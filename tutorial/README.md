@@ -11,7 +11,8 @@ evolution capabilities with bounded scenarios:
 4. **HybridSimulator and GeneralHybridEvolver** — specify a two-mode
    discrete-only automaton, create a simulator, then compute a short
    validated orbit for a separate continuous single-mode hybrid system.
-5. **FirstOrderPDE** — construct a validated, owning PDE model using\n   `add_direction()` and run the actual two-dimensional first-order PDE
+5. **FirstOrderPDE** — construct a validated, owning PDE model using
+   `add_direction()` and run the actual two-dimensional first-order PDE
    solver and inspect its computed solution history. This is the most
    expensive section; the initial profile uses unit-frequency sinusoids.
 

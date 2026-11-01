@@ -7,7 +7,8 @@
 [![Coverage Status](https://github.com/ariadne-cps/evolution/actions/workflows/coverage.yml/badge.svg)](https://github.com/ariadne-cps/evolution/actions/workflows/coverage.yml)
 [![codecov](https://codecov.io/gh/ariadne-cps/evolution/branch/main/graph/badge.svg)](https://codecov.io/gh/ariadne-cps/evolution)
 
-Ariadne Evolution is the standalone C++20 numerical evolution layer for continuous, discrete, and hybrid dynamical systems: enclosures, orbits, simulators, evolvers, numerical propagation methods, and first-order PDE evolution. System specifications live in [System](https://github.com/ariadne-cps/system); reachability, safety verification, and grid-backed storage belong to [Reasoning](https://github.com/ariadne-cps/reasoning).
+Ariadne Evolution is the standalone C++20 numerical evolution layer for continuous, discrete, and hybrid dynamical systems: enclosures, orbits, simulators, evolvers, numerical propagation methods, and first-order PDE evolution.
+
 
 ## Layout
 
@@ -15,7 +16,7 @@ Public headers: `include/evolution`; C++ implementations: `src`; C++ tests: `tes
 
 ## Dependencies
 
-Evolution uses the Git submodules [System](https://github.com/ariadne-cps/system), [Integration](https://github.com/ariadne-cps/integration), [Equation Solving](https://github.com/ariadne-cps/equation-solving), and [Configuration](https://github.com/ariadne-cps/configuration). Commits match the Ariadne `decoupling` branch at extraction. Configuration and Function commit consistency is checked across overlapping dependency paths. Evolution does **not** depend on Reasoning.
+Evolution uses the Git submodules [System](https://github.com/ariadne-cps/system), [Integration](https://github.com/ariadne-cps/integration), [Equation Solving](https://github.com/ariadne-cps/equation-solving), and [Configuration](https://github.com/ariadne-cps/configuration).
 
 ## Build and test
 

@@ -81,7 +81,9 @@ public:
             EffectiveVectorMultivariateFunction f=EffectiveVectorMultivariateFunction::zeros(3,EuclideanDomain(2+1));
             EffectiveVectorMultivariateFunction phi0={sin(4*x[0]),sin(6*x[1]),z};
 
-            FirstOrderPDE pde{A,Bs,Ds,Ts,f};
+            FirstOrderPDE pde(A,f);
+            pde.add_direction(B0,D0,T0).add_direction(B1,D1,T1);
+            pde.validate();
 
             auto solution=first_order_pde(pde,phi0,pr);
             auto uts=solution.uts;

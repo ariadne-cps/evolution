@@ -110,11 +110,12 @@ template<class X> Vector<Bounds<X>> multiaffine_interpolate(Tensor<2,Vector<Boun
 template<class PR>
 FirstOrderPDESolution<PR>
 first_order_pde(FirstOrderPDE const& pde, EffectiveVectorMultivariateFunction const& phi0, PR pr) {
-    Matrix<Real>const& rA=pde.A;
-    Array<Matrix<Real>>const& rBs=pde.Bs;
-    Array<DiagonalMatrix<Real>>const& rDs=pde.Ds;
-    Array<Matrix<Real>>const& rTs=pde.Ts;
-    EffectiveVectorMultivariateFunction const& f=pde.f;
+    pde.validate();
+    Matrix<Real>const& rA=pde.mass_matrix();
+    Array<Matrix<Real>>const& rBs=pde.spatial_matrices();
+    Array<DiagonalMatrix<Real>>const& rDs=pde.characteristic_values();
+    Array<Matrix<Real>>const& rTs=pde.characteristic_transformations();
+    EffectiveVectorMultivariateFunction const& f=pde.source();
 
     typedef RawFloat<PR> X;
 
@@ -132,7 +133,7 @@ first_order_pde(FirstOrderPDE const& pde, EffectiveVectorMultivariateFunction co
     ARIADNE_ASSERT(f.argument_size()==m+1); ARIADNE_ASSERT(f.result_size()==n);
     ARIADNE_ASSERT(phi0.argument_size()==m); ARIADNE_ASSERT(phi0.result_size()==n);
 
-    ARIADNE_ASSERT(m==2);
+    ARIADNE_ASSERT_MSG(m==2, "FirstOrderPDE solver currently supports exactly two spatial dimensions");
 
 
     Matrix<Bounds<X>> A(rA,pr);

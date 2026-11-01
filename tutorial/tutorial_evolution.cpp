@@ -119,7 +119,9 @@ int main() {
     EffectiveVectorMultivariateFunction forcing=
         EffectiveVectorMultivariateFunction::zeros(3,EuclideanDomain(3));
     EffectiveVectorMultivariateFunction profile={sin(coords[0]),sin(coords[1]),zero};
-    FirstOrderPDE pde{A,Bs,Ds,Ts,forcing};
+    FirstOrderPDE pde(A,forcing);
+    pde.add_direction(B0,Ds[0],T0).add_direction(B1,Ds[1],T1);
+    pde.validate();
     auto solution=first_order_pde(pde,profile,double_precision);
     if (solution.uts.size(0)==0u || solution.uts.size(1)==0u ||
         solution.uts.size(2)==0u) {

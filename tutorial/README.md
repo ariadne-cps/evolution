@@ -1,22 +1,28 @@
 # Ariadne Evolution tutorial
 
-Both examples are intentionally short and non-graphical. The C++ program
-illustrates three kinds of system:
+The tutorials are non-graphical. The C++ tutorial exercises **five**
+evolution capabilities with bounded scenarios:
 
-1. **Continuous** — simulate a stable one-dimensional vector field over
-   0.1 time units, producing one trajectory.
-2. **Discrete** — perform one upper-semantics iteration of a contracting map,
-   producing a final enclosure.
-3. **Hybrid** — construct a two-mode, discrete-only automaton and create a
-   `HybridSimulator` with a `HybridTime` budget of one time unit and two
-   discrete jumps. No expensive hybrid orbit is computed.
+1. **VectorFieldSimulator** — simulate a stable one-dimensional continuous
+   vector field for 0.1 time units.
+2. **VectorFieldEvolver** — compute a validated upper-semantics enclosure
+   for the same field over 0.05 time units.
+3. **IteratedMapEvolver** — take one validated step of a contracting map.
+4. **HybridSimulator and GeneralHybridEvolver** — specify a two-mode
+   discrete-only automaton, create a simulator, then compute a short
+   validated orbit for a separate continuous single-mode hybrid system.
+5. **FirstOrderPDE** — run the actual two-dimensional first-order PDE
+   solver and inspect its computed solution history. This is the most
+   expensive section; the initial profile uses unit-frequency sinusoids.
 
 The Python program constructs the **same hybrid automaton**, instantiates
-`HybridSimulator`, and checks `HybridTime` and evolution semantics. Its
-continuous and discrete classes are reported but not instantiated: the
-Python bindings for the System-side `VectorField` and `IteratedMap` models
-do not yet expose their constructors. This is a binding limitation, not a
-claim that those systems can be simulated in Python today.
+`HybridSimulator`, and checks `HybridTime` and evolution semantics. In the
+current binding layer, `VectorField` and `IteratedMap` lack constructors and
+`GeneralHybridEvolver` and `first_order_pde` are not exported. Accordingly,
+the Python script demonstrates the currently functional hybrid interface and
+reports the evolution interfaces that are registered; it does **not** claim
+that the Python module can already perform the PDE or validated hybrid solve.
+These gaps require explicit binding work, not silent omissions in documentation.
 
 ## Build and install
 

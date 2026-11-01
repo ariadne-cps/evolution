@@ -1,0 +1,7 @@
+*.tmp.*
+build*
+.idea/
+.vscode/
+cmake-build-debug/
+.DS_Store
+~*

@@ -8,7 +8,9 @@ using namespace Ariadne;
 int main() {
     // Continuous-time system: a one-dimensional stable vector field.
     RealVariable x("x");
-    VectorField decay({dot(x)=-x});
+    List<DottedRealAssignment> dynamics;
+    dynamics.append(dot(x)=-x);
+    VectorField decay(dynamics);
     VectorFieldSimulator simulator(decay);
     simulator.configuration().set_step_size(0.05);
     simulator.configuration().set_num_subdivisions(0);
@@ -23,7 +25,9 @@ int main() {
     std::cout << "Continuous evolution: " << ncurves << " trajectory\n";
 
     // Discrete-time system: one step of a contracting iterated map.
-    IteratedMap contraction({next(x)=0.5_dec*x});
+    List<PrimedRealAssignment> updates;
+    updates.append(next(x)=0.5_dec*x);
+    IteratedMap contraction(updates);
     IteratedMapEvolver evolver(contraction);
     evolver.configuration().set_maximum_enclosure_radius(1.0);
     auto discrete = evolver.orbit(initial,IteratedMap::TimeType(1),Semantics::UPPER);

@@ -79,7 +79,7 @@ int main() {
 
     // Hybrid validated evolution with continuous dynamics in a single mode.
     // No events are enabled: this isolates the continuous flow in a hybrid
-    // enclosure, with a short maximum time and zero discrete jumps.
+    // enclosure, with a short maximum time and at most one discrete jump.
     HybridAutomaton flow_automaton;
     List<DottedRealAssignment> hybrid_dynamics;
     hybrid_dynamics.append(dot(x)=-x);
@@ -90,7 +90,7 @@ int main() {
     hybrid_evolver.configuration().set_maximum_enclosure_radius(1.0);
     HybridExactBox hybrid_initial(idle,flow_automaton.continuous_state_space(idle),
                                  ExactBoxType{{0.9_x,1.1_x}});
-    auto hybrid_orbit = hybrid_evolver.orbit(hybrid_initial,HybridTime(0.05_x,0),Semantics::UPPER);
+    auto hybrid_orbit = hybrid_evolver.orbit(hybrid_initial,HybridTime(0.05_x,1),Semantics::UPPER);
     if (hybrid_orbit.final().size() == 0u) {
         throw std::runtime_error("Hybrid evolver produced no final enclosure");
     }

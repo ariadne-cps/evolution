@@ -33,6 +33,7 @@
 #include "evolution/hybrid_enclosure.hpp"
 #include "evolution/hybrid_simulator.hpp"
 #include "system/hybrid_automaton_interface.hpp"
+#include "system/hybrid_automaton.hpp"
 
 
 using namespace Ariadne;
@@ -181,6 +182,12 @@ Void evolution_submodule(pybind11::module& module)
         .def("location", &HybridEnclosure::location)
         .def("state_space", &HybridEnclosure::state_space);
     pybind11::class_<HybridSimulator>(module,"HybridSimulator")
-        .def(pybind11::init<HybridSimulator::SystemType const&>());
+        .def(pybind11::init<HybridSimulator::SystemType const&>())
+        // HybridAutomaton is exported by System without a Python base-class
+        // declaration; provide the concrete model overload explicitly.
+        .def(pybind11::init([](HybridAutomaton const& automaton) {
+            return std::make_unique<HybridSimulator>(
+                static_cast<HybridAutomatonInterface const&>(automaton));
+        }));
 
 }

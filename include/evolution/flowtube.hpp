@@ -45,8 +45,8 @@ class FlowTube {
         return phi(join(x,t)); }
     decltype(auto) space_domain() const { SizeType n=this->number_of_state_variables(); return _phi.domain()[range(0,n)]; }
     decltype(auto) time_range() const { SizeType n=this->number_of_state_variables(); return _phi.domain()[n]; }
-    decltype(auto) initial_time() const { return time_range().lower(); }
-    decltype(auto) final_time() const { return time_range().upper(); }
+    auto initial_time() const { return time_range().lower_bound(); }
+    auto final_time() const { return time_range().upper_bound(); }
     ValidatedVectorMultivariateFunctionModelDP reach_function() const;
     ValidatedVectorMultivariateFunctionModelDP final_function() const;
     ValidatedImageSet initial_set() const;

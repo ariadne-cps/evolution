@@ -6,6 +6,7 @@ set(UNIT_TESTS
     test_hybrid_simulator
     test_first_order_pde
     test_first_order_pde_evolution_header
+    test_flowtube_header
     test_orbit_evolution_header
     test_differential_inclusion_evolver
     test_enclosure

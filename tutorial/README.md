@@ -15,14 +15,16 @@ evolution capabilities with bounded scenarios:
    solver and inspect its computed solution history. This is the most
    expensive section; the initial profile uses unit-frequency sinusoids.
 
-The Python program constructs the **same hybrid automaton**, instantiates
-`HybridSimulator`, and checks `HybridTime` and evolution semantics. In the
-current binding layer, `VectorField` and `IteratedMap` lack constructors and
-`GeneralHybridEvolver` and `first_order_pde` are not exported. Accordingly,
-the Python script demonstrates the currently functional hybrid interface and
-reports the evolution interfaces that are registered; it does **not** claim
-that the Python module can already perform the PDE or validated hybrid solve.
-These gaps require explicit binding work, not silent omissions in documentation.
+The Python program builds a contracting `IteratedMap`, computes one validated
+upper-semantics iteration using `IteratedMapEvolver`, and constructs the same
+discrete-only `HybridAutomaton` used in C++. Both examples use the installed
+`pyariadne` extension. `IteratedMapEvolverConfiguration` is exposed so that
+its enclosure-radius and subdivision options can be configured.
+
+Python parity remains incomplete: the C++ tutorial also executes
+`VectorFieldSimulator`, `VectorFieldEvolver`, `GeneralHybridEvolver`, and
+the `FirstOrderPDE` solver. These workflows require further Python-side
+model, integrator, or solver bindings and matching executable examples.
 
 ## Build and install
 

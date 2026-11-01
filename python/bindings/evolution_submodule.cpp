@@ -151,6 +151,15 @@ Void export_vector_field_evolver_configuration(pybind11::module& module) {
     vector_field_evolver_configuration_class.def("__repr__",&__cstr__<ConfigurationType>);
 }
 
+Void export_iterated_map_evolver_configuration(pybind11::module& module) {
+    typedef IteratedMapEvolver::ConfigurationType ConfigurationType;
+    pybind11::class_<ConfigurationType> configuration_class(module,"IteratedMapEvolverConfiguration");
+    configuration_class.def("set_maximum_enclosure_radius",&ConfigurationType::set_maximum_enclosure_radius);
+    configuration_class.def("set_enable_subdivisions",&ConfigurationType::set_enable_subdivisions);
+    configuration_class.def("set_enable_premature_termination",&ConfigurationType::set_enable_premature_termination);
+    configuration_class.def("__repr__",&__cstr__<ConfigurationType>);
+}
+
 Void evolution_submodule(pybind11::module& module)
 {
     export_labelled_drawable_2d_interface(module);
@@ -172,6 +181,7 @@ Void evolution_submodule(pybind11::module& module)
     export_evolver<VectorFieldEvolver, VectorField, IntegratorInterface const&>(module,"VectorFieldEvolver");
 
     export_vector_field_evolver_configuration(module);
+    export_iterated_map_evolver_configuration(module);
 
     // Hybrid evolution belongs here, not to a separate hybrid binding layer.
     pybind11::class_<HybridTime>(module,"HybridTime")

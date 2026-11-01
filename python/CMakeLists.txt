@@ -6,7 +6,8 @@ option(PYTHON_ENFORCE_TESTS "Enforce Python tests" OFF)
 
 if(Python3_FOUND)
     report_python_configuration_once()
-    foreach(_required pybind11::module pyariadne-python-common pyariadne-system pyariadne-integration)
+    foreach(_required pybind11::module pyariadne-python-common
+            pyariadne-system pyariadne-integration pyariadne-equation_solving)
         if(NOT TARGET ${_required})
             message(FATAL_ERROR "Missing Python dependency: ${_required}")
         endif()

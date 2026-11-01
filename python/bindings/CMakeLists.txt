@@ -16,5 +16,8 @@ target_sources(pyariadne-evolution INTERFACE
 target_include_directories(pyariadne-evolution INTERFACE
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
     $<TARGET_PROPERTY:pyariadne-integration,INTERFACE_INCLUDE_DIRECTORIES>)
-target_link_libraries(pyariadne-evolution INTERFACE pyariadne-integration pyariadne-system)
+target_link_libraries(pyariadne-evolution INTERFACE
+    pyariadne-equation_solving
+    pyariadne-integration
+    pyariadne-system)
 ariadne_add_python_module(NAME evolution MODULE_SOURCE evolution_module.cpp)

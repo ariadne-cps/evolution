@@ -88,9 +88,11 @@ int main() {
     hybrid_evolver.set_integrator(TaylorPicardIntegrator(StepMaximumError(1e-5)));
     hybrid_evolver.configuration().set_maximum_step_size(0.05);
     hybrid_evolver.configuration().set_maximum_enclosure_radius(1.0);
+    // ExactBoxType uses double-exact bounds: use dyadic values 7/8 and 9/8,
+    // not non-dyadic decimal fractions.
     HybridExactBox hybrid_initial(idle,flow_automaton.continuous_state_space(idle),
-                                 ExactBoxType{{0.9_x,1.1_x}});
-    auto hybrid_orbit = hybrid_evolver.orbit(hybrid_initial,HybridTime(0.05_x,1),Semantics::UPPER);
+                                 ExactBoxType{{0.875_x,1.125_x}});
+    auto hybrid_orbit = hybrid_evolver.orbit(hybrid_initial,HybridTime(Real(1/20_q),Integer(1)),Semantics::UPPER);
     if (hybrid_orbit.final().size() == 0u) {
         throw std::runtime_error("Hybrid evolver produced no final enclosure");
     }

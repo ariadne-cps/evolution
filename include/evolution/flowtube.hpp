@@ -30,6 +30,9 @@
 #define ARIADNE_FLOWTUBE_HPP
 
 
+#include "function/function_model.hpp"
+#include "set/function_set.hpp"
+
 namespace Ariadne {
 
 template<class ES> class Orbit;
@@ -38,20 +41,26 @@ using ValidatedImageSet = ValidatedConstrainedImageSet;
 
 class FlowTube {
     ValidatedVectorMultivariateFunctionModelDP _phi;
-    List<Identifier> _variable_names;
   public:
+    //! Construct a flow map phi(x,t) over its spatial and temporal domain.
+    explicit FlowTube(ValidatedVectorMultivariateFunctionModelDP const& phi) : _phi(phi) {
+        ARIADNE_PRECONDITION(phi.argument_size()==phi.result_size()+1u);
+    }
     SizeType number_of_state_variables() const { return _phi.result_size(); }
-    template<class X, class T> requires Same<X,T> decltype(auto) operator()(Vector<X> const& x, Scalar<T> const& t) {
-        return phi(join(x,t)); }
+    template<class X, class T> requires Same<X,T> decltype(auto) operator()(Vector<X> const& x, Scalar<T> const& t) const {
+        return _phi(join(x,t)); }
     decltype(auto) space_domain() const { SizeType n=this->number_of_state_variables(); return _phi.domain()[range(0,n)]; }
-    decltype(auto) time_range() const { SizeType n=this->number_of_state_variables(); return _phi.domain()[n]; }
+    auto time_range() const { SizeType n=this->number_of_state_variables(); return _phi.domain()[n]; }
     auto initial_time() const { return time_range().lower_bound(); }
     auto final_time() const { return time_range().upper_bound(); }
-    ValidatedVectorMultivariateFunctionModelDP reach_function() const;
-    ValidatedVectorMultivariateFunctionModelDP final_function() const;
-    ValidatedImageSet initial_set() const;
-    ValidatedImageSet reach_set() const;
-    ValidatedImageSet final_set() const;
+    ValidatedVectorMultivariateFunctionModelDP reach_function() const { return _phi; }
+    ValidatedVectorMultivariateFunctionModelDP final_function() const {
+        return partial_evaluate(_phi,number_of_state_variables(),ValidatedNumber(final_time())); }
+    ValidatedImageSet initial_set() const {
+        auto initial=partial_evaluate(_phi,number_of_state_variables(),ValidatedNumber(initial_time()));
+        return ValidatedImageSet(space_domain(),initial); }
+    ValidatedImageSet reach_set() const { return ValidatedImageSet(_phi.domain(),_phi); }
+    ValidatedImageSet final_set() const { return ValidatedImageSet(space_domain(),final_function()); }
 };
 
 template<class E, class R=E> struct OrbitStep {

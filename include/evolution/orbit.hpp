@@ -217,9 +217,9 @@ operator<<(OutputStream& os, const Orbit< ES >& orb)
 }
 
 template<class ES> Void draw(FigureInterface& figure, const Orbit<ES>& orbit) {
-    draw(figure,orbit.reach());
+    for(auto const& enclosure : orbit.reach()) { draw(figure,enclosure); }
     draw(figure,orbit.initial());
-    draw(figure,orbit.final());
+    for(auto const& enclosure : orbit.final()) { draw(figure,enclosure); }
 }
 
 template<class ES> FigureInterface& operator<<(FigureInterface& figure, const Orbit<ES>& orbit) {

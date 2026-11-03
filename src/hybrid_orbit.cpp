@@ -53,7 +53,7 @@ Orbit<HybridApproximatePoint>::curve(Nat m) const
 Void
 Orbit<HybridApproximatePoint>::insert(HybridTime ht, const HybridApproximatePoint& hpt)
 {
-    ARIADNE_ASSERT(ht.discrete_time()<=this->size());
+    ARIADNE_PRECONDITION(ht.discrete_time()>=0 && ht.discrete_time()<=this->size());
     Real time=ht.continuous_time();
     FloatDP flt_time=cast_exact(time.get(dp));
     if(this->size()==ht.discrete_time()) {
@@ -77,11 +77,10 @@ Void Orbit<HybridApproximatePoint>::draw(CanvasInterface& canvas, const Set<Disc
 }
 
 Orbit<Vector<HybridApproximatePoint>>::Orbit(const Vector<HybridApproximatePoint>& vhpt)
-    : _curves_ptr(new Vector(vhpt.size(), List<HybridInterpolatedCurve>(1u,HybridInterpolatedCurve(vhpt.at(0).location(),vhpt.at(0).space(),InterpolatedCurve(0,vhpt.at(0).point())))))
+    : _curves_ptr(new Vector<List<HybridInterpolatedCurve>>(vhpt.size(),List<HybridInterpolatedCurve>()))
 {
-    for(SizeType i=1; i<vhpt.size(); i++)
-    {
-        this->_curves_ptr->at(i) = List<HybridInterpolatedCurve>(1u,HybridInterpolatedCurve(vhpt.at(i).location(),vhpt.at(i).space(),InterpolatedCurve(0,vhpt.at(i).point())));
+    for(SizeType i=0; i<vhpt.size(); ++i) {
+        this->_curves_ptr->at(i).push_back(HybridInterpolatedCurve(vhpt.at(i).location(),vhpt.at(i).space(),InterpolatedCurve(0,vhpt.at(i).point())));
     }
 }
 
@@ -94,7 +93,7 @@ Orbit<Vector<HybridApproximatePoint>>::size(SizeType setNumber)
 Void
 Orbit<Vector<HybridApproximatePoint>>::insert(HybridTime ht, const HybridApproximatePoint& hpt, SizeType setNumber)
 {
-    ARIADNE_ASSERT(ht.discrete_time()<=this->size(setNumber));
+    ARIADNE_PRECONDITION(ht.discrete_time()>=0 && ht.discrete_time()<=this->size(setNumber));
     Real time=ht.continuous_time();
     FloatDP flt_time=cast_exact(time.get(dp));
     if(this->size(setNumber)==ht.discrete_time()) {

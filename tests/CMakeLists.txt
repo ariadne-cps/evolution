@@ -1,5 +1,6 @@
 include(CTest)
 set(UNIT_TESTS
+    test_orbit_collections
     test_scalings
     test_hybrid_time
     test_hybrid_enclosure

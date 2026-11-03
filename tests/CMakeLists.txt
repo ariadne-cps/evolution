@@ -1,5 +1,7 @@
 include(CTest)
 set(UNIT_TESTS
+    test_scalings
+    test_hybrid_time
     test_hybrid_enclosure
     test_hybrid_evolution
     test_hybrid_evolver

@@ -209,3 +209,26 @@ the outer per-set check. These local derived assertions were removed; the input
 compatibility check remains. The creep factor now chooses alpha_val.value()
 directly, the very midpoint against which its cast was formerly asserted equal,
 instead of computing that midpoint by two separate conversion routes.
+
+## Creep with simultaneous, optional and decreasing guards
+
+A decreasing guard can remain a conservative candidate because its initially
+active boundary belongs to the closed starting enclosure. _apply_guard_step
+previously left the entire starting enclosure unconstrained before resetting
+it. In a system with an urgent partial crossing and an optional event, the new
+test reproduced a reset from x0>-1/2 even though the decreasing guard -x-1/2>=0
+only permits x0=-1/2 at t=0. Applying its initial activation condition restricts
+the reset correctly. The same activation handles POSITIVE/NEGATIVE classifications
+as the full/empty initial subset. No evolution is introduced for these cases.
+
+The tests distinguish all three target locations and event identities, check
+reset coordinates and time intervals, and require the decreasing event to occur
+only at t=0 with x=-1/2. Further cases cover partially active initial guards and
+a last crossing exactly at the suggested step boundary (zero creep factor).
+
+A standard IntervalNewtonSolver with one iteration and equivalent affine/cubic
+guards at x=0 exercises a failed cubic guard-creep proof alongside a certified
+affine crossing. A separate diagnostic wrapper merely records the standard
+solver's success/failure; it does not force an exception. The regression itself
+uses the standard solver directly and verifies both nondeterministic resets,
+event histories and the analytic hit-time interval [1/4,1/2].

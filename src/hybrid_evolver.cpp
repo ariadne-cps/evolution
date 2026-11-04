@@ -943,9 +943,10 @@ _apply_guard_step(HybridEnclosure& set,
                 case CrossingKind::NEGATIVE:
                 case CrossingKind::POSITIVE:
                 case CrossingKind::DECREASING:
-                    {
-                        ARIADNE_WARN("Crossing "<<crossing_data<<" does not introduce additional restrictions on flow");
-                    }
+                    // There is no future entry into a decreasing guard.
+                    // Only its initially active subset may jump. In the
+                    // constant-sign cases activation is either empty or all.
+                    jump_set.new_activation(event,transition_data.guard_function);
                     break;
                 default:
                     ARIADNE_FAIL_MSG("Unhandled crossing kind in "<<crossing_data);

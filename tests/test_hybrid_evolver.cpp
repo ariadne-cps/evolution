@@ -156,6 +156,9 @@ public:
         ARIADNE_TEST_CALL(test_nonlinear_grazing());
         ARIADNE_TEST_CALL(test_guaranteed_near_tangent_crossing());
         ARIADNE_TEST_CALL(test_crossing_in_the_past());
+        ARIADNE_TEST_CALL(test_initially_active_creep());
+        ARIADNE_TEST_CALL(test_creep_with_other_events());
+        ARIADNE_TEST_CALL(test_creep_solver_budget());
         ARIADNE_TEST_CALL(test_partial_crossing_without_creep());
         ARIADNE_TEST_CALL(test_straddling_initial_times());
         ARIADNE_TEST_CALL(test_formatting());
@@ -183,6 +186,9 @@ public:
     Void test_nonlinear_grazing() const;
     Void test_guaranteed_near_tangent_crossing() const;
     Void test_crossing_in_the_past() const;
+    Void test_initially_active_creep() const;
+    Void test_creep_with_other_events() const;
+    Void test_creep_solver_budget() const;
     Void test_partial_crossing_without_creep() const;
     Void test_straddling_initial_times() const;
     Void test_formatting() const;
@@ -660,6 +666,111 @@ Void TestHybridEvolver::test_crossing_in_the_past() const {
         if(count==0u) past=true; else { jumped=true; ARIADNE_TEST_EQUALS(final.previous_events()[0],e); }
     }
     ARIADNE_TEST_ASSERT(past && jumped);
+}
+
+Void TestHybridEvolver::test_initially_active_creep() const {
+    HybridAutomaton system;
+    DiscreteLocation target(2);
+    system.new_mode(q,{dot(x)=1,dot(y)=0});
+    system.new_mode(target,{dot(x)=0,dot(y)=0});
+    system.new_transition(q,e,target,{next(x)=0,next(y)=y},x>=0,EventKind::URGENT);
+    for(Bool active : {false,true}) {
+        GeneralHybridEvolver evolver(system);
+        evolver.configuration().set_maximum_step_size(active ? 0.25 : 0.5);
+        auto initial=active
+            ? HybridBoxSet(q,{-0.5_dec<=x<=0.125_dec,-0.01_dec<=y<=0.01_dec})
+            : HybridBoxSet(q,{-0.5_dec<=x<=-0.25_dec,-0.01_dec<=y<=0.01_dec});
+        auto orbit=evolver.orbit(initial,HybridTime(1.0_x,1),Semantics::UPPER);
+        ARIADNE_TEST_ASSERT(orbit.final().size()>0u);
+        Bool immediate=false,delayed=false;
+        for(auto const& final : orbit.final()) {
+            ARIADNE_TEST_EQUALS(final.location(),target);
+            ARIADNE_TEST_EQUALS(final.previous_events().size(),1u);
+            ARIADNE_TEST_ASSERT(definitely(final.inside(HybridExactBox(target,RealSpace({x,y}),
+                ExactBoxType({{-ExactDouble(0.001),ExactDouble(0.001)},{-ExactDouble(0.011),ExactDouble(0.011)}})))));
+            auto time=final.time_range();
+            ARIADNE_TEST_ASSERT(time.lower_bound().raw().get_d()>=-1e-8);
+            ARIADNE_TEST_ASSERT(time.upper_bound().raw().get_d()<0.501);
+            immediate=immediate || time.lower_bound().raw().get_d()<1e-8;
+            delayed=delayed || time.upper_bound().raw().get_d()>0.49;
+        }
+        ARIADNE_TEST_ASSERT(delayed);
+        if(active) ARIADNE_TEST_ASSERT(immediate);
+    }
+}
+
+Void TestHybridEvolver::test_creep_with_other_events() const {
+    HybridAutomaton system;
+    DiscreteLocation urgent_target(2),early_target(3),optional_target(4);
+    DiscreteEvent early("early"),optional("optional");
+    system.new_mode(q,{dot(x)=1,dot(y)=0});
+    for(auto target : {urgent_target,early_target,optional_target}) system.new_mode(target,{dot(x)=0,dot(y)=0});
+    system.new_transition(q,e,urgent_target,{next(x)=0,next(y)=y},x>=0,EventKind::URGENT);
+    system.new_transition(q,early,early_target,{next(x)=x,next(y)=y},-x-0.5_dec>=0,EventKind::URGENT);
+    system.new_transition(q,optional,optional_target,{next(x)=2,next(y)=y},x+0.375_dec>=0,EventKind::PERMISSIVE);
+    GeneralHybridEvolver evolver(system);
+    evolver.configuration().set_maximum_step_size(0.375);
+    auto orbit=evolver.orbit(HybridBoxSet(q,{-0.5_dec<=x<=-0.25_dec,-0.01_dec<=y<=0.01_dec}),
+        HybridTime(1.0_x,1),Semantics::UPPER);
+    Bool urgent_seen=false,early_seen=false,optional_seen=false;
+    for(auto const& final : orbit.final()) {
+        ARIADNE_TEST_EQUALS(final.previous_events().size(),1u);
+        auto time=final.time_range();
+        ARIADNE_TEST_ASSERT(time.lower_bound().raw().get_d()>=-1e-8);
+        ARIADNE_TEST_ASSERT(time.upper_bound().raw().get_d()<0.501);
+        if(final.location()==early_target) {
+            early_seen=true;
+            // This decreasing guard is active only at x0=-1/2, t=0.
+            expect_time(final,0.0);
+            ARIADNE_TEST_EQUALS(final.previous_events()[0],early);
+            ARIADNE_TEST_ASSERT(definitely(final.inside(HybridExactBox(early_target,RealSpace({x,y}),
+                ExactBoxType({{-ExactDouble(0.501),-ExactDouble(0.499)},{-ExactDouble(0.011),ExactDouble(0.011)}})))));
+        } else {
+            Bool urgent=final.location()==urgent_target;
+            if(urgent) urgent_seen=true; else optional_seen=true;
+            ARIADNE_TEST_EQUALS(final.location(),urgent ? urgent_target : optional_target);
+            ARIADNE_TEST_EQUALS(final.previous_events()[0],urgent ? e : optional);
+            auto x_bounds=urgent ? ExactIntervalType(-ExactDouble(0.001),ExactDouble(0.001))
+                : ExactIntervalType(ExactDouble(1.999),ExactDouble(2.001));
+            ARIADNE_TEST_ASSERT(definitely(final.inside(HybridExactBox(final.location(),RealSpace({x,y}),
+                ExactBoxType({x_bounds,{-ExactDouble(0.011),ExactDouble(0.011)}})))));
+        }
+    }
+    ARIADNE_TEST_ASSERT(urgent_seen && early_seen && optional_seen);
+}
+
+Void TestHybridEvolver::test_creep_solver_budget() const {
+    HybridAutomaton system;
+    DiscreteLocation linear_target(2),curved_target(3);
+    DiscreteEvent linear("linear");
+    system.new_mode(q,{dot(x)=1,dot(y)=0});
+    for(auto target : {linear_target,curved_target}) system.new_mode(target,{dot(x)=0,dot(y)=0});
+    // Both guards vanish exactly at x=0. With one Newton iteration, the
+    // affine equation is certified while the cubic crossing/creep equations
+    // exhaust their proof budget. Either event still has the same hit time.
+    system.new_transition(q,linear,linear_target,{next(x)=0,next(y)=y},x>=0,EventKind::URGENT);
+    system.new_transition(q,e,curved_target,{next(x)=2,next(y)=y},(x+1)*(x+1)*(x+1)-1>=0,EventKind::URGENT);
+    GeneralHybridEvolver evolver(system);
+    evolver.set_solver(IntervalNewtonSolver(1e-8,1u));
+    evolver.configuration().set_maximum_step_size(0.5);
+    auto orbit=evolver.orbit(HybridBoxSet(q,{-0.5_dec<=x<=-0.25_dec,-0.01_dec<=y<=0.01_dec}),
+        HybridTime(1.0_x,1),Semantics::UPPER);
+    Bool linear_seen=false,curved_seen=false;
+    for(auto const& final : orbit.final()) {
+        ARIADNE_TEST_EQUALS(final.previous_events().size(),1u);
+        auto time=final.time_range();
+        ARIADNE_TEST_ASSERT(time.lower_bound().raw().get_d()>0.249);
+        ARIADNE_TEST_ASSERT(time.upper_bound().raw().get_d()<0.501);
+        Bool affine=final.location()==linear_target;
+        if(affine) linear_seen=true; else curved_seen=true;
+        ARIADNE_TEST_EQUALS(final.location(),affine ? linear_target : curved_target);
+        ARIADNE_TEST_EQUALS(final.previous_events()[0],affine ? linear : e);
+        auto x_bounds=affine ? ExactIntervalType(-ExactDouble(0.001),ExactDouble(0.001))
+            : ExactIntervalType(ExactDouble(1.999),ExactDouble(2.001));
+        ARIADNE_TEST_ASSERT(definitely(final.inside(HybridExactBox(final.location(),RealSpace({x,y}),
+            ExactBoxType({x_bounds,{-ExactDouble(0.011),ExactDouble(0.011)}})))));
+    }
+    ARIADNE_TEST_ASSERT(linear_seen && curved_seen);
 }
 
 Void TestHybridEvolver::test_partial_crossing_without_creep() const {

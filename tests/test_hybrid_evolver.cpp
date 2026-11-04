@@ -49,6 +49,39 @@ protected:
     }
 };
 
+// Valid timing policies with genuinely varying step lengths. Their common
+// linear flow has an exact solution, independently of the policy chosen.
+class DependentStepEvolver : public GeneralHybridEvolver {
+    StepKind _kind;
+public:
+    DependentStepEvolver(HybridAutomatonInterface const& system,StepKind kind)
+        : GeneralHybridEvolver(system),_kind(kind) { }
+    DependentStepEvolver* clone() const override { return new DependentStepEvolver(*this); }
+protected:
+    TimingData _estimate_timing(Set<DiscreteEvent>& active,Real time,FlowFunctionModel const& flow,
+        Map<DiscreteEvent,CrossingData>& crossings,Map<DiscreteEvent,TransitionData> const& transitions,
+        HybridEnclosure const& initial) const override {
+        auto result=GeneralHybridEvolver::_estimate_timing(active,time,flow,crossings,transitions,initial);
+        if(result.finishing_kind==FinishingKind::BEFORE_FINAL_TIME && result.step_kind==StepKind::CONSTANT_EVOLUTION_TIME) {
+            auto variable=function_factory().create_coordinate(initial.parameter_domain(),0);
+            if(_kind==StepKind::SPACE_DEPENDENT_EVOLUTION_TIME) variable=initial.state_function()[0];
+            if(_kind==StepKind::TIME_DEPENDENT_EVOLUTION_TIME) variable=initial.time_function();
+            result.step_kind=_kind;
+            result.parameter_dependent_evolution_time=hlf(result.step_size)+(hlf(hlf(result.step_size)))*variable;
+            result.parameter_dependent_finishing_time=initial.time_function()+result.parameter_dependent_evolution_time;
+            if(_kind!=StepKind::PARAMETER_DEPENDENT_EVOLUTION_TIME) {
+                auto domain=result.spacetime_dependent_evolution_time.domain();
+                auto state_time=function_factory().create_coordinate(domain,
+                    _kind==StepKind::SPACE_DEPENDENT_EVOLUTION_TIME ? 0u : initial.state_dimension());
+                result.spacetime_dependent_evolution_time=hlf(result.step_size)+(hlf(hlf(result.step_size)))*state_time;
+                result.spacetime_dependent_finishing_time=result.spacetime_dependent_evolution_time
+                    +function_factory().create_coordinate(domain,initial.state_dimension());
+            }
+        }
+        return result;
+    }
+};
+
 class OvershootingIntegrator : public GradedTaylorSeriesIntegrator {
 public:
     OvershootingIntegrator() : GradedTaylorSeriesIntegrator(1e-8) { }
@@ -119,6 +152,9 @@ public:
         ARIADNE_TEST_CALL(test_initial_constraints_and_contracts());
         ARIADNE_TEST_CALL(test_solver_budget_fallback());
         ARIADNE_TEST_CALL(test_integrator_step_limit());
+        ARIADNE_TEST_CALL(test_dependent_step_policies());
+        ARIADNE_TEST_CALL(test_nonlinear_grazing());
+        ARIADNE_TEST_CALL(test_partial_crossing_without_creep());
         ARIADNE_TEST_CALL(test_straddling_initial_times());
         ARIADNE_TEST_CALL(test_formatting());
         ARIADNE_TEST_CALL(test_flow());
@@ -141,6 +177,9 @@ public:
     Void test_initial_constraints_and_contracts() const;
     Void test_solver_budget_fallback() const;
     Void test_integrator_step_limit() const;
+    Void test_dependent_step_policies() const;
+    Void test_nonlinear_grazing() const;
+    Void test_partial_crossing_without_creep() const;
     Void test_straddling_initial_times() const;
     Void test_formatting() const;
     Void test_flow() const;
@@ -510,6 +549,83 @@ Void TestHybridEvolver::test_integrator_step_limit() const {
     ARIADNE_TEST_EQUALS(orbit.reach().size(),2u);
 }
 
+Void TestHybridEvolver::test_dependent_step_policies() const {
+    HybridAutomaton system;
+    system.new_mode(q,{dot(x)=1,dot(y)=0});
+    for(auto kind : {StepKind::SPACE_DEPENDENT_EVOLUTION_TIME,StepKind::TIME_DEPENDENT_EVOLUTION_TIME,
+                    StepKind::PARAMETER_DEPENDENT_EVOLUTION_TIME}) {
+        DependentStepEvolver evolver(system,kind);
+        evolver.ALLOW_CREEP=false;
+        evolver.configuration().set_maximum_step_size(0.125);
+        auto initial=evolver.enclosure(HybridExactBox(q,RealSpace({x,y}),ExactBoxType({{-ExactDouble(0.01),ExactDouble(0.01)},{-ExactDouble(0.01),ExactDouble(0.01)}})));
+        initial.set_time_function(evolver.function_factory().create_constant(initial.parameter_domain(),Real(1/8_q)));
+        auto orbit=evolver.orbit(initial,HybridTime(0.5_x,3),Semantics::UPPER);
+        expect_final(orbit,ExactBoxType({{ExactDouble(0.364),ExactDouble(0.386)},
+            {-ExactDouble(0.011),ExactDouble(0.011)}}),0.5,0u);
+        ARIADNE_TEST_ASSERT(orbit.intermediate().size()>=2u);
+        // These clocks distinguish all three policies and verify two steps,
+        // rather than merely accepting an unchanged final solution.
+        double first=kind==StepKind::TIME_DEPENDENT_EVOLUTION_TIME ? 0.19140625 : 0.1875;
+        double second=kind==StepKind::TIME_DEPENDENT_EVOLUTION_TIME ? 0.2598876953125
+            : (kind==StepKind::SPACE_DEPENDENT_EVOLUTION_TIME ? 0.251953125 : 0.25);
+        for(SizeType i=0;i<2u;++i) {
+            auto const& intermediate=orbit.intermediate()[i];
+            auto point=Vector<FloatDPApproximation>(intermediate.parameter_domain().midpoint(),dp);
+            auto clock=intermediate.time_function()(point);
+            ARIADNE_TEST_ASSERT(std::abs(clock.raw().get_d()-(i==0u ? first : second))<1e-10);
+        }
+    }
+}
+
+Void TestHybridEvolver::test_nonlinear_grazing() const {
+    HybridAutomaton system;
+    system.new_mode(q,{dot(x)=1,dot(y)=0});
+    // The guard reaches its unique maximum at x=0; negative y misses it,
+    // positive y crosses it, and y=0 is tangent.
+    system.new_transition(q,e,q,{next(x)=x,next(y)=y-1},y-exp(x)-exp(-x)+2>=0,EventKind::URGENT);
+    GeneralHybridEvolver evolver(system);
+    evolver.set_solver(IntervalNewtonSolver(1e-3,16u));
+    evolver.ALLOW_CREEP=false;
+    evolver.configuration().set_maximum_step_size(1.0);
+    auto orbit=evolver.orbit(HybridBoxSet(q,{-0.5_dec<=x<=-0.49_dec,-0.01_dec<=y<=0.01_dec}),
+        HybridTime(1.0_x,2),Semantics::UPPER);
+    Bool jumped=false,flowed=false;
+    for(auto const& final : orbit.final()) {
+        auto count=final.previous_events().size();
+        ARIADNE_TEST_ASSERT(count<=1u);
+        if(count==0u) flowed=true; else { jumped=true; ARIADNE_TEST_EQUALS(final.previous_events()[0],e); }
+        expect_time(final,1.0);
+        auto expected=count==0u
+            ? ExactBoxType({{ExactDouble(0.48),ExactDouble(0.53)},{-ExactDouble(0.02),ExactDouble(0.02)}})
+            : ExactBoxType({{ExactDouble(0.48),ExactDouble(0.53)},{-ExactDouble(1.02),-ExactDouble(0.98)}});
+        ARIADNE_TEST_ASSERT(definitely(final.inside(HybridExactBox(q,RealSpace({x,y}),expected))));
+    }
+    ARIADNE_TEST_ASSERT(jumped && flowed);
+}
+
+Void TestHybridEvolver::test_partial_crossing_without_creep() const {
+    HybridAutomaton system;
+    DiscreteLocation target(2);
+    system.new_mode(q,{dot(x)=1,dot(y)=0});
+    system.new_mode(target,{dot(x)=0,dot(y)=0});
+    system.new_transition(q,e,target,{next(x)=0,next(y)=y},x>=0.4_dec,EventKind::URGENT);
+    GeneralHybridEvolver evolver(system);
+    evolver.ALLOW_CREEP=false;
+    evolver.configuration().set_maximum_step_size(0.25);
+    auto orbit=evolver.orbit(HybridBoxSet(q,{-0.25_dec<=x<=0.25_dec,-0.01_dec<=y<=0.01_dec}),
+        HybridTime(1.0_x,1),Semantics::UPPER);
+    ARIADNE_TEST_ASSERT(orbit.final().size()>0u);
+    for(auto const& final : orbit.final()) {
+        ARIADNE_TEST_EQUALS(final.location(),target);
+        ARIADNE_TEST_EQUALS(final.previous_events().size(),1u);
+        ARIADNE_TEST_EQUALS(final.previous_events()[0],e);
+        ARIADNE_TEST_ASSERT(final.time_range().lower_bound().raw().get_d()>0.149);
+        ARIADNE_TEST_ASSERT(final.time_range().upper_bound().raw().get_d()<0.651);
+        ARIADNE_TEST_ASSERT(definitely(final.inside(HybridExactBox(target,RealSpace({x,y}),
+            ExactBoxType({{-ExactDouble(0.001),ExactDouble(0.001)},{-ExactDouble(0.011),ExactDouble(0.011)}})))));
+    }
+}
+
 Void TestHybridEvolver::test_straddling_initial_times() const {
     HybridAutomaton system;
     system.new_mode(q,{dot(x)=1,dot(y)=0});
@@ -550,6 +666,11 @@ Void TestHybridEvolver::test_straddling_initial_times() const {
     auto past=evolver.orbit(initial,HybridTime(0.25_x,3),Semantics::UPPER);
     ARIADNE_TEST_EQUALS(past.reach().size(),0u);
     ARIADNE_TEST_EQUALS(past.final().size(),0u);
+    initial.set_time_function(evolver.function_factory().create_zero(domain));
+    auto zero_horizon=evolver.orbit(initial,HybridTime(0.0_x,3),Semantics::UPPER);
+    ARIADNE_TEST_EQUALS(zero_horizon.reach().size(),0u);
+    ARIADNE_TEST_ASSERT(zero_horizon.final().size()>0u);
+    for(auto const& final : zero_horizon.final()) expect_time(final,0.0);
 }
 
 Void TestHybridEvolver::test_formatting() const {
@@ -570,6 +691,8 @@ Void TestHybridEvolver::test_formatting() const {
     check(CrossingKind::TRANSVERSE,"TRANSVERSE"); check(CrossingKind::GRAZING,"GRAZING");
     check(static_cast<CrossingKind>(255),"unknown");
     check(StepKind::CONSTANT_EVOLUTION_TIME,"CONSTANT_EVOLUTION_TIME");
+    check(StepKind::SPACE_DEPENDENT_EVOLUTION_TIME,"SPACE_DEPENDENT_EVOLUTION_TIME");
+    check(StepKind::TIME_DEPENDENT_EVOLUTION_TIME,"TIME_DEPENDENT_EVOLUTION_TIME");
     check(StepKind::SPACETIME_DEPENDENT_EVOLUTION_TIME,"SPACETIME_DEPENDENT_EVOLUTION_TIME");
     check(StepKind::PARAMETER_DEPENDENT_EVOLUTION_TIME,"PARAMETER_DEPENDENT_EVOLUTION_TIME");
     check(StepKind::PARAMETER_DEPENDENT_FINISHING_TIME,"PARAMETER_DEPENDENT_FINISHING_TIME");

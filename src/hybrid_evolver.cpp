@@ -94,6 +94,8 @@ OutputStream& operator<<(OutputStream& os, const CrossingKind& crk) {
 OutputStream& operator<<(OutputStream& os, const StepKind& stpk) {
     switch(stpk) {
         case StepKind::CONSTANT_EVOLUTION_TIME: os<<"CONSTANT_EVOLUTION_TIME"; break;
+        case StepKind::SPACE_DEPENDENT_EVOLUTION_TIME: os<<"SPACE_DEPENDENT_EVOLUTION_TIME"; break;
+        case StepKind::TIME_DEPENDENT_EVOLUTION_TIME: os<<"TIME_DEPENDENT_EVOLUTION_TIME"; break;
         case StepKind::SPACETIME_DEPENDENT_EVOLUTION_TIME: os<<"SPACETIME_DEPENDENT_EVOLUTION_TIME"; break;
         case StepKind::PARAMETER_DEPENDENT_EVOLUTION_TIME: os<<"PARAMETER_DEPENDENT_EVOLUTION_TIME"; break;
         case StepKind::PARAMETER_DEPENDENT_FINISHING_TIME: os<<"PARAMETER_DEPENDENT_FINISHING_TIME"; break;
@@ -279,9 +281,20 @@ orbit(const HybridEnclosure& initial,
     ARIADNE_PRECONDITION(this->system().state_auxiliary_space()[initial.location()] == initial.state_auxiliary_space())
 
     auto result = std::make_shared<SynchronisedOrbit>(initial);
-    WorkloadType workload([termination](std::pair<HybridEnclosure,Bool> const& enclosure_jumped, SharedPointer<ProgressIndicator> indicator){
-                              indicator->update_current(enclosure_jumped.first.time_range().lower_bound().get_d());
-                              indicator->update_final(termination.maximum_time().get_d());
+    const double progress_start=initial.time_range().lower_bound().get_d();
+    const double progress_duration=termination.maximum_time().get_d()-progress_start;
+    WorkloadType workload([progress_start,progress_duration](std::pair<HybridEnclosure,Bool> const& enclosure_jumped, SharedPointer<ProgressIndicator> indicator){
+                              // Initial clocks may be negative or already past the horizon.
+                              // ProgressIndicator requires a nonnegative numerator and a
+                              // positive denominator when converting its ratio to unsigned.
+                              if(progress_duration>0.0) {
+                                  const double elapsed=enclosure_jumped.first.time_range().lower_bound().get_d()-progress_start;
+                                  indicator->update_current(std::clamp(elapsed,0.0,progress_duration));
+                                  indicator->update_final(progress_duration);
+                              } else {
+                                  indicator->update_current(1.0);
+                                  indicator->update_final(1.0);
+                              }
                           },
                           std::bind_front(&HybridEvolverBase::_process_working_set,this),termination,semantics,result);
     workload.append({initial,true}).process();
@@ -1132,7 +1145,7 @@ _process_jumped_set(WorkloadType::Access& workload,
     LOGGING_PRINTLN_AT(2,"initial_set="<<initial_set);
 
     LOGGING_RUN_MUTED(auto time_range = initial_set.time_range());
-    if(definitely(time_range.lower_bound()>=final_time)) {
+    if(definitely(time_range.lower_bound()>final_time)) {
         ARIADNE_WARN("initial_set.time_range()="<<time_range<<" which exceeds final time="<<final_time);
         return;
     }
@@ -1148,6 +1161,16 @@ _process_jumped_set(WorkloadType::Access& workload,
     LOGGING_PRINTLN_AT(2,"dynamic="<<dynamic);
     LOGGING_PRINTLN_AT(2,"initial_set "<<initial_set);
     LOGGING_PRINTLN_AT(2,"transitions="<<transitions);
+
+    if(definitely(time_range.lower_bound()>=final_time)) {
+        // The closed horizon includes points at t=T, including a reset that
+        // lands exactly there. Retain its invariant-valid slice before any
+        // further continuous or discrete evolution.
+        this->_apply_invariants(initial_set,transitions);
+        initial_set.set_time(final_time);
+        if(!definitely(initial_set.is_empty())) { result->adjoin_final(initial_set); }
+        return;
+    }
 
     // Test if maximum number of steps has been exceeded; if so, the set should be discarded.
     // NOTE: We could also place a test for the maximum number of steps being reaches which computing jump sets

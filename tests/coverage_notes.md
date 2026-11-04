@@ -149,3 +149,27 @@ slice can preserve its time as an equality constraint without a point-valued
 interval hull. The test verifies the numerical final-time equality, conservation
 of x-t, and the state and clock at an admissible parameter point. Configuration
 and enum constants use portable binary64 or decimal constructors.
+
+## Dependent timing and progress from asynchronous clocks
+
+The three dependent-evolution policies are exercised by a derived evolver with
+actual state-, time- and parameter-dependent step lengths. Two intermediate
+clocks distinguish the policies; the exact linear solution checks the common
+endpoint. StepKind streaming now names SPACE_DEPENDENT_EVOLUTION_TIME and
+TIME_DEPENDENT_EVOLUTION_TIME instead of reporting UNKNOWN for valid values.
+A nonlinear concave guard tests a nonzero critical-time error and both jumping
+and non-jumping trajectories. A partial urgent crossing without creep checks
+reset values, event identity and the analytic event-time interval.
+
+UBSan on Linux exposed a progress-reporting defect for valid negative initial
+clocks: ProgressIndicator converted a negative percentage to unsigned. Hybrid
+progress now measures elapsed time from the initial lower clock bound, clamps
+it to the requested duration, and uses 1/1 for an already reached horizon. The
+existing straddling-time regression is retained, including its negative initial
+times and verbose diagnostics. A zero-horizon case also checks the otherwise
+undefined 0/0 percentage. No evolution time or state is altered by this change.
+
+The zero-horizon expectation exposed a separate boundary defect:
+_process_jumped_set discarded clocks equal to the final time. It now rejects
+strictly later clocks and retains the invariant-valid final-time slice at the
+closed horizon. No additional flow or reset is taken from that slice.

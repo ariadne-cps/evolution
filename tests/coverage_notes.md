@@ -115,3 +115,9 @@ instantiation in the provider library rather than forcing an incidental copy in
 the test translation unit. GCC coverage builds previously diagnosed hidden
 virtual `_unchecked_compose` overloads while emitting that unnecessary copy.
 Warning policies and the enclosure expectations are unchanged.
+
+`FunctionPatch::operator()` considers Taylor model argument types during overload
+resolution, even when the call evaluates an approximate point. GCC requires
+those candidate types to be complete when checking convertibility. The test
+therefore includes `taylor_model.hpp` as well as the factory declarations; the
+factory itself is still constructed through the exported interface.

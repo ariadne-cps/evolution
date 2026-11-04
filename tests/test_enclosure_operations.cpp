@@ -1,5 +1,6 @@
 #include "evolution/enclosure.hpp"
 #include "function/taylor_function.decl.hpp"
+#include "function/taylor_model.hpp"
 #include "algebra/sweeper.hpp"
 #include "labelled/figure.hpp"
 #include "paving/paver.hpp"

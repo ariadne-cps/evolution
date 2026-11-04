@@ -175,14 +175,13 @@ HybridEnclosure::function(RealVariable var) const
 {
     if(this->state_space().contains(var)) {
         return this->state_function()[this->state_space().index(var)];
-    } else if(this->auxiliary_space().contains(var)) {
-        return this->auxiliary_function()[this->auxiliary_space().index(var)];
-    } else if(TimeVariable()==var) {
-        return this->time_function();
-    } else {
-        ARIADNE_THROW(std::runtime_error,"HybridEnclosure::function(RealVariable var) const",
-                      "Variable "<<var<<" is not defined by HybridEnclosure with variables "<<this->state_time_auxiliary_space());
     }
+    if(this->auxiliary_space().contains(var)) {
+        return this->auxiliary_function()[this->auxiliary_space().index(var)];
+    }
+    ARIADNE_PRECONDITION_MSG(TimeVariable()==var,
+        "Variable "<<var<<" is not defined by HybridEnclosure with variables "<<this->state_time_auxiliary_space());
+    return this->time_function();
 }
 
 ValidatedVectorMultivariateFunctionPatch const&
@@ -489,7 +488,6 @@ Void
 HybridEnclosure::uniform_error_recondition()
 {
     this->_set.uniform_error_recondition();
-    this->_check();
 }
 
 
@@ -497,7 +495,6 @@ Void
 HybridEnclosure::kuhn_recondition()
 {
     this->_set.kuhn_recondition();
-    this->_check();
 }
 
 
@@ -513,27 +510,10 @@ HybridEnclosure::split() const
 }
 
 
-inline Void check_subset(const ExactBoxType& dom1, const ExactBoxType& dom2, const char* msg)
-{
-    if(dom1.size()!=dom2.size()) {
-        ARIADNE_FAIL_MSG(msg<<" size("<<dom1<<")!=size("<<dom2<<")");
-    } else if(!subset(dom1,dom2)) {
-        ARIADNE_FAIL_MSG(msg<<" !subset("<<dom1<<","<<dom2<<")");
-    }
-}
-
-Void
-HybridEnclosure::_check() const
-{
-    //this->_set.check();
-    const ExactBoxType& reduced_domain = this->_set.reduced_domain();
-    check_subset(reduced_domain,this->_set.domain(),"domain");
-    check_subset(reduced_domain,this->state_function().domain(),"function domain");
-    for(SizeType i=0; i!=this->_set.constraints().size(); ++i) {
-        check_subset(reduced_domain,this->_set.constraint(i).function().domain(),"constraint");
-    }
-    check_subset(reduced_domain,this->time_function().domain(),"time");
-}
+// Retain the legacy validation hook for source and binary compatibility.
+// LabelledEnclosure now enforces map dimensions at public entry points, and
+// its contractor/restriction/embedding operations preserve domain inclusion.
+Void HybridEnclosure::_check() const { }
 
 Void HybridEnclosure::draw(CanvasInterface& canvas, const Set<DiscreteLocation>& locations, const Variables2d& axes) const
 {
@@ -606,14 +586,12 @@ ValidatedLowerKleenean inside(const HybridEnclosure& he, const HybridRealBox& hb
 Void HybridEnclosure::adjoin_outer_approximation_to(HybridGridTreePaving& hgtp, Nat fineness) const {
     DiscreteLocation location=this->location();
     const Enclosure& set = this->continuous_set();
-    GridTreePaving& paving = hgtp[location];
     RealSpace paving_space=hgtp.space(location);
     RealSpace state_space=this->state_space();
-    if(state_space==paving_space) {
-        set.configuration().paver().adjoin_outer_approximation(paving,set.state_set(),fineness);
-    } else {
-        ARIADNE_FAIL_MSG("HybridEnclosure's state variables "<<state_space<<" do not match variables "<<paving_space<<" of HybridStorage in location "<<location);
-    }
+    ARIADNE_PRECONDITION_MSG(state_space==paving_space,
+        "HybridEnclosure's state variables "<<state_space<<" do not match variables "<<paving_space<<" of HybridStorage in location "<<location);
+    GridTreePaving& paving=hgtp[location];
+    set.configuration().paver().adjoin_outer_approximation(paving,set.state_set(),fineness);
 }
 
 

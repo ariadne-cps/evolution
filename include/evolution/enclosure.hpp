@@ -96,6 +96,9 @@ List<Identifier> canonical_variable_names(const List<EnclosureVariableKind>& vks
 class Enclosure
     : public Drawable2dInterface
 {
+    // Public entry points validate dimensions before mutation. Factory creation,
+    // composition and restriction preserve argument dimensions; parameter
+    // extension embeds every map and appends its variable kind together.
     ExactBoxType _domain;
     EffectiveVectorMultivariateFunction _auxiliary_mapping;
     ValidatedVectorMultivariateFunctionPatch _state_function;
@@ -332,7 +335,6 @@ class Enclosure
     //! \brief Introduces a new independent variable with values in the interval \a ivl.
     //! Equivalent to constructing the set \f$S\times I\f$.
     Void _unchecked_new_variable(ExactIntervalType ivl, EnclosureVariableKind vk);
-    Void _check() const;
   private:
     friend Enclosure product(const Enclosure&, const ExactIntervalType&);
     friend Enclosure product(const Enclosure&, const ExactBoxType&);

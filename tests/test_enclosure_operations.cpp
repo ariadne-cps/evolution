@@ -152,6 +152,8 @@ public:
         reduced.kuhn_recondition();
         ARIADNE_TEST_EQUALS(reduced.number_of_parameters(),2u);
         ARIADNE_TEST_EQUALS(reduced.number_of_constraints(),1u);
+        ARIADNE_TEST_EQUALS(reduced.variable_kinds().front(),EnclosureVariableKind::INITIAL);
+        ARIADNE_TEST_EQUALS(reduced.variable_kinds().back(),EnclosureVariableKind::ERROR);
         ARIADNE_TEST_ASSERT(reduced.state_function()[0].range().lower_bound().raw().get_d()<=-6.0);
         ARIADNE_TEST_ASSERT(reduced.state_function()[0].range().upper_bound().raw().get_d()>=6.0);
         ARIADNE_TEST_FAIL(config.set_reconditioning_num_blocks(0u));

@@ -46,6 +46,8 @@
 #include "drawing/drawing_command_line_interface.hpp"
 
 #include "macro/testing.hpp"
+#include "log_verbosity_scope.hpp"
+#include <memory>
 
 using namespace Ariadne;
 using namespace std;
@@ -54,8 +56,46 @@ class TestIteratedMapEvolver
 {
   public:
     Void test() const {
+        ARIADNE_TEST_CALL(test_stopping_policies());
         ARIADNE_TEST_CALL(test_evolve());
         ARIADNE_TEST_CALL(test_subdivide());
+    }
+
+    Void test_stopping_policies() const {
+        RealVariable x("x"),other("other");
+        IteratedMap map(List<PrimedRealAssignment>{next(x)=x+1});
+        IteratedMapEvolver evolver(map);
+        auto initial=evolver.enclosure(ExactBoxType({{-1.0_x,1.0_x}}));
+        std::unique_ptr<IteratedMapEvolver> clone(evolver.clone());
+        auto const& const_evolver=*clone;
+        ARIADNE_TEST_EQUALS(const_evolver.configuration().maximum_enclosure_radius(),100.0);
+        ARIADNE_TEST_EQUALS(clone->system().state_space(),RealSpace({x}));
+        auto zero=evolver.orbit(initial,Integer(0),Semantics::LOWER);
+        ARIADNE_TEST_EQUALS(zero.final().size(),1u);
+        ARIADNE_TEST_EQUALS(zero.reach().size(),0u);
+        ARIADNE_TEST_EQUALS(zero.intermediate().size(),0u);
+        evolver.configuration().set_maximum_enclosure_radius(0.5);
+        evolver.configuration().set_enable_premature_termination(true);
+        auto stopped=evolver.orbit(initial,Integer(1),Semantics::LOWER);
+        ARIADNE_TEST_EQUALS(stopped.final().size(),0u);
+        ARIADNE_TEST_EQUALS(stopped.reach().size(),0u);
+        evolver.configuration().set_maximum_enclosure_radius(2.0);
+        auto small=evolver.orbit(initial,Integer(1),Semantics::LOWER);
+        ARIADNE_TEST_EQUALS(small.final().size(),1u);
+        evolver.configuration().set_maximum_enclosure_radius(0.5);
+        evolver.configuration().set_enable_premature_termination(false);
+        {
+            LogVerbosityScope diagnostics(100u);
+            auto continued=evolver.orbit(initial,Integer(2),Semantics::LOWER);
+            ARIADNE_TEST_EQUALS(continued.final().size(),1u);
+            ARIADNE_TEST_EQUALS(continued.reach().size(),2u);
+            ARIADNE_TEST_EQUALS(continued.intermediate().size(),2u);
+            ARIADNE_TEST_ASSERT(definitely(continued.final()[0].euclidean_set().subset(ExactBoxType({{0.99_x,3.01_x}}))));
+        }
+        auto unsplit=evolver.orbit(initial,Integer(1),Semantics::UPPER);
+        ARIADNE_TEST_EQUALS(unsplit.final().size(),1u);
+        auto incompatible=LabelledEnclosure(initial.euclidean_set(),RealSpace({other}));
+        ARIADNE_TEST_FAIL(evolver.orbit(incompatible,Integer(1),Semantics::UPPER));
     }
 
     Void test_evolve() const

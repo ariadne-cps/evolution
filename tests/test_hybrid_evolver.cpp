@@ -154,6 +154,7 @@ public:
         ARIADNE_TEST_CALL(test_integrator_step_limit());
         ARIADNE_TEST_CALL(test_dependent_step_policies());
         ARIADNE_TEST_CALL(test_nonlinear_grazing());
+        ARIADNE_TEST_CALL(test_guaranteed_near_tangent_crossing());
         ARIADNE_TEST_CALL(test_partial_crossing_without_creep());
         ARIADNE_TEST_CALL(test_straddling_initial_times());
         ARIADNE_TEST_CALL(test_formatting());
@@ -179,6 +180,7 @@ public:
     Void test_integrator_step_limit() const;
     Void test_dependent_step_policies() const;
     Void test_nonlinear_grazing() const;
+    Void test_guaranteed_near_tangent_crossing() const;
     Void test_partial_crossing_without_creep() const;
     Void test_straddling_initial_times() const;
     Void test_formatting() const;
@@ -336,7 +338,7 @@ Void TestHybridEvolver::test_grazing_and_terminating_event() const {
         if(count==0u) flowed=true; else jumped=true;
         ARIADNE_TEST_ASSERT(final.time_range().lower_bound().raw().get_d()>=1.9);
         ARIADNE_TEST_ASSERT(final.time_range().upper_bound().raw().get_d()<=2.1);
-        ExactBoxType expected=count==0u ? ExactBoxType({{ExactDouble(0.874),ExactDouble(1.126)},{-ExactDouble(0.26),ExactDouble(0.26)}}) : ExactBoxType({{ExactDouble(0.874),ExactDouble(1.126)},{-ExactDouble(1.26),-ExactDouble(0.74)}});
+        ExactBoxType expected=count==0u ? ExactBoxType({{ExactDouble(0.874),ExactDouble(1.126)},{-ExactDouble(0.26),ExactDouble(0.000001)}}) : ExactBoxType({{ExactDouble(0.874),ExactDouble(1.126)},{-ExactDouble(1.26),-ExactDouble(0.74)}});
         ARIADNE_TEST_ASSERT(definitely(final.inside(HybridExactBox(q,RealSpace({x,y}),expected))));
     }
     ARIADNE_TEST_ASSERT(jumped && flowed);
@@ -470,6 +472,9 @@ Void TestHybridEvolver::test_initial_constraints_and_contracts() const {
     auto outside=evolver.orbit(HybridBoxSet(q,{0.5_dec<=x<=0.75_dec,0<=y<=0.125_dec}),HybridTime(0.125_x,3),Semantics::UPPER);
     ARIADNE_TEST_EQUALS(outside.reach().size(),0u);
     ARIADNE_TEST_EQUALS(outside.final().size(),0u);
+    auto outside_zero=evolver.orbit(HybridBoxSet(q,{0.5_dec<=x<=0.75_dec,0<=y<=0.125_dec}),HybridTime(0.0_x,3),Semantics::UPPER);
+    ARIADNE_TEST_EQUALS(outside_zero.reach().size(),0u);
+    ARIADNE_TEST_EQUALS(outside_zero.final().size(),0u);
     ExactBoxType domain({{0,0.125_x},{0,0.125_x}});
     auto config=EnclosureConfiguration(evolver.function_factory());
     DiscreteLocation unknown(404);
@@ -603,6 +608,28 @@ Void TestHybridEvolver::test_nonlinear_grazing() const {
     ARIADNE_TEST_ASSERT(jumped && flowed);
 }
 
+Void TestHybridEvolver::test_guaranteed_near_tangent_crossing() const {
+    HybridAutomaton system;
+    system.new_mode(q,{dot(x)=1,dot(y)=0});
+    system.new_transition(q,e,q,{next(x)=x,next(y)=y-1},y-sqr(x)>=0,EventKind::URGENT);
+    GeneralHybridEvolver evolver(system);
+    evolver.ALLOW_CREEP=false;
+    evolver.configuration().set_maximum_step_size(1.0);
+    HybridBoxSet initial(q,{-0.5_dec<=x<=-0.49_dec,0.0001_dec<=y<=0.0002_dec});
+    // t_hit=-x0-sqrt(y0), so every trajectory hits in (0.475,0.491).
+    // The root lies beyond the reduced critical-time solver interval, which
+    // must fall back to the grazing partition without inventing a missing path.
+    auto before=evolver.orbit(initial,HybridTime(0.25_x,2),Semantics::UPPER);
+    expect_final(before,ExactBoxType({{-ExactDouble(0.251),-ExactDouble(0.239)},
+        {ExactDouble(0.00009),ExactDouble(0.00021)}}),0.25,0u);
+    auto after=evolver.orbit(initial,HybridTime(1.0_x,2),Semantics::UPPER);
+    expect_final(after,ExactBoxType({{ExactDouble(0.499),ExactDouble(0.511)},
+        {-ExactDouble(0.99991),-ExactDouble(0.99979)}}),1.0,1u);
+    for(auto const& final : after.final()) {
+        if(final.previous_events().size()==1u) ARIADNE_TEST_EQUALS(final.previous_events()[0],e);
+    }
+}
+
 Void TestHybridEvolver::test_partial_crossing_without_creep() const {
     HybridAutomaton system;
     DiscreteLocation target(2);
@@ -669,8 +696,8 @@ Void TestHybridEvolver::test_straddling_initial_times() const {
     initial.set_time_function(evolver.function_factory().create_zero(domain));
     auto zero_horizon=evolver.orbit(initial,HybridTime(0.0_x,3),Semantics::UPPER);
     ARIADNE_TEST_EQUALS(zero_horizon.reach().size(),0u);
-    ARIADNE_TEST_ASSERT(zero_horizon.final().size()>0u);
-    for(auto const& final : zero_horizon.final()) expect_time(final,0.0);
+    expect_final(zero_horizon,ExactBoxType({{-ExactDouble(0.001),ExactDouble(0.501)},
+        {-ExactDouble(0.011),ExactDouble(0.011)}}),0.0,0u);
 }
 
 Void TestHybridEvolver::test_formatting() const {

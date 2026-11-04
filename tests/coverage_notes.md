@@ -173,3 +173,22 @@ The zero-horizon expectation exposed a separate boundary defect:
 _process_jumped_set discarded clocks equal to the final time. It now rejects
 strictly later clocks and retains the invariant-valid final-time slice at the
 closed horizon. No additional flow or reset is taken from that slice.
+
+## Grazing partitions must remember earlier crossings
+
+For x'=1, y'=0 with urgent guard y-x*x>=0 and positive y, every trajectory
+crosses at t=-x0-sqrt(y0). Close to tangency, that root can lie beyond the
+15/16-reduced solver interval, so the standard solver legitimately chooses the
+GRAZING fallback. The old early exit tested elapsed_time<=critical_time. At an
+endpoint after the maximum this is false, even for a trajectory which crossed
+and returned; the endpoint was consequently retained without a jump.
+
+The early exit now tests 0<=critical_time instead: a future crossing is measured
+from the starting state, not the current endpoint. The existing three-way
+partition then excludes trajectories that already crossed. Before the change,
+the new analytic regression failed on the event count and reset state. It checks
+both the pre-crossing horizon and the post-crossing endpoint. The mixed grazing
+test additionally checks that non-jumping trajectories have y<=0 (within numeric
+tolerance), rather than accepting their full original y interval. This removes
+an avoidable spurious continuous path under upper semantics; it does not imply
+that the previous upper enclosure omitted a true reachable state.

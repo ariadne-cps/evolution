@@ -1037,7 +1037,10 @@ _apply_guard(List<HybridEnclosure>& sets,
                 // If no points in the set arise from trajectories which will later leave the progress set,
                 // then we only need to look at the maximum value of the guard.
                 HybridEnclosure eventually_hitting_set=set;
-                eventually_hitting_set.new_parameter_constraint( event, elapsed_time_function <= critical_time_function );
+                // Test whether the trajectory can hit at any future time
+                // from its starting state. An endpoint already beyond the
+                // maximum may have crossed and returned; it is not a miss.
+                eventually_hitting_set.new_parameter_constraint( event, zero <= critical_time_function );
                 eventually_hitting_set.new_parameter_constraint( event, maximal_guard_function >= zero);
                 LOGGING_PRINTLN_AT(1,"eventually_hitting_set.is_empty()="<<eventually_hitting_set.is_empty());
                 if(definitely(eventually_hitting_set.is_empty())) {

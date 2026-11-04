@@ -104,3 +104,14 @@ reference finish before either append; local hitting/past copies remain valid.
 Newly appended sets are not processed again, as required by the original algorithm.
 The same grazing test runs on every supported platform and checks both optional
 outcomes, numeric endpoint bounds, event histories and final times.
+
+## Exported factory ownership in enclosure tests
+
+The enclosure operations test only needs a validated Taylor function factory;
+it does not exercise implementation-specific factory construction. It now uses
+`make_taylor_function_patch_factory(sweeper)` exported by Function, retaining the same
+DP precision and threshold sweeper. This keeps concrete model/factory vtable
+instantiation in the provider library rather than forcing an incidental copy in
+the test translation unit. GCC coverage builds previously diagnosed hidden
+virtual `_unchecked_compose` overloads while emitting that unnecessary copy.
+Warning policies and the enclosure expectations are unchanged.

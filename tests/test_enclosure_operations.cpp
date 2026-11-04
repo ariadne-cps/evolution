@@ -1,5 +1,6 @@
 #include "evolution/enclosure.hpp"
-#include "function/taylor_function.hpp"
+#include "function/taylor_function.decl.hpp"
+#include "algebra/sweeper.hpp"
 #include "labelled/figure.hpp"
 #include "paving/paver.hpp"
 #include "set/list_set.hpp"
@@ -10,7 +11,10 @@ using namespace Ariadne;
 
 class TestEnclosureOperations {
     ExactBoxType domain{{-1,1}};
-    EnclosureConfiguration config{TaylorFunctionFactory(ThresholdSweeper<FloatDP>(dp,1e-8))};
+    // Use the exported factory: this test exercises enclosure operations, while
+    // the function library owns the concrete factory/model instantiations.
+    EnclosureConfiguration config{ValidatedFunctionPatchFactory(
+        make_taylor_function_patch_factory(ThresholdSweeper<FloatDP>(dp,1e-8)))};
     EffectiveVectorMultivariateFunction identity=EffectiveVectorMultivariateFunction::identity(1u);
     EffectiveScalarMultivariateFunction coordinate=identity[0];
     EffectiveScalarMultivariateFunction zero=EffectiveScalarMultivariateFunction::zero(1u);

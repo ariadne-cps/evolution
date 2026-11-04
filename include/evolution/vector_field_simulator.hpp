@@ -136,12 +136,11 @@ class VectorFieldSimulatorConfiguration : public ConfigurationInterface
     FloatDPApproximation _step_size;
     Nat _num_subdivisions;
     DiscretisationType _discretisation_type;
-    Bool _is_using_subspace;
     subspace _subspace;
 
   public:
 
-    Void set_step_size(double h) { _step_size=h; }
+    Void set_step_size(double h) { ARIADNE_PRECONDITION(h>0); _step_size=h; }
     FloatDPApproximation const& step_size() const { return _step_size; }
 
     Void set_discretisation_type(DiscretisationType discretisation_type) { _discretisation_type = discretisation_type; }
@@ -150,20 +149,10 @@ class VectorFieldSimulatorConfiguration : public ConfigurationInterface
     Void set_num_subdivisions(Nat num_subdivisions) { _num_subdivisions = num_subdivisions; }
     Nat const& num_subdivisions() const { return _num_subdivisions; }
 
-    Void insert_subspace(RealVariable v, Nat n){
-        if (n <= 0) {
-            ARIADNE_ERROR("The number of subspace should be greater that zero");
-        }
-        if(_subspace.has_key(v) == false){
-            //If key doesn't exists, then create it one with its value
-            _subspace.insert(v, n);
-            _is_using_subspace = true;
-        }else{
-            //if key already exists,
-            ARIADNE_ERROR("The key " <<v<< "already exists creating subspace");
-
-
-        }
+    Void insert_subspace(RealVariable v, Nat n) {
+        ARIADNE_PRECONDITION(n>0u);
+        ARIADNE_PRECONDITION(!_subspace.has_key(v));
+        _subspace.insert(v,n);
     }
 
     Void remove_keys() {
@@ -171,11 +160,11 @@ class VectorFieldSimulatorConfiguration : public ConfigurationInterface
     }
 
     Void set_subspace(subspace _subspace_) {
-        _is_using_subspace = true;
+        for(auto const& entry : _subspace_) { ARIADNE_PRECONDITION(entry.second>0u); }
         _subspace = _subspace_;
     }
 
-    Bool is_using_subspace() { return _is_using_subspace; }
+    Bool is_using_subspace() const { return !_subspace.empty(); }
 
     subspace const& get_subspace() const { return _subspace; }
 

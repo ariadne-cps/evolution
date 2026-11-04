@@ -74,17 +74,16 @@ HybridSimulator::_guard_functions(const DiscreteLocation& location) const {
 
 Bool
 HybridSimulator::_satisfies_invariants(const DiscreteLocation& location, const Point<FloatDPApproximation>& point) const {
-    Bool result=true;
     Set<DiscreteEvent> events=_sys_ptr->events(location);
-    for(Set<DiscreteEvent>::ConstIterator iter=events.begin(); iter!=events.end(); ++iter) {
-        EventKind kind = _sys_ptr->event_kind(location,*iter);
-        EffectiveScalarMultivariateFunction guard = _sys_ptr->guard_function(location,*iter);
-        if ((kind == EventKind::INVARIANT || kind == EventKind::PROGRESS) && probably(evaluate(guard,point)<0)) {
-            result=false;
-            break;
+    for(auto const& event : events) {
+        EventKind kind=_sys_ptr->event_kind(location,event);
+        if(kind==EventKind::INVARIANT || kind==EventKind::PROGRESS) {
+            // Both predicates are supplied by invariant_function with p(x)<=0.
+            auto predicate=_sys_ptr->invariant_function(location,event);
+            if(probably(evaluate(predicate,point)>0)) { return false; }
         }
     }
-    return result;
+    return true;
 }
 
 template<class X> Point<X> make_point(const HybridPoint<X>& hpt, const RealSpace& sspc) {
@@ -106,18 +105,20 @@ template<class X> Void make_point_list(const HybridPoint<X>& list, Vector<Point<
     }
 }
 
-Vector<HybridPoint<FloatDPApproximation>> create_hybrid_point_list(GridTreePaving& grid, DiscreteLocation loc , RealSpace spc, DiscretizationHybridType _dtype, Nat fineness)
+Vector<HybridPoint<FloatDPApproximation>> create_hybrid_point_list(GridTreePaving& grid, DiscreteLocation loc , RealSpace spc, DiscretizationHybridType _dtype, Nat fineness, UpperBoxType const& sampling_box)
 {
     if(_dtype == DiscretizationHybridType::HMince){
         grid.mince(fineness);
     }else{ grid.recombine(); }
 
     GridTreePaving::ConstIterator iter = grid.begin();
-    Vector<HybridPoint<FloatDPApproximation>> approxPointList(grid.size(), HybridPoint<FloatDPApproximation>(loc,spc,HybridUpperBox(loc, spc, iter->box()).euclidean_set().midpoint()));
+    Vector<HybridPoint<FloatDPApproximation>> approxPointList(grid.size(),HybridPoint<FloatDPApproximation>());
     SizeType k(0);
     for( ; iter!=grid.end(); ++iter){
-        auto hucell = HybridUpperBox(loc, spc, iter->box());
-        auto midpoint = hucell.euclidean_set().midpoint();
+        // Outer approximation may include cells crossing the requested boundary.
+        // Sample their intersection so every initial point belongs to the box.
+        auto sampled=intersection(UpperBoxType(iter->box()),sampling_box);
+        auto midpoint=sampled.midpoint();
         HybridPoint<FloatDPApproximation> pt(loc,spc,midpoint);
         approxPointList.at(k) = pt;
         k++;
@@ -301,27 +302,25 @@ auto HybridSimulator::orbit(const Vector<HybridRealPoint>& initial_set, const Te
 auto HybridSimulator::orbit(HybridUpperBox const& initial_box, DiscreteLocation loc, HybridSpace space, TerminationType const& termination) const
     -> Orbit<HybridApproximateListPointType>
 {
-    auto lengths = initial_box.euclidean_set(space[loc]).widths();
-    Nat box_width_null = 0;
-    for(SizeType i=0; i<lengths.size(); i++){
-        if(lengths[i].get_d() > 0) { continue; }
-        box_width_null++;
+    auto box=initial_box.euclidean_set(space[loc]);
+    auto lengths=box.widths();
+    Nat box_width_null=0;
+    for(SizeType i=0;i<lengths.size();++i) {
+        if(lengths[i].get_d()>0) { continue; }
+        ++box_width_null;
     }
-    if(box_width_null == lengths.size()) 
-    {
-        auto midpoint = initial_box.euclidean_set(space[loc]).midpoint();
-        HybridApproximateListPointType pointList(1, HybridApproximatePointType(loc, space[loc], midpoint));
-        return orbit(pointList, termination);
+    if(box_width_null==lengths.size()) {
+        auto midpoint=box.midpoint();
+        HybridApproximateListPointType pointList(1,HybridApproximatePointType(loc,space[loc],midpoint));
+        return orbit(pointList,termination);
     }
-    else if (box_width_null > 0)
-    {
-        FloatDPUpperBound eps(0.0001_q,dp);
-        auto box_temp = widen(initial_box.euclidean_set(space[loc]), eps);
-        HybridUpperBox hbox(loc, space[loc], box_temp);
+    if(box_width_null>0) {
+        // A partially flat box needs positive grid lengths in every coordinate.
+        box=widen(box,FloatDPUpperBound(0.0001_q,dp));
     }
-    GridTreePaving gridPaving = create_hybrid_grid(initial_box.euclidean_set(space[loc]));
-    gridPaving.adjoin_outer_approximation(initial_box.euclidean_set(space[loc]), _configuration->fineness());
-    HybridApproximateListPointType pointList = create_hybrid_point_list(gridPaving, loc, this->_sys_ptr->continuous_state_space(loc), _configuration->d_type(), _configuration->fineness());
+    GridTreePaving gridPaving=create_hybrid_grid(box);
+    gridPaving.adjoin_outer_approximation(box,_configuration->fineness());
+    HybridApproximateListPointType pointList=create_hybrid_point_list(gridPaving,loc,this->_sys_ptr->continuous_state_space(loc),_configuration->d_type(),_configuration->fineness(),initial_box.euclidean_set(space[loc]));
     return orbit(pointList, termination);
 }
 
@@ -340,7 +339,7 @@ auto HybridSimulator::orbit(const HybridApproximateListPointType& init_list,
     Vector<ApproximatePointType> point_list(init_list.size(), ApproximatePointType());
 
     Vector<ApproximatePointType> next_point(init_list.size(), ApproximatePointType());
-    Vector<List<DiscreteEvent>> event_trace(init_list.size(), DiscreteEvent());
+    Vector<List<DiscreteEvent>> event_trace(init_list.size(),List<DiscreteEvent>());
 
     Vector<RealSpace> continuous_state_space(init_list.size(), RealSpace());
     Vector<RealSpace> continuous_auxiliary_space(init_list.size(), RealSpace());

@@ -1,140 +1,152 @@
-/***************************************************************************
- *            test_hybrid_simulator.cpp
- *
- *  Copyright  2006-20  Pieter Collins
- *
- ****************************************************************************/
-
-/*
- *  This file is part of Ariadne.
- *
- *  Ariadne is free software: you can redistribute it and/or modify
- *  it under the terms of the GNU General Public License as published by
- *  the Free Software Foundation, either version 3 of the License, or
- *  (at your option) any later version.
- *
- *  Ariadne is distributed in the hope that it will be useful,
- *  but WITHOUT ANY WARRANTY; without even the implied warranty of
- *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- *  GNU General Public License for more details.
- *
- *  You should have received a copy of the GNU General Public License
- *  along with Ariadne.  If not, see <https://www.gnu.org/licenses/>.
- */
-
-#include <fstream>
-#include <iostream>
-
-#include "symbolic/expression.hpp"
-#include "symbolic/space.hpp"
-#include "hybrid/hybrid_set.hpp"
-#include "hybrid/hybrid_paving.hpp"
+#include "evolution/hybrid_simulator.hpp"
 #include "evolution/hybrid_orbit.hpp"
 #include "evolution/hybrid_time.hpp"
 #include "system/hybrid_automata.hpp"
-#include "evolution/hybrid_simulator.hpp"
-#include "hybrid/hybrid_graphics.hpp"
-#include "drawing/drawing_command_line_interface.hpp"
-#include "labelled/figure.hpp"
-#include "logging/logging.hpp"
-
+#include "log_verbosity_scope.hpp"
 #include "macro/testing.hpp"
-
-
+#include <cmath>
+#include <sstream>
 using namespace Ariadne;
-using namespace std;
 
-class TestHybridSimulator
-{
-  private:
-    HybridAutomaton system() const
-    {
-        const DiscreteLocation location1(1);
-        const DiscreteLocation location2(2);
-        const DiscreteEvent event3("e3");
-        const DiscreteEvent event4("e4");
-        const RealVariable x("x");
-        const RealVariable y("y");
-        const RealVariable z("z");
-
-        HybridAutomaton automaton;
-        Dyadic a(-0.5_x); Dyadic b(1.0_x); Dyadic cx1(3.0_x); Dyadic cx2(-1.0_x); Dyadic cz(1.0_x);
-        automaton.new_mode(location1,{dot(x)= a*x-b*y+cx1,dot(y)=b*x+a*y} );
-        automaton.new_mode(location2,{dot(x)= a*x-b*y+cx2,dot(y)=b*x+a*y,dot(z)=cz});
-        automaton.new_transition(location1,event3,location2,{next(x)=x,next(y)=y,next(z)=y},x>=1,EventKind::URGENT);
-        automaton.new_transition(location2,event4,location1,{next(x)=x,next(y)=y},x<=-1,EventKind::URGENT);
-
-        return automaton;
-    }
-
-  public:
-    Void test() const {
-        ARIADNE_TEST_CALL(test_run());
-    }
-
-    Void test_run() const {
-        typedef HybridSimulator::ApproximatePointType ApproximatePointType;
-        typedef HybridSimulator::HybridApproximatePointType HybridApproximatePointType;
-        typedef HybridSimulator::HybridApproximateListPointType HybridApproximateListPointType;
-
-        const DiscreteLocation location1(1);
-        const DiscreteLocation location2(2);
-        const DiscreteEvent event3("e3");
-        const DiscreteEvent event4("e4");
-        const RealVariable x("x");
-        const RealVariable y("y");
-
-        // Make a hybrid automaton for the Van der Pol equation
-        HybridAutomaton automaton=system();
-        ARIADNE_TEST_PRINT(automaton);
-
-        // Set up the evaluators
-        HybridSimulator simulator(automaton);
-        simulator.configuration().set_step_size(0.0625);
-
-        cout << "configuration=" << simulator.configuration() << endl;
-
-        // Define the initial box
-        RealSpace space={x,y};
-        RealPoint initial_point = Point<Real>{-0.00_x, 0.50_x};
-        cout << "initial_point=" << initial_point << endl;
-        ApproximatePointType approximate_initial_point = ApproximatePointType(initial_point,dp);
-        HybridApproximatePointType initial_hybrid_point(location1,space,approximate_initial_point);
-        HybridApproximateListPointType hybrid_point_list(1, initial_hybrid_point);
-        HybridApproximatePointType hybrid_point(location1,space,approximate_initial_point);
-        HybridTime simulation_time(5.25_x,3);
-
-        // Compute the reachable sets
-        cout << "Computing orbit... "<<std::endl;
-//        auto orbit1=simulator.orbit(hybrid_point_list,simulation_time);
-        auto orbit2=simulator.orbit(HybridBoundedConstraintSet(location1,{x==0,y==0.5_dec}),simulation_time);
-//        auto orbit3=simulator.orbit(hybrid_point,simulation_time);
-
-        cout << "done"<<std::endl;
-
-        HybridFigure hfig;
-        hfig.set_locations({location1});
-        hfig.set_bounds(x,-1.5,1.5);
-        hfig.set_bounds(y,-1.5,1.5);
-        hfig.set_variables(x,y);
-/*
-        hfig << fill_colour(red) << fill_opacity(1.0) << line_colour(black) << line_width(1.0) << orbit1;
-        hfig.write("orbit_single_point_list");
-*/
-        hfig.clear();
-        hfig << fill_colour(green) << fill_opacity(0.1) << line_colour(red) << line_width(1.0) << orbit2;
-        hfig.write("orbit_bounded_constraint_set");
-/*
-        hfig.clear();
-        hfig << fill_colour(green) << fill_opacity(0.1) << line_colour(red) << line_width(4.0) << orbit3;
-        hfig.write("orbit_single_point");
-*/
-        //ARIADNE_TEST_EQUALS(orbit1.curve(0).size(),orbit2.curve(0).size()); MODIFICARE PRIMA L'INTERFACCIA HYBRID SIMULATOR   
+// A valid progress predicate supplied through the supported automaton interface.
+// HybridAutomaton's convenience invariant builder currently selects INVARIANT.
+class ProgressAutomaton : public HybridAutomaton {
+public:
+    ProgressAutomaton* clone() const override { return new ProgressAutomaton(*this); }
+    EventKind event_kind(DiscreteLocation location,DiscreteEvent event) const override {
+        auto kind=HybridAutomaton::event_kind(location,event);
+        return kind==EventKind::INVARIANT ? EventKind::PROGRESS : kind;
     }
 };
 
-int main()
-{
-    TestHybridSimulator().test();
-    return ARIADNE_TEST_FAILURES;
-}
+class TestHybridSimulator {
+    RealVariable x{"x"},y{"y"},z{"z"};
+    DiscreteLocation q{1},target{2};
+    DiscreteEvent jump{"jump"};
+    using PointType=HybridSimulator::HybridApproximatePointType;
+    using PointList=HybridSimulator::HybridApproximateListPointType;
+    PointType point(double xv=0.0) const {
+        return PointType(q,RealSpace({x,y}),FloatDPApproximationPoint({ExactDouble(xv),2.0_x},dp));
+    }
+    Void expect_endpoint(HybridInterpolatedCurve const& curve,double time,double xv,double yv,double zv) const {
+        auto const& endpoint=curve.euclidean_set().end();
+        ARIADNE_TEST_ASSERT(std::abs(endpoint->first.get_d()-time)<1e-12);
+        auto const& values=endpoint->second;
+        ARIADNE_TEST_ASSERT(std::abs(values[curve.space()[x]].raw().get_d()-xv)<1e-12);
+        ARIADNE_TEST_ASSERT(std::abs(values[curve.space()[y]].raw().get_d()-yv)<1e-12);
+        ARIADNE_TEST_ASSERT(std::abs(values[curve.space()[z]].raw().get_d()-zv)<1e-12);
+    }
+    HybridAutomaton flow_system() const {
+        HybridAutomaton system;
+        system.new_mode(q,{dot(x)=1,dot(y)=0},{let(z)=x+2*y});
+        return system;
+    }
+public:
+    Void test() {
+        ARIADNE_TEST_CALL(test_labelled_flow());
+        ARIADNE_TEST_CALL(test_transitions_and_termination());
+        ARIADNE_TEST_CALL(test_invariant_and_progress_stopping());
+        ARIADNE_TEST_CALL(test_box_sampling());
+    }
+    Void test_labelled_flow() {
+        HybridSimulator simulator(flow_system());
+        simulator.configuration().set_step_size(0.25);
+        PointType reordered(q,RealSpace({y,x}),FloatDPApproximationPoint({2.0_x,0.0_x},dp));
+        HybridRealPoint real(q,RealSpace({x,y}),RealPoint({Real(0),Real(2)}));
+        auto single=simulator.orbit(point(),HybridTime(1.0_x,3));
+        auto permuted=simulator.orbit(reordered,HybridTime(1.0_x,3));
+        auto from_real=simulator.orbit(real,HybridTime(1.0_x,3));
+        expect_endpoint(single.curves()[0],1.0,1.0,2.0,5.0);
+        expect_endpoint(permuted.curves()[0],1.0,1.0,2.0,5.0);
+        expect_endpoint(from_real.curves()[0],1.0,1.0,2.0,5.0);
+        auto list=simulator.orbit(PointList{point(),reordered},HybridTime(1.0_x,3));
+        ARIADNE_TEST_EQUALS(list.number_of_trajectories(),2u);
+        expect_endpoint(list.curves(0)[0],1.0,1.0,2.0,5.0);
+        expect_endpoint(list.curves(1)[0],1.0,1.0,2.0,5.0);
+        HybridTerminationCriterion no_phantom_event(Real(1),Integer(3),Set<DiscreteEvent>{DiscreteEvent()});
+        auto fresh=simulator.orbit(PointList{point()},no_phantom_event);
+        expect_endpoint(fresh.curves(0u)[0],1.0,1.0,2.0,5.0);
+        auto none=simulator.orbit(PointList{},HybridTime(1.0_x,3));
+        ARIADNE_TEST_EQUALS(none.number_of_trajectories(),0u);
+        auto zero=simulator.orbit(point(),HybridTime(0.0_x,3));
+        expect_endpoint(zero.curves()[0],0.0,0.0,2.0,4.0);
+        ARIADNE_TEST_FAIL(simulator.configuration().set_step_size(0.0));
+        ARIADNE_TEST_FAIL(simulator.configuration().set_step_size(-0.25));
+        auto const& configured=simulator;
+        ARIADNE_TEST_EQUALS(configured.configuration().step_size().raw().get_d(),0.25);
+    }
+    Void test_transitions_and_termination() {
+        auto system=flow_system();
+        system.new_mode(target,{dot(x)=0,dot(y)=0},{let(z)=x+2*y});
+        system.new_transition(q,jump,target,{next(x)=0,next(y)=y},x>=Real(1/4_q),EventKind::URGENT);
+        HybridSimulator simulator(system);
+        simulator.configuration().set_step_size(0.25);
+        for(unsigned verbosity : {0u,100u}) {
+            LogVerbosityScope logging(verbosity);
+            HybridTerminationCriterion stop(Real(1),Integer(3),Set<DiscreteEvent>{jump});
+            auto single=simulator.orbit(point(),stop);
+            ARIADNE_TEST_EQUALS(single.size(),2u);
+            ARIADNE_TEST_EQUALS(single.curves()[1].location(),target);
+            expect_endpoint(single.curves()[0],0.5,0.5,2.0,4.5);
+            expect_endpoint(single.curves()[1],0.5,0.0,2.0,4.0);
+            auto multiple=simulator.orbit(PointList{point()},stop);
+            ARIADNE_TEST_EQUALS(multiple.size(0u),2u);
+            expect_endpoint(multiple.curves(0u)[1],0.5,0.0,2.0,4.0);
+            auto continued=simulator.orbit(point(),HybridTime(1.0_x,3));
+            expect_endpoint(continued.curves()[1],1.0,0.0,2.0,4.0);
+            auto continued_list=simulator.orbit(PointList{point()},HybridTime(1.0_x,3));
+            expect_endpoint(continued_list.curves(0u)[1],1.0,0.0,2.0,4.0);
+        }
+    }
+    Void test_invariant_and_progress_stopping() {
+        for(EventKind kind : {EventKind::INVARIANT,EventKind::PROGRESS}) {
+            auto base=flow_system();
+            DiscreteEvent block("block");
+            base.new_invariant(q,x<=1,block);
+            ProgressAutomaton progress;
+            progress.new_mode(q,{dot(x)=1,dot(y)=0},{let(z)=x+2*y});
+            progress.new_invariant(q,x<=1,block);
+            HybridSimulator simulator(kind==EventKind::INVARIANT
+                ? static_cast<HybridAutomatonInterface const&>(base)
+                : static_cast<HybridAutomatonInterface const&>(progress));
+            for(unsigned verbosity : {0u,100u}) {
+                LogVerbosityScope logging(verbosity);
+                auto stopped=simulator.orbit(point(2.0),HybridTime(1.0_x,3));
+                ARIADNE_TEST_EQUALS(stopped.curve(0u).size(),1u);
+                expect_endpoint(stopped.curves()[0],0.0,2.0,2.0,6.0);
+                auto stopped_list=simulator.orbit(PointList{point(2.0)},HybridTime(1.0_x,3));
+                ARIADNE_TEST_EQUALS(stopped_list.curve(0u,0u).size(),1u);
+                auto valid=simulator.orbit(point(),HybridTime(0.5_x,3));
+                expect_endpoint(valid.curves()[0],0.5,0.5,2.0,4.5);
+            }
+        }
+    }
+    Void test_box_sampling() {
+        auto system=flow_system();
+        HybridSimulator simulator(system);
+        simulator.configuration().set_fineness(1u);
+        HybridUpperBox box(q,RealSpace({x,y}),UpperBoxType({{0,1},{1,2}}));
+        SizeType minces=0u;
+        for(auto type : {DiscretizationHybridType::HMince,DiscretizationHybridType::HRecombine}) {
+            simulator.configuration().set_d_type(type);
+            auto orbit=simulator.orbit(box,q,system.state_space(),HybridTime(0.0_x,3));
+            ARIADNE_TEST_ASSERT(orbit.number_of_trajectories()>0u);
+            if(type==DiscretizationHybridType::HMince) minces=orbit.number_of_trajectories();
+            else ARIADNE_TEST_ASSERT(orbit.number_of_trajectories()<=minces);
+            for(SizeType i=0u;i<orbit.number_of_trajectories();++i) {
+                auto p=orbit.curve(static_cast<Nat>(i),0u).begin()->second;
+                ARIADNE_TEST_ASSERT(p[0].raw().get_d()>=0.0 && p[0].raw().get_d()<=1.0);
+                ARIADNE_TEST_ASSERT(p[1].raw().get_d()>=1.0 && p[1].raw().get_d()<=2.0);
+            }
+            std::ostringstream description; description<<simulator.configuration();
+            ARIADNE_TEST_ASSERT(description.str().find(type==DiscretizationHybridType::HMince ? "Mince" : "Recombine")!=std::string::npos);
+        }
+        HybridUpperBox flat(q,RealSpace({x,y}),UpperBoxType({{0,0},{1,2}}));
+        auto flat_orbit=simulator.orbit(flat,q,system.state_space(),HybridTime(0.0_x,3));
+        ARIADNE_TEST_ASSERT(flat_orbit.number_of_trajectories()>0u);
+        auto singleton=simulator.orbit(HybridBoundedConstraintSet(q,{x==0,y==2}),HybridTime(0.0_x,3));
+        ARIADNE_TEST_EQUALS(singleton.number_of_trajectories(),1u);
+        expect_endpoint(singleton.curves(0u)[0],0.0,0.0,2.0,4.0);
+    }
+};
+int main() { TestHybridSimulator().test(); return ARIADNE_TEST_FAILURES; }

@@ -43,6 +43,9 @@
 #include "evolution/orbit.hpp"
 
 #include "macro/testing.hpp"
+#include "log_verbosity_scope.hpp"
+#include <cmath>
+#include <sstream>
 
 using namespace Ariadne;
 using namespace std;
@@ -51,10 +54,78 @@ class TestVectorFieldSimulator
 {
   public:
     Void test() const {
+        ARIADNE_TEST_CALL(test_linear_flow_and_input_labels());
+        ARIADNE_TEST_CALL(test_configuration_and_sampling());
         ARIADNE_TEST_CALL(test_multiple_real_expr_vdp_cycle());
         ARIADNE_TEST_CALL(test_multiple_real_box_vdp_cycle());
         ARIADNE_TEST_CALL(test_multiple_trajectories_x());
         ARIADNE_TEST_CALL(test_multiple_trajectories_xy());
+    }
+
+    Void test_linear_flow_and_input_labels() const {
+        RealVariable x("x"),y("y"),z("z"),missing("missing");
+        VectorField field({dot(x)=1,dot(y)=0},{let(z)=x+2*y});
+        VectorFieldSimulator simulator(field);
+        simulator.configuration().set_step_size(0.25);
+        using PointType=VectorFieldSimulator::ApproximatePointType;
+        using Points=VectorFieldSimulator::ApproximateListPointType;
+        PointType start(RealSpace({x,y}),FloatDPApproximationPoint({0.0_x,2.0_x},dp));
+        PointType reordered(RealSpace({y,x}),FloatDPApproximationPoint({2.0_x,0.0_x},dp));
+        for(unsigned verbosity : {0u,100u}) {
+            LogVerbosityScope logging(verbosity);
+            auto orbit=simulator.orbit(Points{start,reordered},Real(1));
+            ARIADNE_TEST_EQUALS(orbit.curves().size(),2u);
+            for(auto const& curve : orbit.curves()) {
+                auto const& endpoint=curve.end();
+                ARIADNE_TEST_EQUALS(endpoint->first.get_d(),1.0);
+                ARIADNE_TEST_ASSERT(std::abs(endpoint->second[curve.space()[x]].raw().get_d()-1.0)<1e-12);
+                ARIADNE_TEST_ASSERT(std::abs(endpoint->second[curve.space()[y]].raw().get_d()-2.0)<1e-12);
+                ARIADNE_TEST_ASSERT(std::abs(endpoint->second[curve.space()[z]].raw().get_d()-5.0)<1e-12);
+            }
+        }
+        ARIADNE_TEST_EQUALS(simulator.orbit(Points{},Real(1)).curves().size(),0u);
+        ARIADNE_TEST_EQUALS(simulator.orbit(Points{start},Real(0)).curve(0).size(),1u);
+        PointType incompatible(RealSpace({missing,y}),FloatDPApproximationPoint({0.0_x,2.0_x},dp));
+        ARIADNE_TEST_FAIL(simulator.orbit(Points{incompatible},Real(1)));
+    }
+
+    Void test_configuration_and_sampling() const {
+        RealVariable x("x"),y("y"),unknown("unknown");
+        VectorField field({dot(x)=0,dot(y)=0});
+        VectorFieldSimulator simulator(field);
+        auto& config=simulator.configuration();
+        ARIADNE_TEST_FAIL(config.set_step_size(0.0));
+        ARIADNE_TEST_FAIL(config.set_step_size(-1.0));
+        ARIADNE_TEST_FAIL(config.insert_subspace(x,0u));
+        config.insert_subspace(x,2u);
+        ARIADNE_TEST_FAIL(config.insert_subspace(x,3u));
+        ARIADNE_TEST_FAIL(config.set_subspace(subspace{{x,0u}}));
+        ARIADNE_TEST_EQUALS(config.get_subspace().size(),1u);
+        config.remove_keys();
+        ARIADNE_TEST_ASSERT(!config.is_using_subspace());
+        config.set_subspace(subspace{});
+        ARIADNE_TEST_ASSERT(!config.is_using_subspace());
+        config.set_subspace(subspace{{x,2u}});
+        config.set_num_subdivisions(3u);
+        auto const& configured=simulator;
+        ARIADNE_TEST_ASSERT(configured.configuration().is_using_subspace());
+        UpperBoxType box({{0,1},{0,1}});
+        auto divided=simulator.orbit(box,Real(0));
+        ARIADNE_TEST_EQUALS(config.num_subdivisions(),3u);
+        ARIADNE_TEST_ASSERT(divided.curves().size()>0u);
+        config.set_subspace(subspace{{unknown,2u}});
+        ARIADNE_TEST_FAIL(simulator.orbit(box,Real(0)));
+        config.remove_keys();
+        config.set_num_subdivisions(0u);
+        for(auto type : {DiscretisationType::None,DiscretisationType::Recombine}) {
+            config.set_discretisation_type(type);
+            auto sampled=simulator.orbit(box,Real(0));
+            ARIADNE_TEST_ASSERT(sampled.curves().size()>0u);
+            std::ostringstream description;
+            ConfigurationInterface const& base=config;
+            description<<base;
+            ARIADNE_TEST_ASSERT(description.str().find("VectorFieldSimulatorConfiguration")!=std::string::npos);
+        }
     }
 
     Void test_multiple_trajectories_x() const {

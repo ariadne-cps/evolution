@@ -48,6 +48,7 @@ class TestHybridEnclosure {
     Void test() {
         ARIADNE_TEST_CALL(test_time_maps_and_steps())
         ARIADNE_TEST_CALL(test_constraints_and_collections())
+        ARIADNE_TEST_CALL(test_alternate_factory_formatting())
         ARIADNE_TEST_CALL(test_construct())
         ARIADNE_TEST_CALL(test_space_having_time())
         ARIADNE_TEST_CALL(test_auxiliary())
@@ -200,6 +201,26 @@ class TestHybridEnclosure {
         ARIADNE_TEST_FAIL(initial.adjoin_outer_approximation_to(wrong,0u));
         sets.clear();
         ARIADNE_TEST_EQUALS(sets.size(),0u);
+    }
+
+    void test_alternate_factory_formatting() {
+        RealVariable x("x"),y("y");
+        RealSpace space({x,y});
+        DiscreteLocation q(1);
+        EnclosureConfiguration config(ScaledFunctionPatchFactory<ValidatedBoundsTaylorModelDP>(ThresholdSweeper<FloatDP>(dp,1e-8)));
+        HybridEnclosure enclosure(HybridExactBox(q,space,ExactBoxType({{-1,1},{-1,1}})),config);
+        auto coordinate=EffectiveVectorMultivariateFunction::identity(2u);
+        enclosure.new_state_constraint(DiscreteEvent("bound"),ValidatedConstraint(-1,coordinate[0],1));
+        enclosure._check();
+        std::ostringstream representation; enclosure.repr(representation);
+        ARIADNE_TEST_ASSERT(representation.str().find("HybridEnclosure")!=std::string::npos);
+        ARIADNE_TEST_ASSERT(representation.str().find("<=")!=std::string::npos);
+        ARIADNE_TEST_EQUALS(enclosure.bounding_box().location(),q);
+        ARIADNE_TEST_ASSERT(definitely(inside(enclosure,HybridRealBox(q,{-2<=x<=2,-2<=y<=2}))));
+        HybridExactBox exact(q,space,ExactBoxType({{-2,2},{-2,2}}));
+        ARIADNE_TEST_ASSERT(definitely(inside(enclosure,exact)));
+        ARIADNE_TEST_ASSERT(definitely(inside(ListSet<HybridEnclosure>(enclosure),exact)));
+        ARIADNE_TEST_ASSERT(definitely(inside(ListSet<HybridEnclosure>(),exact)));
     }
 
     void test_construct() {

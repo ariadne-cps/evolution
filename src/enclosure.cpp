@@ -86,15 +86,6 @@ namespace Ariadne {
 
 template<class T> inline StringType str(const T& t) { StringStream ss; ss<<t; return ss.str(); }
 
-using ValidatedConstraintModelDP = Constraint<ValidatedScalarMultivariateFunctionPatch,FloatDPBounds>;
-
-inline ValidatedConstraintModelDP operator>=(ValidatedScalarMultivariateFunctionPatch const& f, FloatDPBounds const& l) {
-    return ValidatedConstraintModel(l,f,FloatDP::inf(dp)); }
-inline ValidatedConstraintModelDP operator<=(ValidatedScalarMultivariateFunctionPatch const& f, FloatDPBounds const& u) {
-    return ValidatedConstraintModel(-FloatDP::inf(dp),f,u); }
-inline ValidatedConstraintModelDP operator==(ValidatedScalarMultivariateFunctionPatch const& f, FloatDPBounds const& c) {
-    return ValidatedConstraintModel(c,f,c); }
-
 // This overload was removed from the extracted Set module. Keep the original
 // Real-interval rounding and error-enclosure algorithm local to dynamics.
 static Pair<Interval<FloatDP>,FloatDPError> make_domain(Interval<Real> const& ivl) {
@@ -322,9 +313,9 @@ Enclosure::Enclosure(const ExactBoxType& domain, const ValidatedVectorMultivaria
 Enclosure::Enclosure(const ExactBoxType& domain, const ValidatedVectorMultivariateFunction& state_function, const ValidatedScalarMultivariateFunction& time_function, const List<ValidatedConstraint>& constraints, const EnclosureConfiguration& configuration)
     : _configuration(configuration)
 {
-    ARIADNE_ASSERT_MSG(domain.size()==state_function.argument_size(),"domain="<<domain<<", state_function="<<state_function);
-    ARIADNE_ASSERT_MSG(domain.size()==time_function.argument_size(),"domain="<<domain<<", time_function="<<time_function);
-    ARIADNE_ASSERT_MSG(state_function.domain()==time_function.domain(),"state_function.domain()="<<state_function.domain()<<", time_function.domain()="<<time_function.domain());
+    ARIADNE_PRECONDITION_MSG(domain.size()==state_function.argument_size(),"domain="<<domain<<", state_function="<<state_function);
+    ARIADNE_PRECONDITION_MSG(domain.size()==time_function.argument_size(),"domain="<<domain<<", time_function="<<time_function);
+    // Generic function domains are EuclideanDomain(argument_size), checked above.
     this->_domain=domain;
     this->_variable_kinds=List<EnclosureVariableKind>(this->_domain.size(),EnclosureVariableKind::INITIAL);
 
@@ -334,7 +325,7 @@ Enclosure::Enclosure(const ExactBoxType& domain, const ValidatedVectorMultivaria
     this->_auxiliary_mapping=EffectiveVectorMultivariateFunction(0u,EuclideanDomain(this->_state_function.result_size()));
 
     for(SizeType i=0; i!=constraints.size(); ++i) {
-        ARIADNE_ASSERT_MSG(domain.size()==constraints[i].function().argument_size(),"domain="<<domain<<", constraint="<<constraints[i]);
+        ARIADNE_PRECONDITION_MSG(domain.size()==constraints[i].function().argument_size(),"domain="<<domain<<", constraint="<<constraints[i]);
         this->new_parameter_constraint(constraints[i]);
     }
 
@@ -432,7 +423,8 @@ Void Enclosure::clear_time()
 
 Void Enclosure::apply_map(ValidatedVectorMultivariateFunction map)
 {
-    ARIADNE_ASSERT_MSG(map.argument_size()==this->state_dimension(),"state_dimension="<<this->state_dimension()<<", map="<<map);
+    ARIADNE_PRECONDITION_MSG(map.argument_size()==this->state_dimension(),"state_dimension="<<this->state_dimension()<<", map="<<map);
+    ARIADNE_PRECONDITION(map.result_size()==this->_auxiliary_mapping.argument_size());
     this->_state_function=compose(map,this->_state_function);
     this->_dwell_time_function=this->configuration().function_factory().create_zero(this->domain());
     this->_check();
@@ -440,8 +432,8 @@ Void Enclosure::apply_map(ValidatedVectorMultivariateFunction map)
 
 Void Enclosure::apply_map(ValidatedVectorMultivariateFunction map, EffectiveVectorMultivariateFunction aux_map)
 {
-    ARIADNE_ASSERT_MSG(map.argument_size()==this->state_dimension(),"state_dimension="<<this->state_dimension()<<", map="<<map);
-    ARIADNE_ASSERT_MSG(aux_map.argument_size()==map.result_size(),"map="<<map<<", aux_map="<<aux_map);
+    ARIADNE_PRECONDITION_MSG(map.argument_size()==this->state_dimension(),"state_dimension="<<this->state_dimension()<<", map="<<map);
+    ARIADNE_PRECONDITION_MSG(aux_map.argument_size()==map.result_size(),"map="<<map<<", aux_map="<<aux_map);
     this->_state_function=compose(map,this->_state_function);
     this->_dwell_time_function=this->configuration().function_factory().create_zero(this->domain());
     this->_auxiliary_mapping=aux_map;
@@ -458,7 +450,8 @@ Void Enclosure::apply_discrete_time_map_step(ValidatedVectorMultivariateFunction
 
 Void Enclosure::apply_fixed_evolve_step(ValidatedVectorMultivariateFunction flow, StepSizeType time)
 {
-    ARIADNE_ASSERT_MSG(flow.argument_size()==this->state_dimension()+1u,"state_dimension="<<this->state_dimension()<<", flow="<<flow);
+    ARIADNE_PRECONDITION(flow.result_size()==this->state_dimension());
+    ARIADNE_PRECONDITION_MSG(flow.argument_size()==this->state_dimension()+1u,"state_dimension="<<this->state_dimension()<<", flow="<<flow);
     try {
         ValidatedVectorMultivariateFunctionPatch flow_model=dynamic_handle_cast<const ValidatedVectorMultivariateFunctionPatch>(flow);
         ValidatedVectorMultivariateFunctionPatch flow_step_model=partial_evaluate(flow_model,flow_model.argument_size()-1u,time);
@@ -476,9 +469,9 @@ Void
 Enclosure::apply_parameterised_fixed_evolve_step(
         ValidatedVectorMultivariateFunctionPatch state, StepSizeType time)
 {
-    ARIADNE_ASSERT(state.argument_size()==this->number_of_parameters());
-    ARIADNE_ASSERT(state.domain()==this->parameter_domain());
-    ARIADNE_ASSERT(state.result_size()==this->state_dimension());
+    ARIADNE_PRECONDITION(state.argument_size()==this->number_of_parameters());
+    ARIADNE_PRECONDITION(state.domain()==this->parameter_domain());
+    ARIADNE_PRECONDITION(state.result_size()==this->state_dimension());
     this->_state_function=std::move(state);
     this->_time_function=this->_time_function+time;
     this->_dwell_time_function=this->_dwell_time_function+time;
@@ -488,8 +481,9 @@ Enclosure::apply_parameterised_fixed_evolve_step(
 
 Void Enclosure::apply_space_evolve_step(ValidatedVectorMultivariateFunction flow, ValidatedScalarMultivariateFunction time)
 {
-    ARIADNE_ASSERT_MSG(flow.argument_size()==this->state_dimension()+1u,"state_dimension="<<this->state_dimension()<<", flow="<<flow);
-    ARIADNE_ASSERT_MSG(time.argument_size()==this->state_dimension(),"state_dimension="<<this->state_dimension()<<", time="<<time);
+    ARIADNE_PRECONDITION(flow.result_size()==this->state_dimension());
+    ARIADNE_PRECONDITION_MSG(flow.argument_size()==this->state_dimension()+1u,"state_dimension="<<this->state_dimension()<<", flow="<<flow);
+    ARIADNE_PRECONDITION_MSG(time.argument_size()==this->state_dimension(),"state_dimension="<<this->state_dimension()<<", time="<<time);
     ValidatedScalarMultivariateFunctionPatch evolve_time_function=compose(time,this->_state_function);
     this->_state_function=compose(flow,join(this->_state_function,evolve_time_function));
     this->_time_function=this->_time_function + evolve_time_function;
@@ -499,8 +493,9 @@ Void Enclosure::apply_space_evolve_step(ValidatedVectorMultivariateFunction flow
 
 Void Enclosure::apply_spacetime_evolve_step(ValidatedVectorMultivariateFunction flow, ValidatedScalarMultivariateFunction time)
 {
-    ARIADNE_ASSERT_MSG(flow.argument_size()==this->state_dimension()+1u,"state_dimension="<<this->state_dimension()<<", flow="<<flow);
-    ARIADNE_ASSERT_MSG(time.argument_size()==this->state_dimension()+1u,"state_dimension="<<this->state_dimension()<<", time="<<time);
+    ARIADNE_PRECONDITION(flow.result_size()==this->state_dimension());
+    ARIADNE_PRECONDITION_MSG(flow.argument_size()==this->state_dimension()+1u,"state_dimension="<<this->state_dimension()<<", flow="<<flow);
+    ARIADNE_PRECONDITION_MSG(time.argument_size()==this->state_dimension()+1u,"state_dimension="<<this->state_dimension()<<", time="<<time);
     ValidatedScalarMultivariateFunctionPatch evolve_time_function=compose(time,join(this->_state_function,this->_time_function));
     this->_state_function=compose(flow,join(this->_state_function,evolve_time_function));
     this->_time_function=this->_time_function + evolve_time_function;
@@ -510,9 +505,9 @@ Void Enclosure::apply_spacetime_evolve_step(ValidatedVectorMultivariateFunction 
 
 Void Enclosure::apply_parameter_evolve_step(ValidatedVectorMultivariateFunction flow, ValidatedScalarMultivariateFunction time)
 {
-    ARIADNE_ASSERT_MSG(flow.argument_size()==this->state_dimension()+1u,"state_dimension="<<this->state_dimension()<<", flow="<<flow);
-    ARIADNE_ASSERT_MSG(time.argument_size()==this->number_of_parameters(),"number_of_parameters="<<this->number_of_parameters()<<", time="<<time<<", enclosure="<<*this);
-    ARIADNE_ASSERT_MSG(time.domain().dimension()==this->parameter_domain().dimension(),"parameter_domain="<<this->parameter_domain()<<", time="<<time);
+    ARIADNE_PRECONDITION(flow.result_size()==this->state_dimension());
+    ARIADNE_PRECONDITION_MSG(flow.argument_size()==this->state_dimension()+1u,"state_dimension="<<this->state_dimension()<<", flow="<<flow);
+    ARIADNE_PRECONDITION_MSG(time.argument_size()==this->number_of_parameters(),"number_of_parameters="<<this->number_of_parameters()<<", time="<<time<<", enclosure="<<*this);
     this->_state_function=compose(flow,join(this->_state_function,this->configuration().function_factory().create(this->_state_function.domain(),time)));
     this->_time_function=this->_time_function + time;
     this->_dwell_time_function=this->_dwell_time_function + time;
@@ -521,9 +516,9 @@ Void Enclosure::apply_parameter_evolve_step(ValidatedVectorMultivariateFunction 
 
 Void Enclosure::apply_finishing_parameter_evolve_step(ValidatedVectorMultivariateFunction flow, ValidatedScalarMultivariateFunction finishing_time)
 {
-    ARIADNE_ASSERT_MSG(flow.argument_size()==this->state_dimension()+1u,"state_dimension="<<this->state_dimension()<<", flow="<<flow);
-    ARIADNE_ASSERT_MSG(finishing_time.argument_size()==this->number_of_parameters(),"number_of_parameters="<<this->number_of_parameters()<<", finishing_time="<<finishing_time);
-    ARIADNE_ASSERT_MSG(finishing_time.domain().dimension()==this->parameter_domain().dimension(),"parameter_domain="<<this->parameter_domain()<<", finishing_time="<<finishing_time);
+    ARIADNE_PRECONDITION(flow.result_size()==this->state_dimension());
+    ARIADNE_PRECONDITION_MSG(flow.argument_size()==this->state_dimension()+1u,"state_dimension="<<this->state_dimension()<<", flow="<<flow);
+    ARIADNE_PRECONDITION_MSG(finishing_time.argument_size()==this->number_of_parameters(),"number_of_parameters="<<this->number_of_parameters()<<", finishing_time="<<finishing_time);
     ValidatedScalarMultivariateFunctionPatch omega=this->configuration().function_factory().create(this->domain(),finishing_time);
     this->_state_function=compose(flow,join(this->_state_function,omega-this->_time_function));
     this->_dwell_time_function=this->_dwell_time_function + (omega-this->_time_function);
@@ -535,8 +530,8 @@ Void Enclosure::apply_full_reach_step(ValidatedVectorMultivariateFunctionPatch p
 {
     // xi'(s,t) = phi(xi(s),t) for t in [0,h] with constraint t<=eps(s) where range(eps) in [0,h]
     // tau'(s) = tau(s)+t
-    ARIADNE_ASSERT(phi.result_size()==this->state_dimension());
-    ARIADNE_ASSERT(phi.argument_size()==this->state_dimension()+1);
+    ARIADNE_PRECONDITION(phi.result_size()==this->state_dimension());
+    ARIADNE_PRECONDITION(phi.argument_size()==this->state_dimension()+1);
     FloatDP h=phi.domain()[phi.result_size()].upper_bound();
     ValidatedScalarMultivariateFunctionPatch elps=this->configuration().function_factory().create_constant(this->domain(),h);
     this->apply_parameter_reach_step(phi,elps);
@@ -547,13 +542,13 @@ Void
 Enclosure::apply_parameterised_full_reach_step(
         ValidatedVectorMultivariateFunctionPatch flowpipe)
 {
-    ARIADNE_ASSERT(flowpipe.result_size()==this->state_dimension());
-    ARIADNE_ASSERT(flowpipe.argument_size()==this->number_of_parameters()+1u);
+    ARIADNE_PRECONDITION(flowpipe.result_size()==this->state_dimension());
+    ARIADNE_PRECONDITION(flowpipe.argument_size()==this->number_of_parameters()+1u);
 
     ExactIntervalType const time_domain=
         flowpipe.domain()[flowpipe.domain().dimension()-1u];
     ExactBoxType const old_parameter_domain=this->parameter_domain();
-    ARIADNE_ASSERT(flowpipe.domain()==product(old_parameter_domain,time_domain));
+    ARIADNE_PRECONDITION(flowpipe.domain()==product(old_parameter_domain,time_domain));
 
     this->_unchecked_new_variable(time_domain,EnclosureVariableKind::TEMPORAL);
     this->_state_function=std::move(flowpipe);
@@ -569,9 +564,9 @@ Enclosure::apply_parameterised_full_reach_step(
 
 Void Enclosure::apply_spacetime_reach_step(ValidatedVectorMultivariateFunctionPatch phi, ValidatedScalarMultivariateFunction elps)
 {
-    ARIADNE_ASSERT(phi.result_size()==this->state_dimension());
-    ARIADNE_ASSERT(phi.argument_size()==this->state_dimension()+1);
-    ARIADNE_ASSERT(elps.argument_size()==this->state_dimension()+1);
+    ARIADNE_PRECONDITION(phi.result_size()==this->state_dimension());
+    ARIADNE_PRECONDITION(phi.argument_size()==this->state_dimension()+1);
+    ARIADNE_PRECONDITION(elps.argument_size()==this->state_dimension()+1);
     this->apply_parameter_reach_step(phi,compose(elps,join(this->state_function(),this->time_function())));
     this->_check();
 }
@@ -580,15 +575,15 @@ Void Enclosure::apply_parameter_reach_step(ValidatedVectorMultivariateFunctionPa
 {
     // xi'(s,t) = phi(xi(s),t) for t in [0,h] with constraint t<=eps(s) where range(eps) in [0,h]
     // tau'(s) = tau(s)+t
-    ARIADNE_ASSERT(phi.result_size()==this->state_dimension());
-    ARIADNE_ASSERT(phi.argument_size()==this->state_dimension()+1);
-    ARIADNE_ASSERT(elps.argument_size()==this->number_of_parameters());
+    ARIADNE_PRECONDITION(phi.result_size()==this->state_dimension());
+    ARIADNE_PRECONDITION(phi.argument_size()==this->state_dimension()+1);
+    ARIADNE_PRECONDITION(elps.argument_size()==this->number_of_parameters());
     FloatDP h=phi.domain()[phi.result_size()].upper_bound();
     ExactBoxType parameter_domain=this->parameter_domain();
     ExactIntervalType time_domain=ExactIntervalType(FloatDP(0,dp),h);
     ValidatedScalarMultivariateFunctionPatch time_function=this->configuration().function_factory().create_coordinate({time_domain},0u);
     this->_unchecked_new_variable(time_domain,EnclosureVariableKind::TEMPORAL);
-    ARIADNE_ASSERT(phi.argument_size()==this->state_dimension());
+    // The appended temporal coordinate supplies the final flow argument.
     this->apply_map(phi);
     ExactBoxType new_domain=this->parameter_domain();
     ValidatedScalarMultivariateFunctionPatch time_step_function=this->configuration().function_factory().create_coordinate(new_domain,new_domain.size()-1u);
@@ -602,14 +597,14 @@ Void Enclosure::apply_parameter_reach_step(ValidatedVectorMultivariateFunctionPa
 }
 
 Void Enclosure::new_state_time_bound(ValidatedScalarMultivariateFunction gamma) {
-    ARIADNE_ASSERT(gamma.argument_size()==this->state_dimension());
+    ARIADNE_PRECONDITION(gamma.argument_size()==this->state_dimension());
     this->_is_fully_reduced=false;
     this->_constraints.append(this->time_function()<=compose(gamma,this->state_function()));
     this->_check();
 }
 
 Void Enclosure::new_state_constraint(ValidatedConstraint constraint) {
-    ARIADNE_ASSERT(constraint.function().argument_size()==this->state_dimension());
+    ARIADNE_PRECONDITION(constraint.function().argument_size()==this->state_dimension());
     this->_is_fully_reduced=false;
     ValidatedNumber lower_bound=constraint.lower_bound();
     ValidatedScalarMultivariateFunctionPatch composed_function_model=compose(constraint.function(),this->_state_function);
@@ -619,7 +614,7 @@ Void Enclosure::new_state_constraint(ValidatedConstraint constraint) {
 }
 
 Void Enclosure::new_state_time_constraint(ValidatedConstraint constraint) {
-    ARIADNE_ASSERT(constraint.function().argument_size()==this->state_dimension()+1u);
+    ARIADNE_PRECONDITION(constraint.function().argument_size()==this->state_dimension()+1u);
     this->_is_fully_reduced=false;
     ValidatedNumber lower_bound=constraint.lower_bound();
     ValidatedScalarMultivariateFunctionPatch composed_function_model=compose(constraint.function(),join(this->_state_function,this->_time_function));
@@ -629,7 +624,7 @@ Void Enclosure::new_state_time_constraint(ValidatedConstraint constraint) {
 }
 
 Void Enclosure::new_parameter_constraint(ValidatedConstraint constraint) {
-    ARIADNE_ASSERT(constraint.function().argument_size()==this->number_of_parameters());
+    ARIADNE_PRECONDITION(constraint.function().argument_size()==this->number_of_parameters());
     this->_is_fully_reduced=false;
     ValidatedNumber lower_bound=constraint.lower_bound();
     ValidatedScalarMultivariateFunctionPatch function_model=this->configuration().function_factory().create(this->domain(),constraint.function());
@@ -639,7 +634,7 @@ Void Enclosure::new_parameter_constraint(ValidatedConstraint constraint) {
 }
 
 Void Enclosure::new_positive_state_constraint(ValidatedScalarMultivariateFunction constraint_function) {
-    ARIADNE_ASSERT_MSG(constraint_function.argument_size()==this->state_dimension(),"state_dimension="<<this->state_dimension()<<", constraint_function="<<constraint_function);
+    ARIADNE_PRECONDITION_MSG(constraint_function.argument_size()==this->state_dimension(),"state_dimension="<<this->state_dimension()<<", constraint_function="<<constraint_function);
     this->_is_fully_reduced=false;
     ExactNumber zero=0;
     this->_constraints.append(compose(constraint_function,this->state_function())>=zero);
@@ -647,7 +642,7 @@ Void Enclosure::new_positive_state_constraint(ValidatedScalarMultivariateFunctio
 }
 
 Void Enclosure::new_negative_state_constraint(ValidatedScalarMultivariateFunction constraint_function) {
-    ARIADNE_ASSERT_MSG(constraint_function.argument_size()==this->state_dimension(),"state_dimension="<<this->state_dimension()<<", constraint_function="<<constraint_function);
+    ARIADNE_PRECONDITION_MSG(constraint_function.argument_size()==this->state_dimension(),"state_dimension="<<this->state_dimension()<<", constraint_function="<<constraint_function);
     this->_is_fully_reduced=false;
     ExactNumber zero=0;
     this->_constraints.append(compose(constraint_function,this->state_function())<=zero);
@@ -655,7 +650,7 @@ Void Enclosure::new_negative_state_constraint(ValidatedScalarMultivariateFunctio
 }
 
 Void Enclosure::new_zero_state_constraint(ValidatedScalarMultivariateFunction constraint_function) {
-    ARIADNE_ASSERT_MSG(constraint_function.argument_size()==this->state_dimension(),"state_dimension="<<this->state_dimension()<<", constraint_function="<<constraint_function);
+    ARIADNE_PRECONDITION_MSG(constraint_function.argument_size()==this->state_dimension(),"state_dimension="<<this->state_dimension()<<", constraint_function="<<constraint_function);
     this->_is_fully_reduced=false;
     ExactNumber zero=0;
     this->_constraints.append(compose(constraint_function,this->state_function())==zero);
@@ -663,7 +658,7 @@ Void Enclosure::new_zero_state_constraint(ValidatedScalarMultivariateFunction co
 }
 
 Void Enclosure::new_negative_parameter_constraint(ValidatedScalarMultivariateFunction constraint_function) {
-    ARIADNE_ASSERT_MSG(constraint_function.argument_size()==this->domain().size(),"domain="<<this->domain()<<", constraint_function="<<constraint_function);
+    ARIADNE_PRECONDITION_MSG(constraint_function.argument_size()==this->domain().size(),"domain="<<this->domain()<<", constraint_function="<<constraint_function);
     this->_is_fully_reduced=false;
     ExactNumber zero=0;
     this->_constraints.append(this->configuration().function_factory().create(this->domain(),constraint_function)<=zero);
@@ -671,7 +666,7 @@ Void Enclosure::new_negative_parameter_constraint(ValidatedScalarMultivariateFun
 }
 
 Void Enclosure::new_zero_parameter_constraint(ValidatedScalarMultivariateFunction constraint_function) {
-    ARIADNE_ASSERT_MSG(constraint_function.argument_size()==this->domain().size(),"domain="<<this->domain()<<", constraint_function="<<constraint_function);
+    ARIADNE_PRECONDITION_MSG(constraint_function.argument_size()==this->domain().size(),"domain="<<this->domain()<<", constraint_function="<<constraint_function);
     this->_is_fully_reduced=false;
     ExactNumber zero=0;
     this->_constraints.append(this->configuration().function_factory().create(this->domain(),constraint_function)==zero);
@@ -832,7 +827,7 @@ ValidatedLowerKleenean Enclosure::subset(const ExactBoxType& bx) const
 
 ValidatedLowerKleenean Enclosure::separated(const ExactBoxType& bx) const
 {
-    ARIADNE_ASSERT_MSG(this->state_dimension()==bx.dimension(),"Enclosure::subset(ExactBoxType): self="<<*this<<", box="<<bx);
+    ARIADNE_PRECONDITION_MSG(this->state_dimension()==bx.dimension(),"Enclosure::subset(ExactBoxType): self="<<*this<<", box="<<bx);
     List<ValidatedConstraint> constraints = this->constraints();
     ConstraintSolver contractor=ConstraintSolver();
     UpperBoxType reduced_domain(this->_reduced_domain);
@@ -1255,8 +1250,8 @@ Enclosure::kuhn_recondition()
 
 Void Enclosure::restrict(const ExactBoxType& subdomain)
 {
-    ARIADNE_ASSERT_MSG(subdomain.size()==this->number_of_parameters(),"set="<<*this<<", subdomain="<<subdomain);
-    ARIADNE_ASSERT_MSG(Ariadne::subset(subdomain,this->domain()),"set.domain()="<<this->domain()<<", subdomain="<<subdomain);
+    ARIADNE_PRECONDITION_MSG(subdomain.size()==this->number_of_parameters(),"set="<<*this<<", subdomain="<<subdomain);
+    ARIADNE_PRECONDITION_MSG(Ariadne::subset(subdomain,this->domain()),"set.domain()="<<this->domain()<<", subdomain="<<subdomain);
     Enclosure& result(*this);
     result._domain=subdomain;
     result._reduced_domain=Ariadne::intersection(static_cast<const ExactBoxType&>(result._reduced_domain),subdomain);
@@ -1287,10 +1282,6 @@ ValidatedScalarMultivariateFunctionPatch const Enclosure::get_function(SizeType 
     else { return compose(this->_auxiliary_mapping[i-this->state_dimension()-1u],this->_state_function); }
 }
 
-inline ValidatedVectorMultivariateFunctionPatch join(const ValidatedVectorMultivariateFunctionPatch& f1, const ValidatedScalarMultivariateFunctionPatch& f2, const ValidatedVectorMultivariateFunctionPatch& f3) {
-    return join(join(f1,f2),f3);
-}
-
 Void Enclosure::draw(CanvasInterface& canvas, const Projection2d& projection) const {
     DrawerManager::instance().drawer().draw(canvas,projection,this->state_time_auxiliary_set());
 }
@@ -1304,15 +1295,11 @@ template<class K, class V> Map<K,V> filter(const Map<K,V>& m, const Set<K>& s) {
 }
 
 
-inline const ValidatedScalarMultivariateFunctionPatch& repr(const ValidatedScalarMultivariateFunctionPatch& f) { return f; }
-inline const ValidatedVectorMultivariateFunctionPatch& repr(const ValidatedVectorMultivariateFunctionPatch& f) { return f; }
-inline const List<ValidatedScalarMultivariateFunctionPatch>& repr(const List<ValidatedScalarMultivariateFunctionPatch>& f) { return f; }
 
 OutputStream& Enclosure::_write(OutputStream& os) const {
-    const Bool LONG_FORMAT=true;
 
     // TODO: improve by using writers
-    if(LONG_FORMAT) {
+
         os << "Enclosure"
            << "(\n  domain=" << this->domain()
            << ",\n  range=" << this->bounding_box()
@@ -1324,17 +1311,7 @@ OutputStream& Enclosure::_write(OutputStream& os) const {
            << ",\n  auxiliary_mapping = [" << this->auxiliary_mapping().argument_size() << "]" << this->auxiliary_mapping()
            << ",\n  parameters = " << canonical_variable_names(this->variable_kinds())
            << "\n)\n";
-    } else {
-        os << "Enclosure"
-           << "( domain=" << this->domain()
-           << ", range=" << this->bounding_box()
-           << ", state_function=" << repr(this->state_function())
-           << ", time_function=" << repr(this->time_function())
-           << ", constraints=" << this->constraints()
-           << ", auxiliary_mapping = " << this->auxiliary_mapping()
-           << ")";
-
-    } return os;
+     return os;
 }
 
 
@@ -1558,10 +1535,9 @@ Void LabelledEnclosure::draw(CanvasInterface& canvas, const Variables2d& axes) c
 
 
 OutputStream& LabelledEnclosure::_write(OutputStream& os) const {
-    const Bool LONG_FORMAT=true;
 
     // TODO: improve by using writers
-    if(LONG_FORMAT) {
+
         os << "LabelledEnclosure"
            << "(\n  domain=" << this->domain()
            << ",\n  range=" << this->bounding_box()
@@ -1575,18 +1551,7 @@ OutputStream& LabelledEnclosure::_write(OutputStream& os) const {
            << ",\n  space =" << this->space()
            << ",\n  auxiliary_space =" << this->auxiliary_space()
            << "\n)\n";
-    } else {
-        os << "LabelledEnclosure"
-           << "( domain=" << this->domain()
-           << ", range=" << this->bounding_box()
-           << ", state_function=" << repr(this->state_function())
-           << ", time_function=" << repr(this->time_function())
-           << ", constraints=" << this->constraints()
-           << ", auxiliary_mapping = " << this->auxiliary_mapping()
-           << ", space =" << this->space()
-           << ")";
-
-    } return os;
+     return os;
 }
 
 

@@ -50,3 +50,28 @@ LLVM can emit constructor entry variants and multiple template instantiations
 whose individual counters differ. The official function/line/branch summary is
 the completion criterion; structured per-symbol data and macro expansions are
 used to explain residuals. Region coverage is recorded but is not a target.
+
+## Hybrid event and timing regressions
+
+`test_hybrid_evolver` checks a validated flow against analytic endpoints and
+checks event kind, location, history and event-time bounds. It includes convex,
+concave and degenerate guards, upper/lower semantics, invariant and progress
+blocking, and uncertain initial times with the exact relation x(t0)=t0.
+
+A correlated near-miss test uses x'=y'=1 and y0=x0-0.251+epsilon, with
+|epsilon|<=0.0001. The maxima of y-x^2 and y-x^2+0.0001 at x=1/2 are
+strictly negative. The crossing operation receives a genuinely const candidate
+set containing both events and returns no crossings. It previously erased the
+current iterator through const_cast; it now leaves its input unchanged, and the
+caller updates active candidates from the returned map after iteration.
+
+Progress predicates have no reset function, just like invariants. Transition
+formatting now tests whether an event activates a transition before formatting
+its reset. The progress scenario is executed with full logging as a regression
+for the former null-function dereference.
+
+The unused local arithmetic overloads had no call sites, as confirmed by clean
+compilation after removal. The old time-creep strategy and alternate final-time
+path were guarded by local constants `TIME_CREEP=false` and `if(false)`;
+neither had a public configuration path. Their removal preserves the selected
+guard-creep strategy and the existing final-time behavior.

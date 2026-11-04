@@ -55,8 +55,6 @@ inline PositiveValidatedUpperNumber mag(PositiveValidatedUpperNumber y) { return
 static const FloatDP zero={0,dp};
 
 inline auto operator+(Int n, FloatDPBounds x) -> decltype(FloatDP(n,dp)+x) { return FloatDP(n,dp)+x; }
-inline auto operator-(Int n, FloatDPBounds x) -> decltype(FloatDP(n,dp)-x) { return FloatDP(n,dp)-x; }
-inline auto operator/(FloatDP x, Nat n) -> decltype(x/FloatDP(n,dp)) { return x/FloatDP(n,dp); }
 
 template<class PR> inline auto operator*(FloatUpperBound<PR> x1, PositiveFloat<PR> x2) -> FloatUpperBound<PR> {
     return FloatUpperBound<PR>(mul(up,x1._u,x2._v)); }
@@ -118,7 +116,7 @@ OutputStream& operator<<(OutputStream& os, const FinishingKind& fnshk) {
 OutputStream& operator<<(OutputStream& os, const TransitionData& transition) {
     os << "kind="<<transition.event_kind<<", guard="<<transition.guard_function<<", "
                  "target="<<transition.target;
-    if(transition.event_kind!=EventKind::INVARIANT) { os<<", reset="<<transition.reset_function; }
+    if(is_activating(transition.event_kind)) { os<<", reset="<<transition.reset_function; }
     return os;
 }
 
@@ -613,7 +611,6 @@ _compute_crossings(Set<DiscreteEvent> const& active_events,
     const EquationSolverInterface& solver=*this->_solver_ptr;
 
     Map<DiscreteEvent,CrossingData> crossings;
-    crossings.clear();
 
     ExactBoxType flow_spacial_domain=project(flow.domain(),range(0,flow.argument_size()-1u));
     ExactIntervalType flow_time_domain=flow.domain()[flow.argument_size()-1u];
@@ -742,7 +739,7 @@ _compute_crossings(Set<DiscreteEvent> const& active_events,
                     LOGGING_PRINTLN_AT(2,"guard_range_at_critical_time="<<guard_range_at_critical_time);
                     if(definitely(guard_range_at_critical_time.upper_bound()<0)) {
                         // No crossing
-                        const_cast<Set<DiscreteEvent>&>(active_events).erase(event); // WARNING: Maybe removing event is unsafe
+                        // Omit this event from the returned crossing map.
                     } else if(definitely(guard_range_at_critical_time.lower_bound()>0)) {
                         LOGGING_PRINTLN_AT(2,"guard range eventually positive");
                         // Transverse crossing
@@ -1281,6 +1278,9 @@ _evolution_step(WorkloadType::Access& workload,
     // Compute the kind of crossing (increasing, convex, etc);
     Map<DiscreteEvent,CrossingData> crossings =
         this->_compute_crossings(active_events,dynamic,guard_functions,flow_model,starting_set);
+    // Crossing computation is read-only; prune conservative candidates here,
+    // after iteration has finished, using the events that can actually cross.
+    active_events=crossings.keys();
     LOGGING_PRINTLN_AT(1,"crossings="<<crossings);
 
     // Compute end conditions for flow
@@ -1705,16 +1705,9 @@ _estimate_timing(Set<DiscreteEvent>&,
         // Some of the points may already have reached the final time.
         // Don't try anything fancy, just do a simple constant time step.
         if(definitely(remaining_time_range.upper_bound()<=step_size)) {
-            if(false) {
-                // Within one time step we can go beyond final time
-                result.step_kind=StepKind::CONSTANT_EVOLUTION_TIME;
-                result.finishing_kind=FinishingKind::AFTER_FINAL_TIME;
-                temporal_evolution_time=FloatDPBounds(step_size); //   remaining_time_range.upper_bound();
-            } else {
-                result.step_kind=StepKind::CONSTANT_FINISHING_TIME;
-                result.finishing_kind=FinishingKind::AT_FINAL_TIME;
-                temporal_evolution_time=final_time_bounds-time_identity;
-            }
+            result.step_kind=StepKind::CONSTANT_FINISHING_TIME;
+            result.finishing_kind=FinishingKind::AT_FINAL_TIME;
+            temporal_evolution_time=final_time_bounds-time_identity;
         } else {
             result.step_kind=StepKind::CONSTANT_EVOLUTION_TIME;
             result.finishing_kind=FinishingKind::STRADDLE_FINAL_TIME;
@@ -1755,9 +1748,6 @@ _estimate_timing(Set<DiscreteEvent>&,
 
     ValidatedScalarMultivariateFunctionPatch spacial_evolution_time=this->function_factory().create_constant(state_domain,FloatDP(step_size));
 
-    // Select one of GUARD_CREEP or TIME_CREEP
-    static const Bool GUARD_CREEP=true;
-    static const Bool TIME_CREEP=false;
 
     Bool creep=false;
 
@@ -1833,49 +1823,7 @@ _estimate_timing(Set<DiscreteEvent>&,
 
     if(ALLOW_CREEP && creep==false) { LOGGING_PRINTLN("No creep"); }
 
-    if(TIME_CREEP && creep==true) {
-        // Compute reduced evolution time; note that for every remaining increasing crossing, we have
-        // crossing_time_range.lower_bound()>zero and crossing_time_range.upper_bound()>step_size.
-
-        for(Map<DiscreteEvent,CrossingData>::ConstIterator crossing_iter=crossings.begin();
-            crossing_iter!=crossings.end(); ++crossing_iter)
-        {
-            if(crossing_iter->second.crossing_kind==CrossingKind::TRANSVERSE) {
-                // Modify the crossing time function to be the smallest possible; this ensures that the evaluation time is
-                // essentially exact
-                ValidatedScalarMultivariateFunctionPatch lower_crossing_time=crossing_iter->second.crossing_time;
-                ValidatedErrorNumber crossing_time_error=lower_crossing_time.error();
-                lower_crossing_time.clobber();
-                // TODO: Remove use of casts
-                lower_crossing_time-=static_cast<Dyadic>(cast_exact(crossing_time_error.get(dp)));
-
-                // One possibility is to use quadratic restrictions
-                //   If 0<=x<=2h, then x(1-x/4h)<=min(x,h)
-                //   If 0<=x<=4h, then x(1-x/8h)<=min(x,2h)
-                // Formula below works if x<=2h
-                //   evolution_time=evolution_time*(crossing_time/result.step_size)*(1.0-crossing_time/(4*result.step_size));
-
-                // Prefer simpler linear restrictions.
-                // Multiply evolution time by crossing_time/max_crossing_time
-                spacial_evolution_time=spacial_evolution_time*lower_crossing_time/static_cast<Dyadic>(cast_exact(lower_crossing_time.range().upper_bound()));
-            }
-        }
-        // Erase increasing transverse crossings since these cannot occur
-        for(Map<DiscreteEvent,CrossingData>::Iterator crossing_iter=crossings.begin();
-            crossing_iter!=crossings.end(); )
-        {
-            if(crossing_iter->second.crossing_kind==CrossingKind::TRANSVERSE) {
-                crossings.erase(crossing_iter++);
-            } else {
-                ++crossing_iter;
-            }
-        }
-        LOGGING_PRINTLN("Creep step: spacial_evolution_time="<<spacial_evolution_time);
-        result.step_kind=StepKind::SPACETIME_DEPENDENT_EVOLUTION_TIME;
-        result.finishing_kind=FinishingKind::BEFORE_FINAL_TIME;
-    }
-
-    if(GUARD_CREEP && creep==true) {
+    if(creep) {
         // If an event is possible, but only some points reach the guard set
         // after a full time step, then terminating the evolution here will
         // cause a splitting of the enclosure set. To prevent this, attempt

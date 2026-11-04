@@ -27,6 +27,14 @@ protected:
     }
 };
 
+// Expose the documented crossing operation for a correlated near-miss test.
+class CrossingProbeEvolver : public GeneralHybridEvolver {
+public:
+    using GeneralHybridEvolver::GeneralHybridEvolver;
+    using HybridEvolverBase::_compute_crossings;
+    using HybridEvolverBase::_compute_flow;
+};
+
 class CountingEvolver : public GeneralHybridEvolver {
 public:
     using GeneralHybridEvolver::GeneralHybridEvolver;
@@ -36,6 +44,15 @@ protected:
     Void _recondition(HybridEnclosure& enclosure) const override {
         ++reconditions;
         HybridEvolverBase::_recondition(enclosure);
+    }
+};
+
+class ProgressAutomaton : public HybridAutomaton {
+public:
+    ProgressAutomaton* clone() const override { return new ProgressAutomaton(*this); }
+    EventKind event_kind(DiscreteLocation location,DiscreteEvent event) const override {
+        auto kind=HybridAutomaton::event_kind(location,event);
+        return kind==EventKind::INVARIANT ? EventKind::PROGRESS : kind;
     }
 };
 
@@ -70,6 +87,9 @@ public:
         ARIADNE_TEST_CALL(test_default_timing_and_policies());
         ARIADNE_TEST_CALL(test_impact_and_optional_transition());
         ARIADNE_TEST_CALL(test_grazing_and_terminating_event());
+        ARIADNE_TEST_CALL(test_invariants_and_curvature());
+        ARIADNE_TEST_CALL(test_correlated_near_miss());
+        ARIADNE_TEST_CALL(test_uncertain_initial_time());
         ARIADNE_TEST_CALL(test_formatting());
         ARIADNE_TEST_CALL(test_flow());
         ARIADNE_TEST_CALL(test_exact_final_time());
@@ -85,6 +105,9 @@ public:
     Void test_default_timing_and_policies() const;
     Void test_impact_and_optional_transition() const;
     Void test_grazing_and_terminating_event() const;
+    Void test_invariants_and_curvature() const;
+    Void test_correlated_near_miss() const;
+    Void test_uncertain_initial_time() const;
     Void test_formatting() const;
     Void test_flow() const;
     Void test_exact_final_time() const;
@@ -264,11 +287,110 @@ Void TestHybridEvolver::test_grazing_and_terminating_event() const {
     }
 }
 
+Void TestHybridEvolver::test_invariants_and_curvature() const {
+    for(Bool progress : {false,true}) {
+        HybridAutomaton invariant;
+        ProgressAutomaton progressing;
+        for(HybridAutomaton* system : {&invariant,static_cast<HybridAutomaton*>(&progressing)}) {
+            system->new_mode(q,{dot(x)=1,dot(y)=0});
+            system->new_invariant(q,x<=0.25_dec,e);
+        }
+        _set_evolver(progress ? static_cast<HybridAutomatonInterface const&>(progressing) : invariant);
+        evolver_ptr->configuration().set_maximum_step_size(0.25);
+        HybridBoxSet initial(q,{-0.01_dec<=x<=0.01_dec,-0.01_dec<=y<=0.01_dec});
+        auto before=evolver_ptr->orbit(initial,HybridTime(0.125_x,3),Semantics::UPPER);
+        expect_final(before,ExactBoxType({{0.114_x,0.136_x},{-0.011_x,0.011_x}}),0.125,0u);
+        auto blocked=evolver_ptr->orbit(initial,HybridTime(0.5_x,3),Semantics::UPPER);
+        ARIADNE_TEST_EQUALS(blocked.final().size(),0u);
+        ARIADNE_TEST_ASSERT(blocked.reach().size()>0u);
+        for(auto const& reach : blocked.reach()) {
+            ARIADNE_TEST_EQUALS(reach.previous_events().size(),0u);
+        }
+    }
+    DiscreteLocation target(2);
+    // Under x'=1,y'=0 these guards are respectively convex, concave,
+    // and degenerate in time. A jump resets to a stationary origin.
+    for(unsigned shape=0;shape!=3;++shape) {
+        HybridAutomaton system;
+        system.new_mode(q,{dot(x)=1,dot(y)=0});
+        system.new_mode(target,{dot(x)=0,dot(y)=0});
+        auto guard=shape==0 ? sqr(x)+y : (shape==1 ? y-sqr(x) : x*x*x+y);
+        system.new_transition(q,e,target,{next(x)=0,next(y)=0},guard>=0,EventKind::URGENT);
+        _set_evolver(system);
+        evolver_ptr->ALLOW_CREEP=false;
+        evolver_ptr->configuration().set_maximum_step_size(1.0);
+        HybridBoxSet initial=shape==0 ? HybridBoxSet(q,{-0.01_dec<=x<=0.01_dec,-0.063_dec<=y<=-0.062_dec})
+            : shape==1 ? HybridBoxSet(q,{-0.5_dec<=x<=-0.49_dec,0.062_dec<=y<=0.063_dec})
+            : HybridBoxSet(q,{-0.01_dec<=x<=0.01_dec,-0.001_dec<=y<=-0.0005_dec});
+        auto orbit=evolver_ptr->orbit(initial,HybridTime(0.75_x,1),Semantics::UPPER);
+        ARIADNE_TEST_ASSERT(orbit.final().size()>0u);
+        for(auto const& final : orbit.final()) {
+            ARIADNE_TEST_EQUALS(final.location(),target);
+            ARIADNE_TEST_EQUALS(final.previous_events().size(),1u);
+            ARIADNE_TEST_ASSERT(definitely(final.inside(HybridExactBox(target,RealSpace({x,y}),ExactBoxType({{-0.001_x,0.001_x},{-0.001_x,0.001_x}})))));
+            ARIADNE_TEST_ASSERT(final.time_range().lower_bound().raw().get_d()>=-1e-8);
+            ARIADNE_TEST_ASSERT(final.time_range().upper_bound().raw().get_d()<=0.75+1e-8);
+        }
+        if(shape==2) {
+            auto lower=evolver_ptr->orbit(initial,HybridTime(0.75_x,1),Semantics::LOWER);
+            ARIADNE_TEST_EQUALS(lower.final().size(),0u);
+        }
+    }
+}
+
+Void TestHybridEvolver::test_correlated_near_miss() const {
+    HybridAutomaton system;
+    system.new_mode(q,{dot(x)=1,dot(y)=1});
+    DiscreteEvent second("second");
+    system.new_transition(q,e,q,{next(x)=x,next(y)=y},y-sqr(x)>=0,EventKind::PERMISSIVE);
+    system.new_transition(q,second,q,{next(x)=x,next(y)=y},y-sqr(x)+0.0001_dec>=0,EventKind::PERMISSIVE);
+    CrossingProbeEvolver probe(system);
+    auto factory=probe.function_factory();
+    ExactBoxType parameters({{-0.5_x,-0.49_x},{-0.0001_x,0.0001_x}});
+    auto coordinates=factory.create_identity(parameters);
+    auto mapping=coordinates;
+    mapping[1]=coordinates[0]-factory.create_constant(parameters,Real(0.251_dec))+coordinates[1];
+    HybridEnclosure initial(q,RealSpace({x,y}),Enclosure(parameters,mapping,EnclosureConfiguration(factory)));
+    auto dynamic=system.dynamic_function(q);
+    auto flow=probe._compute_flow(dynamic,cast_exact_box(initial.state_bounding_box()),Dyadic(2));
+    const Set<DiscreteEvent> active={e,second};
+    Map<DiscreteEvent,EffectiveScalarMultivariateFunction> guards;
+    guards.insert(e,system.guard_function(q,e));
+    guards.insert(second,system.guard_function(q,second));
+    auto crossings=probe._compute_crossings(active,dynamic,guards,flow,initial);
+    // Along every trajectory y-x is constant. Both guard maxima at x=1/2
+    // are strictly negative, despite the coarse flow box meeting the guards.
+    ARIADNE_TEST_ASSERT(crossings.empty());
+    ARIADNE_TEST_EQUALS(active.size(),2u);
+}
+
+Void TestHybridEvolver::test_uncertain_initial_time() const {
+    HybridAutomaton system;
+    system.new_mode(q,{dot(x)=1,dot(y)=0});
+    for(double width : {0.125,0.5}) {
+        GeneralHybridEvolver evolver(system);
+        evolver.ALLOW_UNWIND=true;
+        evolver.configuration().set_maximum_step_size(0.25);
+        ExactBoxType domain({{FloatDP(0,dp),FloatDP(ExactDouble(width),dp)},{-0.01_x,0.01_x}});
+        HybridEnclosure initial=evolver.enclosure(HybridExactBox(q,RealSpace({x,y}),domain));
+        initial.set_time_function(evolver.function_factory().create_coordinate(domain,0));
+        auto orbit=evolver.orbit(initial,HybridTime(1.25_x,3),Semantics::UPPER);
+        // x(t0)=t0 gives x(T)=T for every initial time in the enclosure.
+        expect_final(orbit,ExactBoxType({{1.249_x,1.251_x},{-0.011_x,0.011_x}}),1.25,0u);
+    }
+}
+
 Void TestHybridEvolver::test_formatting() const {
     auto check=[](auto value,const char* expected) {
         std::ostringstream text; text<<value;
         ARIADNE_TEST_EQUALS(text.str(),std::string(expected));
     };
+    ARIADNE_TEST_ASSERT(is_blocking(EventKind::INVARIANT));
+    ARIADNE_TEST_ASSERT(is_blocking(EventKind::PROGRESS));
+    ARIADNE_TEST_ASSERT(!is_activating(EventKind::INVARIANT));
+    ARIADNE_TEST_ASSERT(!is_activating(EventKind::PROGRESS));
+    ARIADNE_TEST_FAIL(is_blocking(static_cast<EventKind>(255)));
+    ARIADNE_TEST_FAIL(is_activating(static_cast<EventKind>(255)));
     check(CrossingKind::DEGENERATE,"DEGENERATE"); check(CrossingKind::POSITIVE,"POSITIVE");
     check(CrossingKind::NEGATIVE,"NEGATIVE"); check(CrossingKind::MONOTONE,"MONOTONE");
     check(CrossingKind::INCREASING,"INCREASING"); check(CrossingKind::DECREASING,"DECREASING");

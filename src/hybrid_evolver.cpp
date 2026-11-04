@@ -990,9 +990,12 @@ _apply_guard(List<HybridEnclosure>& sets,
         starting_state_function = embed(starting_state_function,elapsed_time_domain);
     }
 
-    List<HybridEnclosure>::Iterator end=sets.end(); // Store current end set since we may adjoin new sets at end
-    for(List<HybridEnclosure>::Iterator iter=sets.begin(); iter!=end; ++iter) {
-        HybridEnclosure& set=*iter;
+    // List is vector-backed: appending invalidates end() and may invalidate all
+    // iterators/references. Process only the original sets, reacquiring each by
+    // index after any append in the previous iteration.
+    const SizeType original_size=sets.size();
+    for(SizeType set_index=0; set_index!=original_size; ++set_index) {
+        HybridEnclosure& set=sets[set_index];
         LOGGING_PRINTLN_AT(1,"set.parameter_domain()="<<set.parameter_domain());
         ARIADNE_ASSERT(set.parameter_domain()==elapsed_time_function.domain());
         switch(guard_crossing_data.crossing_kind) {

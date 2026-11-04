@@ -90,3 +90,17 @@ Each runtime test redirects the logger once, at entry, to `NUL` on Windows and
 while leaving assertion diagnostics on stdout and stderr visible. Public-header
 compile checks remain independent of the logging helper. Benchmarks continue to
 use the caller's logging options.
+
+## Guard splitting and vector iterator lifetime
+
+`List<HybridEnclosure>` is backed by `std::vector`. The grazing-guard path can
+append hitting and past components while iterating over the original sets.
+Appending invalidates the cached end iterator even without reallocation; when
+reallocation occurs it also invalidates element iterators and references. The
+former loop therefore had undefined behavior, detected by GCC's checked iterators
+in `test_grazing_and_terminating_event`. It now snapshots the original count and
+reacquires each original set by index. All accesses through the current set
+reference finish before either append; local hitting/past copies remain valid.
+Newly appended sets are not processed again, as required by the original algorithm.
+The same grazing test runs on every supported platform and checks both optional
+outcomes, numeric endpoint bounds, event histories and final times.

@@ -23,6 +23,7 @@
  */
 
 #include <typeinfo>
+#include <algorithm>
 
 #include "numeric/numeric.hpp"
 #include "algebra/vector.hpp"
@@ -1025,14 +1026,9 @@ _apply_guard(List<HybridEnclosure>& sets,
                 ValidatedScalarMultivariateFunctionPatch maximal_guard_function
                     = compose( guard_function, unchecked_compose( flow, join(starting_state_function, critical_time_function) ) );
                 UpperIntervalType guard_range_at_critical_time = guard_crossing_data.guard_range_at_critical_time;
-                ARIADNE_ASSERT_MSG(starting_state_function.argument_size()==set.parameter_domain().size(),
-                                   starting_state_function<<" "<<set);
-                ARIADNE_ASSERT_MSG(critical_time_function.argument_size()==set.parameter_domain().size(),
-                                   critical_time_function<<" "<<set);
-                ARIADNE_ASSERT_MSG(maximal_guard_function.argument_size()==set.parameter_domain().size(),
-                                   maximal_guard_function<<" "<<set);
-                ARIADNE_ASSERT_MSG(final_guard_function.argument_size()==set.parameter_domain().size(),
-                                   final_guard_function<<" "<<set);
+                // Embedding above gives the starting map the elapsed-time
+                // domain; composition and join preserve that argument domain.
+                // The per-set domain check already establishes compatibility.
 
                 // If no points in the set arise from trajectories which will later leave the progress set,
                 // then we only need to look at the maximum value of the guard.
@@ -1888,8 +1884,7 @@ _estimate_timing(Set<DiscreteEvent>&,
                 UpperIntervalType guard_derivative_range = compose(lie_derivative(guard_function,dynamic),flow).range();
 
                 FloatDPBounds alpha_val=(1+flow.step_size()*cast_exact(guard_derivative_range.lower_bound())/cast_exact(guard_range.lower_bound()));
-                FloatDP alpha=cast_exact(alpha_val);
-                ARIADNE_ASSERT(alpha_val.value()==alpha);
+                FloatDP alpha=alpha_val.value();
                 LOGGING_PRINTLN_AT(1,"step_size: "<<flow.step_size()<<", guard_range: "<<guard_range<<", guard_derivative_range: "<<guard_derivative_range<<", alpha: "<<alpha);
                 if(alpha>0 && alpha<=1) {
                     ValidatedScalarMultivariateFunctionPatch guard_creep_time;

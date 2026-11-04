@@ -155,6 +155,7 @@ public:
         ARIADNE_TEST_CALL(test_dependent_step_policies());
         ARIADNE_TEST_CALL(test_nonlinear_grazing());
         ARIADNE_TEST_CALL(test_guaranteed_near_tangent_crossing());
+        ARIADNE_TEST_CALL(test_crossing_in_the_past());
         ARIADNE_TEST_CALL(test_partial_crossing_without_creep());
         ARIADNE_TEST_CALL(test_straddling_initial_times());
         ARIADNE_TEST_CALL(test_formatting());
@@ -181,6 +182,7 @@ public:
     Void test_dependent_step_policies() const;
     Void test_nonlinear_grazing() const;
     Void test_guaranteed_near_tangent_crossing() const;
+    Void test_crossing_in_the_past() const;
     Void test_partial_crossing_without_creep() const;
     Void test_straddling_initial_times() const;
     Void test_formatting() const;
@@ -489,7 +491,8 @@ Void TestHybridEvolver::test_initial_constraints_and_contracts() const {
 
 Void TestHybridEvolver::test_solver_budget_fallback() const {
     DiscreteLocation target(2);
-    for(Bool concave : {false,true}) {
+    for(unsigned failure=0u;failure!=3u;++failure) {
+        Bool concave=failure!=0u;
         HybridAutomaton system;
         system.new_mode(q,{dot(x)=1,dot(y)=0});
         system.new_mode(target,{dot(x)=0,dot(y)=0});
@@ -498,7 +501,8 @@ Void TestHybridEvolver::test_solver_budget_fallback() const {
         GeneralHybridEvolver evolver(system);
         // The solver is allowed to exhaust its proof budget. Evolution must
         // retain a validated event enclosure using guard constraints instead.
-        evolver.set_solver(IntervalNewtonSolver(1e-8,0u));
+        if(failure==2u) evolver.set_solver(RuntimeFailureSolver());
+        else evolver.set_solver(IntervalNewtonSolver(1e-8,0u));
         evolver.ALLOW_CREEP=false;
         evolver.configuration().set_maximum_step_size(1.0);
         HybridBoxSet initial=concave
@@ -628,6 +632,34 @@ Void TestHybridEvolver::test_guaranteed_near_tangent_crossing() const {
     for(auto const& final : after.final()) {
         if(final.previous_events().size()==1u) ARIADNE_TEST_EQUALS(final.previous_events()[0],e);
     }
+}
+
+Void TestHybridEvolver::test_crossing_in_the_past() const {
+    HybridAutomaton system;
+    system.new_mode(q,{dot(x)=1,dot(y)=0});
+    system.new_transition(q,e,q,{next(x)=x,next(y)=y-1},y-sqr(x)>=0,EventKind::URGENT);
+    GeneralHybridEvolver evolver(system);
+    evolver.ALLOW_CREEP=false;
+    evolver.configuration().set_maximum_step_size(0.25);
+    auto orbit=evolver.orbit(HybridBoxSet(q,{-0.125_dec<=x<=0.125_dec,0.0001_dec<=y<=0.0002_dec}),
+        HybridTime(0.25_x,2),Semantics::UPPER);
+    // For positive x0 outside the guard, its maximum is in the past and
+    // the guard decreases forever. Negative x0 either hits in the future
+    // or starts inside the guard; both of those paths must reset y.
+    Bool jumped=false,past=false;
+    for(auto const& final : orbit.final()) {
+        auto count=final.previous_events().size();
+        ARIADNE_TEST_ASSERT(count<=1u);
+        expect_time(final,0.25);
+        auto expected=count==0u
+            ? ExactBoxType({{ExactDouble(0.249),ExactDouble(0.376)},
+                {ExactDouble(0.00009),ExactDouble(0.00021)}})
+            : ExactBoxType({{ExactDouble(0.124),ExactDouble(0.376)},
+                {-ExactDouble(0.99991),-ExactDouble(0.99979)}});
+        ARIADNE_TEST_ASSERT(definitely(final.inside(HybridExactBox(q,RealSpace({x,y}),expected))));
+        if(count==0u) past=true; else { jumped=true; ARIADNE_TEST_EQUALS(final.previous_events()[0],e); }
+    }
+    ARIADNE_TEST_ASSERT(past && jumped);
 }
 
 Void TestHybridEvolver::test_partial_crossing_without_creep() const {

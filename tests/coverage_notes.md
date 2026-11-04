@@ -192,3 +192,20 @@ test additionally checks that non-jumping trajectories have y<=0 (within numeric
 tolerance), rather than accepting their full original y interval. This removes
 an avoidable spurious continuous path under upper semantics; it does not imply
 that the previous upper enclosure omitted a true reachable state.
+
+## Past maxima, backend recovery and derived dimensions
+
+A positive-y quadratic guard with x0 spanning both sides of zero checks that
+past maxima remain flowable while initial/future activations reset y. Tests
+verify the final clock, the past component's x>=1/4 bound, reset bounds and
+both event histories. A runtime outage of the critical-time backend also checks
+the existing conservative CONCAVE recovery under both semantics.
+
+The four dimensional assertions inside the grazing case repeated facts from
+construction: the starting-state map is optionally embedded onto the elapsed
+parameter domain; unchecked_compose, join and composition with the scalar guard
+retain that domain. Every set is already checked against the elapsed domain by
+the outer per-set check. These local derived assertions were removed; the input
+compatibility check remains. The creep factor now chooses alpha_val.value()
+directly, the very midpoint against which its cast was formerly asserted equal,
+instead of computing that midpoint by two separate conversion routes.

@@ -121,3 +121,31 @@ resolution, even when the call evaluates an approximate point. GCC requires
 those candidate types to be complete when checking convertibility. The test
 therefore includes `taylor_model.hpp` as well as the factory declarations; the
 factory itself is still constructed through the exported interface.
+
+## Hybrid solver failures and step-size contracts
+
+UnknownSolutionException derives from EquationSolverException; their former
+crossing handlers performed the same conservative INCREASING fallback. A single
+EquationSolverException handler covers both. With a zero proof budget, the
+standard interval Newton solver exercises that fallback and the corresponding
+CONCAVE fallback for critical times. Tests verify the target, reset values,
+event history and event-time bounds under both upper and lower semantics.
+An unexpected backend runtime error is rethrown with its diagnostic preserved;
+the formerly following assignment after a guaranteed throw was unreachable.
+
+IntegratorInterface explicitly allows the selected step to differ from its
+suggestion, including a larger step. HybridEvolver now restricts the returned
+validated flow to min(available_step,configured_maximum). Restricting the time
+domain preserves validation and the configured limit. A conforming integrator
+that chooses twice the suggestion checks both the cap and analytic orbit bounds.
+
+Initial invariant filtering is checked for partially valid and wholly invalid
+sets, including termination before any events. The public location/space
+contracts are tested with invalid locations and variable lists. The diagnostic
+summary now includes the synchronized intermediate-set count.
+
+Asynchronous initial times exercise straddling and unwinding policies. A final
+slice can preserve its time as an equality constraint without a point-valued
+interval hull. The test verifies the numerical final-time equality, conservation
+of x-t, and the state and clock at an admissible parameter point. Configuration
+and enum constants use portable binary64 or decimal constructors.

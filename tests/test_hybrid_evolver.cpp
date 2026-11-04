@@ -5,7 +5,8 @@
 #include "function/function.hpp"
 #include "integration/integrator.hpp"
 #include "macro/testing.hpp"
-#include "function/taylor_function.hpp"
+#include "function/taylor_function.decl.hpp"
+#include "function/taylor_model.hpp"
 #include "equation-solving/interval_newton_method.hpp"
 #include "log_verbosity_scope.hpp"
 #include <sstream>
@@ -45,6 +46,30 @@ protected:
     Void _recondition(HybridEnclosure& enclosure) const override {
         ++reconditions;
         HybridEvolverBase::_recondition(enclosure);
+    }
+};
+
+class OvershootingIntegrator : public GradedTaylorSeriesIntegrator {
+public:
+    OvershootingIntegrator() : GradedTaylorSeriesIntegrator(1e-8) { }
+    OvershootingIntegrator* clone() const override { return new OvershootingIntegrator(*this); }
+    using GradedTaylorSeriesIntegrator::flow_step;
+    FlowStepModelType flow_step(ValidatedVectorMultivariateFunction const& field,
+        ExactBoxType const& domain,Suggestion<StepSizeType> const& hint) const override {
+        // Suggestions need not be upper bounds in IntegratorInterface.
+        return GradedTaylorSeriesIntegrator::flow_step(field,domain,suggest(2*static_cast<StepSizeType const&>(hint)));
+    }
+};
+
+// An unexpected numerical backend failure must retain its original diagnostic.
+class RuntimeFailureSolver : public IntervalNewtonSolver {
+public:
+    RuntimeFailureSolver() : IntervalNewtonSolver(1e-8,16u) { }
+    RuntimeFailureSolver* clone() const override { return new RuntimeFailureSolver(*this); }
+    using IntervalNewtonSolver::implicit;
+    ValidatedScalarMultivariateFunctionPatch implicit(
+        ValidatedScalarMultivariateFunction const&,ExactBoxType const&,ExactIntervalType const&) const override {
+        throw std::runtime_error("implicit backend unavailable");
     }
 };
 
@@ -91,6 +116,10 @@ public:
         ARIADNE_TEST_CALL(test_invariants_and_curvature());
         ARIADNE_TEST_CALL(test_correlated_near_miss());
         ARIADNE_TEST_CALL(test_uncertain_initial_time());
+        ARIADNE_TEST_CALL(test_initial_constraints_and_contracts());
+        ARIADNE_TEST_CALL(test_solver_budget_fallback());
+        ARIADNE_TEST_CALL(test_integrator_step_limit());
+        ARIADNE_TEST_CALL(test_straddling_initial_times());
         ARIADNE_TEST_CALL(test_formatting());
         ARIADNE_TEST_CALL(test_flow());
         ARIADNE_TEST_CALL(test_exact_final_time());
@@ -109,6 +138,10 @@ public:
     Void test_invariants_and_curvature() const;
     Void test_correlated_near_miss() const;
     Void test_uncertain_initial_time() const;
+    Void test_initial_constraints_and_contracts() const;
+    Void test_solver_budget_fallback() const;
+    Void test_integrator_step_limit() const;
+    Void test_straddling_initial_times() const;
     Void test_formatting() const;
     Void test_flow() const;
     Void test_exact_final_time() const;
@@ -124,7 +157,7 @@ public:
 Void TestHybridEvolver::test_components_and_copy_ownership() const {
     HybridAutomaton system;
     system.new_mode(q,{dot(x)=1,dot(y)=0});
-    EnclosureConfiguration enclosure_config(TaylorFunctionFactory(ThresholdSweeper<FloatDP>(dp,1e-8)));
+    EnclosureConfiguration enclosure_config{ValidatedFunctionPatchFactory(make_taylor_function_patch_factory(ThresholdSweeper<FloatDP>(dp,1e-8)))};
     auto factory=enclosure_config.function_factory();
     using FactoryInterface=EvolverFactoryInterface<HybridAutomatonInterface,HybridEnclosure,HybridTerminationCriterion>;
     static_assert(std::has_virtual_destructor_v<FactoryInterface>);
@@ -368,7 +401,7 @@ Void TestHybridEvolver::test_correlated_near_miss() const {
 Void TestHybridEvolver::test_uncertain_initial_time() const {
     HybridAutomaton system;
     system.new_mode(q,{dot(x)=1,dot(y)=0});
-    for(double width : {0.125,0.5}) {
+    for(double width : {0.0625,0.125,0.5}) {
         GeneralHybridEvolver evolver(system);
         evolver.ALLOW_UNWIND=true;
         evolver.configuration().set_maximum_step_size(0.25);
@@ -379,6 +412,144 @@ Void TestHybridEvolver::test_uncertain_initial_time() const {
         // x(t0)=t0 gives x(T)=T for every initial time in the enclosure.
         expect_final(orbit,ExactBoxType({{ExactDouble(1.249),ExactDouble(1.251)},{-ExactDouble(0.011),ExactDouble(0.011)}}),1.25,0u);
     }
+}
+
+Void TestHybridEvolver::test_initial_constraints_and_contracts() const {
+    HybridAutomaton system;
+    system.new_mode(q,{dot(x)=1,dot(y)=0});
+    system.new_invariant(q,x<=0.25_dec,e);
+    GeneralHybridEvolver evolver(system);
+    evolver.configuration().set_maximum_step_size(0.25);
+    HybridBoxSet partial(q,{0.125_dec<=x<=0.375_dec,-0.01_dec<=y<=0.01_dec});
+    auto orbit=evolver.orbit(partial,HybridTime(0.0625_x,3),Semantics::UPPER);
+    expect_final(orbit,ExactBoxType({{ExactDouble(0.1874),ExactDouble(0.2501)},{-ExactDouble(0.011),ExactDouble(0.011)}}),0.0625,0u);
+    auto stopped=evolver.orbit(partial,HybridTime(1.0_x,0),Semantics::UPPER);
+    ARIADNE_TEST_EQUALS(stopped.final().size(),1u);
+    auto stopped_final=stopped.final()[0];
+    stopped_final.reduce();
+    ARIADNE_TEST_ASSERT(definitely(stopped_final.inside(HybridExactBox(q,RealSpace({x,y}),ExactBoxType({{ExactDouble(0.1249),ExactDouble(0.2501)},{-ExactDouble(0.011),ExactDouble(0.011)}})))));
+    auto outside=evolver.orbit(HybridBoxSet(q,{0.5_dec<=x<=0.75_dec,0<=y<=0.125_dec}),HybridTime(0.125_x,3),Semantics::UPPER);
+    ARIADNE_TEST_EQUALS(outside.reach().size(),0u);
+    ARIADNE_TEST_EQUALS(outside.final().size(),0u);
+    ExactBoxType domain({{0,0.125_x},{0,0.125_x}});
+    auto config=EnclosureConfiguration(evolver.function_factory());
+    DiscreteLocation unknown(404);
+    HybridEnclosure unknown_location(unknown,RealSpace({x,y}),Enclosure(domain,config));
+    ARIADNE_TEST_FAIL(evolver.orbit(unknown_location,HybridTime(0.25_x,3),Semantics::UPPER));
+    ARIADNE_TEST_FAIL(evolver.enclosure(HybridExactBox(unknown,RealSpace({x,y}),domain)));
+    ARIADNE_TEST_FAIL(evolver.orbit(HybridExactBox(unknown,RealSpace({x,y}),domain),HybridTime(0.25_x,3),Semantics::UPPER));
+    RealVariable z("z");
+    HybridEnclosure wrong_variables(q,RealSpace({x,z}),Enclosure(domain,config));
+    ARIADNE_TEST_FAIL(evolver.orbit(wrong_variables,HybridTime(0.25_x,3),Semantics::UPPER));
+}
+
+Void TestHybridEvolver::test_solver_budget_fallback() const {
+    DiscreteLocation target(2);
+    for(Bool concave : {false,true}) {
+        HybridAutomaton system;
+        system.new_mode(q,{dot(x)=1,dot(y)=0});
+        system.new_mode(target,{dot(x)=0,dot(y)=0});
+        auto guard=concave ? y-sqr(x) : x-0.25_dec;
+        system.new_transition(q,e,target,{next(x)=0,next(y)=0},guard>=0,EventKind::URGENT);
+        GeneralHybridEvolver evolver(system);
+        // The solver is allowed to exhaust its proof budget. Evolution must
+        // retain a validated event enclosure using guard constraints instead.
+        evolver.set_solver(IntervalNewtonSolver(1e-8,0u));
+        evolver.ALLOW_CREEP=false;
+        evolver.configuration().set_maximum_step_size(1.0);
+        HybridBoxSet initial=concave
+            ? HybridBoxSet(q,{-0.5_dec<=x<=-0.49_dec,0.062_dec<=y<=0.063_dec})
+            : HybridBoxSet(q,{-0.01_dec<=x<=0.01_dec,-0.01_dec<=y<=0.01_dec});
+        for(auto semantics : {Semantics::UPPER,Semantics::LOWER}) {
+            auto orbit=evolver.orbit(initial,HybridTime(0.75_x,1),semantics);
+                ARIADNE_TEST_ASSERT(orbit.final().size()>0u);
+                for(auto const& final : orbit.final()) {
+                    ARIADNE_TEST_EQUALS(final.location(),target);
+                    ARIADNE_TEST_EQUALS(final.previous_events().size(),1u);
+                    ARIADNE_TEST_EQUALS(final.previous_events()[0],e);
+                    ARIADNE_TEST_ASSERT(definitely(final.inside(HybridExactBox(target,RealSpace({x,y}),ExactBoxType({{-ExactDouble(0.001),ExactDouble(0.001)},{-ExactDouble(0.001),ExactDouble(0.001)}})))));
+                    ARIADNE_TEST_ASSERT(final.time_range().lower_bound().raw().get_d()>=-1e-8);
+                    ARIADNE_TEST_ASSERT(final.time_range().upper_bound().raw().get_d()<=0.75+1e-8);
+                }
+        }
+    }
+    HybridAutomaton system;
+    system.new_mode(q,{dot(x)=1,dot(y)=0});
+    system.new_transition(q,e,q,{next(x)=0,next(y)=y},x>=0.25_dec,EventKind::URGENT);
+    CrossingProbeEvolver probe(system);
+    probe.set_solver(RuntimeFailureSolver());
+    auto initial=probe.enclosure(HybridExactBox(q,RealSpace({x,y}),ExactBoxType({{-ExactDouble(0.01),ExactDouble(0.01)},{-ExactDouble(0.01),ExactDouble(0.01)}})));
+    auto dynamic=system.dynamic_function(q);
+    auto flow=probe._compute_flow(dynamic,cast_exact_box(initial.state_bounding_box()),Dyadic(1));
+    Map<DiscreteEvent,EffectiveScalarMultivariateFunction> guards;
+    guards.insert(e,system.guard_function(q,e));
+    Bool received=false;
+    try { (void)probe._compute_crossings(Set<DiscreteEvent>{e},dynamic,guards,flow,initial); }
+    catch(std::runtime_error const& error) {
+        received=true;
+        ARIADNE_TEST_EQUALS(std::string(error.what()),std::string("implicit backend unavailable"));
+    }
+    ARIADNE_TEST_ASSERT(received);
+}
+
+Void TestHybridEvolver::test_integrator_step_limit() const {
+    HybridAutomaton system;
+    system.new_mode(q,{dot(x)=1,dot(y)=0});
+    CrossingProbeEvolver evolver(system);
+    OvershootingIntegrator integrator;
+    evolver.set_integrator(integrator);
+    evolver.configuration().set_maximum_step_size(0.25);
+    ExactBoxType domain({{-ExactDouble(0.01),ExactDouble(0.01)},{-ExactDouble(0.01),ExactDouble(0.01)}});
+    auto field=system.dynamic_function(q);
+    auto available=integrator.flow_step(field,domain,suggest(Dyadic(1/4_q)));
+    ARIADNE_TEST_EQUALS(available.domain()[2].upper_bound(),FloatDP(0.5_x,dp));
+    FlowFunctionModel capped(evolver._compute_flow(field,domain,Dyadic(1/4_q)));
+    ARIADNE_TEST_EQUALS(capped.step_size(),Dyadic(1/4_q));
+    auto orbit=evolver.orbit(HybridExactBox(q,RealSpace({x,y}),domain),HybridTime(0.5_x,3),Semantics::UPPER);
+    expect_final(orbit,ExactBoxType({{ExactDouble(0.489),ExactDouble(0.511)},{-ExactDouble(0.011),ExactDouble(0.011)}}),0.5,0u);
+    ARIADNE_TEST_EQUALS(orbit.reach().size(),2u);
+}
+
+Void TestHybridEvolver::test_straddling_initial_times() const {
+    HybridAutomaton system;
+    system.new_mode(q,{dot(x)=1,dot(y)=0});
+    GeneralHybridEvolver evolver(system);
+    evolver.ALLOW_CREEP=false;
+    evolver.configuration().set_maximum_step_size(0.125);
+    ExactBoxType domain({{0,0.5_x},{-ExactDouble(0.01),ExactDouble(0.01)}});
+    auto initial=evolver.enclosure(HybridExactBox(q,RealSpace({x,y}),domain));
+    initial.set_time_function(evolver.function_factory().create_coordinate(domain,0)-Dyadic(1/8_q));
+    auto orbit=evolver.orbit(initial,HybridTime(0.25_x,3),Semantics::UPPER);
+    // x(t0)=t0+1/8, hence x(1/4)=3/8 even when the initial
+    // time range extends past the horizon for part of the parameter domain.
+    ARIADNE_TEST_ASSERT(orbit.final().size()>0u);
+    for(auto const& final : orbit.final()) {
+        ARIADNE_TEST_EQUALS(final.previous_events().size(),0u);
+        // A constrained slice can retain a non-point clock range. Check the
+        // final-time equality and the conserved relation x-t=1/8 numerically.
+        auto near_zero=[](UpperIntervalType const& range) {
+            return range.lower_bound().raw().get_d()>-1e-10 && range.upper_bound().raw().get_d()<1e-10;
+        };
+        auto clock_residual=final.time_function()-Dyadic(1/4_q);
+        Bool sliced=near_zero(clock_residual.range());
+        for(auto const& constraint : final.continuous_set().constraint_models()) {
+            if(definitely(constraint.lower_bound()==0) && definitely(constraint.upper_bound()==0)) {
+                sliced=sliced || near_zero((constraint.function()-clock_residual).range())
+                    || near_zero((constraint.function()+clock_residual).range());
+            }
+        }
+        ARIADNE_TEST_ASSERT(sliced);
+        ARIADNE_TEST_ASSERT(near_zero((final.state_function()[0]-final.time_function()-Dyadic(1/8_q)).range()));
+        auto point=final.continuous_set().reduced_domain().midpoint();
+        auto state=final.state_function()(Vector<FloatDPApproximation>(point,dp));
+        auto clock=final.time_function()(Vector<FloatDPApproximation>(point,dp));
+        ARIADNE_TEST_ASSERT(std::abs(state[0].raw().get_d()-0.375)<1e-10);
+        ARIADNE_TEST_ASSERT(std::abs(clock.raw().get_d()-0.25)<1e-10);
+    }
+    initial.set_time_function(evolver.function_factory().create_constant(domain,Real(1)));
+    auto past=evolver.orbit(initial,HybridTime(0.25_x,3),Semantics::UPPER);
+    ARIADNE_TEST_EQUALS(past.reach().size(),0u);
+    ARIADNE_TEST_EQUALS(past.final().size(),0u);
 }
 
 Void TestHybridEvolver::test_formatting() const {
@@ -408,7 +579,7 @@ Void TestHybridEvolver::test_formatting() const {
     check(FinishingKind::BEFORE_FINAL_TIME,"BEFORE_FINAL_TIME"); check(FinishingKind::AT_FINAL_TIME,"AT_FINAL_TIME");
     check(FinishingKind::AFTER_FINAL_TIME,"AFTER_FINAL_TIME"); check(FinishingKind::STRADDLE_FINAL_TIME,"STRADDLE_FINAL_TIME");
     check(static_cast<FinishingKind>(255),"UNKNOWN");
-    EnclosureConfiguration config(TaylorFunctionFactory(ThresholdSweeper<FloatDP>(dp,1e-8)));
+    EnclosureConfiguration config{ValidatedFunctionPatchFactory(make_taylor_function_patch_factory(ThresholdSweeper<FloatDP>(dp,1e-8)))};
     auto time=config.function_factory().create_constant(ExactBoxType({{-1,1},{-1,1}}),Real(1/4_q));
     CrossingData transverse(CrossingKind::TRANSVERSE,time),grazing(CrossingKind::GRAZING),negative(CrossingKind::NEGATIVE);
     grazing.critical_time=time;

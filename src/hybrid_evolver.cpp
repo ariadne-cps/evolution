@@ -220,7 +220,7 @@ Set<DiscreteEvent> activating_events(const Map<DiscreteEvent,TransitionData>& tr
 
 Void set_auxiliary(HybridAutomatonInterface const& system, HybridEnclosure& enclosure) {
     DiscreteLocation initial_location=enclosure.location();
-    ARIADNE_ASSERT(system.state_space().has_location(initial_location))
+    ARIADNE_PRECONDITION(system.state_space().has_location(initial_location))
     RealSpace auxiliary_space=system.continuous_auxiliary_space(initial_location);
     EffectiveVectorMultivariateFunction auxiliary_function=system.auxiliary_function(initial_location);
     enclosure.set_auxiliary(auxiliary_space.variables(),auxiliary_function);
@@ -390,6 +390,7 @@ _log_summary(HybridEnclosure const& starting_set, SharedPointer<SynchronisedOrbi
     std::streamsize old_precision = std::clog.precision();
     LOGGING_PRINTLN(
             "#r="<<std::setw(5)<<std::left<<result->reach_size()
+            <<" #i="<<std::setw(5)<<std::left<<result->intermediate_size()
             <<" #f="<<std::setw(4)<<std::left<<result->final_size()
             <<" #e="<<std::setw(3)<<std::left<<starting_set.previous_events().size()
             <<" #p="<<std::setw(2)<<std::left<<starting_set.number_of_parameters()
@@ -548,8 +549,9 @@ _compute_flow(EffectiveVectorMultivariateFunction dynamic,
     ValidatedVectorMultivariateFunctionPatch flow_model=integrator.flow_step(dynamic,initial_box,suggest(maximum_step_size));
     LOGGING_PRINTLN_AT(1,"twosided_flow_model="<<flow_model);
     ExactBoxType flow_domain=flow_model.domain();
-    StepSizeType step_size=static_cast<StepSizeType>(flow_domain[flow_domain.size()-1u].upper_bound());
-    ARIADNE_ASSERT(step_size<=maximum_step_size);
+    // IntegratorInterface permits an actual step larger than its suggestion.
+    // Restrict the validated flow to the configured maximum before using it.
+    StepSizeType step_size=min(static_cast<StepSizeType>(flow_domain[flow_domain.size()-1u].upper_bound()),maximum_step_size);
     flow_domain[flow_domain.size()-1u]=ExactIntervalType(0,step_size);
     flow_model=restriction(flow_model,flow_domain);
     LOGGING_PRINTLN_AT(1,"flow_model="<<flow_model);
@@ -645,12 +647,6 @@ _compute_crossings(Set<DiscreteEvent> const& active_events,
                 crossings[event]=CrossingData(CrossingKind::TRANSVERSE,crossing_time);
                 LOGGING_PRINTLN_AT(2,"crossing_time="<<crossing_time);
             }
-            catch(const UnknownSolutionException& e) {
-                // If the crossing time cannot be computed, then we can still
-                // use the fact that the crossing occurs as soon as $g(x(t))=0$.
-                LOGGING_PRINTLN_AT(2,"Error in computing crossing time for event "<<*event_iter<<":"<<e.what());
-                crossings[event]=CrossingData(CrossingKind::INCREASING);
-            }
             catch(const EquationSolverException& e) {
                 // If the crossing time cannot be computed, then we can still
                 // use the fact that the crossing occurs as soon as $g(x(t))=0$.
@@ -659,8 +655,7 @@ _compute_crossings(Set<DiscreteEvent> const& active_events,
             }
             catch(const std::runtime_error& e) {
                 LOGGING_PRINTLN_AT(2,"Unexpected error in computing crossing time for event "<<*event_iter<<": "<<e.what());
-                ARIADNE_FAIL_MSG("ERROR!!");
-                crossings[event]=CrossingData(CrossingKind::INCREASING);
+                throw;
             }
         } else if(definitely(guard_derivative_range.upper_bound()<zero)) {
             // If the guard derivative is strictly negative over the bounding box for the flow,

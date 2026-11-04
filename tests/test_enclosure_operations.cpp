@@ -26,6 +26,8 @@ public:
         ARIADNE_TEST_CALL(test_evolve_and_reach_steps());
         ARIADNE_TEST_CALL(test_map_and_constraint_contracts());
         ARIADNE_TEST_CALL(test_labelled_adapters_and_parameter_names());
+        ARIADNE_TEST_CALL(test_constrained_reconditioning_and_products());
+        ARIADNE_TEST_CALL(test_degenerate_sets_and_remaining_contracts());
     }
     void test_constructors_and_configuration() {
         EnclosureConfiguration copied(static_cast<ValidatedFunctionPatchFactory::Interface const&>(factory()),2u);
@@ -112,6 +114,105 @@ public:
         ARIADNE_TEST_FAIL(initial().restrict(ExactBoxType({{-2,2}})));
         ARIADNE_TEST_FAIL(initial().separated(ExactBoxType({{0,1},{0,1}})));
     }
+    void test_constrained_reconditioning_and_products() {
+        List<ValidatedConstraint> constraints={ValidatedConstraint(-2,coordinate,2)};
+        Enclosure constrained(domain,identity,constraints,config);
+        BoundedConstraintSet bounded_set(RealBox({{-1,1}}),List<EffectiveConstraint>{EffectiveConstraint(-2,coordinate,2)});
+        Enclosure bounded(bounded_set,config);
+        ARIADNE_TEST_EQUALS(bounded.number_of_constraints(),1u);
+        ARIADNE_TEST_ASSERT(!definitely(bounded.is_empty()));
+        auto split=constrained.split();
+        ARIADNE_TEST_EQUALS(split.first.number_of_constraints(),1u);
+        ARIADNE_TEST_EQUALS(split.second.number_of_constraints(),1u);
+        constrained.restrict(ExactBoxType({{-0.5_x,0.5_x}}));
+        ARIADNE_TEST_ASSERT(definitely(constrained.inside(ExactBoxType({{-0.51_x,0.51_x}}))));
+        ARIADNE_TEST_EQUALS(product(constrained,ExactIntervalType(-1,1)).number_of_constraints(),1u);
+        ARIADNE_TEST_EQUALS(product(constrained,ExactBoxType({{-1,1},{-1,1}})).number_of_constraints(),1u);
+        ARIADNE_TEST_EQUALS(product(constrained,constrained).number_of_constraints(),2u);
+        auto late=initial(); late.set_time_function(factory().create_constant(domain,Real(1)));
+        ARIADNE_TEST_FAIL(product(initial(),late));
+        auto flow_coordinates=EffectiveVectorMultivariateFunction::identity(2u);
+        EffectiveVectorMultivariateFunction flow={flow_coordinates[0]+flow_coordinates[1]};
+        auto different_dwell=initial(); different_dwell.apply_fixed_evolve_step(flow,Dyadic(1/4_q));
+        different_dwell.set_time_function(factory().create_zero(domain));
+        ARIADNE_TEST_FAIL(product(initial(),different_dwell));
+        auto uncertain_state=factory().create_identity(domain)+Vector<FloatDPBounds>({{-0.1_x,0.1_x}},dp);
+        Enclosure uncertain(domain,uncertain_state,constraints,config);
+        uncertain.uniform_error_recondition();
+        ARIADNE_TEST_EQUALS(uncertain.number_of_parameters(),2u);
+        ARIADNE_TEST_EQUALS(uncertain.number_of_constraints(),1u);
+        ARIADNE_TEST_EQUALS(uncertain.variable_kinds().back(),EnclosureVariableKind::ERROR);
+        ARIADNE_TEST_ASSERT(uncertain.state_function()[0].range().lower_bound().raw().get_d()<=-1.1);
+        ARIADNE_TEST_ASSERT(uncertain.state_function()[0].range().upper_bound().raw().get_d()>=1.1);
+        ExactBoxType larger({{-1,1},{-1,1},{-1,1}});
+        auto coordinates=EffectiveVectorMultivariateFunction::identity(3u);
+        EffectiveVectorMultivariateFunction state={3*coordinates[0]+2*coordinates[1]+coordinates[2]};
+        EnclosureConfiguration reducing(config.function_factory(),2u);
+        Enclosure reduced(larger,state,coordinates[0],List<ValidatedConstraint>{ValidatedConstraint(-2,coordinates[0],2)},reducing);
+        reduced.kuhn_recondition();
+        ARIADNE_TEST_EQUALS(reduced.number_of_parameters(),2u);
+        ARIADNE_TEST_EQUALS(reduced.number_of_constraints(),1u);
+        ARIADNE_TEST_ASSERT(reduced.state_function()[0].range().lower_bound().raw().get_d()<=-6.0);
+        ARIADNE_TEST_ASSERT(reduced.state_function()[0].range().upper_bound().raw().get_d()>=6.0);
+        ARIADNE_TEST_FAIL(config.set_reconditioning_num_blocks(0u));
+        ARIADNE_TEST_FAIL(EnclosureConfiguration(config.function_factory(),0u));
+        ARIADNE_TEST_FAIL(EnclosureConfiguration(config.function_factory(),config.paver(),0u));
+        EnclosureConfiguration explicit_paver(config.function_factory(),config.paver(),1u);
+        ARIADNE_TEST_EQUALS(explicit_paver.reconditioning_num_blocks(),1u);
+    }
+
+    void test_degenerate_sets_and_remaining_contracts() {
+        auto coordinates=EffectiveVectorMultivariateFunction::identity(2u);
+        EffectiveVectorMultivariateFunction flow={coordinates[0]+coordinates[1]};
+        auto flow_domain=product(domain,ExactIntervalType(0.0_x,0.5_x));
+        auto phi=factory().create(flow_domain,flow);
+        auto bad_result=factory().create_zeros(2u,flow_domain);
+        auto bad_argument=factory().create_identity(domain);
+        ARIADNE_TEST_FAIL(initial().apply_full_reach_step(bad_result));
+        ARIADNE_TEST_FAIL(initial().apply_full_reach_step(bad_argument));
+        ARIADNE_TEST_FAIL(initial().apply_spacetime_reach_step(bad_result,zero));
+        ARIADNE_TEST_FAIL(initial().apply_spacetime_reach_step(bad_argument,zero));
+        ARIADNE_TEST_FAIL(initial().apply_spacetime_reach_step(phi,zero));
+        ARIADNE_TEST_FAIL(initial().apply_parameter_reach_step(bad_result,zero));
+        ARIADNE_TEST_FAIL(initial().apply_parameter_reach_step(bad_argument,zero));
+        ARIADNE_TEST_FAIL(initial().apply_parameter_reach_step(phi,EffectiveScalarMultivariateFunction::zero(2u)));
+        ARIADNE_TEST_FAIL(initial().apply_map(EffectiveVectorMultivariateFunction::identity(2u),EffectiveVectorMultivariateFunction::zeros(0u,2u)));
+        ARIADNE_TEST_FAIL(initial().set_auxiliary_mapping(EffectiveVectorMultivariateFunction::zeros(0u,2u)));
+        ARIADNE_TEST_FAIL(initial().split(1u));
+        ARIADNE_TEST_FAIL(initial().split_first_order());
+        Enclosure constant(domain,EffectiveVectorMultivariateFunction::zeros(1u,1u),config);
+        ARIADNE_TEST_EQUALS(constant.splitting_subdomains_zeroth_order().size(),1u);
+        EffectiveVectorMultivariateFunction nonlinear={sqr(coordinate),zero};
+        Enclosure curve(domain,nonlinear,config);
+        auto nonlinear_split=curve.split_first_order();
+        ARIADNE_TEST_EQUALS(nonlinear_split.first.state_dimension(),2u);
+        auto zero_step=initial();
+        zero_step.apply_full_reach_step(factory().create(product(domain,ExactIntervalType(0.0_x,0.0_x)),flow));
+        ARIADNE_TEST_ASSERT(definitely(zero_step.inside(ExactBoxType({{-1.01_x,1.01_x}}))));
+        Enclosure zero_dimensional(ExactBoxType(0u),config);
+        zero_dimensional.new_negative_parameter_constraint(EffectiveScalarMultivariateFunction::constant(0u,Real(1)));
+        ARIADNE_TEST_ASSERT(definitely(zero_dimensional.is_empty()));
+        auto contradictory=initial();
+        contradictory.new_positive_state_constraint(coordinate-Real(1/2_q));
+        contradictory.new_negative_state_constraint(coordinate+Real(1/2_q));
+        ARIADNE_TEST_ASSERT(definitely(contradictory.is_empty()));
+        ARIADNE_TEST_ASSERT(definitely(contradictory.separated(domain)));
+        RealVariable x("x"),y("y"),z("z");
+        LabelledEnclosure labelled(initial(),RealSpace({x}));
+        ARIADNE_TEST_FAIL(labelled.set_state_space(RealSpace({x,y})));
+        ARIADNE_TEST_FAIL(labelled.set_auxiliary(RealSpace({z}),EffectiveVectorMultivariateFunction::zeros(1u,2u)));
+        ARIADNE_TEST_FAIL(labelled.set_auxiliary(RealSpace(),identity));
+        ARIADNE_TEST_FAIL(labelled.apply_map(identity,RealSpace({x,y})));
+        ARIADNE_TEST_FAIL(labelled.apply_map(identity,RealSpace({x}),EffectiveVectorMultivariateFunction::zeros(1u,2u),RealSpace({z})));
+        ARIADNE_TEST_FAIL(labelled.apply_map(identity,RealSpace({x}),identity,RealSpace()));
+        ListSet<LabelledEnclosure> empty,sets;
+        ARIADNE_TEST_FAIL(empty.bounding_box());
+        sets.adjoin(labelled); sets.adjoin(labelled);
+        ARIADNE_TEST_EQUALS(sets.bounding_box().space(),RealSpace({x}));
+        auto unknown=canonical_variable_names({static_cast<EnclosureVariableKind>(255)});
+        ARIADNE_TEST_EQUALS(unknown,List<Identifier>({"s0"}));
+    }
+
     void test_labelled_adapters_and_parameter_names() {
         RealVariable x("x"),z("z");
         LabelledEnclosure labelled(initial(),RealSpace({x}));

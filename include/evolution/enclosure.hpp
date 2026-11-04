@@ -77,12 +77,12 @@ class EnclosureConfiguration {
     explicit EnclosureConfiguration(ValidatedFunctionPatchFactory::Interface const& function_factory, SizeType reconditioning_num_blocks = 3u)
         : EnclosureConfiguration(ValidatedFunctionPatchFactory(function_factory.clone()),reconditioning_num_blocks) { }
     EnclosureConfiguration(ValidatedFunctionPatchFactory function_factory, Paver paver, SizeType reconditioning_num_blocks = 3u)
-        : _function_factory(function_factory), _paver(paver), _reconditioning_num_blocks(reconditioning_num_blocks) { }
+        : _function_factory(function_factory), _paver(paver), _reconditioning_num_blocks(reconditioning_num_blocks) { ARIADNE_PRECONDITION(reconditioning_num_blocks>0u); }
     ValidatedFunctionPatchFactory const& function_factory() const { return _function_factory; }
     Paver const& paver() const { return _paver; }
     SizeType reconditioning_num_blocks() const { return _reconditioning_num_blocks; }
     EnclosureConfiguration& set_paver(Paver paver) { _paver=paver; return *this; }
-    EnclosureConfiguration& set_reconditioning_num_blocks(SizeType num_blocks) { _reconditioning_num_blocks = num_blocks; return *this; }
+    EnclosureConfiguration& set_reconditioning_num_blocks(SizeType num_blocks) { ARIADNE_PRECONDITION(num_blocks>0u); _reconditioning_num_blocks = num_blocks; return *this; }
     friend OutputStream& operator<<(OutputStream& os, EnclosureConfiguration const& ec);
 };
 
@@ -103,7 +103,6 @@ class Enclosure
     ValidatedScalarMultivariateFunctionPatch _dwell_time_function;
     List<ValidatedConstraintModel> _constraints;
     mutable ExactBoxType _reduced_domain;
-    mutable Bool _is_fully_reduced;
 
     List<EnclosureVariableKind> _variable_kinds;
 

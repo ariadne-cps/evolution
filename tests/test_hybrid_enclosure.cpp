@@ -208,10 +208,13 @@ class TestHybridEnclosure {
         RealSpace space({x,y});
         DiscreteLocation q(1);
         EnclosureConfiguration config(ScaledFunctionPatchFactory<ValidatedBoundsTaylorModelDP>(ThresholdSweeper<FloatDP>(dp,1e-8)));
+        config.set_reconditioning_num_blocks(1u);
         HybridEnclosure enclosure(HybridExactBox(q,space,ExactBoxType({{-1,1},{-1,1}})),config);
         auto coordinate=EffectiveVectorMultivariateFunction::identity(2u);
         enclosure.new_state_constraint(DiscreteEvent("bound"),ValidatedConstraint(-1,coordinate[0],1));
         enclosure._check();
+        enclosure.kuhn_recondition();
+        ARIADNE_TEST_EQUALS(enclosure.number_of_parameters(),2u);
         std::ostringstream representation; enclosure.repr(representation);
         ARIADNE_TEST_ASSERT(representation.str().find("HybridEnclosure")!=std::string::npos);
         ARIADNE_TEST_ASSERT(representation.str().find("<=")!=std::string::npos);

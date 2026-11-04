@@ -224,10 +224,7 @@ HybridEnclosure::state_time_auxiliary_function() const
 
 Void HybridEnclosure::set_time_function(const ValidatedScalarMultivariateFunctionPatch& time_function)
 {
-    static_cast<void>(time_function);
-    // This setter deliberately remains unimplemented; checks and assignment
-    // after the unconditional throw were unreachable.
-    ARIADNE_NOT_IMPLEMENTED;
+    this->_set.set_time_function(time_function);
 }
 
 UpperBoxType
@@ -281,8 +278,8 @@ HybridEnclosure::bounding_box() const
 
 Void HybridEnclosure::set_auxiliary(List<RealVariable> vars, EffectiveVectorMultivariateFunction aux)
 {
-    ARIADNE_ASSERT(this->state_space().size()==aux.argument_size());
-    ARIADNE_ASSERT(vars.size()==aux.result_size());
+    ARIADNE_PRECONDITION(this->state_space().size()==aux.argument_size());
+    ARIADNE_PRECONDITION(vars.size()==aux.result_size());
     this->_set.set_auxiliary(vars,aux);
 }
 
@@ -326,7 +323,7 @@ Void HybridEnclosure::clear_events()
 
 Void HybridEnclosure::apply_reset(DiscreteEvent event, DiscreteLocation target, RealSpace state_space, const ValidatedVectorMultivariateFunction& map, RealSpace auxiliary_space, const EffectiveVectorMultivariateFunction& auxiliary_mapping)
 {
-    ARIADNE_ASSERT_MSG(map.argument_size()==this->state_dimension(),"*this="<<*this<<", event="<<event<<", state_space="<<state_space<<", target="<<target<<", map="<<map);
+    ARIADNE_PRECONDITION_MSG(map.argument_size()==this->state_dimension(),"*this="<<*this<<", event="<<event<<", state_space="<<state_space<<", target="<<target<<", map="<<map);
     this->_events.append(event);
     this->_location=target;
     this->_set.apply_map(map,state_space,auxiliary_mapping,auxiliary_space);
@@ -407,7 +404,7 @@ HybridBasicSet<Enclosure> HybridEnclosure::state_set() const {
 
 HybridBasicSet<Enclosure> HybridEnclosure::state_time_set() const {
     auto state_time_space=(this->state_space().contains(TimeVariable()) ? this->state_space() : join(this->state_space(),TimeVariable()));
-    auto state_time_function=join(this->state_function(),this->time_function());
+    auto state_time_function=(this->state_space().contains(TimeVariable()) ? this->state_function() : join(this->state_function(),this->time_function()));
     Enclosure enclosure(this->parameter_domain(),state_time_function,this->time_function(),this->constraints(),this->configuration());
     HybridBasicSet<Enclosure> hset(this->location(),state_time_space,enclosure);
     return hset;
@@ -541,8 +538,7 @@ HybridEnclosure::_check() const
 Void HybridEnclosure::draw(CanvasInterface& canvas, const Set<DiscreteLocation>& locations, const Variables2d& axes) const
 {
     if(locations.empty() || locations.contains(this->location())) {
-        Projection2d proj=Ariadne::projection(this->state_time_auxiliary_space(),axes);
-        this->continuous_set().draw(canvas,proj);
+        this->_set.draw(canvas,axes);
     }
 }
 
@@ -646,6 +642,7 @@ VariablesUpperBoxType
 ListSet<HybridEnclosure>::bounding_box() const
 {
     LOGGING_SCOPE_CREATE;
+    ARIADNE_PRECONDITION(this->size()>0u);
     auto iter=this->begin();
     auto box = iter->state_auxiliary_set().euclidean_set().bounding_box();
     RealSpace space = join(iter->state_space(),iter->auxiliary_space());

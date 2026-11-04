@@ -177,6 +177,9 @@ class Enclosure
     //! \brief Substitutes the expression \f$x_j=c\f$ into the function and constraints.
     Void substitute(SizeType j, FloatDP c);
 
+    //! \brief Replace the absolute time map, preserving the dwell time and state.
+    Void set_time_function(ValidatedScalarMultivariateFunctionPatch const& time);
+
     //! \brief Set the time function to zero.
     Void clear_time();
 
@@ -406,6 +409,7 @@ class LabelledEnclosure
     const RealSpace auxiliary_space() const;
     const RealSpace state_auxiliary_space() const;
     const RealSpace state_time_auxiliary_space() const;
+    ValidatedVectorMultivariateFunctionPatch const state_time_auxiliary_function() const;
 
     Void set_auxiliary(const RealSpace& spc, const EffectiveVectorMultivariateFunction& aux);
 

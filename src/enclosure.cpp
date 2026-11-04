@@ -415,6 +415,14 @@ Void Enclosure::_unchecked_new_variable(ExactIntervalType ivl, EnclosureVariable
     this->_variable_kinds.append(vk);
 }
 
+Void Enclosure::set_time_function(ValidatedScalarMultivariateFunctionPatch const& time)
+{
+    ARIADNE_PRECONDITION(time.argument_size()==this->number_of_parameters());
+    ARIADNE_PRECONDITION(Ariadne::subset(this->parameter_domain(),time.domain()));
+    this->_time_function=restriction(time,this->parameter_domain());
+    this->_check();
+}
+
 Void Enclosure::clear_time()
 {
     this->_time_function=0;
@@ -596,7 +604,7 @@ Void Enclosure::apply_parameter_reach_step(ValidatedVectorMultivariateFunctionPa
 Void Enclosure::new_state_time_bound(ValidatedScalarMultivariateFunction gamma) {
     ARIADNE_ASSERT(gamma.argument_size()==this->state_dimension());
     this->_is_fully_reduced=false;
-    this->_constraints.append(compose(gamma,this->state_function())<=this->time_function());
+    this->_constraints.append(this->time_function()<=compose(gamma,this->state_function()));
     this->_check();
 }
 
@@ -1471,6 +1479,11 @@ const RealSpace LabelledEnclosure::state_time_auxiliary_space() const
 }
 
 
+ValidatedVectorMultivariateFunctionPatch const LabelledEnclosure::state_time_auxiliary_function() const {
+    if(this->state_space().contains(this->time_variable())) { return this->state_auxiliary_function(); }
+    return this->Enclosure::state_time_auxiliary_function();
+}
+
 const RealSpace LabelledEnclosure::space() const {
     return this->state_time_auxiliary_space();
 }
@@ -1539,7 +1552,8 @@ Void LabelledEnclosure::apply_map(ValidatedVectorMultivariateFunction const& f, 
 Void LabelledEnclosure::draw(CanvasInterface& canvas, const Variables2d& axes) const
 {
     Projection2d proj=projection(this->state_time_auxiliary_space(),axes);
-    this->euclidean_set().draw(canvas,proj);
+    ValidatedConstrainedImageSet set(this->domain(),this->state_time_auxiliary_function(),this->constraints());
+    DrawerManager::instance().drawer().draw(canvas,proj,set);
 }
 
 

@@ -5,6 +5,7 @@
 #include "set/list_set.hpp"
 #include "macro/testing.hpp"
 #include <sstream>
+#include "test_logging.hpp"
 using namespace Ariadne;
 
 class TestEnclosureOperations {
@@ -64,7 +65,7 @@ public:
         auto reach=initial(); reach.apply_parameterised_full_reach_step(phi);
         ARIADNE_TEST_EQUALS(reach.number_of_parameters(),2u);
         ARIADNE_TEST_EQUALS(reach.variable_kinds().back(),EnclosureVariableKind::TEMPORAL);
-        ARIADNE_TEST_ASSERT(definitely(reach.inside(ExactBoxType({{-1.01_x,1.51_x}}))));
+        ARIADNE_TEST_ASSERT(definitely(reach.inside(ExactBoxType({{-ExactDouble(1.01),ExactDouble(1.51)}}))));
         ARIADNE_TEST_FAIL(initial().apply_parameterised_fixed_evolve_step(factory().create_identity(ExactBoxType({{-1,1},{-1,1}})),Dyadic(1/4_q)));
         ARIADNE_TEST_FAIL(initial().apply_parameterised_fixed_evolve_step(factory().create_identity(ExactBoxType({{0,1}})),Dyadic(1/4_q)));
         ARIADNE_TEST_FAIL(initial().apply_parameterised_fixed_evolve_step(factory().create_zeros(2u,domain),Dyadic(1/4_q)));
@@ -93,7 +94,7 @@ public:
         EffectiveVectorMultivariateFunction map={2*coordinate};
         auto mapped=apply(map,initial()); expect_value(mapped.state_function()[0],0.0);
         auto unchecked=unchecked_apply(factory().create(domain,map),initial());
-        ARIADNE_TEST_ASSERT(definitely(unchecked.inside(ExactBoxType({{-2.01_x,2.01_x}}))));
+        ARIADNE_TEST_ASSERT(definitely(unchecked.inside(ExactBoxType({{-ExactDouble(2.01),ExactDouble(2.01)}}))));
         auto a=initial(); a.set_auxiliary_mapping(map);
         ARIADNE_TEST_EQUALS(a.get_function(0u).argument_size(),1u);
         expect_value(a.get_function(1u),0.0); expect_value(a.get_function(2u),0.0);
@@ -125,7 +126,7 @@ public:
         ARIADNE_TEST_EQUALS(split.first.number_of_constraints(),1u);
         ARIADNE_TEST_EQUALS(split.second.number_of_constraints(),1u);
         constrained.restrict(ExactBoxType({{-0.5_x,0.5_x}}));
-        ARIADNE_TEST_ASSERT(definitely(constrained.inside(ExactBoxType({{-0.51_x,0.51_x}}))));
+        ARIADNE_TEST_ASSERT(definitely(constrained.inside(ExactBoxType({{-ExactDouble(0.51),ExactDouble(0.51)}}))));
         ARIADNE_TEST_EQUALS(product(constrained,ExactIntervalType(-1,1)).number_of_constraints(),1u);
         ARIADNE_TEST_EQUALS(product(constrained,ExactBoxType({{-1,1},{-1,1}})).number_of_constraints(),1u);
         ARIADNE_TEST_EQUALS(product(constrained,constrained).number_of_constraints(),2u);
@@ -136,7 +137,7 @@ public:
         auto different_dwell=initial(); different_dwell.apply_fixed_evolve_step(flow,Dyadic(1/4_q));
         different_dwell.set_time_function(factory().create_zero(domain));
         ARIADNE_TEST_FAIL(product(initial(),different_dwell));
-        auto uncertain_state=factory().create_identity(domain)+Vector<FloatDPBounds>({{-0.1_x,0.1_x}},dp);
+        auto uncertain_state=factory().create_identity(domain)+Vector<FloatDPBounds>({{-ExactDouble(0.1),ExactDouble(0.1)}},dp);
         Enclosure uncertain(domain,uncertain_state,constraints,config);
         uncertain.uniform_error_recondition();
         ARIADNE_TEST_EQUALS(uncertain.number_of_parameters(),2u);
@@ -190,7 +191,7 @@ public:
         ARIADNE_TEST_EQUALS(nonlinear_split.first.state_dimension(),2u);
         auto zero_step=initial();
         zero_step.apply_full_reach_step(factory().create(product(domain,ExactIntervalType(0.0_x,0.0_x)),flow));
-        ARIADNE_TEST_ASSERT(definitely(zero_step.inside(ExactBoxType({{-1.01_x,1.01_x}}))));
+        ARIADNE_TEST_ASSERT(definitely(zero_step.inside(ExactBoxType({{-ExactDouble(1.01),ExactDouble(1.01)}}))));
         Enclosure zero_dimensional(ExactBoxType(0u),config);
         zero_dimensional.new_negative_parameter_constraint(EffectiveScalarMultivariateFunction::constant(0u,Real(1)));
         ARIADNE_TEST_ASSERT(definitely(zero_dimensional.is_empty()));
@@ -232,4 +233,5 @@ public:
         ARIADNE_TEST_EQUALS(names,List<Identifier>({"x0","x1","t0","a0","u0","v0","e0","s0"}));
     }
 };
-int main() { TestEnclosureOperations().test(); return ARIADNE_TEST_FAILURES; }
+int main() {
+    redirect_test_logging_to_null(); TestEnclosureOperations().test(); return ARIADNE_TEST_FAILURES; }

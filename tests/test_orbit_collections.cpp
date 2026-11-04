@@ -8,6 +8,7 @@
 #include "macro/testing.hpp"
 #include <sstream>
 #include <memory>
+#include "test_logging.hpp"
 using namespace Ariadne;
 
 class TestOrbitCollections {
@@ -146,4 +147,5 @@ public:
         ARIADNE_TEST_ASSERT(recorded->boundaries>0u);
     }
 };
-int main() { TestOrbitCollections().test(); return ARIADNE_TEST_FAILURES; }
+int main() {
+    redirect_test_logging_to_null(); TestOrbitCollections().test(); return ARIADNE_TEST_FAILURES; }

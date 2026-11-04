@@ -44,6 +44,7 @@
 #include "drawing/drawing_command_line_interface.hpp"
 
 #include "macro/testing.hpp"
+#include "test_logging.hpp"
 
 using namespace Ariadne;
 using namespace std;
@@ -224,6 +225,7 @@ public:
 
 Int main(Int argc, const char* argv[])
 {
+    redirect_test_logging_to_null();
     if (not DrawingCommandLineInterface().acquire(argc,argv)) return -1;
 
     TestVectorFieldEvolver().test();

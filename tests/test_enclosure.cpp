@@ -45,6 +45,7 @@
 #include "logging/logging.hpp"
 
 #include "macro/testing.hpp"
+#include "test_logging.hpp"
 
 
 using namespace Ariadne;
@@ -269,6 +270,7 @@ class TestEnclosure
 
 Int main()
 {
+    redirect_test_logging_to_null();
     ARIADNE_TEST_CALL(TestEnclosure().test());
     return ARIADNE_TEST_FAILURES;
 }

@@ -11,11 +11,13 @@
 #include "evolution/enclosure.hpp"
 
 #include "macro/testing.hpp"
+#include "test_logging.hpp"
 
 using namespace Ariadne;
 
 Int main()
 {
+    redirect_test_logging_to_null();
     RealBox box({{Decimal("1.25"),Decimal("1.55")},
                  {Decimal("2.35"),Decimal("2.45")}});
 

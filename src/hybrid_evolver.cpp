@@ -724,7 +724,7 @@ _compute_crossings(Set<DiscreteEvent> const& active_events,
                     ValidatedScalarMultivariateFunctionPatch critical_time=solver.implicit(compose(guard_derivative,flow),flow_spacial_domain,flow_time_domain);
                     UpperIntervalType critical_time_range=critical_time.range();
                     LOGGING_PRINTLN_AT(2,"critical_time_range="<<critical_time_range);
-                    if (possibly(critical_time.error()>1e-8_x)) {
+                    if (possibly(critical_time.error()>1e-8_pr)) {
                         LOGGING_PRINTLN_AT(2,event<<": critical_time: error="<<critical_time.error()<<", range="<<critical_time.range()); }
 
                     HybridEnclosure evolve_set_at_critical_time=initial_set;

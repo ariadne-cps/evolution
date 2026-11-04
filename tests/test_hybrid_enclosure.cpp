@@ -39,6 +39,7 @@
 #include "drawing/drawer_manager.hpp"
 #include <memory>
 #include <sstream>
+#include "test_logging.hpp"
 
 using namespace std;
 using namespace Ariadne;
@@ -69,7 +70,7 @@ class TestHybridEnclosure {
         auto constant_spacetime=EffectiveScalarMultivariateFunction::constant(3u,Real(1/4_q));
         auto space=initial;
         space.apply_space_evolve_step(phi,factory.create(domain,constant_space));
-        ARIADNE_TEST_ASSERT(definitely(space.state_bounding_box().inside(ExactBoxType({{-0.76_x,1.26_x},{-0.51_x,1.51_x}}))));
+        ARIADNE_TEST_ASSERT(definitely(space.state_bounding_box().inside(ExactBoxType({{-ExactDouble(0.76),ExactDouble(1.26)},{-ExactDouble(0.51),ExactDouble(1.51)}}))));
         ARIADNE_TEST_EQUALS(space.time_range().upper_bound().raw().get_d(),0.25);
         auto spacetime=initial;
         spacetime.apply_spacetime_evolve_step(phi,factory.create(flow_domain,constant_spacetime));
@@ -286,6 +287,7 @@ class TestHybridEnclosure {
 };
 
 Int main() {
+    redirect_test_logging_to_null();
     TestHybridEnclosure().test();
     return ARIADNE_TEST_FAILURES;
 }

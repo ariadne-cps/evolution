@@ -48,6 +48,7 @@
 #include "macro/testing.hpp"
 #include "log_verbosity_scope.hpp"
 #include <memory>
+#include "test_logging.hpp"
 
 using namespace Ariadne;
 using namespace std;
@@ -90,7 +91,7 @@ class TestIteratedMapEvolver
             ARIADNE_TEST_EQUALS(continued.final().size(),1u);
             ARIADNE_TEST_EQUALS(continued.reach().size(),2u);
             ARIADNE_TEST_EQUALS(continued.intermediate().size(),2u);
-            ARIADNE_TEST_ASSERT(definitely(continued.final()[0].euclidean_set().subset(ExactBoxType({{0.99_x,3.01_x}}))));
+            ARIADNE_TEST_ASSERT(definitely(continued.final()[0].euclidean_set().subset(ExactBoxType({{ExactDouble(0.99),ExactDouble(3.01)}}))));
         }
         auto unsplit=evolver.orbit(initial,Integer(1),Semantics::UPPER);
         ARIADNE_TEST_EQUALS(unsplit.final().size(),1u);
@@ -177,6 +178,7 @@ class TestIteratedMapEvolver
 
 Int main(Int argc, const char* argv[])
 {
+    redirect_test_logging_to_null();
     if (not DrawingCommandLineInterface().acquire(argc,argv)) return -1;
 
     TestIteratedMapEvolver().test();

@@ -6,6 +6,7 @@
 #include "macro/testing.hpp"
 #include <cmath>
 #include <sstream>
+#include "test_logging.hpp"
 using namespace Ariadne;
 
 // A valid progress predicate supplied through the supported automaton interface.
@@ -149,4 +150,5 @@ public:
         expect_endpoint(singleton.curves(0u)[0],0.0,0.0,2.0,4.0);
     }
 };
-int main() { TestHybridSimulator().test(); return ARIADNE_TEST_FAILURES; }
+int main() {
+    redirect_test_logging_to_null(); TestHybridSimulator().test(); return ARIADNE_TEST_FAILURES; }

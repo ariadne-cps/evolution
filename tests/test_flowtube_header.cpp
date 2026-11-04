@@ -4,6 +4,7 @@
 
 #include <type_traits>
 #include <utility>
+#include "test_logging.hpp"
 
 // The interval returned by time_range() may be temporary: endpoints must not
 // escape as references to that temporary.
@@ -13,6 +14,7 @@ static_assert(!std::is_reference_v<decltype(std::declval<FlowTube const&>().fina
 
 using namespace Ariadne;
 int main() {
+    redirect_test_logging_to_null();
     TaylorFunctionFactory factory(ThresholdSweeper<FloatDP>(dp,1e-8));
     ExactBoxType domain({{-1.0_x,1.0_x},{0.0_x,2.0_x}});
     auto coordinates=EffectiveVectorMultivariateFunction::identity(2);
@@ -30,9 +32,9 @@ int main() {
     ARIADNE_TEST_EQUALS(tube.initial_set().domain(),tube.space_domain());
     ARIADNE_TEST_EQUALS(tube.reach_set().domain(),domain);
     ARIADNE_TEST_EQUALS(tube.final_set().domain(),tube.space_domain());
-    ARIADNE_TEST_ASSERT(definitely(tube.initial_set().bounding_box().inside(ExactBoxType({{-1.1_x,1.1_x}}))));
-    ARIADNE_TEST_ASSERT(definitely(tube.final_set().bounding_box().inside(ExactBoxType({{0.9_x,3.1_x}}))));
-    ARIADNE_TEST_ASSERT(definitely(tube.reach_set().bounding_box().inside(ExactBoxType({{-1.1_x,3.1_x}}))));
+    ARIADNE_TEST_ASSERT(definitely(tube.initial_set().bounding_box().inside(ExactBoxType({{-ExactDouble(1.1),ExactDouble(1.1)}}))));
+    ARIADNE_TEST_ASSERT(definitely(tube.final_set().bounding_box().inside(ExactBoxType({{ExactDouble(0.9),ExactDouble(3.1)}}))));
+    ARIADNE_TEST_ASSERT(definitely(tube.reach_set().bounding_box().inside(ExactBoxType({{-ExactDouble(1.1),ExactDouble(3.1)}}))));
     ARIADNE_TEST_FAIL(FlowTube(factory.create(domain,coordinates)));
     return ARIADNE_TEST_FAILURES;
 }

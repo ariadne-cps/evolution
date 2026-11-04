@@ -46,6 +46,7 @@
 #include "log_verbosity_scope.hpp"
 #include <cmath>
 #include <sstream>
+#include "test_logging.hpp"
 
 using namespace Ariadne;
 using namespace std;
@@ -270,6 +271,7 @@ class TestVectorFieldSimulator
 
 Int main(Int argc, const char* argv[])
 {
+    redirect_test_logging_to_null();
     if (not DrawingCommandLineInterface().acquire(argc,argv)) return -1;
     TestVectorFieldSimulator().test();
     return ARIADNE_TEST_FAILURES;

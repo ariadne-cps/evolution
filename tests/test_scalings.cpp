@@ -3,6 +3,7 @@
 #include <sstream>
 #include <string>
 #include "macro/testing.hpp"
+#include "test_logging.hpp"
 using namespace Ariadne;
 
 class TestScalings {
@@ -48,4 +49,5 @@ public:
         ARIADNE_TEST_EQUALS(policy.scaling(x),2.0_x);
     }
 };
-Int main() { TestScalings().test(); return ARIADNE_TEST_FAILURES; }
+Int main() {
+    redirect_test_logging_to_null(); TestScalings().test(); return ARIADNE_TEST_FAILURES; }

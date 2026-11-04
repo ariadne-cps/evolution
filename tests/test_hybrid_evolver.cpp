@@ -12,6 +12,7 @@
 #include <type_traits>
 #include <cmath>
 #include <memory>
+#include "test_logging.hpp"
 using namespace Ariadne;
 
 // Exercise the default timing strategy provided for derived evolvers.
@@ -139,7 +140,7 @@ Void TestHybridEvolver::test_components_and_copy_ownership() const {
     created->set_solver(IntervalNewtonSolver(1e-9,16u));
     created->configuration().set_enable_subdivisions(false);
     ARIADNE_TEST_ASSERT(!created->configuration().enable_subdivisions());
-    HybridExactBox box(q,RealSpace({x,y}),ExactBoxType({{-0.01_x,0.01_x},{-0.01_x,0.01_x}}));
+    HybridExactBox box(q,RealSpace({x,y}),ExactBoxType({{-ExactDouble(0.01),ExactDouble(0.01)},{-ExactDouble(0.01),ExactDouble(0.01)}}));
     ARIADNE_TEST_EQUALS(created->enclosure(box).state_dimension(),2u);
     HybridBoundedConstraintSet bounded(q,{-0.01_dec<=x<=0.01_dec,-0.01_dec<=y<=0.01_dec});
     ARIADNE_TEST_EQUALS(created->enclosure(bounded).state_dimension(),2u);
@@ -168,7 +169,7 @@ Void TestHybridEvolver::test_components_and_copy_ownership() const {
     auto copied_orbit=surviving->orbit(box,HybridTime(0.25_x,3),Semantics::UPPER);
     ARIADNE_TEST_EQUALS(copied_orbit.final().size(),1u);
     expect_time(copied_orbit.final()[0],0.25);
-    ARIADNE_TEST_ASSERT(definitely(copied_orbit.final()[0].inside(HybridExactBox(q,RealSpace({x,y}),ExactBoxType({{0.23_x,0.27_x},{-0.02_x,0.02_x}})))));
+    ARIADNE_TEST_ASSERT(definitely(copied_orbit.final()[0].inside(HybridExactBox(q,RealSpace({x,y}),ExactBoxType({{ExactDouble(0.23),ExactDouble(0.27)},{-ExactDouble(0.02),ExactDouble(0.02)}})))));
     auto coordinates=EffectiveVectorMultivariateFunction::identity(3u);
     FlowFunctionModel flow(factory.create(ExactBoxType({{-1,1},{-1,1},{0,1}}),EffectiveVectorMultivariateFunction{coordinates[0]+coordinates[2],coordinates[1]}));
     ARIADNE_TEST_EQUALS(flow.codomain().dimension(),2u);
@@ -181,9 +182,9 @@ Void TestHybridEvolver::test_default_timing_and_policies() const {
     system.new_mode(q,{dot(x)=1,dot(y)=0});
     FixedTimingEvolver fixed(system);
     fixed.configuration().set_maximum_step_size(0.25);
-    HybridExactBox box(q,RealSpace({x,y}),ExactBoxType({{-0.25_x,0.25_x},{-0.01_x,0.01_x}}));
+    HybridExactBox box(q,RealSpace({x,y}),ExactBoxType({{-0.25_x,0.25_x},{-ExactDouble(0.01),ExactDouble(0.01)}}));
     auto fixed_orbit=fixed.orbit(box,HybridTime(0.25_x,3),Semantics::UPPER);
-    expect_final(fixed_orbit,ExactBoxType({{-0.01_x,0.51_x},{-0.02_x,0.02_x}}),0.25,0u);
+    expect_final(fixed_orbit,ExactBoxType({{-ExactDouble(0.01),ExactDouble(0.51)},{-ExactDouble(0.02),ExactDouble(0.02)}}),0.25,0u);
     GeneralHybridEvolver evolver(system);
     evolver.configuration().set_maximum_enclosure_radius(0.2);
     auto upper=evolver.orbit(box,HybridTime(0.125_x,3),Semantics::UPPER);
@@ -195,7 +196,7 @@ Void TestHybridEvolver::test_default_timing_and_policies() const {
     ARIADNE_TEST_EQUALS(unsplit.final().size(),1u);
     evolver.configuration().set_maximum_enclosure_radius(1.0);
     auto lower_flow=evolver.orbit(box,HybridTime(0.125_x,3),Semantics::LOWER);
-    expect_final(lower_flow,ExactBoxType({{-0.126_x,0.376_x},{-0.02_x,0.02_x}}),0.125,0u);
+    expect_final(lower_flow,ExactBoxType({{-ExactDouble(0.126),ExactDouble(0.376)},{-ExactDouble(0.02),ExactDouble(0.02)}}),0.125,0u);
     auto stopped=evolver.orbit(box,HybridTime(1.0_x,0),Semantics::UPPER);
     ARIADNE_TEST_EQUALS(stopped.final().size(),1u);
     ARIADNE_TEST_EQUALS(stopped.reach().size(),0u);
@@ -203,7 +204,7 @@ Void TestHybridEvolver::test_default_timing_and_policies() const {
     CountingEvolver counted(system);
     auto initial=counted.enclosure(box);
     auto factory=counted.function_factory();
-    auto state=factory.create_identity(box.euclidean_set())+Vector<FloatDPBounds>({{-0.1_x,0.1_x},{-0.1_x,0.1_x}},dp);
+    auto state=factory.create_identity(box.euclidean_set())+Vector<FloatDPBounds>({{-ExactDouble(0.1),ExactDouble(0.1)},{-ExactDouble(0.1),ExactDouble(0.1)}},dp);
     HybridEnclosure uncertain(q,RealSpace({x,y}),Enclosure(box.euclidean_set(),state,EnclosureConfiguration(factory)));
     counted.configuration().set_enable_reconditioning(false);
     auto without=counted.orbit(uncertain,HybridTime(0.125_x,3),Semantics::UPPER);
@@ -222,7 +223,7 @@ Void TestHybridEvolver::test_impact_and_optional_transition() const {
     evolver_ptr->configuration().set_flow_accuracy(1e-8);
     evolver_ptr->configuration().set_maximum_step_size(0.25);
     auto impact=evolver_ptr->orbit(HybridBoxSet(q,{0.999_dec<=x<=1.001_dec,-0.001_dec<=y<=0.001_dec}),HybridTime(1.5_x,3),Semantics::UPPER);
-    expect_final(impact,ExactBoxType({{0.03_x,0.08_x},{0.58_x,0.67_x}}),1.5,1u);
+    expect_final(impact,ExactBoxType({{ExactDouble(0.03),ExactDouble(0.08)},{ExactDouble(0.58),ExactDouble(0.67)}}),1.5,1u);
     DiscreteLocation target(2);
     HybridAutomaton optional;
     optional.new_mode(q,{dot(x)=1,dot(y)=0});
@@ -237,7 +238,7 @@ Void TestHybridEvolver::test_impact_and_optional_transition() const {
             flowed=true;
             ARIADNE_TEST_EQUALS(final.previous_events().size(),0u);
             expect_time(final,0.5);
-            ARIADNE_TEST_ASSERT(definitely(final.inside(HybridExactBox(q,RealSpace({x,y}),ExactBoxType({{0.29_x,0.41_x},{-0.02_x,0.02_x}})))));
+            ARIADNE_TEST_ASSERT(definitely(final.inside(HybridExactBox(q,RealSpace({x,y}),ExactBoxType({{ExactDouble(0.29),ExactDouble(0.41)},{-ExactDouble(0.02),ExactDouble(0.02)}})))));
         } else {
             jumped=true;
             ARIADNE_TEST_EQUALS(final.location(),target);
@@ -263,7 +264,7 @@ Void TestHybridEvolver::test_grazing_and_terminating_event() const {
         if(count==0u) flowed=true; else jumped=true;
         ARIADNE_TEST_ASSERT(final.time_range().lower_bound().raw().get_d()>=1.9);
         ARIADNE_TEST_ASSERT(final.time_range().upper_bound().raw().get_d()<=2.1);
-        ExactBoxType expected=count==0u ? ExactBoxType({{0.874_x,1.126_x},{-0.26_x,0.26_x}}) : ExactBoxType({{0.874_x,1.126_x},{-1.26_x,-0.74_x}});
+        ExactBoxType expected=count==0u ? ExactBoxType({{ExactDouble(0.874),ExactDouble(1.126)},{-ExactDouble(0.26),ExactDouble(0.26)}}) : ExactBoxType({{ExactDouble(0.874),ExactDouble(1.126)},{-ExactDouble(1.26),-ExactDouble(0.74)}});
         ARIADNE_TEST_ASSERT(definitely(final.inside(HybridExactBox(q,RealSpace({x,y}),expected))));
     }
     ARIADNE_TEST_ASSERT(jumped && flowed);
@@ -299,7 +300,7 @@ Void TestHybridEvolver::test_invariants_and_curvature() const {
         evolver_ptr->configuration().set_maximum_step_size(0.25);
         HybridBoxSet initial(q,{-0.01_dec<=x<=0.01_dec,-0.01_dec<=y<=0.01_dec});
         auto before=evolver_ptr->orbit(initial,HybridTime(0.125_x,3),Semantics::UPPER);
-        expect_final(before,ExactBoxType({{0.114_x,0.136_x},{-0.011_x,0.011_x}}),0.125,0u);
+        expect_final(before,ExactBoxType({{ExactDouble(0.114),ExactDouble(0.136)},{-ExactDouble(0.011),ExactDouble(0.011)}}),0.125,0u);
         auto blocked=evolver_ptr->orbit(initial,HybridTime(0.5_x,3),Semantics::UPPER);
         ARIADNE_TEST_EQUALS(blocked.final().size(),0u);
         ARIADNE_TEST_ASSERT(blocked.reach().size()>0u);
@@ -327,7 +328,7 @@ Void TestHybridEvolver::test_invariants_and_curvature() const {
         for(auto const& final : orbit.final()) {
             ARIADNE_TEST_EQUALS(final.location(),target);
             ARIADNE_TEST_EQUALS(final.previous_events().size(),1u);
-            ARIADNE_TEST_ASSERT(definitely(final.inside(HybridExactBox(target,RealSpace({x,y}),ExactBoxType({{-0.001_x,0.001_x},{-0.001_x,0.001_x}})))));
+            ARIADNE_TEST_ASSERT(definitely(final.inside(HybridExactBox(target,RealSpace({x,y}),ExactBoxType({{-ExactDouble(0.001),ExactDouble(0.001)},{-ExactDouble(0.001),ExactDouble(0.001)}})))));
             ARIADNE_TEST_ASSERT(final.time_range().lower_bound().raw().get_d()>=-1e-8);
             ARIADNE_TEST_ASSERT(final.time_range().upper_bound().raw().get_d()<=0.75+1e-8);
         }
@@ -346,7 +347,7 @@ Void TestHybridEvolver::test_correlated_near_miss() const {
     system.new_transition(q,second,q,{next(x)=x,next(y)=y},y-sqr(x)+0.0001_dec>=0,EventKind::PERMISSIVE);
     CrossingProbeEvolver probe(system);
     auto factory=probe.function_factory();
-    ExactBoxType parameters({{-0.5_x,-0.49_x},{-0.0001_x,0.0001_x}});
+    ExactBoxType parameters({{-0.5_x,-ExactDouble(0.49)},{-ExactDouble(0.0001),ExactDouble(0.0001)}});
     auto coordinates=factory.create_identity(parameters);
     auto mapping=coordinates;
     mapping[1]=coordinates[0]-factory.create_constant(parameters,Real(0.251_dec))+coordinates[1];
@@ -371,12 +372,12 @@ Void TestHybridEvolver::test_uncertain_initial_time() const {
         GeneralHybridEvolver evolver(system);
         evolver.ALLOW_UNWIND=true;
         evolver.configuration().set_maximum_step_size(0.25);
-        ExactBoxType domain({{FloatDP(0,dp),FloatDP(ExactDouble(width),dp)},{-0.01_x,0.01_x}});
+        ExactBoxType domain({{FloatDP(0,dp),FloatDP(ExactDouble(width),dp)},{-ExactDouble(0.01),ExactDouble(0.01)}});
         HybridEnclosure initial=evolver.enclosure(HybridExactBox(q,RealSpace({x,y}),domain));
         initial.set_time_function(evolver.function_factory().create_coordinate(domain,0));
         auto orbit=evolver.orbit(initial,HybridTime(1.25_x,3),Semantics::UPPER);
         // x(t0)=t0 gives x(T)=T for every initial time in the enclosure.
-        expect_final(orbit,ExactBoxType({{1.249_x,1.251_x},{-0.011_x,0.011_x}}),1.25,0u);
+        expect_final(orbit,ExactBoxType({{ExactDouble(1.249),ExactDouble(1.251)},{-ExactDouble(0.011),ExactDouble(0.011)}}),1.25,0u);
     }
 }
 
@@ -434,7 +435,7 @@ Void TestHybridEvolver::test_flow() const {
     ARIADNE_TEST_EQUALS(orbit.intermediate().size(),2u);
 
 
-    expect_final(orbit,ExactBoxType({{2.374_x,2.626_x},{1.124_x,1.376_x}}),2.5,0u);
+    expect_final(orbit,ExactBoxType({{ExactDouble(2.374),ExactDouble(2.626)},{ExactDouble(1.124),ExactDouble(1.376)}}),2.5,0u);
 }
 
 Void TestHybridEvolver::test_exact_final_time() const {
@@ -453,7 +454,7 @@ Void TestHybridEvolver::test_exact_final_time() const {
     ARIADNE_TEST_EQUALS(orbit.final().size(),1u);
     ARIADNE_TEST_EQUALS(orbit.reach().size(),2u);
 
-    expect_final(orbit,ExactBoxType({{1.874_x,2.126_x},{0.874_x,1.126_x}}),2.0,0u);
+    expect_final(orbit,ExactBoxType({{ExactDouble(1.874),ExactDouble(2.126)},{ExactDouble(0.874),ExactDouble(1.126)}}),2.0,0u);
 }
 
 Void TestHybridEvolver::test_maximum_steps() const {
@@ -478,7 +479,7 @@ Void TestHybridEvolver::test_maximum_steps() const {
         ARIADNE_TEST_EQUALS(enclosure.previous_events().size(),1u);
         ARIADNE_TEST_EQUALS(enclosure.previous_events()[0],e);
         ARIADNE_TEST_ASSERT(enclosure.time_range().upper_bound().raw().get_d()<1.0);
-        ARIADNE_TEST_ASSERT(definitely(enclosure.inside(HybridExactBox(q,RealSpace({x,y}),ExactBoxType({{-1.1_x,-0.9_x},{-0.2_x,0.6_x}})))));
+        ARIADNE_TEST_ASSERT(definitely(enclosure.inside(HybridExactBox(q,RealSpace({x,y}),ExactBoxType({{-ExactDouble(1.1),-ExactDouble(0.9)},{-ExactDouble(0.2),ExactDouble(0.6)}})))));
     }
 }
 
@@ -500,7 +501,7 @@ Void TestHybridEvolver::test_urgent_event() const {
     ARIADNE_TEST_EQUALS(orbit.final().size(),1u);
     ARIADNE_TEST_EQUALS(orbit.reach().size(),2u);
 
-    expect_final(orbit,ExactBoxType({{-0.626_x,-0.374_x},{0.374_x,0.626_x}}),1.0,1u);
+    expect_final(orbit,ExactBoxType({{-ExactDouble(0.626),-ExactDouble(0.374)},{ExactDouble(0.374),ExactDouble(0.626)}}),1.0,1u);
 }
 
 Void TestHybridEvolver::test_step_size_event() const {
@@ -520,7 +521,7 @@ Void TestHybridEvolver::test_step_size_event() const {
     ARIADNE_TEST_EQUALS(orbit.final().size(),1u);
     ARIADNE_TEST_EQUALS(orbit.reach().size(),1u);
 
-    expect_final(orbit,ExactBoxType({{0.874_x,1.126_x},{0.374_x,0.626_x}}),1.0,0u);
+    expect_final(orbit,ExactBoxType({{ExactDouble(0.874),ExactDouble(1.126)},{ExactDouble(0.374),ExactDouble(0.626)}}),1.0,0u);
 }
 
 Void TestHybridEvolver::test_partial_event() const {
@@ -547,11 +548,11 @@ Void TestHybridEvolver::test_partial_event() const {
         ARIADNE_TEST_ASSERT(count<=1u);
         if(count==0u) {
             flowed=true;
-            ARIADNE_TEST_ASSERT(definitely(enclosure.inside(HybridExactBox(q,RealSpace({x,y}),ExactBoxType({{1.8_x,2.3_x},{0.8_x,1.2_x}})))));
+            ARIADNE_TEST_ASSERT(definitely(enclosure.inside(HybridExactBox(q,RealSpace({x,y}),ExactBoxType({{ExactDouble(1.8),ExactDouble(2.3)},{ExactDouble(0.8),ExactDouble(1.2)}})))));
         } else {
             jumped=true;
             ARIADNE_TEST_EQUALS(enclosure.previous_events()[0],e);
-            ARIADNE_TEST_ASSERT(definitely(enclosure.inside(HybridExactBox(q,RealSpace({x,y}),ExactBoxType({{-0.2_x,0.3_x},{0.8_x,1.2_x}})))));
+            ARIADNE_TEST_ASSERT(definitely(enclosure.inside(HybridExactBox(q,RealSpace({x,y}),ExactBoxType({{-ExactDouble(0.2),ExactDouble(0.3)},{ExactDouble(0.8),ExactDouble(1.2)}})))));
         }
     }
     ARIADNE_TEST_ASSERT(jumped && flowed);
@@ -576,7 +577,7 @@ Void TestHybridEvolver::test_initially_active_event() const {
 
 
 
-    expect_final(orbit,ExactBoxType({{1.374_x,1.626_x},{0.874_x,1.126_x}}),1.0,2u);
+    expect_final(orbit,ExactBoxType({{ExactDouble(1.374),ExactDouble(1.626)},{ExactDouble(0.874),ExactDouble(1.126)}}),1.0,2u);
 }
 
 Void TestHybridEvolver::test_simultaneous_events() const {
@@ -647,6 +648,7 @@ Void TestHybridEvolver::test_transverse_linear_crossing() const
 }
 
 int main() {
+    redirect_test_logging_to_null();
     TestHybridEvolver().test_all();
     { LogVerbosityScope diagnostics(100u); TestHybridEvolver().test_all(); }
     return ARIADNE_TEST_FAILURES;

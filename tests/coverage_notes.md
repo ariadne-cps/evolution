@@ -75,3 +75,18 @@ compilation after removal. The old time-creep strategy and alternate final-time
 path were guarded by local constants `TIME_CREEP=false` and `if(false)`;
 neither had a public configuration path. Their removal preserves the selected
 guard-creep strategy and the existing final-time behavior.
+
+## Portable constants and quiet diagnostics
+
+The `_x` suffix requires an exactly representable double. On platforms with a
+wider `long double`, non-dyadic literals such as `0.01_x` violate that contract.
+Expected boxes and error intervals deliberately use `ExactDouble(0.01)` to name
+the rounded binary64 value, matching the former values on Apple ARM. Large PDE
+inputs instead use exact decimal literals (`1e60_dec`, `1e308_dec`). The critical
+time logging threshold uses `_pr`, consistently with the crossing-time threshold.
+
+Each runtime test redirects the logger once, at entry, to `NUL` on Windows and
+`/dev/null` elsewhere. This keeps verbose formatting and its coverage active
+while leaving assertion diagnostics on stdout and stderr visible. Public-header
+compile checks remain independent of the logging helper. Benchmarks continue to
+use the caller's logging options.

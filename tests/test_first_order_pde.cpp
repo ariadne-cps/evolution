@@ -32,6 +32,7 @@
 #include "system/first_order_pde.hpp"
 #include "evolution/first_order_pde.hpp"
 #include "function/function.hpp"
+#include "test_logging.hpp"
 
 using namespace Ariadne;
 using namespace std;
@@ -95,8 +96,8 @@ public:
         }
         // Valid dimensions can still request a grid too large to represent.
         auto coordinates=EffectiveVectorMultivariateFunction::identity(2u);
-        EffectiveVectorMultivariateFunction huge={Real(1e60_x)*sqr(coordinates[0])};
-        EffectiveVectorMultivariateFunction overflowing={Real(1e308_x)*sqr(coordinates[0])};
+        EffectiveVectorMultivariateFunction huge={Real(1e60_dec)*sqr(coordinates[0])};
+        EffectiveVectorMultivariateFunction overflowing={Real(1e308_dec)*sqr(coordinates[0])};
         ARIADNE_TEST_FAIL(first_order_pde(pde,huge,pr));
         ARIADNE_TEST_FAIL(first_order_pde(pde,overflowing,pr));
         ARIADNE_TEST_FAIL(first_order_pde(pde,EffectiveVectorMultivariateFunction::zeros(1u,1u),pr));
@@ -195,6 +196,7 @@ public:
 };
 
 int main() {
+    redirect_test_logging_to_null();
     TestFirstOrderPDE test;
     test.test(double_precision);
     test.test_constant_and_contracts(MultiplePrecision(80u));

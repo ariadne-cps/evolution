@@ -2,6 +2,7 @@
 #include "macro/testing.hpp"
 #include <sstream>
 #include <string>
+#include "test_logging.hpp"
 using namespace Ariadne;
 
 class TestHybridTime {
@@ -80,4 +81,5 @@ public:
         ARIADNE_TEST_ASSERT(text.str().find("maximum_steps=2")!=std::string::npos);
     }
 };
-Int main() { TestHybridTime().test(); return ARIADNE_TEST_FAILURES; }
+Int main() {
+    redirect_test_logging_to_null(); TestHybridTime().test(); return ARIADNE_TEST_FAILURES; }

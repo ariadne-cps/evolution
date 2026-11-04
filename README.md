@@ -37,3 +37,33 @@ The `pyariadne-evolution` target composes the upstream Python bindings with the 
 ## License
 
 Ariadne Evolution is distributed under the GNU General Public License v3.0. See [LICENSE](LICENSE).
+
+## Watertank benchmark
+
+The benchmark measures validated upper evolution of a tank with opening, open,
+closing and closed valve modes. The dynamics are `height' = -height/50 +
+3*aperture/10`; the valve takes four time units to open or close and switches
+at heights 5.5 and 8. The initial valve is opening, with height in [0,1/16]
+and aperture in [0,1/64]. The default stopping limits are time 80 or 8 events.
+
+Build and run in Release mode for timing comparisons:
+
+```bash
+cmake -S . -B build-release -DCMAKE_BUILD_TYPE=Release -DBUILD_PYTHON_BINDINGS=OFF
+cmake --build build-release --parallel --target benchmark_watertank
+./build-release/benchmarks/benchmark_watertank --samples 5 --warmups 1
+./build-release/benchmarks/benchmark_watertank --help
+```
+
+Options include `--duration`, `--events`, `--step`, `--radius`, `--accuracy`,
+`--samples`, `--warmups`, plus the standard logging and threading options
+`--verbosity`, `--scheduler`, `--theme` and `--concurrency`. Each measured sample
+reports elapsed milliseconds and reach/intermediate/final enclosure counts;
+the summary reports the median, minimum and maximum. At verbosity 2 the final
+locations, event histories, time ranges and state bounds are also printed.
+Setup and final-result formatting are outside the timed region; integration,
+orbit construction and any enabled internal logging are inside. Keep build,
+configuration, concurrency and verbosity fixed when comparing results.
+
+The benchmark is separate from CTest: correctness tests assert explicit
+expectations and do not require generated plots or manual inspection.

@@ -92,11 +92,12 @@ class HybridEvolverFactoryInterface
     : public EvolverFactoryInterface<HybridAutomatonInterface,HybridEnclosure,HybridTerminationCriterion>
 {
   public:
+    ~HybridEvolverFactoryInterface() override = default;
 
     //! \brief Create a copy of the factory.
-    virtual HybridEvolverFactoryInterface* clone() const = 0;
+    virtual HybridEvolverFactoryInterface* clone() const override = 0;
     //! \brief Create a hybrid evolver interface object around a \a system.
-    virtual HybridEvolverInterface* create(const HybridAutomatonInterface& system) const = 0;
+    virtual HybridEvolverInterface* create(const HybridAutomatonInterface& system) const override = 0;
 };
 
 

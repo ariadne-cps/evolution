@@ -82,6 +82,7 @@ OutputStream& operator<<(OutputStream& os, const CrossingKind& crk) {
         case CrossingKind::DEGENERATE: os<<"DEGENERATE"; break;
         case CrossingKind::POSITIVE: os<<"POSITIVE"; break;
         case CrossingKind::NEGATIVE: os<<"NEGATIVE"; break;
+        case CrossingKind::MONOTONE: os<<"MONOTONE"; break;
         case CrossingKind::INCREASING: os<<"INCREASING"; break;
         case CrossingKind::DECREASING: os<<"DECREASING"; break;
         case CrossingKind::CONVEX: os<<"CONVEX"; break;
@@ -1234,7 +1235,7 @@ _evolution_step(WorkloadType::Access& workload,
             possibly(norm(starting_set.state_function().errors()) > this->_configuration_ptr->maximum_spacial_error())) {
         LOGGING_PRINTLN_AT(1,"reconditioning: errors "<<starting_set.state_function().errors());
         HybridEnclosure reconditioned_set=starting_set;
-        reconditioned_set.recondition();
+        this->_recondition(reconditioned_set);
         workload.append({reconditioned_set,false});
         return;
     }
@@ -1439,7 +1440,8 @@ _apply_evolution_step(WorkloadType::Access& workload,
         {
             HybridEnclosure& reach_set=*reach_set_iter;
             //reach_set.continuous_set().reduce();
-            if(possibly(reach_set.time_range().upper_bound()>timing_data.final_time)) {
+            // The closed reach interval also contains the final time at its upper endpoint.
+            if(possibly(reach_set.time_range().upper_bound()>=FloatDPBounds(timing_data.final_time,dp))) {
                 HybridEnclosure final_set=reach_set;
                 final_set.set_time(timing_data.final_time);
                 if(timing_data.finishing_kind!=FinishingKind::BEFORE_FINAL_TIME && !definitely(final_set.is_empty())) {
@@ -1610,6 +1612,43 @@ GeneralHybridEvolver::GeneralHybridEvolver(
     this->_configuration_ptr.reset(new GeneralHybridEvolverConfiguration(*this));
 }
 
+
+GeneralHybridEvolver::GeneralHybridEvolver(GeneralHybridEvolver const& other)
+    : HybridEvolverBase(other.system(),other.function_factory())
+{
+    this->_copy_configuration_from(other);
+}
+
+GeneralHybridEvolver& GeneralHybridEvolver::operator=(GeneralHybridEvolver const& other)
+{
+    if(this!=&other) {
+        this->_sys_ptr.reset(other.system().clone());
+        this->set_function_factory(other.function_factory());
+        this->_copy_configuration_from(other);
+    }
+    return *this;
+}
+
+Void GeneralHybridEvolver::_copy_configuration_from(GeneralHybridEvolver const& other)
+{
+    // The configuration stores its owning evolver by reference. Rebuild that
+    // relationship so copies remain independent and outlive the original.
+    auto integrator=std::shared_ptr<IntegratorInterface>(other._integrator_ptr->clone());
+    auto solver=std::shared_ptr<EquationSolverInterface>(other._solver_ptr->clone());
+    this->_configuration_ptr.reset(new GeneralHybridEvolverConfiguration(*this));
+    auto const& source=other.configuration();
+    auto& target=this->configuration();
+    target.set_flow_accuracy(source.flow_accuracy());
+    target.set_maximum_step_size(source.maximum_step_size());
+    target.set_maximum_enclosure_radius(source.maximum_enclosure_radius());
+    target.set_maximum_spacial_error(source.maximum_spacial_error());
+    target.set_enable_reconditioning(source.enable_reconditioning());
+    target.set_enable_subdivisions(source.enable_subdivisions());
+    this->_integrator_ptr=std::move(integrator);
+    this->_solver_ptr=std::move(solver);
+    this->ALLOW_CREEP=other.ALLOW_CREEP;
+    this->ALLOW_UNWIND=other.ALLOW_UNWIND;
+}
 
 TimingData
 GeneralHybridEvolver::

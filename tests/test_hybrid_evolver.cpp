@@ -5,13 +5,43 @@
 #include "function/function.hpp"
 #include "integration/integrator.hpp"
 #include "macro/testing.hpp"
+#include "function/taylor_function.hpp"
+#include "equation-solving/interval_newton_method.hpp"
+#include "log_verbosity_scope.hpp"
+#include <sstream>
+#include <type_traits>
 #include <cmath>
 #include <memory>
 using namespace Ariadne;
 
+// Exercise the default timing strategy provided for derived evolvers.
+class FixedTimingEvolver : public GeneralHybridEvolver {
+public:
+    using GeneralHybridEvolver::GeneralHybridEvolver;
+    FixedTimingEvolver* clone() const override { return new FixedTimingEvolver(*this); }
+protected:
+    TimingData _estimate_timing(Set<DiscreteEvent>& active,Real time,FlowFunctionModel const& flow,
+        Map<DiscreteEvent,CrossingData>& crossings,Map<DiscreteEvent,TransitionData> const& transitions,
+        HybridEnclosure const& initial) const override {
+        return HybridEvolverBase::_estimate_timing(active,time,flow,crossings,transitions,initial);
+    }
+};
+
+class CountingEvolver : public GeneralHybridEvolver {
+public:
+    using GeneralHybridEvolver::GeneralHybridEvolver;
+    mutable SizeType reconditions=0u;
+    CountingEvolver* clone() const override { return new CountingEvolver(*this); }
+protected:
+    Void _recondition(HybridEnclosure& enclosure) const override {
+        ++reconditions;
+        HybridEvolverBase::_recondition(enclosure);
+    }
+};
+
 class TestHybridEvolver {
     inline static RealVariable x{"x"},y{"y"};
-    inline static DiscreteLocation q;
+    inline static DiscreteLocation q{1};
     inline static DiscreteEvent e{"e"};
     inline static Real one{1};
     const Dyadic eighth{0.125_x},quarter{0.25_x};
@@ -36,6 +66,11 @@ class TestHybridEvolver {
     }
 public:
     Void test_all() const {
+        ARIADNE_TEST_CALL(test_components_and_copy_ownership());
+        ARIADNE_TEST_CALL(test_default_timing_and_policies());
+        ARIADNE_TEST_CALL(test_impact_and_optional_transition());
+        ARIADNE_TEST_CALL(test_grazing_and_terminating_event());
+        ARIADNE_TEST_CALL(test_formatting());
         ARIADNE_TEST_CALL(test_flow());
         ARIADNE_TEST_CALL(test_exact_final_time());
         ARIADNE_TEST_CALL(test_maximum_steps());
@@ -46,6 +81,11 @@ public:
         ARIADNE_TEST_CALL(test_simultaneous_events());
         ARIADNE_TEST_CALL(test_transverse_linear_crossing());
     }
+    Void test_components_and_copy_ownership() const;
+    Void test_default_timing_and_policies() const;
+    Void test_impact_and_optional_transition() const;
+    Void test_grazing_and_terminating_event() const;
+    Void test_formatting() const;
     Void test_flow() const;
     Void test_exact_final_time() const;
     Void test_maximum_steps() const;
@@ -56,6 +96,204 @@ public:
     Void test_simultaneous_events() const;
     Void test_transverse_linear_crossing() const;
 };
+
+Void TestHybridEvolver::test_components_and_copy_ownership() const {
+    HybridAutomaton system;
+    system.new_mode(q,{dot(x)=1,dot(y)=0});
+    EnclosureConfiguration enclosure_config(TaylorFunctionFactory(ThresholdSweeper<FloatDP>(dp,1e-8)));
+    auto factory=enclosure_config.function_factory();
+    using FactoryInterface=EvolverFactoryInterface<HybridAutomatonInterface,HybridEnclosure,HybridTerminationCriterion>;
+    static_assert(std::has_virtual_destructor_v<FactoryInterface>);
+    GeneralHybridEvolverFactory standard;
+    std::unique_ptr<GeneralHybridEvolver> made(standard.create(system));
+    std::unique_ptr<FactoryInterface> polymorphic_factory(standard.clone());
+    std::unique_ptr<EvolverInterface<HybridAutomatonInterface,HybridEnclosure,HybridTerminationCriterion>> owned(polymorphic_factory->create(system));
+    ARIADNE_TEST_EQUALS(owned->system().continuous_state_space(q),RealSpace({x,y}));
+    GeneralHybridEvolverFactory customized(factory);
+    std::unique_ptr<GeneralHybridEvolverFactory> copied_factory(customized.clone());
+    std::unique_ptr<GeneralHybridEvolver> created(copied_factory->create(system));
+    created->set_function_factory(factory);
+    created->set_solver(IntervalNewtonSolver(1e-9,16u));
+    created->configuration().set_enable_subdivisions(false);
+    ARIADNE_TEST_ASSERT(!created->configuration().enable_subdivisions());
+    HybridExactBox box(q,RealSpace({x,y}),ExactBoxType({{-0.01_x,0.01_x},{-0.01_x,0.01_x}}));
+    ARIADNE_TEST_EQUALS(created->enclosure(box).state_dimension(),2u);
+    HybridBoundedConstraintSet bounded(q,{-0.01_dec<=x<=0.01_dec,-0.01_dec<=y<=0.01_dec});
+    ARIADNE_TEST_EQUALS(created->enclosure(bounded).state_dimension(),2u);
+    auto computed=created->orbit(box,HybridTime(0.25_x,3),Semantics::UPPER);
+    ARIADNE_TEST_EQUALS(computed.final().size(),1u);
+    std::ostringstream description; description<<*created;
+    ARIADNE_TEST_ASSERT(description.str().find("GeneralHybridEvolver")!=std::string::npos);
+    ARIADNE_TEST_FAIL(created->reconfigure(HybridExactBoxes(),HybridExactFloatVector()));
+    std::unique_ptr<GeneralHybridEvolver> surviving;
+    {
+        GeneralHybridEvolver original(system,factory);
+        original.configuration().set_flow_accuracy(1e-7);
+        original.configuration().set_maximum_step_size(0.25);
+        original.ALLOW_UNWIND=true;
+        surviving.reset(original.clone());
+        surviving->configuration().set_maximum_step_size(0.125);
+        ARIADNE_TEST_EQUALS(original.configuration().maximum_step_size(),0.25_x);
+        ARIADNE_TEST_ASSERT(surviving->ALLOW_UNWIND);
+        *made=original;
+        made->configuration().set_flow_accuracy(1e-9);
+        ARIADNE_TEST_EQUALS(original.configuration().flow_accuracy(),cast_exact(ApproximateDouble(1e-7)));
+        auto& alias=*made; *made=alias;
+        ARIADNE_TEST_EQUALS(made->configuration().flow_accuracy(),cast_exact(ApproximateDouble(1e-9)));
+    }
+    surviving->configuration().set_flow_accuracy(1e-6);
+    auto copied_orbit=surviving->orbit(box,HybridTime(0.25_x,3),Semantics::UPPER);
+    ARIADNE_TEST_EQUALS(copied_orbit.final().size(),1u);
+    expect_time(copied_orbit.final()[0],0.25);
+    ARIADNE_TEST_ASSERT(definitely(copied_orbit.final()[0].inside(HybridExactBox(q,RealSpace({x,y}),ExactBoxType({{0.23_x,0.27_x},{-0.02_x,0.02_x}})))));
+    auto coordinates=EffectiveVectorMultivariateFunction::identity(3u);
+    FlowFunctionModel flow(factory.create(ExactBoxType({{-1,1},{-1,1},{0,1}}),EffectiveVectorMultivariateFunction{coordinates[0]+coordinates[2],coordinates[1]}));
+    ARIADNE_TEST_EQUALS(flow.codomain().dimension(),2u);
+    ARIADNE_TEST_EQUALS(flow.space_domain(),ExactBoxType({{-1,1},{-1,1}}));
+    ARIADNE_TEST_EQUALS(flow.step_size(),Dyadic(1));
+}
+
+Void TestHybridEvolver::test_default_timing_and_policies() const {
+    HybridAutomaton system;
+    system.new_mode(q,{dot(x)=1,dot(y)=0});
+    FixedTimingEvolver fixed(system);
+    fixed.configuration().set_maximum_step_size(0.25);
+    HybridExactBox box(q,RealSpace({x,y}),ExactBoxType({{-0.25_x,0.25_x},{-0.01_x,0.01_x}}));
+    auto fixed_orbit=fixed.orbit(box,HybridTime(0.25_x,3),Semantics::UPPER);
+    expect_final(fixed_orbit,ExactBoxType({{-0.01_x,0.51_x},{-0.02_x,0.02_x}}),0.25,0u);
+    GeneralHybridEvolver evolver(system);
+    evolver.configuration().set_maximum_enclosure_radius(0.2);
+    auto upper=evolver.orbit(box,HybridTime(0.125_x,3),Semantics::UPPER);
+    ARIADNE_TEST_EQUALS(upper.final().size(),2u);
+    auto lower=evolver.orbit(box,HybridTime(0.125_x,3),Semantics::LOWER);
+    ARIADNE_TEST_EQUALS(lower.final().size(),0u);
+    evolver.configuration().set_enable_subdivisions(false);
+    auto unsplit=evolver.orbit(box,HybridTime(0.125_x,3),Semantics::UPPER);
+    ARIADNE_TEST_EQUALS(unsplit.final().size(),1u);
+    evolver.configuration().set_maximum_enclosure_radius(1.0);
+    auto lower_flow=evolver.orbit(box,HybridTime(0.125_x,3),Semantics::LOWER);
+    expect_final(lower_flow,ExactBoxType({{-0.126_x,0.376_x},{-0.02_x,0.02_x}}),0.125,0u);
+    auto stopped=evolver.orbit(box,HybridTime(1.0_x,0),Semantics::UPPER);
+    ARIADNE_TEST_EQUALS(stopped.final().size(),1u);
+    ARIADNE_TEST_EQUALS(stopped.reach().size(),0u);
+    expect_time(stopped.final()[0],0.0);
+    CountingEvolver counted(system);
+    auto initial=counted.enclosure(box);
+    auto factory=counted.function_factory();
+    auto state=factory.create_identity(box.euclidean_set())+Vector<FloatDPBounds>({{-0.1_x,0.1_x},{-0.1_x,0.1_x}},dp);
+    HybridEnclosure uncertain(q,RealSpace({x,y}),Enclosure(box.euclidean_set(),state,EnclosureConfiguration(factory)));
+    counted.configuration().set_enable_reconditioning(false);
+    auto without=counted.orbit(uncertain,HybridTime(0.125_x,3),Semantics::UPPER);
+    ARIADNE_TEST_EQUALS(counted.reconditions,0u);
+    counted.configuration().set_enable_reconditioning(true);
+    auto with=counted.orbit(uncertain,HybridTime(0.125_x,3),Semantics::UPPER);
+    ARIADNE_TEST_ASSERT(counted.reconditions>0u);
+    ARIADNE_TEST_EQUALS(with.final().size(),without.final().size());
+}
+
+Void TestHybridEvolver::test_impact_and_optional_transition() const {
+    HybridAutomaton ball;
+    ball.new_mode(q,{dot(x)=y,dot(y)=-1});
+    ball.new_transition(q,e,q,{next(x)=x,next(y)=-y/2},x<=0,EventKind::IMPACT);
+    _set_evolver(ball);
+    evolver_ptr->configuration().set_flow_accuracy(1e-8);
+    evolver_ptr->configuration().set_maximum_step_size(0.25);
+    auto impact=evolver_ptr->orbit(HybridBoxSet(q,{0.999_dec<=x<=1.001_dec,-0.001_dec<=y<=0.001_dec}),HybridTime(1.5_x,3),Semantics::UPPER);
+    expect_final(impact,ExactBoxType({{0.03_x,0.08_x},{0.58_x,0.67_x}}),1.5,1u);
+    DiscreteLocation target(2);
+    HybridAutomaton optional;
+    optional.new_mode(q,{dot(x)=1,dot(y)=0});
+    optional.new_mode(target,{dot(x)=0,dot(y)=0});
+    optional.new_transition(q,e,target,{next(x)=0,next(y)=y},x>=0,EventKind::PERMISSIVE);
+    _set_evolver(optional);
+    evolver_ptr->configuration().set_maximum_step_size(1.0);
+    auto orbit=evolver_ptr->orbit(HybridBoxSet(q,{-0.2_dec<=x<=-0.1_dec,-0.01_dec<=y<=0.01_dec}),HybridTime(0.5_x,1),Semantics::UPPER);
+    Bool flowed=false,jumped=false;
+    for(auto const& final : orbit.final()) {
+        if(final.location()==q) {
+            flowed=true;
+            ARIADNE_TEST_EQUALS(final.previous_events().size(),0u);
+            expect_time(final,0.5);
+            ARIADNE_TEST_ASSERT(definitely(final.inside(HybridExactBox(q,RealSpace({x,y}),ExactBoxType({{0.29_x,0.41_x},{-0.02_x,0.02_x}})))));
+        } else {
+            jumped=true;
+            ARIADNE_TEST_EQUALS(final.location(),target);
+            ARIADNE_TEST_EQUALS(final.previous_events().size(),1u);
+            ARIADNE_TEST_ASSERT(final.time_range().lower_bound().raw().get_d()>=-1e-8);
+            ARIADNE_TEST_ASSERT(final.time_range().upper_bound().raw().get_d()<=0.5+1e-8);
+        }
+    }
+    ARIADNE_TEST_ASSERT(flowed && jumped);
+}
+
+Void TestHybridEvolver::test_grazing_and_terminating_event() const {
+    HybridAutomaton tangent;
+    tangent.new_mode(q,{dot(x)=1,dot(y)=0});
+    tangent.new_transition(q,e,q,{next(x)=x,next(y)=y-1},y-sqr(x)>=0,EventKind::URGENT);
+    _set_evolver(tangent);
+    evolver_ptr->configuration().set_maximum_step_size(2.0);
+    auto grazing=evolver_ptr->orbit(HybridBoxSet(q,{-1-eighth<=x<=-1+eighth,-quarter<=y<=quarter}),HybridTime(2.0_x,3),Semantics::UPPER);
+    Bool jumped=false,flowed=false;
+    for(auto const& final : grazing.final()) {
+        auto count=final.previous_events().size();
+        ARIADNE_TEST_ASSERT(count<=1u);
+        if(count==0u) flowed=true; else jumped=true;
+        ARIADNE_TEST_ASSERT(final.time_range().lower_bound().raw().get_d()>=1.9);
+        ARIADNE_TEST_ASSERT(final.time_range().upper_bound().raw().get_d()<=2.1);
+        ExactBoxType expected=count==0u ? ExactBoxType({{0.874_x,1.126_x},{-0.26_x,0.26_x}}) : ExactBoxType({{0.874_x,1.126_x},{-1.26_x,-0.74_x}});
+        ARIADNE_TEST_ASSERT(definitely(final.inside(HybridExactBox(q,RealSpace({x,y}),expected))));
+    }
+    ARIADNE_TEST_ASSERT(jumped && flowed);
+    DiscreteLocation target(2);
+    HybridAutomaton urgent;
+    urgent.new_mode(q,{dot(x)=1,dot(y)=0});
+    urgent.new_mode(target,{dot(x)=0,dot(y)=0});
+    urgent.new_transition(q,e,target,{next(x)=0,next(y)=y},x>=Real(1/4_q),EventKind::URGENT);
+    _set_evolver(urgent);
+    HybridTerminationCriterion stop(Real(1),Integer(5),Set<DiscreteEvent>{e});
+    for(auto semantics : {Semantics::UPPER,Semantics::LOWER}) {
+        auto orbit=evolver_ptr->orbit(HybridBoxSet(q,{-0.01_dec<=x<=0.01_dec,-0.01_dec<=y<=0.01_dec}),stop,semantics);
+        ARIADNE_TEST_ASSERT(orbit.final().size()>0u);
+        for(auto const& final : orbit.final()) {
+            ARIADNE_TEST_EQUALS(final.location(),target);
+            ARIADNE_TEST_EQUALS(final.previous_events().size(),1u);
+            ARIADNE_TEST_EQUALS(final.previous_events()[0],e);
+            ARIADNE_TEST_ASSERT(final.time_range().lower_bound().raw().get_d()>0.2);
+            ARIADNE_TEST_ASSERT(final.time_range().upper_bound().raw().get_d()<0.3);
+        }
+    }
+}
+
+Void TestHybridEvolver::test_formatting() const {
+    auto check=[](auto value,const char* expected) {
+        std::ostringstream text; text<<value;
+        ARIADNE_TEST_EQUALS(text.str(),std::string(expected));
+    };
+    check(CrossingKind::DEGENERATE,"DEGENERATE"); check(CrossingKind::POSITIVE,"POSITIVE");
+    check(CrossingKind::NEGATIVE,"NEGATIVE"); check(CrossingKind::MONOTONE,"MONOTONE");
+    check(CrossingKind::INCREASING,"INCREASING"); check(CrossingKind::DECREASING,"DECREASING");
+    check(CrossingKind::CONVEX,"CONVEX"); check(CrossingKind::CONCAVE,"CONCAVE");
+    check(CrossingKind::TRANSVERSE,"TRANSVERSE"); check(CrossingKind::GRAZING,"GRAZING");
+    check(static_cast<CrossingKind>(255),"unknown");
+    check(StepKind::CONSTANT_EVOLUTION_TIME,"CONSTANT_EVOLUTION_TIME");
+    check(StepKind::SPACETIME_DEPENDENT_EVOLUTION_TIME,"SPACETIME_DEPENDENT_EVOLUTION_TIME");
+    check(StepKind::PARAMETER_DEPENDENT_EVOLUTION_TIME,"PARAMETER_DEPENDENT_EVOLUTION_TIME");
+    check(StepKind::PARAMETER_DEPENDENT_FINISHING_TIME,"PARAMETER_DEPENDENT_FINISHING_TIME");
+    check(StepKind::SPACETIME_DEPENDENT_FINISHING_TIME,"SPACETIME_DEPENDENT_FINISHING_TIME");
+    check(StepKind::CONSTANT_FINISHING_TIME,"CONSTANT_FINISHING_TIME");
+    check(static_cast<StepKind>(255),"UNKNOWN");
+    check(FinishingKind::BEFORE_FINAL_TIME,"BEFORE_FINAL_TIME"); check(FinishingKind::AT_FINAL_TIME,"AT_FINAL_TIME");
+    check(FinishingKind::AFTER_FINAL_TIME,"AFTER_FINAL_TIME"); check(FinishingKind::STRADDLE_FINAL_TIME,"STRADDLE_FINAL_TIME");
+    check(static_cast<FinishingKind>(255),"UNKNOWN");
+    EnclosureConfiguration config(TaylorFunctionFactory(ThresholdSweeper<FloatDP>(dp,1e-8)));
+    auto time=config.function_factory().create_constant(ExactBoxType({{-1,1},{-1,1}}),Real(1/4_q));
+    CrossingData transverse(CrossingKind::TRANSVERSE,time),grazing(CrossingKind::GRAZING),negative(CrossingKind::NEGATIVE);
+    grazing.critical_time=time;
+    for(auto const& crossing : {transverse,grazing,negative}) {
+        std::ostringstream text; text<<crossing;
+        ARIADNE_TEST_ASSERT(text.str().find("kind=")!=std::string::npos);
+    }
+}
 
 Void TestHybridEvolver::test_flow() const {
     HybridAutomaton automaton;
@@ -286,4 +524,8 @@ Void TestHybridEvolver::test_transverse_linear_crossing() const
     ARIADNE_TEST_BINARY_PREDICATE(refines,final_enclosure.state_function()[1],expected_final_enclosure.state_function()[1]+tolerance[1]);
 }
 
-int main() { TestHybridEvolver().test_all(); return ARIADNE_TEST_FAILURES; }
+int main() {
+    TestHybridEvolver().test_all();
+    { LogVerbosityScope diagnostics(100u); TestHybridEvolver().test_all(); }
+    return ARIADNE_TEST_FAILURES;
+}

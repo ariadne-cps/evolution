@@ -232,3 +232,42 @@ affine crossing. A separate diagnostic wrapper merely records the standard
 solver's success/failure; it does not force an exception. The regression itself
 uses the standard solver directly and verifies both nondeterministic resets,
 event histories and the analytic hit-time interval [1/4,1/2].
+
+## Legacy ariadne issues #811, #312 and #313
+
+Issue #811 reports a crash with interval-coefficient Taylor models in a reach
+step. The previous alternate-factory test only checked formatting and the Kuhn
+fallback. The new regression checks a fixed endpoint and a full reach step,
+parameter counts, clock ranges and the affine solution, then uses x'=x with
+interval Taylor coefficients and checks x0*exp(t) at an independently evaluated
+point. No image is used. These current-API tests do not establish which historical
+change eliminated the reported abort, nor certify the entire legacy example.
+
+Issue #312 describes repeated subdivision near the horizon after a jump; its
+comments suspect a large time-model error. A current linear counterexample
+confirmed that uniform_error_recondition ignored absolute/dwell-time errors.
+The clock retained error 1/8 after reconditioning and the orbit exhausted a
+finite work budget while failing to advance its time interval. Tests also
+reproduced the failure after an actual immediate transition, at two horizons.
+
+Uniform error reconditioning now introduces ERROR parameters for the clock and
+dwell-time errors as well as state errors, embedding all maps and constraints
+on the enlarged parameter domain. Kuhn reduction runs before the final uniform
+pass because discarding a clock dependency can itself create a uniform error.
+HybridEnclosure delegates to the same implementation rather than duplicating
+the old order. The hybrid trigger also checks clock/dwell error, so the model
+is reconditioned even when state error is small. This preserves an outer
+approximation: clobbered error is represented by a new coordinate in [-1,1]
+with its upward-rounded bound as coefficient. Tests check preservation of time
+ranges, constraints, error kinds and idempotence, plus analytic post-jump states
+and event histories. Timing and reconditioning budgets fail deterministically
+if progress regresses; no wall-clock timeout is the correctness oracle.
+
+Issue #313's historical ERROR!! is the generic runtime-error handler in
+_compute_crossings. The campaign already replaced it by a rethrow preserving
+the backend diagnostic, and tests verify this. The new standard-backend case
+requires subdivision both initially and after a reset expands y, then computes
+a nonlinear crossing. With subdivision on/off it checks target, both events,
+reset coordinates and the analytic interval [3/4,1] for the second event.
+This guards the reported combination of features without claiming the original
+Space Rendezvous backend failure has been identified.

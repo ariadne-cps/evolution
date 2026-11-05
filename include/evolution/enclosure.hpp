@@ -289,7 +289,7 @@ class Enclosure
     Void reduce() const;
     //! \brief Reconditions the set to give an over-approximation with a simpler representation.
     Void recondition();
-    //! \brief Simplifies the representation by changing all uniform errors into independent variables.
+    //! \brief Changes uniform errors in state, absolute time and dwell time into independent variables.
     Void uniform_error_recondition();
     //! \brief Simplifies the representation by choosing most significant independent variables to keep, and merging the rest into a single error for each component.
     Void kuhn_recondition();

@@ -1250,7 +1250,9 @@ _evolution_step(WorkloadType::Access& workload,
 
     // Test to see if set requires reconditioning
     if(this->_configuration_ptr->enable_reconditioning() &&
-            possibly(norm(starting_set.state_function().errors()) > this->_configuration_ptr->maximum_spacial_error())) {
+            (possibly(norm(starting_set.state_function().errors()) > this->_configuration_ptr->maximum_spacial_error())
+             || possibly(starting_set.time_function().error() > this->_configuration_ptr->maximum_spacial_error())
+             || possibly(starting_set.continuous_set().dwell_time_function().error() > this->_configuration_ptr->maximum_spacial_error()))) {
         LOGGING_PRINTLN_AT(1,"reconditioning: errors "<<starting_set.state_function().errors());
         HybridEnclosure reconditioned_set=starting_set;
         this->_recondition(reconditioned_set);

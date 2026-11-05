@@ -999,8 +999,10 @@ TaylorModel<ValidatedTag,FloatDP> recondition(const TaylorModel<ValidatedTag,Flo
 Void
 Enclosure::recondition()
 {
-    this->uniform_error_recondition();
     this->kuhn_recondition();
+    // Kuhn reduction can turn discarded clock dependencies into uniform error.
+    // Expose those errors last, so subsequent time-dependent steps retain them.
+    this->uniform_error_recondition();
 }
 
 
@@ -1008,49 +1010,39 @@ Void Enclosure::
 uniform_error_recondition()
 {
     const ExactDouble MAXIMUM_ERROR = cast_exact(std::numeric_limits<double>::epsilon() * 1024);
-    SizeType old_number_of_parameters = this->number_of_parameters();
-
+    const SizeType old_number_of_parameters=this->number_of_parameters();
+    const SizeType state_dimension=this->state_dimension();
     List<SizeType> large_error_indices;
-
-    for(SizeType i=0; i!=this->_state_function.result_size(); ++i) {
-        ValidatedErrorNumber error=this->_state_function.get(i).error();
-        if (possibly(error > MAXIMUM_ERROR)) {
-            large_error_indices.append(i);
-        }
+    for(SizeType i=0;i!=state_dimension;++i) {
+        if(possibly(this->_state_function.get(i).error()>MAXIMUM_ERROR)) large_error_indices.append(i);
     }
+    if(possibly(this->_time_function.error()>MAXIMUM_ERROR)) large_error_indices.append(state_dimension);
+    if(possibly(this->_dwell_time_function.error()>MAXIMUM_ERROR)) large_error_indices.append(state_dimension+1u);
+    if(large_error_indices.empty()) return;
 
-    if (large_error_indices.size() > 0) {
-
-        ExactBoxType error_domains(large_error_indices.size());
-        for(SizeType i=0; i!=large_error_indices.size(); ++i) {
-            FloatDP error=cast_exact(this->_state_function.get(large_error_indices[i]).error().get(double_precision));
-            error_domains[i]=ExactIntervalType(-error,+error);
-        }
-        error_domains=ExactBoxType(large_error_indices.size(),ExactIntervalType(-1,+1));
-        SizeType k=this->number_of_parameters();
-
-        this->_domain=product(this->_domain,error_domains);
-        this->_reduced_domain=product(this->_reduced_domain,error_domains);
-        this->_state_function=embed(this->_state_function,error_domains);
-        for(SizeType i=0; i!=this->_constraints.size(); ++i) {
-            this->_constraints[i].function()=embed(this->_constraints[i].function(),error_domains);
-        }
-
-        for(SizeType i=0; i!=large_error_indices.size(); ++i) {
-            FloatDP error=cast_exact(this->_state_function.get(large_error_indices[i]).error().get(double_precision));
-            // embed preserves the error of each component, and this index was
-            // selected above because that same error exceeds MAXIMUM_ERROR.
-            this->_state_function[large_error_indices[i]].clobber();
-            this->_state_function[large_error_indices[i]] = this->_state_function.get(large_error_indices[i]) + this->configuration().function_factory().create_coordinate(this->_domain,k)*FloatDPBounds(+error);
-            ++k;
-        }
-
-        ExactBoxType new_variables = project(this->parameter_domain(),range(old_number_of_parameters,this->number_of_parameters()));
-        this->_time_function = embed(this->_time_function,new_variables);
-        this->_dwell_time_function = embed(this->_dwell_time_function,new_variables);
+    ExactBoxType error_domains(large_error_indices.size(),ExactIntervalType(-1,+1));
+    this->_domain=product(this->_domain,error_domains);
+    this->_reduced_domain=product(this->_reduced_domain,error_domains);
+    this->_state_function=embed(this->_state_function,error_domains);
+    this->_time_function=embed(this->_time_function,error_domains);
+    this->_dwell_time_function=embed(this->_dwell_time_function,error_domains);
+    for(auto& constraint : this->_constraints) {
+        constraint.function()=embed(constraint.function(),error_domains);
     }
-    SizeType number_of_extra_parameters=this->number_of_parameters()-old_number_of_parameters;
-    this->_variable_kinds.concatenate(List<EnclosureVariableKind>(number_of_extra_parameters,EnclosureVariableKind::ERROR));
+    SizeType parameter=old_number_of_parameters;
+    for(SizeType index : large_error_indices) {
+        ValidatedScalarMultivariateFunctionPatch component=index<state_dimension
+            ? this->_state_function.get(index)
+            : (index==state_dimension ? this->_time_function : this->_dwell_time_function);
+        const FloatDP error=cast_exact(component.error().get(double_precision));
+        component.clobber();
+        component=component+this->configuration().function_factory().create_coordinate(this->_domain,parameter)*FloatDPBounds(error);
+        if(index<state_dimension) this->_state_function[index]=component;
+        else if(index==state_dimension) this->_time_function=component;
+        else this->_dwell_time_function=component;
+        ++parameter;
+    }
+    this->_variable_kinds.concatenate(List<EnclosureVariableKind>(large_error_indices.size(),EnclosureVariableKind::ERROR));
 
 }
 

@@ -37,6 +37,7 @@
 #include "recording_canvas.hpp"
 #include "drawing/drawer.hpp"
 #include "drawing/drawer_manager.hpp"
+#include <cmath>
 #include <memory>
 #include <sstream>
 #include "test_logging.hpp"
@@ -50,6 +51,7 @@ class TestHybridEnclosure {
         ARIADNE_TEST_CALL(test_time_maps_and_steps())
         ARIADNE_TEST_CALL(test_constraints_and_collections())
         ARIADNE_TEST_CALL(test_alternate_factory_formatting())
+        ARIADNE_TEST_CALL(test_bounds_factory_reach_steps())
         ARIADNE_TEST_CALL(test_construct())
         ARIADNE_TEST_CALL(test_space_having_time())
         ARIADNE_TEST_CALL(test_auxiliary())
@@ -225,6 +227,52 @@ class TestHybridEnclosure {
         ARIADNE_TEST_ASSERT(definitely(inside(enclosure,exact)));
         ARIADNE_TEST_ASSERT(definitely(inside(ListSet<HybridEnclosure>(enclosure),exact)));
         ARIADNE_TEST_ASSERT(definitely(inside(ListSet<HybridEnclosure>(),exact)));
+    }
+
+    void test_bounds_factory_reach_steps() {
+        // Regression for ariadne#811: interval coefficients must support the
+        // extra reach parameter, as well as a fixed-time endpoint.
+        RealVariable x("x"),y("y");
+        RealSpace space({x,y}); DiscreteLocation q(1);
+        EnclosureConfiguration settings(ScaledFunctionPatchFactory<ValidatedBoundsTaylorModelDP>(ThresholdSweeper<FloatDP>(dp,1e-8)));
+        auto factory=settings.function_factory();
+        ExactBoxType domain({{-1,1},{-1,1}});
+        auto coordinates=EffectiveVectorMultivariateFunction::identity(3u);
+        EffectiveVectorMultivariateFunction affine={coordinates[0]+coordinates[2],coordinates[1]-2*coordinates[2]};
+        auto flow=factory.create(product(domain,ExactIntervalType(0,0.25_x)),affine);
+        HybridEnclosure initial(HybridExactBox(q,space,domain),settings);
+        auto fixed=initial,reach=initial;
+        fixed.apply_fixed_evolve_step(flow,Dyadic(1/4_q));
+        reach.apply_full_reach_step(flow);
+        ARIADNE_TEST_EQUALS(fixed.number_of_parameters(),2u);
+        ARIADNE_TEST_EQUALS(reach.number_of_parameters(),3u);
+        ARIADNE_TEST_EQUALS(reach.state_dimension(),2u);
+        ARIADNE_TEST_ASSERT(definitely(inside(fixed,HybridExactBox(q,space,
+            ExactBoxType({{-ExactDouble(0.751),ExactDouble(1.251)},{-ExactDouble(1.501),ExactDouble(0.501)}})))));
+        ARIADNE_TEST_ASSERT(definitely(inside(reach,HybridExactBox(q,space,
+            ExactBoxType({{-ExactDouble(1.001),ExactDouble(1.251)},{-ExactDouble(1.501),ExactDouble(1.001)}})))));
+        auto at_end=reach.state_function()(Vector<FloatDPApproximation>({0,0,0.25_x},dp));
+        ARIADNE_TEST_ASSERT(std::abs(at_end[0].raw().get_d()-0.25)<1e-10);
+        ARIADNE_TEST_ASSERT(std::abs(at_end[1].raw().get_d()+0.5)<1e-10);
+        ARIADNE_TEST_ASSERT(std::abs(fixed.time_range().lower_bound().raw().get_d()-0.25)<1e-10);
+        ARIADNE_TEST_ASSERT(std::abs(fixed.time_range().upper_bound().raw().get_d()-0.25)<1e-10);
+        ARIADNE_TEST_ASSERT(std::abs(reach.time_range().lower_bound().raw().get_d())<1e-10);
+        ARIADNE_TEST_ASSERT(std::abs(reach.time_range().upper_bound().raw().get_d()-0.25)<1e-10);
+        // A curved flow exercises interval-coefficient Taylor multiplication
+        // and composition, with the independent analytic solution x(t)=x0*exp(t).
+        ExactBoxType positive_domain({{1,2},{-1,1}});
+        EffectiveVectorMultivariateFunction exponential={coordinates[0]*exp(coordinates[2]),coordinates[1]};
+        auto curved_flow=factory.create(product(positive_domain,ExactIntervalType(0,0.25_x)),exponential);
+        HybridEnclosure curved(HybridExactBox(q,space,positive_domain),settings);
+        curved.apply_full_reach_step(curved_flow);
+        ARIADNE_TEST_ASSERT(definitely(inside(curved,HybridExactBox(q,space,
+            ExactBoxType({{0,3},{-ExactDouble(1.001),ExactDouble(1.001)}})))));
+        auto value=curved.state_function()(Vector<FloatDPBounds>({1.5_x,0.0_x,0.25_x},dp));
+        double expected=1.5*std::exp(0.25);
+        ARIADNE_TEST_ASSERT(value[0].lower().raw().get_d()<=expected+1e-12);
+        ARIADNE_TEST_ASSERT(value[0].upper().raw().get_d()>=expected-1e-12);
+        ARIADNE_TEST_ASSERT(value[1].lower().raw().get_d()<=0.0);
+        ARIADNE_TEST_ASSERT(value[1].upper().raw().get_d()>=0.0);
     }
 
     void test_construct() {

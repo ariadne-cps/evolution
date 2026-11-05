@@ -49,6 +49,26 @@ protected:
     }
 };
 
+// A deterministic work budget makes a stalled clock a finite test failure.
+class ClockProgressEvolver : public GeneralHybridEvolver {
+public:
+    using GeneralHybridEvolver::GeneralHybridEvolver;
+    mutable SizeType timing_steps=0u;
+    mutable SizeType reconditions=0u;
+    ClockProgressEvolver* clone() const override { return new ClockProgressEvolver(*this); }
+protected:
+    Void _recondition(HybridEnclosure& set) const override {
+        if(++reconditions>64u) throw std::runtime_error("clock reconditioning budget exhausted");
+        HybridEvolverBase::_recondition(set);
+    }
+    TimingData _estimate_timing(Set<DiscreteEvent>& active,Real time,FlowFunctionModel const& flow,
+        Map<DiscreteEvent,CrossingData>& crossings,Map<DiscreteEvent,TransitionData> const& transitions,
+        HybridEnclosure const& initial) const override {
+        if(++timing_steps>64u) throw std::runtime_error("clock progress budget exhausted");
+        return GeneralHybridEvolver::_estimate_timing(active,time,flow,crossings,transitions,initial);
+    }
+};
+
 // Valid timing policies with genuinely varying step lengths. Their common
 // linear flow has an exact solution, independently of the policy chosen.
 class DependentStepEvolver : public GeneralHybridEvolver {
@@ -149,6 +169,9 @@ public:
         ARIADNE_TEST_CALL(test_invariants_and_curvature());
         ARIADNE_TEST_CALL(test_correlated_near_miss());
         ARIADNE_TEST_CALL(test_uncertain_initial_time());
+        ARIADNE_TEST_CALL(test_clock_error_after_jump());
+        ARIADNE_TEST_CALL(test_dwell_error_reconditioning());
+        ARIADNE_TEST_CALL(test_subdivided_crossings_after_reset());
         ARIADNE_TEST_CALL(test_initial_constraints_and_contracts());
         ARIADNE_TEST_CALL(test_solver_budget_fallback());
         ARIADNE_TEST_CALL(test_integrator_step_limit());
@@ -179,6 +202,9 @@ public:
     Void test_invariants_and_curvature() const;
     Void test_correlated_near_miss() const;
     Void test_uncertain_initial_time() const;
+    Void test_clock_error_after_jump() const;
+    Void test_dwell_error_reconditioning() const;
+    Void test_subdivided_crossings_after_reset() const;
     Void test_initial_constraints_and_contracts() const;
     Void test_solver_budget_fallback() const;
     Void test_integrator_step_limit() const;
@@ -460,6 +486,102 @@ Void TestHybridEvolver::test_uncertain_initial_time() const {
         auto orbit=evolver.orbit(initial,HybridTime(1.25_x,3),Semantics::UPPER);
         // x(t0)=t0 gives x(T)=T for every initial time in the enclosure.
         expect_final(orbit,ExactBoxType({{ExactDouble(1.249),ExactDouble(1.251)},{-ExactDouble(0.011),ExactDouble(0.011)}}),1.25,0u);
+    }
+}
+
+Void TestHybridEvolver::test_clock_error_after_jump() const {
+    DiscreteLocation target(2);
+    HybridAutomaton system;
+    system.new_mode(q,{dot(x)=1,dot(y)=0});
+    system.new_mode(target,{dot(x)=1,dot(y)=0});
+    system.new_transition(q,e,target,{next(x)=0,next(y)=y},x>=0,EventKind::URGENT);
+    for(auto horizon : {Dyadic(1/4_q),Dyadic(1/2_q)}) {
+        ClockProgressEvolver evolver(system);
+        evolver.configuration().set_maximum_step_size(0.125);
+        evolver.configuration().set_maximum_spacial_error(1e-3);
+        evolver.configuration().set_maximum_enclosure_radius(0.0625);
+        evolver.configuration().set_enable_subdivisions(true);
+        ExactBoxType domain({{0,0},{-0.0009765625_x,0.0009765625_x}});
+        EnclosureConfiguration settings(evolver.function_factory(),1u);
+        HybridEnclosure initial(HybridExactBox(q,RealSpace({x,y}),domain),settings);
+        initial.set_time_function(evolver.function_factory().create_zero(domain)+FloatDPBounds(-0.125_x,0.125_x,dp));
+        auto orbit=evolver.orbit(initial,HybridTime(Real(horizon),3),Semantics::UPPER);
+        ARIADNE_TEST_ASSERT(orbit.final().size()>0u);
+        ARIADNE_TEST_ASSERT(evolver.timing_steps<=64u);
+        double time=horizon.get_d();
+        for(auto const& final : orbit.final()) {
+            ARIADNE_TEST_EQUALS(final.location(),target);
+            ARIADNE_TEST_EQUALS(final.previous_events().size(),1u);
+            if(final.previous_events().size()==1u) ARIADNE_TEST_EQUALS(final.previous_events()[0],e);
+            expect_time(final,time);
+            // The jump is immediate at uncertain absolute time t0. Thereafter
+            // x(T)=T-t0, with t0 in [-1/8,1/8], and y is constant.
+            ARIADNE_TEST_ASSERT(definitely(final.inside(HybridExactBox(target,RealSpace({x,y}),
+                ExactBoxType({{ExactDouble(time-0.126),ExactDouble(time+0.126)},
+                    {-ExactDouble(0.0011),ExactDouble(0.0011)}})))));
+        }
+    }
+}
+
+Void TestHybridEvolver::test_dwell_error_reconditioning() const {
+    HybridAutomaton stationary;
+    stationary.new_mode(q,{dot(x)=0,dot(y)=0});
+    ClockProgressEvolver evolver(stationary);
+    evolver.configuration().set_maximum_step_size(0.125);
+    ExactBoxType domain({{-0.125_x,0.125_x},{-0.125_x,0.125_x}});
+    auto initial=evolver.enclosure(HybridExactBox(q,RealSpace({x,y}),domain));
+    auto factory=evolver.function_factory();
+    auto coordinates=EffectiveVectorMultivariateFunction::identity(3u);
+    auto phi=factory.create(product(domain,ExactIntervalType(0,0.5_x)),
+        EffectiveVectorMultivariateFunction{coordinates[0],coordinates[1]});
+    auto duration=factory.create_constant(domain,Real(1/4_q))+FloatDPBounds(-0.125_x,0.125_x,dp);
+    initial.apply_parameter_evolve_step(phi,duration);
+    // Reset the absolute clock's origin, preserving the uncertain dwell time.
+    initial.set_time_function(factory.create_zero(domain));
+    auto orbit=evolver.orbit(initial,HybridTime(0.25_x,3),Semantics::UPPER);
+    expect_final(orbit,ExactBoxType({{-ExactDouble(0.126),ExactDouble(0.126)},
+        {-ExactDouble(0.126),ExactDouble(0.126)}}),0.25,0u);
+    ARIADNE_TEST_ASSERT(evolver.reconditions>0u);
+    for(auto const& final : orbit.final()) {
+        auto const& dwell=final.continuous_set().dwell_time_function();
+        ARIADNE_TEST_ASSERT(dwell.error().get(dp).raw().get_d()<1e-12);
+        ARIADNE_TEST_ASSERT(dwell.range().lower_bound().raw().get_d()<=0.375);
+        ARIADNE_TEST_ASSERT(dwell.range().upper_bound().raw().get_d()>=0.625);
+    }
+}
+
+Void TestHybridEvolver::test_subdivided_crossings_after_reset() const {
+    // Regression for ariadne#313: subdivision precedes the first crossing
+    // and is required again after a reset expands the second coordinate.
+    DiscreteLocation middle(2),target(3);
+    DiscreteEvent next_event("next");
+    HybridAutomaton system;
+    system.new_mode(q,{dot(x)=1,dot(y)=0});
+    system.new_mode(middle,{dot(x)=1,dot(y)=0});
+    system.new_mode(target,{dot(x)=0,dot(y)=0});
+    system.new_transition(q,e,middle,{next(x)=-0.5_dec,next(y)=8*y},x>=0,EventKind::URGENT);
+    system.new_transition(middle,next_event,target,{next(x)=0,next(y)=y},(x+1)*(x+1)*(x+1)-1>=0,EventKind::URGENT);
+    for(Bool subdivisions : {false,true}) {
+        GeneralHybridEvolver evolver(system);
+        evolver.configuration().set_maximum_step_size(0.5);
+        evolver.configuration().set_maximum_enclosure_radius(0.0625);
+        evolver.configuration().set_enable_subdivisions(subdivisions);
+        auto orbit=evolver.orbit(HybridBoxSet(q,{-0.5_dec<=x<=-0.25_dec,-0.01_dec<=y<=0.01_dec}),
+            HybridTime(2.0_x,2),Semantics::UPPER);
+        ARIADNE_TEST_ASSERT(orbit.final().size()>0u);
+        if(subdivisions) ARIADNE_TEST_ASSERT(orbit.final().size()>=4u);
+        for(auto const& final : orbit.final()) {
+            ARIADNE_TEST_EQUALS(final.location(),target);
+            ARIADNE_TEST_EQUALS(final.previous_events().size(),2u);
+            if(final.previous_events().size()==2u) {
+                ARIADNE_TEST_EQUALS(final.previous_events()[0],e);
+                ARIADNE_TEST_EQUALS(final.previous_events()[1],next_event);
+            }
+            ARIADNE_TEST_ASSERT(final.time_range().lower_bound().raw().get_d()>0.749);
+            ARIADNE_TEST_ASSERT(final.time_range().upper_bound().raw().get_d()<1.001);
+            ARIADNE_TEST_ASSERT(definitely(final.inside(HybridExactBox(target,RealSpace({x,y}),
+                ExactBoxType({{-ExactDouble(0.001),ExactDouble(0.001)},{-ExactDouble(0.081),ExactDouble(0.081)}})))));
+        }
     }
 }
 

@@ -480,8 +480,7 @@ HybridEnclosure::reduce()
 Void
 HybridEnclosure::recondition()
 {
-    this->uniform_error_recondition();
-    this->kuhn_recondition();
+    this->_set.recondition();
 }
 
 Void

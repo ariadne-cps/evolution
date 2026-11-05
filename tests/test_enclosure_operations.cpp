@@ -33,6 +33,7 @@ public:
         ARIADNE_TEST_CALL(test_map_and_constraint_contracts());
         ARIADNE_TEST_CALL(test_labelled_adapters_and_parameter_names());
         ARIADNE_TEST_CALL(test_constrained_reconditioning_and_products());
+        ARIADNE_TEST_CALL(test_clock_error_reconditioning());
         ARIADNE_TEST_CALL(test_degenerate_sets_and_remaining_contracts());
     }
     void test_constructors_and_configuration() {
@@ -167,6 +168,35 @@ public:
         ARIADNE_TEST_FAIL(EnclosureConfiguration(config.function_factory(),config.paver(),0u));
         EnclosureConfiguration explicit_paver(config.function_factory(),config.paver(),1u);
         ARIADNE_TEST_EQUALS(explicit_paver.reconditioning_num_blocks(),1u);
+    }
+
+    void test_clock_error_reconditioning() {
+        auto coordinates=EffectiveVectorMultivariateFunction::identity(2u);
+        auto phi=factory().create(product(domain,ExactIntervalType(0,0.5_x)),
+            EffectiveVectorMultivariateFunction{coordinates[0]});
+        auto duration=factory().create_constant(domain,Real(1/4_q))+FloatDPBounds(-0.125_x,0.125_x,dp);
+        for(Bool kuhn : {false,true}) {
+            EnclosureConfiguration settings(factory(),kuhn ? 1u : 3u);
+            Enclosure set(domain,settings);
+            set.new_negative_parameter_constraint(coordinate);
+            set.apply_parameter_evolve_step(phi,duration);
+            ARIADNE_TEST_ASSERT(set.time_function().error().get(dp).raw().get_d()>0.12);
+            ARIADNE_TEST_ASSERT(set.dwell_time_function().error().get(dp).raw().get_d()>0.12);
+            if(kuhn) set.recondition(); else set.uniform_error_recondition();
+            ARIADNE_TEST_ASSERT(set.time_function().error().get(dp).raw().get_d()<1e-12);
+            ARIADNE_TEST_ASSERT(set.dwell_time_function().error().get(dp).raw().get_d()<1e-12);
+            ARIADNE_TEST_EQUALS(set.number_of_parameters(),3u);
+            ARIADNE_TEST_EQUALS(set.number_of_constraints(),1u);
+            auto time=set.time_function().range(),dwell=set.dwell_time_function().range();
+            ARIADNE_TEST_ASSERT(time.lower_bound().raw().get_d()<=0.125);
+            ARIADNE_TEST_ASSERT(time.upper_bound().raw().get_d()>=0.375);
+            ARIADNE_TEST_ASSERT(dwell.lower_bound().raw().get_d()<=0.125);
+            ARIADNE_TEST_ASSERT(dwell.upper_bound().raw().get_d()>=0.375);
+            auto count=set.number_of_parameters();
+            set.uniform_error_recondition();
+            ARIADNE_TEST_EQUALS(set.number_of_parameters(),count);
+            ARIADNE_TEST_EQUALS(set.variable_kinds().back(),EnclosureVariableKind::ERROR);
+        }
     }
 
     void test_degenerate_sets_and_remaining_contracts() {

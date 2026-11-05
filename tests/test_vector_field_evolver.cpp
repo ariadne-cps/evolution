@@ -114,7 +114,7 @@ public:
         Orbit<EnclosureType> trajectory = evolver.orbit(initial_point, time, semantics);
 
         LabelledBox<RealInterval> expected_final_trajectory_bounding_box({x,v},{{-0.16_dec,-0.15_dec},{-1.49_dec,-1.48_dec}});
-        ARIADNE_TESTING_PROVE(subset(flow_tube.final().bounding_box(),expected_final_flow_tube_bounding_box));
+        ARIADNE_TESTING_PROVE(subset(trajectory.final().bounding_box(),expected_final_trajectory_bounding_box));
 
         fig << line_style(true) << fill_colour(blue) << trajectory.reach();
 

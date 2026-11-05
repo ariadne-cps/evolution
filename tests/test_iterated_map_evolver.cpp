@@ -117,9 +117,22 @@ class TestIteratedMapEvolver : public Ariadne::Testing::ContextFixture {
         Vector<FloatApproximation<PR>> p({a,b},pr);
         Vector<FloatApproximation<PR>> xa({0.5_x,0.25_x},pr);
         Vector<FloatApproximation<PR>> hxa={p[0]-xa[0]*xa[0]+xa[1]*p[1], xa[0]};
-        ARIADNE_TESTING_EXPECT_EQUAL(henon.update_function().evaluate(xa),hxa);
+        // Approximate equality is three-valued, even when the stored values
+        // are identical. Check each computed representation explicitly.
+        const auto evaluated=henon.update_function().evaluate(xa);
+        ARIADNE_TESTING_REQUIRE(evaluated.size()==hxa.size());
+        for(SizeType i=0; i<hxa.size(); ++i) {
+            ARIADNE_TESTING_EXPECT_SAME(evaluated[i],hxa[i]);
+        }
         Matrix<FloatApproximation<PR>> dhxa={{-2*xa[0],p[1]},{{1.0,pr},{0.0,pr}}};
-        ARIADNE_TESTING_EXPECT_EQUAL(henon.update_function().jacobian(xa),dhxa);
+        const auto jacobian=henon.update_function().jacobian(xa);
+        ARIADNE_TESTING_REQUIRE(jacobian.row_size()==dhxa.row_size());
+        ARIADNE_TESTING_REQUIRE(jacobian.column_size()==dhxa.column_size());
+        for(SizeType i=0; i<dhxa.row_size(); ++i) {
+            for(SizeType j=0; j<dhxa.column_size(); ++j) {
+                ARIADNE_TESTING_EXPECT_SAME(jacobian.at(i,j),dhxa.at(i,j));
+            }
+        }
 
         // Set up the evolution parameters and grid
         IteratedMap::TimeType time(6);

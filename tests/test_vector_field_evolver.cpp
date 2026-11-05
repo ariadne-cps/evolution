@@ -41,7 +41,6 @@
 #include "evolution/orbit.hpp"
 #include "evolution/vector_field_evolver.hpp"
 #include "labelled/figure.hpp"
-#include "drawing/drawing_command_line_interface.hpp"
 
 #include "ariadne-testing.hpp"
 #include "test_logging.hpp"
@@ -224,11 +223,10 @@ public:
 
 int main(int argc, const char* argv[]) {
     redirect_test_logging_to_null();
-    if (not DrawingCommandLineInterface().acquire(argc,argv)) return -1;
     ARIADNE_TESTING_SUITE("test_vector_field_evolver");
     ARIADNE_TESTING_ADD_TEST(TestVectorFieldEvolver, test_single_trajectory);
     ARIADNE_TESTING_ADD_TEST(TestVectorFieldEvolver, test_failure);
     ARIADNE_TESTING_ADD_TEST(TestVectorFieldEvolver, test_subdivide_initially);
     ARIADNE_TESTING_ADD_TEST(TestVectorFieldEvolver, test_subdivide_along_evolution);
-    return ARIADNE_TESTING_RUN_TESTS();
+    return ARIADNE_TESTING_RUN_TESTS_WITH_ARGS(argc, argv);
 }

@@ -39,7 +39,6 @@
 #include "expression-set/expression_set.hpp"
 #include "evolution/vector_field_simulator.hpp"
 #include "labelled/figure.hpp"
-#include "drawing/drawing_command_line_interface.hpp"
 #include "evolution/orbit.hpp"
 
 #include "ariadne-testing.hpp"
@@ -267,7 +266,6 @@ class TestVectorFieldSimulator : public Ariadne::Testing::ContextFixture {
 
 int main(int argc, const char* argv[]) {
     redirect_test_logging_to_null();
-    if (not DrawingCommandLineInterface().acquire(argc,argv)) return -1;
     ARIADNE_TESTING_SUITE("test_vector_field_simulator");
     ARIADNE_TESTING_ADD_TEST(TestVectorFieldSimulator, test_linear_flow_and_input_labels);
     ARIADNE_TESTING_ADD_TEST(TestVectorFieldSimulator, test_configuration_and_sampling);
@@ -275,5 +273,5 @@ int main(int argc, const char* argv[]) {
     ARIADNE_TESTING_ADD_TEST(TestVectorFieldSimulator, test_multiple_real_box_vdp_cycle);
     ARIADNE_TESTING_ADD_TEST(TestVectorFieldSimulator, test_multiple_trajectories_x);
     ARIADNE_TESTING_ADD_TEST(TestVectorFieldSimulator, test_multiple_trajectories_xy);
-    return ARIADNE_TESTING_RUN_TESTS();
+    return ARIADNE_TESTING_RUN_TESTS_WITH_ARGS(argc, argv);
 }

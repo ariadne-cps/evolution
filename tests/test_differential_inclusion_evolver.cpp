@@ -33,7 +33,6 @@
 #include "algebra/algebra.hpp"
 #include "set/function_set.hpp"
 #include "labelled/figure.hpp"
-#include "drawing/drawing_command_line_interface.hpp"
 #include "expression-set/expression_set.hpp"
 
 #include "ariadne-testing.hpp"
@@ -99,9 +98,8 @@ class TestDifferentialInclusionEvolver : public Ariadne::Testing::ContextFixture
 
 int main(int argc, const char* argv[]) {
     redirect_test_logging_to_null();
-    if (not DrawingCommandLineInterface().acquire(argc,argv)) return -1;
     ARIADNE_TESTING_SUITE("test_differential_inclusion_evolver");
     ARIADNE_TESTING_ADD_TEST(TestDifferentialInclusionEvolver, test_uncertain_input);
     ARIADNE_TESTING_ADD_TEST(TestDifferentialInclusionEvolver, test_periodic_reconditioning);
-    return ARIADNE_TESTING_RUN_TESTS();
+    return ARIADNE_TESTING_RUN_TESTS_WITH_ARGS(argc, argv);
 }

@@ -43,7 +43,6 @@
 #include "system/iterated_map.hpp"
 #include "evolution/iterated_map_evolver.hpp"
 #include "labelled/figure.hpp"
-#include "drawing/drawing_command_line_interface.hpp"
 
 #include "ariadne-testing.hpp"
 #include "log_verbosity_scope.hpp"
@@ -177,10 +176,9 @@ class TestIteratedMapEvolver : public Ariadne::Testing::ContextFixture {
 
 int main(int argc, const char* argv[]) {
     redirect_test_logging_to_null();
-    if (not DrawingCommandLineInterface().acquire(argc,argv)) return -1;
     ARIADNE_TESTING_SUITE("test_iterated_map_evolver");
     ARIADNE_TESTING_ADD_TEST(TestIteratedMapEvolver, test_stopping_policies);
     ARIADNE_TESTING_ADD_TEST(TestIteratedMapEvolver, test_evolve);
     ARIADNE_TESTING_ADD_TEST(TestIteratedMapEvolver, test_subdivide);
-    return ARIADNE_TESTING_RUN_TESTS();
+    return ARIADNE_TESTING_RUN_TESTS_WITH_ARGS(argc, argv);
 }

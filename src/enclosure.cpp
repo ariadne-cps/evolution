@@ -31,7 +31,7 @@
 #include "function/procedure.hpp"
 #include "evolution/enclosure.hpp"
 
-#include "macro/general.hpp"
+#include "utility/macros.hpp"
 #include "utility/exceptions.hpp"
 #include "utility/stopwatch.hpp"
 #include "numeric/numeric.hpp"

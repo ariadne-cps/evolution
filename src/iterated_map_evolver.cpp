@@ -30,6 +30,7 @@
 #include "utility/stlio.hpp"
 #include "algebra/vector.hpp"
 #include "function/function.hpp"
+#include "function/taylor_function.decl.hpp"
 #include "function/constraint.hpp"
 #include "symbolic/assignment.hpp"
 #include "evolution/enclosure.hpp"
@@ -55,8 +56,6 @@ template<class ES> List<ES> subdivide(const ES& enclosure) {
 
 } // namespace
 
-FunctionModelFactoryInterface<ValidatedTag,DoublePrecision>* make_taylor_function_factory();
-FunctionPatchFactoryInterface<ValidatedTag>* make_taylor_function_patch_factory();
 
 
 IteratedMapEvolver::IteratedMapEvolver(const SystemType& system)

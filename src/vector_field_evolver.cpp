@@ -290,7 +290,21 @@ _process_timed_enclosure_step(WorkloadType::Access& workload,
     // Set evolution parameters
     const StepSizeType configured_step_size=this->_configuration->maximum_step_size();
     const StepSizeType remaining_time=dyadic_end_time-current_time;
-    const StepSizeType maximum_step_size=min(configured_step_size,remaining_time);
+    // The integration machinery constructs FloatDP from its suggested
+    // Dyadic step and requires exact binary64 representability. An exact
+    // difference of accumulated dyadic times need not satisfy that.
+    // Round the positive remainder downward before passing it to the
+    // integrator, so neither LOWER nor UPPER can overshoot the chosen bound.
+    const FloatDP representable_remaining_time(
+        remaining_time, FloatDP::ROUND_DOWNWARD, DoublePrecision());
+    const StepSizeType rounded_remaining_time(representable_remaining_time);
+    if (rounded_remaining_time==StepSizeType(0u)) {
+        // No positive binary64 step remains: do not silently report a
+        // truncated orbit as final for either evolution semantics.
+        throw std::runtime_error(
+            "VectorFieldEvolver: remaining time is too small for a positive binary64 step");
+    }
+    const StepSizeType maximum_step_size=min(configured_step_size,rounded_remaining_time);
 
     // Get bounding boxes for time and space bounding_box
     auto current_set_bounds=cast_exact_box(current_set.euclidean_set().bounding_box());

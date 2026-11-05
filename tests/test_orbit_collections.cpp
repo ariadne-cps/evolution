@@ -22,8 +22,8 @@ class TestOrbitCollections : public Ariadne::Testing::ContextFixture {
     FloatDP time{1.0_x,dp};
 public:
     
-    Void check_endpoint(InterpolatedCurve const& curve,SizeType size) {
-        ARIADNE_TESTING_EXPECT_EQUAL(curve.size(),size);
+    Void check_endpoint(InterpolatedCurve const& curve,SizeType expected_size) {
+        ARIADNE_TESTING_EXPECT_EQUAL(curve.size(),expected_size);
         ARIADNE_TESTING_EXPECT_EQUAL(curve.end()->second[0].raw().get_d(),3.0);
         ARIADNE_TESTING_EXPECT_EQUAL(curve.end()->second[1].raw().get_d(),4.0);
     }

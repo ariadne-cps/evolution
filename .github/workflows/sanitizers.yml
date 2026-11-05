@@ -8,6 +8,8 @@ on:
 
 env:
   SCCACHE_GHA_ENABLED: "true"
+  SCCACHE_IGNORE_SERVER_IO_ERROR: "1"
+  SCCACHE_CONF: ${{ github.workspace }}/ss/bui/cmake/sccache.toml
 
 jobs:
   thread-sanitizer:
@@ -23,6 +25,7 @@ jobs:
 
       - name: Set up sccache
         uses: mozilla-actions/sccache-action@v0.0.11
+        continue-on-error: true
         with:
           version: "v0.18.0"
 
@@ -31,13 +34,18 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y cmake ninja-build pkg-config clang-16
 
+      - name: Initialize optional sccache before compilation
+        run: |
+          git submodule update --init -- ss/bui
+          cmake -P ss/bui/cmake/InitializeSccache.cmake
+
       - name: Configure CMake
         run: |
           cmake -S . -B "${{ runner.workspace }}/build-tsan" -G Ninja \
             -DCMAKE_BUILD_TYPE=Debug \
             -DCMAKE_CXX_COMPILER=clang++-16 \
-            -DCMAKE_C_COMPILER_LAUNCHER=sccache \
-            -DCMAKE_CXX_COMPILER_LAUNCHER=sccache \
+            -DCMAKE_C_COMPILER_LAUNCHER="$SCCACHE_LAUNCHER" \
+            -DCMAKE_CXX_COMPILER_LAUNCHER="$SCCACHE_LAUNCHER" \
             -DTHREAD_SANITIZER=ON \
             -DBUILD_PYTHON_BINDINGS=ON -DPYTHON_ENFORCE_TESTS=ON \
             -DWARNINGS_AS_ERRORS=ON
@@ -65,6 +73,7 @@ jobs:
 
       - name: Set up sccache
         uses: mozilla-actions/sccache-action@v0.0.11
+        continue-on-error: true
         with:
           version: "v0.18.0"
 
@@ -73,13 +82,18 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y cmake ninja-build pkg-config clang-16
 
+      - name: Initialize optional sccache before compilation
+        run: |
+          git submodule update --init -- ss/bui
+          cmake -P ss/bui/cmake/InitializeSccache.cmake
+
       - name: Configure CMake
         run: |
           cmake -S . -B "${{ runner.workspace }}/build-asan" -G Ninja \
             -DCMAKE_BUILD_TYPE=Debug \
             -DCMAKE_CXX_COMPILER=clang++-16 \
-            -DCMAKE_C_COMPILER_LAUNCHER=sccache \
-            -DCMAKE_CXX_COMPILER_LAUNCHER=sccache \
+            -DCMAKE_C_COMPILER_LAUNCHER="$SCCACHE_LAUNCHER" \
+            -DCMAKE_CXX_COMPILER_LAUNCHER="$SCCACHE_LAUNCHER" \
             -DBUILD_PYTHON_BINDINGS=ON -DPYTHON_ENFORCE_TESTS=ON \
             -DCMAKE_CXX_FLAGS="-fsanitize=address,undefined -fno-omit-frame-pointer -fno-sanitize-recover=all" \
             -DCMAKE_EXE_LINKER_FLAGS="-fsanitize=address,undefined" \

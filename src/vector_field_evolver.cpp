@@ -236,8 +236,8 @@ Void
 VectorFieldEvolver::
 _process_timed_enclosure_step(WorkloadType::Access& workload,
                               TimedEnclosureType const& working_timed_set_model,
-                              TimeType const&,
-                              Semantics,
+                              TimeType const& maximum_time,
+                              Semantics semantics,
                               SharedPointer<SynchronisedOrbit> result) const
 {
     LOGGING_SCOPE_CREATE
@@ -273,8 +273,24 @@ _process_timed_enclosure_step(WorkloadType::Access& workload,
     /////////////// Main Evolution ////////////////////////////////
     const FunctionType& dynamic=_system->function();
 
+    // Limit the next step to the remaining evolution horizon. Evolution
+    // horizons are Real, while integration steps are exact Dyadic values:
+    // use validated bounds rather than an unchecked floating-point cast.
+    // UPPER reaches at least the horizon; LOWER stays at or before it.
+    const auto maximum_time_bounds=maximum_time.get(DoublePrecision());
+    const TimeStepType dyadic_end_time=
+        (semantics==Semantics::LOWER)
+            ? TimeStepType(maximum_time_bounds.lower_raw())
+            : TimeStepType(maximum_time_bounds.upper_raw());
+    if (current_time>=dyadic_end_time) {
+        result->adjoin_final(current_set);
+        return;
+    }
+
     // Set evolution parameters
-    const StepSizeType maximum_step_size=this->_configuration->maximum_step_size();
+    const StepSizeType configured_step_size=this->_configuration->maximum_step_size();
+    const StepSizeType remaining_time=dyadic_end_time-current_time;
+    const StepSizeType maximum_step_size=min(configured_step_size,remaining_time);
 
     // Get bounding boxes for time and space bounding_box
     auto current_set_bounds=cast_exact_box(current_set.euclidean_set().bounding_box());

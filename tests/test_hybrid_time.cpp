@@ -25,7 +25,7 @@ public:
         ARIADNE_TESTING_EXPECT_EQUAL(continuous_only.discrete_time(),Integer(-1));
         HybridTime real(Real(2),Integer(3));
         HybridTime raw(FloatDP(2,dp),Integer(3));
-        HybridTime fractional(FloatDP(1.25,dp),Integer(3));
+        HybridTime fractional(FloatDP(Dyadic(5,2u),dp),Integer(3));
         HybridTime signed_steps(2.0_x,Int(3));
         HybridTime natural_steps(2.0_x,Nat(3));
         for(const auto& time : {real,raw,signed_steps,natural_steps}) {

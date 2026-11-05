@@ -941,7 +941,7 @@ Void TestHybridEvolver::test_straddling_initial_times() {
 }
 
 Void TestHybridEvolver::test_formatting() {
-    auto check=[](auto value,const char* expected) {
+    auto check=[this](auto value,const char* expected) {
         std::ostringstream text; text<<value;
         ARIADNE_TESTING_EXPECT_EQUAL(text.str(),std::string(expected));
     };

@@ -216,8 +216,8 @@ class TestEnclosure : public Ariadne::Testing::ContextFixture {
         ARIADNE_TESTING_NOTE(product(le1,le2));
     }
 
-    Void _draw(Drawer const& drawer, String suffix) const {
-        ARIADNE_PRINT_TEST_COMMENT("Drawing with " + suffix + " method");
+    Void _draw(Drawer const& drawer, String suffix) {
+        ARIADNE_TESTING_NOTE("Drawing with " + suffix + " method");
         ARIADNE_TESTING_NOTE(drawer);
         DrawerManager::instance().set_drawer(drawer);
         ExactBoxType dom({{0.0_x,1.0_x},{1.0_x,2.0_x}});

@@ -71,8 +71,9 @@ class HybridTime
     //! \brief Create the hybrid time moment with continuous-time \a t and discrete-time steps \a n.
     HybridTime(Real t, Integer n)
       : _continuous_time(t), _discrete_time(n) { }
+    // A binary floating-point value is an exact dyadic rational.
     HybridTime(FloatDP t, Integer n)
-      : _continuous_time(t), _discrete_time(n) { }
+      : _continuous_time(Dyadic(t)), _discrete_time(n) { }
     HybridTime(ExactDouble t, Int n)
       : _continuous_time(t), _discrete_time(n) { }
     HybridTime(ExactDouble t, Nat m)

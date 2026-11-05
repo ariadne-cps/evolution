@@ -25,12 +25,15 @@ public:
         ARIADNE_TESTING_EXPECT_EQUAL(continuous_only.discrete_time(),Integer(-1));
         HybridTime real(Real(2),Integer(3));
         HybridTime raw(FloatDP(2,dp),Integer(3));
+        HybridTime fractional(FloatDP(1.25,dp),Integer(3));
         HybridTime signed_steps(2.0_x,Int(3));
         HybridTime natural_steps(2.0_x,Nat(3));
         for(const auto& time : {real,raw,signed_steps,natural_steps}) {
             check_continuous(time.continuous_time(),2.0);
             ARIADNE_TESTING_EXPECT_EQUAL(time.discrete_time(),Integer(3));
         }
+        check_continuous(fractional.continuous_time(),1.25);
+        ARIADNE_TESTING_EXPECT_EQUAL(fractional.discrete_time(),Integer(3));
         HybridTime scaled=Integer(2)*real;
         check_continuous(scaled.continuous_time(),4.0);
         ARIADNE_TESTING_EXPECT_EQUAL(scaled.discrete_time(),Integer(6));

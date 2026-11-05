@@ -29,7 +29,8 @@ foreach(TEST IN LISTS UNIT_TESTS)
     target_link_libraries(${TEST} PRIVATE ariadne-evolution evolution ariadne-testing)
     # The drawing-backed suites parse their own command line options.
     # Keep their default invocation; all other suites use concise reporting.
-    if(TEST IN_LIST DRAWING_TESTS)
+    list(FIND DRAWING_TESTS "${TEST}" _drawing_test_index)
+    if(NOT _drawing_test_index EQUAL -1)
         add_test(NAME ${TEST} COMMAND $<TARGET_FILE:${TEST}>)
     else()
         add_test(NAME ${TEST} COMMAND $<TARGET_FILE:${TEST}> --concise)

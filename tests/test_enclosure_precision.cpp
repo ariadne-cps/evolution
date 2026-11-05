@@ -10,14 +10,17 @@
 #include "geometry/box.hpp"
 #include "evolution/enclosure.hpp"
 
-#include "macro/testing.hpp"
+#include "ariadne-testing.hpp"
 #include "test_logging.hpp"
 
 using namespace Ariadne;
 
-Int main()
-{
-    redirect_test_logging_to_null();
+
+class TestEnclosurePrecision : public Ariadne::Testing::ContextFixture {
+  public:
+    using ContextFixture::ContextFixture;
+    void test_contracts() {
+    
     RealBox box({{Decimal("1.25"),Decimal("1.55")},
                  {Decimal("2.35"),Decimal("2.45")}});
 
@@ -30,8 +33,17 @@ Int main()
         dynamic_cast<ValidatedVectorMultivariateTaylorFunctionModelDP const&>(
             enclosure.state_function().reference());
     for(SizeType i=0; i!=state_model.size(); ++i) {
-        ARIADNE_TEST_COMPARE(state_model[i].error().raw(),<,1e-14_pr);
+        ARIADNE_TESTING_EXPECT_LESS(state_model[i].error().raw(),1e-14_pr);
     }
 
-    return ARIADNE_TEST_FAILURES;
+    
+
+    }
+};
+
+int main(int argc, char** argv) {
+    redirect_test_logging_to_null();
+    ARIADNE_TESTING_SUITE("test_enclosure_precision");
+    ARIADNE_TESTING_ADD_TEST(TestEnclosurePrecision, test_contracts);
+    return ARIADNE_TESTING_RUN_TESTS_WITH_ARGS(argc, argv);
 }

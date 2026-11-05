@@ -43,7 +43,7 @@
 #include "labelled/figure.hpp"
 #include "drawing/drawing_command_line_interface.hpp"
 
-#include "macro/testing.hpp"
+#include "ariadne-testing.hpp"
 #include "test_logging.hpp"
 
 using namespace Ariadne;
@@ -52,16 +52,14 @@ using namespace std;
 template<class IVL1, class IVL2> decltype(auto) subset(LabelledBox<IVL1> bx1, LabelledBox<IVL2> bx2) {
     return subset(bx1.euclidean_set(),bx2.euclidean_set()); }
 
-class TestVectorFieldEvolver {
-public:
-    Void test() const {
-        ARIADNE_TEST_CALL(test_single_trajectory());
-        ARIADNE_TEST_CALL(test_failure());
-        ARIADNE_TEST_CALL(test_subdivide_initially());
-        ARIADNE_TEST_CALL(test_subdivide_along_evolution());
-    }
+class TestVectorFieldEvolver : public Ariadne::Testing::ContextFixture {
+  public:
+    using Ariadne::Testing::ContextFixture::ContextFixture;
 
-    Void test_single_trajectory() const {
+public:
+    
+
+    Void test_single_trajectory() {
 
         typedef VectorFieldEvolver::EnclosureType EnclosureType;
 
@@ -82,31 +80,31 @@ public:
 
         IntegratorInterface &integrator = picard_integrator;
 
-        ARIADNE_TEST_PRINT(integrator);
+        ARIADNE_TESTING_NOTE(integrator);
 
         // Set up the vector field
         Real mu = Dyadic(0.5_x);
         RealVariable x("x"), v("v");
 
         VectorField vanderpol({dot(x) = v, dot(v) = mu * (1 - x * x) * v - x});
-        ARIADNE_TEST_PRINT(vanderpol);
+        ARIADNE_TESTING_NOTE(vanderpol);
 
         Semantics semantics = Semantics::LOWER;
 
         VectorFieldEvolver evolver(vanderpol, integrator);
         evolver.configuration().set_maximum_enclosure_radius(enclosure_radius);
         evolver.configuration().set_maximum_step_size(step_size);
-        ARIADNE_TEST_PRINT(evolver.configuration());
+        ARIADNE_TESTING_NOTE(evolver.configuration());
 
         LabelledFigure fig(Axes2d(-2.25_dec <= x <= +2.25_dec, -2.25_dec <= v <= +2.25_dec));
 
         // Define the initial set
         RealExpressionBoundedConstraintSet initial_set({0.95_dec <= x <= 1.05_dec, 0.45_dec <= v <= 0.55_dec});
         Orbit<EnclosureType> flow_tube = evolver.orbit(initial_set, time, semantics);
-        ARIADNE_TEST_PRINT(flow_tube);
+        ARIADNE_TESTING_NOTE(flow_tube);
 
         LabelledBox<RealInterval> expected_final_flow_tube_bounding_box({x,v},{{-0.26_dec,-0.07_dec},{-1.57_dec,-1.43_dec}});
-        ARIADNE_TEST_ASSERT(subset(flow_tube.final().bounding_box(),expected_final_flow_tube_bounding_box));
+        ARIADNE_TESTING_PROVE(subset(flow_tube.final().bounding_box(),expected_final_flow_tube_bounding_box));
 
         fig << line_style(true) << fill_colour(cyan) << flow_tube.reach();
         fig << fill_colour(magenta) << flow_tube.intermediate();
@@ -117,14 +115,14 @@ public:
         Orbit<EnclosureType> trajectory = evolver.orbit(initial_point, time, semantics);
 
         LabelledBox<RealInterval> expected_final_trajectory_bounding_box({x,v},{{-0.16_dec,-0.15_dec},{-1.49_dec,-1.48_dec}});
-        ARIADNE_TEST_ASSERT(subset(flow_tube.final().bounding_box(),expected_final_flow_tube_bounding_box));
+        ARIADNE_TESTING_PROVE(subset(flow_tube.final().bounding_box(),expected_final_flow_tube_bounding_box));
 
         fig << line_style(true) << fill_colour(blue) << trajectory.reach();
 
         fig.write("test_vector_field_evolver-vdp");
     }
 
-    Void test_failure() const {
+    Void test_failure() {
         // The system in this test is stiff and is expected to fail.
 
         RealVariable x("x"), y("y");
@@ -152,10 +150,10 @@ public:
         time = 1.5_dec;
 
         // Compute the reachable sets; expect failure as required step size becomes too small
-        ARIADNE_TEST_FAIL(evolver.orbit(initial_box, time, Semantics::UPPER));
+        ARIADNE_TESTING_EXPECT_EXCEPTION(evolver.orbit(initial_box, time, Semantics::UPPER));
     }
 
-    Void test_subdivide_initially() const {
+    Void test_subdivide_initially() {
 
         RealConstant mu("mu",1.0_dec);
         RealVariable x("x"), y("y");
@@ -183,10 +181,10 @@ public:
 
         auto evolution = evolver.orbit(initial_set,evolution_time,Semantics::UPPER);
 
-        ARIADNE_TEST_ASSERT(evolution.final().size()>1);
+        ARIADNE_TESTING_PROVE(evolution.final().size()>1);
     }
 
-    Void test_subdivide_along_evolution() const {
+    Void test_subdivide_along_evolution() {
 
         RealVariable x("x"), y("y");
 
@@ -219,15 +217,18 @@ public:
 
         auto orbit_lower = evolver.orbit(initial_set,evolution_time,Semantics::LOWER);
 
-        ARIADNE_TEST_ASSERT(orbit_upper.reach().size() > orbit_lower.reach().size());
+        ARIADNE_TESTING_PROVE(orbit_upper.reach().size() > orbit_lower.reach().size());
     }
 };
 
-Int main(Int argc, const char* argv[])
-{
+
+int main(int argc, const char* argv[]) {
     redirect_test_logging_to_null();
     if (not DrawingCommandLineInterface().acquire(argc,argv)) return -1;
-
-    TestVectorFieldEvolver().test();
-    return ARIADNE_TEST_FAILURES;
+    ARIADNE_TESTING_SUITE("test_vector_field_evolver");
+    ARIADNE_TESTING_ADD_TEST(TestVectorFieldEvolver, test_single_trajectory);
+    ARIADNE_TESTING_ADD_TEST(TestVectorFieldEvolver, test_failure);
+    ARIADNE_TESTING_ADD_TEST(TestVectorFieldEvolver, test_subdivide_initially);
+    ARIADNE_TESTING_ADD_TEST(TestVectorFieldEvolver, test_subdivide_along_evolution);
+    return ARIADNE_TESTING_RUN_TESTS();
 }

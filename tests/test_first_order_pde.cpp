@@ -24,7 +24,7 @@
 
 #include <cmath>
 #include <vector>
-#include "macro/testing.hpp"
+#include "ariadne-testing.hpp"
 #include "ariadne-evolution.hpp"
 #include "numeric/numeric.hpp"
 #include "numeric/float_bounds.hpp"
@@ -37,13 +37,13 @@
 using namespace Ariadne;
 using namespace std;
 
-class TestFirstOrderPDE
+class TestFirstOrderPDE : public Ariadne::Testing::ContextFixture
 {
 public:
-    template<class PR> void test(PR pr) {
-        ARIADNE_TEST_CALL(test_constant_and_contracts(pr));
-        ARIADNE_TEST_CALL(test_first_order_pde(pr));
-    }
+    using ContextFixture::ContextFixture;
+    void test_double_precision_contracts() { test_constant_and_contracts(double_precision); }
+    void test_double_precision_evolution() { test_first_order_pde(double_precision); }
+    void test_multiple_precision_contracts() { test_constant_and_contracts(MultiplePrecision(80u)); }
 
     template<class PR> void test_constant_and_contracts(PR pr) {
         Matrix<Real> identity=Matrix<Real>::identity(1u);
@@ -52,14 +52,14 @@ public:
         pde.add_direction(identity,speed,identity).add_direction(identity,speed,identity);
         auto constant=EffectiveVectorMultivariateFunction::constant(2u,Vector<Real>{Real(2)});
         auto solution=first_order_pde(pde,constant,pr);
-        ARIADNE_TEST_ASSERT(solution.uts.size(0)>=4u);
-        ARIADNE_TEST_ASSERT(solution.uts.size(2)>1u);
-        ARIADNE_TEST_EQUALS(solution.tau.get_d()*static_cast<double>(solution.uts.size(2)-1u),0.25);
+        ARIADNE_TESTING_PROVE(solution.uts.size(0)>=4u);
+        ARIADNE_TESTING_PROVE(solution.uts.size(2)>1u);
+        ARIADNE_TESTING_EXPECT_EQUAL(solution.tau.get_d()*static_cast<double>(solution.uts.size(2)-1u),0.25);
         for(SizeType i=0;i<solution.uts.size(0);++i) {
             for(SizeType j=0;j<solution.uts.size(1);++j) {
                 auto value=solution.uts[{i,j,solution.uts.size(2)-1u}][0];
-                ARIADNE_TEST_ASSERT(value.lower().get_d()<=2.0 && value.upper().get_d()>=2.0);
-                ARIADNE_TEST_ASSERT(value.upper().get_d()-value.lower().get_d()<1e-10);
+                ARIADNE_TESTING_PROVE(value.lower().get_d()<=2.0 && value.upper().get_d()>=2.0);
+                ARIADNE_TESTING_PROVE(value.upper().get_d()-value.lower().get_d()<1e-10);
             }
         }
         FirstOrderPDE reverse=FirstOrderPDE::homogeneous(identity,2u);
@@ -67,8 +67,8 @@ public:
         reverse.add_direction(-identity,negative_speed,identity).add_direction(-identity,negative_speed,identity);
         auto reversed=first_order_pde(reverse,constant,pr);
         auto endpoint=reversed.uts[{0u,0u,reversed.uts.size(2)-1u}][0];
-        ARIADNE_TEST_ASSERT(endpoint.lower().get_d()<=2.0 && endpoint.upper().get_d()>=2.0);
-        ARIADNE_TEST_ASSERT(endpoint.upper().get_d()-endpoint.lower().get_d()<1e-10);
+        ARIADNE_TESTING_PROVE(endpoint.lower().get_d()<=2.0 && endpoint.upper().get_d()>=2.0);
+        ARIADNE_TESTING_PROVE(endpoint.upper().get_d()-endpoint.lower().get_d()<1e-10);
         // At Courant number one, upwind transport is an exact cyclic cell shift.
         auto coordinate=EffectiveVectorMultivariateFunction::identity(2u);
         EffectiveVectorMultivariateFunction ramp={coordinate[0]};
@@ -92,19 +92,19 @@ public:
                         && value.upper().get_d()-value.lower().get_d()<1e-10;
                 }
             }
-            ARIADNE_TEST_ASSERT(exact_shift);
+            ARIADNE_TESTING_PROVE(exact_shift);
         }
         // Valid dimensions can still request a grid too large to represent.
         auto coordinates=EffectiveVectorMultivariateFunction::identity(2u);
         EffectiveVectorMultivariateFunction huge={Real(1e60_dec)*sqr(coordinates[0])};
         EffectiveVectorMultivariateFunction overflowing={Real(1e308_dec)*sqr(coordinates[0])};
-        ARIADNE_TEST_FAIL(first_order_pde(pde,huge,pr));
-        ARIADNE_TEST_FAIL(first_order_pde(pde,overflowing,pr));
-        ARIADNE_TEST_FAIL(first_order_pde(pde,EffectiveVectorMultivariateFunction::zeros(1u,1u),pr));
-        ARIADNE_TEST_FAIL(first_order_pde(pde,EffectiveVectorMultivariateFunction::zeros(2u,2u),pr));
+        ARIADNE_TESTING_EXPECT_EXCEPTION(first_order_pde(pde,huge,pr));
+        ARIADNE_TESTING_EXPECT_EXCEPTION(first_order_pde(pde,overflowing,pr));
+        ARIADNE_TESTING_EXPECT_EXCEPTION(first_order_pde(pde,EffectiveVectorMultivariateFunction::zeros(1u,1u),pr));
+        ARIADNE_TESTING_EXPECT_EXCEPTION(first_order_pde(pde,EffectiveVectorMultivariateFunction::zeros(2u,2u),pr));
         FirstOrderPDE one_dimension=FirstOrderPDE::homogeneous(identity,1u);
         one_dimension.add_direction(identity,speed,identity);
-        ARIADNE_TEST_FAIL(first_order_pde(one_dimension,EffectiveVectorMultivariateFunction::zeros(1u,1u),pr));
+        ARIADNE_TESTING_EXPECT_EXCEPTION(first_order_pde(one_dimension,EffectiveVectorMultivariateFunction::zeros(1u,1u),pr));
     }
 
         template <class PR>
@@ -189,16 +189,17 @@ public:
                                         && upper[component]>=expected_sum[component]-1e-8;
                 }
             }
-            ARIADNE_TEST_ASSERT(finite);
-            ARIADNE_TEST_ASSERT(initial_values_correct);
-            ARIADNE_TEST_ASSERT(conserved);
+            ARIADNE_TESTING_PROVE(finite);
+            ARIADNE_TESTING_PROVE(initial_values_correct);
+            ARIADNE_TESTING_PROVE(conserved);
         }
 };
 
-int main() {
+int main(int argc, char** argv) {
     redirect_test_logging_to_null();
-    TestFirstOrderPDE test;
-    test.test(double_precision);
-    test.test_constant_and_contracts(MultiplePrecision(80u));
-    return ARIADNE_TEST_FAILURES;
+    ARIADNE_TESTING_SUITE("test_first_order_pde");
+    ARIADNE_TESTING_ADD_TEST(TestFirstOrderPDE, test_double_precision_contracts);
+    ARIADNE_TESTING_ADD_TEST(TestFirstOrderPDE, test_double_precision_evolution);
+    ARIADNE_TESTING_ADD_TEST(TestFirstOrderPDE, test_multiple_precision_contracts);
+    return ARIADNE_TESTING_RUN_TESTS_WITH_ARGS(argc, argv);
 }

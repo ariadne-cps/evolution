@@ -18,10 +18,22 @@ set(UNIT_TESTS
     test_vector_field_evolver
     test_vector_field_simulator
 )
+set(DRAWING_TESTS
+    test_differential_inclusion_evolver
+    test_iterated_map_evolver
+    test_vector_field_evolver
+    test_vector_field_simulator
+)
 foreach(TEST IN LISTS UNIT_TESTS)
     add_executable(${TEST} ${TEST}.cpp)
-    target_link_libraries(${TEST} ariadne-evolution evolution)
-    add_test(NAME ${TEST} COMMAND $<TARGET_FILE:${TEST}>)
+    target_link_libraries(${TEST} PRIVATE ariadne-evolution evolution ariadne-testing)
+    # The drawing-backed suites parse their own command line options.
+    # Keep their default invocation; all other suites use concise reporting.
+    if(TEST IN_LIST DRAWING_TESTS)
+        add_test(NAME ${TEST} COMMAND $<TARGET_FILE:${TEST}>)
+    else()
+        add_test(NAME ${TEST} COMMAND $<TARGET_FILE:${TEST}> --concise)
+    endif()
     set_property(TEST ${TEST} PROPERTY LABELS "evolution")
 endforeach()
 add_custom_target(tests)

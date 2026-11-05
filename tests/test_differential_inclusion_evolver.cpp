@@ -36,17 +36,20 @@
 #include "drawing/drawing_command_line_interface.hpp"
 #include "expression-set/expression_set.hpp"
 
-#include "macro/testing.hpp"
+#include "ariadne-testing.hpp"
 #include "test_logging.hpp"
 
 using namespace Ariadne;
 
-class TestDifferentialInclusionEvolver {
+class TestDifferentialInclusionEvolver : public Ariadne::Testing::ContextFixture {
+  public:
+    using Ariadne::Testing::ContextFixture::ContextFixture;
+
     // One scalar affine inclusion: cheap even under MSVC Debug, but still
     // exercises uncertain inputs and periodic parameter reconditioning.
     void run_case(const List<InputApproximation>& approximations,
                   Nat reduction_period, ExactDouble ratio,
-                  Real evolution_time, ExactDouble maximum_step) const {
+                  Real evolution_time, ExactDouble maximum_step) {
         RealVariable x("x"), u("u");
         DottedRealAssignments dynamics={dot(x)=u-x};
         RealVariablesBox inputs={0.5_dec<=u<=1.5_dec};
@@ -72,33 +75,33 @@ class TestDifferentialInclusionEvolver {
             evolver.configuration().set_approximations(selected);
             evolver.configuration().set_maximum_step_size(maximum_step);
             auto orbit=evolver.orbit(initial,evolution_time);
-            ARIADNE_TEST_ASSERT(orbit.reach().size()>0u);
-            ARIADNE_TEST_ASSERT(orbit.final().size()>0u);
+            ARIADNE_TESTING_PROVE(orbit.reach().size()>0u);
+            ARIADNE_TESTING_PROVE(orbit.final().size()>0u);
         }
     }
 
   public:
-    void test_uncertain_input() const {
+    void test_uncertain_input() {
         // One step with each of the two input approximations.
         run_case({ConstantApproximation(),AffineApproximation()},
                  3,3.0_x,1/32_q,1.0_x/pow(two,5));
     }
 
-    void test_periodic_reconditioning() const {
+    void test_periodic_reconditioning() {
         // Four short steps and parameter reduction every two steps.
         run_case({AffineApproximation()},
                  2,1.25_x,1/8_q,1.0_x/pow(two,5));
     }
 
-    void test() const {
-        ARIADNE_TEST_CALL(test_uncertain_input());
-        ARIADNE_TEST_CALL(test_periodic_reconditioning());
-    }
+    
 };
+
 
 int main(int argc, const char* argv[]) {
     redirect_test_logging_to_null();
     if (not DrawingCommandLineInterface().acquire(argc,argv)) return -1;
-    TestDifferentialInclusionEvolver().test();
-    return ARIADNE_TEST_FAILURES;
+    ARIADNE_TESTING_SUITE("test_differential_inclusion_evolver");
+    ARIADNE_TESTING_ADD_TEST(TestDifferentialInclusionEvolver, test_uncertain_input);
+    ARIADNE_TESTING_ADD_TEST(TestDifferentialInclusionEvolver, test_periodic_reconditioning);
+    return ARIADNE_TESTING_RUN_TESTS();
 }

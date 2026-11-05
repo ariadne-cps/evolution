@@ -45,7 +45,7 @@
 #include "labelled/figure.hpp"
 #include "drawing/drawing_command_line_interface.hpp"
 
-#include "macro/testing.hpp"
+#include "ariadne-testing.hpp"
 #include "log_verbosity_scope.hpp"
 #include <memory>
 #include "test_logging.hpp"
@@ -53,53 +53,51 @@
 using namespace Ariadne;
 using namespace std;
 
-class TestIteratedMapEvolver
-{
+class TestIteratedMapEvolver : public Ariadne::Testing::ContextFixture {
   public:
-    Void test() const {
-        ARIADNE_TEST_CALL(test_stopping_policies());
-        ARIADNE_TEST_CALL(test_evolve());
-        ARIADNE_TEST_CALL(test_subdivide());
-    }
+    using Ariadne::Testing::ContextFixture::ContextFixture;
 
-    Void test_stopping_policies() const {
+  public:
+    
+
+    Void test_stopping_policies() {
         RealVariable x("x"),other("other");
         IteratedMap map(List<PrimedRealAssignment>{next(x)=x+1});
         IteratedMapEvolver evolver(map);
         auto initial=evolver.enclosure(ExactBoxType({{-1.0_x,1.0_x}}));
         std::unique_ptr<IteratedMapEvolver> clone(evolver.clone());
         auto const& const_evolver=*clone;
-        ARIADNE_TEST_EQUALS(const_evolver.configuration().maximum_enclosure_radius(),100.0);
-        ARIADNE_TEST_EQUALS(clone->system().state_space(),RealSpace({x}));
+        ARIADNE_TESTING_EXPECT_EQUAL(const_evolver.configuration().maximum_enclosure_radius(),100.0);
+        ARIADNE_TESTING_EXPECT_EQUAL(clone->system().state_space(),RealSpace({x}));
         auto zero=evolver.orbit(initial,Integer(0),Semantics::LOWER);
-        ARIADNE_TEST_EQUALS(zero.final().size(),1u);
-        ARIADNE_TEST_EQUALS(zero.reach().size(),0u);
-        ARIADNE_TEST_EQUALS(zero.intermediate().size(),0u);
+        ARIADNE_TESTING_EXPECT_EQUAL(zero.final().size(),1u);
+        ARIADNE_TESTING_EXPECT_EQUAL(zero.reach().size(),0u);
+        ARIADNE_TESTING_EXPECT_EQUAL(zero.intermediate().size(),0u);
         evolver.configuration().set_maximum_enclosure_radius(0.5);
         evolver.configuration().set_enable_premature_termination(true);
         auto stopped=evolver.orbit(initial,Integer(1),Semantics::LOWER);
-        ARIADNE_TEST_EQUALS(stopped.final().size(),0u);
-        ARIADNE_TEST_EQUALS(stopped.reach().size(),0u);
+        ARIADNE_TESTING_EXPECT_EQUAL(stopped.final().size(),0u);
+        ARIADNE_TESTING_EXPECT_EQUAL(stopped.reach().size(),0u);
         evolver.configuration().set_maximum_enclosure_radius(2.0);
         auto small=evolver.orbit(initial,Integer(1),Semantics::LOWER);
-        ARIADNE_TEST_EQUALS(small.final().size(),1u);
+        ARIADNE_TESTING_EXPECT_EQUAL(small.final().size(),1u);
         evolver.configuration().set_maximum_enclosure_radius(0.5);
         evolver.configuration().set_enable_premature_termination(false);
         {
             LogVerbosityScope diagnostics(100u);
             auto continued=evolver.orbit(initial,Integer(2),Semantics::LOWER);
-            ARIADNE_TEST_EQUALS(continued.final().size(),1u);
-            ARIADNE_TEST_EQUALS(continued.reach().size(),2u);
-            ARIADNE_TEST_EQUALS(continued.intermediate().size(),2u);
-            ARIADNE_TEST_ASSERT(definitely(continued.final()[0].euclidean_set().subset(ExactBoxType({{ExactDouble(0.99),ExactDouble(3.01)}}))));
+            ARIADNE_TESTING_EXPECT_EQUAL(continued.final().size(),1u);
+            ARIADNE_TESTING_EXPECT_EQUAL(continued.reach().size(),2u);
+            ARIADNE_TESTING_EXPECT_EQUAL(continued.intermediate().size(),2u);
+            ARIADNE_TESTING_PROVE(definitely(continued.final()[0].euclidean_set().subset(ExactBoxType({{ExactDouble(0.99),ExactDouble(3.01)}}))));
         }
         auto unsplit=evolver.orbit(initial,Integer(1),Semantics::UPPER);
-        ARIADNE_TEST_EQUALS(unsplit.final().size(),1u);
+        ARIADNE_TESTING_EXPECT_EQUAL(unsplit.final().size(),1u);
         auto incompatible=LabelledEnclosure(initial.euclidean_set(),RealSpace({other}));
-        ARIADNE_TEST_FAIL(evolver.orbit(incompatible,Integer(1),Semantics::UPPER));
+        ARIADNE_TESTING_EXPECT_EXCEPTION(evolver.orbit(incompatible,Integer(1),Semantics::UPPER));
     }
 
-    Void test_evolve() const
+    Void test_evolve()
     {
         typedef DoublePrecision PR;
         DoublePrecision pr;
@@ -109,20 +107,20 @@ class TestIteratedMapEvolver
         Real a=1.3_dec; Real b=0.3_dec;
         RealVariable x("x"), y("y");
         IteratedMap henon({ next(x)=a-x*x+b*y, next(y)=x });
-        ARIADNE_TEST_PRINT(henon);
+        ARIADNE_TESTING_NOTE(henon);
 
         // Define the initial set
         RealExpressionBoundedConstraintSet initial_set({0.4_dec<=x<=0.7_dec,0.9_dec<=y<=1.1_dec});
 
-        ARIADNE_TEST_PRINT(initial_set);
+        ARIADNE_TESTING_NOTE(initial_set);
 
         // Function evaluation sanity check
         Vector<FloatApproximation<PR>> p({a,b},pr);
         Vector<FloatApproximation<PR>> xa({0.5_x,0.25_x},pr);
         Vector<FloatApproximation<PR>> hxa={p[0]-xa[0]*xa[0]+xa[1]*p[1], xa[0]};
-        ARIADNE_TEST_EQUAL(henon.update_function().evaluate(xa),hxa);
+        ARIADNE_TESTING_EXPECT_EQUAL(henon.update_function().evaluate(xa),hxa);
         Matrix<FloatApproximation<PR>> dhxa={{-2*xa[0],p[1]},{{1.0,pr},{0.0,pr}}};
-        ARIADNE_TEST_EQUAL(henon.update_function().jacobian(xa),dhxa);
+        ARIADNE_TESTING_EXPECT_EQUAL(henon.update_function().jacobian(xa),dhxa);
 
         // Set up the evolution parameters and grid
         IteratedMap::TimeType time(6);
@@ -131,7 +129,7 @@ class TestIteratedMapEvolver
         IteratedMapEvolver evolver(henon);
         evolver.configuration().set_maximum_enclosure_radius(0.25);
 
-        ARIADNE_TEST_PRINT(evolver.configuration());
+        ARIADNE_TESTING_NOTE(evolver.configuration());
 
         // Compute the orbit
         auto orbit = evolver.orbit(initial_set,time,Semantics::UPPER);
@@ -151,7 +149,7 @@ class TestIteratedMapEvolver
         fig2.write("test_iterated_map_evolver_ty");
     }
 
-    Void test_subdivide() const
+    Void test_subdivide()
     {
         Real a=1.3_dec; Real b=0.3_dec;
         RealVariable x("x"), y("y");
@@ -167,7 +165,7 @@ class TestIteratedMapEvolver
 
         auto orbit = evolver.orbit(initial_set,time,Semantics::UPPER);
 
-        ARIADNE_TEST_ASSERT(orbit.final().size()>1);
+        ARIADNE_TESTING_PROVE(orbit.final().size()>1);
 
         LabelledFigure fig(Axes2d(-10<=x<=10, -10<=y<=10));
         fig << line_style(true) << fill_colour(cyan) << orbit.reach();
@@ -176,11 +174,13 @@ class TestIteratedMapEvolver
     }
 };
 
-Int main(Int argc, const char* argv[])
-{
+
+int main(int argc, const char* argv[]) {
     redirect_test_logging_to_null();
     if (not DrawingCommandLineInterface().acquire(argc,argv)) return -1;
-
-    TestIteratedMapEvolver().test();
-    return ARIADNE_TEST_FAILURES;
+    ARIADNE_TESTING_SUITE("test_iterated_map_evolver");
+    ARIADNE_TESTING_ADD_TEST(TestIteratedMapEvolver, test_stopping_policies);
+    ARIADNE_TESTING_ADD_TEST(TestIteratedMapEvolver, test_evolve);
+    ARIADNE_TESTING_ADD_TEST(TestIteratedMapEvolver, test_subdivide);
+    return ARIADNE_TESTING_RUN_TESTS();
 }

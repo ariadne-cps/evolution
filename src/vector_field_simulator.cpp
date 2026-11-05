@@ -94,13 +94,11 @@ template<class X> List<LabelledPoint<X>> make_state_auxiliary_point(const List<L
 }
 
 GridTreePaving create_paving(UpperBoxType box, Space<Real> spc, subspace sspc) {
-    if(sspc.size() > spc.size()) {
-        ARIADNE_ERROR("Too much dimension on subdivision of subspace");
+    for(auto const& entry : sspc) {
+        ARIADNE_PRECONDITION(spc.contains(entry.first));
     }
-    Nat divider = 1;
-
-    FloatDP eps_box(0.01_q, Ariadne::ROUND_TO_NEAREST, dp);
-    FloatDP eps_len(0.00_q, Ariadne::ROUND_TO_NEAREST, dp); //For Debug purposes
+    Nat divider=1u;
+    FloatDP eps_box(0.01_q,Ariadne::ROUND_TO_NEAREST,dp);
 
     //Widen Initial set
     box = widen(box, eps_box);
@@ -110,17 +108,8 @@ GridTreePaving create_paving(UpperBoxType box, Space<Real> spc, subspace sspc) {
     Vector<FloatDP> origin(tmpPointCenter.dimension(), FloatDP(0, dp));
     Vector<FloatDP> lengths(box.widths().size(), FloatDP(0, dp));
 
-    auto lengths_ = box.widths();
-    Nat box_width_null = 0;
-    for(SizeType i=0; i<lengths_.size(); i++){
-        if(lengths_[i].get_d() > 0) { continue; }
-        box_width_null++;
-    }
-    if(box_width_null == lengths_.size())
-    {
-        tmpPointCenter = box.midpoint();
-    }
-
+    // Widening a finite coordinate by eps_box>0 gives it positive width.
+    // In zero dimensions, lower_bounds() and midpoint() are both empty points.
     for(SizeType i=0; i<tmpPointCenter.dimension(); i++){
         divider = 1;
         if(sspc.has_key(spc[i])) {
@@ -128,9 +117,6 @@ GridTreePaving create_paving(UpperBoxType box, Space<Real> spc, subspace sspc) {
             divider = val;
         }
         lengths[i] = (box[i].width().raw() / divider).value();
-        if (divider >= 1) {
-            lengths[i] = (lengths[i] + (eps_len /(divider))).value();
-        }
         origin[i] = tmpPointCenter[i];
     }
     Grid grid(origin, lengths);
@@ -187,12 +173,10 @@ auto VectorFieldSimulator::orbit(UpperBoxType& initial_box, const TerminationTyp
 -> OrbitType
 {
     GridTreePaving gridPaving = create_paving(initial_box, _system->state_space(), _configuration->get_subspace());
-    if(_configuration->is_using_subspace() == true) {
-        _configuration->set_num_subdivisions(0);
-    }
-    gridPaving.adjoin_outer_approximation(initial_box, _configuration->num_subdivisions());
+    Nat subdivisions=_configuration->is_using_subspace() ? 0u : _configuration->num_subdivisions();
+    gridPaving.adjoin_outer_approximation(initial_box,subdivisions);
     ApproximateListPointType pointList = create_point_list(gridPaving, _system->state_space(),
-                                                           _configuration->discretisation_type(), _configuration->num_subdivisions());
+                                                           _configuration->discretisation_type(),subdivisions);
     return orbit(pointList, termination);
 }
 
@@ -207,11 +191,20 @@ auto VectorFieldSimulator::orbit(const ApproximateListPointType& initial_points,
     auto auxiliary_space = _system->auxiliary_space();
     auto state_auxiliary_space = _system->state_auxiliary_space();
 
-    auto result = std::make_shared<SynchronisedOrbit>(make_state_auxiliary_point(initial_points, state_space, auxiliary_space, state_auxiliary_space, auxiliary_function));
+    // Labelled input points may list the state variables in a different order.
+    auto canonical_points=initial_points;
+    for(auto& point : canonical_points) {
+        Point<FloatDPApproximation> ordered(state_space.dimension(),point.zero_element());
+        for(SizeType i=0;i<state_space.dimension();++i) {
+            ARIADNE_PRECONDITION(point.space().contains(state_space[i]));
+            ordered[i]=point[point.space()[state_space[i]]];
+        }
+        point=ApproximatePointType(state_space,ordered);
+    }
+    auto result=std::make_shared<SynchronisedOrbit>(make_state_auxiliary_point(canonical_points,state_space,auxiliary_space,state_auxiliary_space,auxiliary_function));
 
     WorkloadType workload(std::bind_front(&VectorFieldSimulator::_simulate_from_point,this),termination,result);
-    for (SizeType i=0; i<initial_points.size(); i++)
-        workload.append({i,initial_points.at(i)});
+    for(SizeType i=0;i<canonical_points.size();++i) { workload.append({i,canonical_points.at(i)}); }
     workload.process();
 
     return std::move(*result);
@@ -249,7 +242,7 @@ void VectorFieldSimulator::_simulate_from_point(Pair<SizeType,ApproximatePointTy
 }
 
 VectorFieldSimulatorConfiguration::VectorFieldSimulatorConfiguration() :
-        _step_size(0.125_x, dp), _num_subdivisions(2), _discretisation_type(DiscretisationType::Recombine), _is_using_subspace(false), _subspace()  {
+        _step_size(0.125_x, dp), _num_subdivisions(2), _discretisation_type(DiscretisationType::Recombine), _subspace()  {
 
 }
 

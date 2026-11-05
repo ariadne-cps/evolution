@@ -31,7 +31,8 @@
 
 #include "logging/logging.hpp"
 #include "evolution/configuration_interface.hpp"
-#include "hybrid/hybrid_set.decl.hpp"
+#include "numeric/numeric.hpp"
+#include "hybrid/hybrid_set.hpp"
 #include "hybrid/hybrid_paving.hpp"
 
 
@@ -125,7 +126,7 @@ private:
 public:
 
     const FloatDPApproximation& step_size() const { return _step_size; }
-    Void set_step_size(ApproximateDouble value) { _step_size = FloatDPApproximation(value,double_precision); }
+    Void set_step_size(ApproximateDouble value) { ARIADNE_PRECONDITION(decide(value>0)); _step_size = FloatDPApproximation(value,double_precision); }
     const Nat& fineness() const { return _fineness; }
     Void set_fineness(Nat value) { _fineness = value; } 
     Void set_d_type(DiscretizationHybridType type) { _discretization_type = type; }

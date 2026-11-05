@@ -38,6 +38,7 @@
 #include "numeric/builtin.hpp"
 #include "paving/grid.hpp"
 #include "symbolic/variable.hpp"
+#include "symbolic/space.hpp"
 
 namespace Ariadne {
 
@@ -51,10 +52,10 @@ class Scalings {
     Map<Identifier,ExactDouble> _scalings;
   public:
     Scalings(ApproximateDouble default_scaling)
-        : _default_scaling(cast_exact(default_scaling)), _scalings() { }
+        : _default_scaling(cast_exact(default_scaling)), _scalings() { ARIADNE_PRECONDITION(decide(default_scaling>0)); }
     Scalings(ExactDouble default_scaling, Map<RealVariable,ExactDouble> const& scalings);
     Void set_scaling(RealVariable const& var, ApproximateDouble scal) {
-        ARIADNE_ASSERT(decide(scal>0)); _scalings[var.name()]=cast_exact(scal); }
+        ARIADNE_PRECONDITION(decide(scal>0)); _scalings[var.name()]=cast_exact(scal); }
     ExactDouble scaling(const RealVariable& var) const {
         return (this->_scalings.has_key(var.name())) ? this->_scalings[var.name()] : this->_default_scaling; }
     Grid grid(RealSpace const& spc) const;
@@ -65,14 +66,17 @@ class Scalings {
 inline Scalings::Scalings(ExactDouble default_scaling, Map<RealVariable,ExactDouble> const& scalings)
     : _default_scaling(default_scaling), _scalings()
 {
-    ARIADNE_ASSERT(default_scaling>0);
+    ARIADNE_PRECONDITION(default_scaling>0);
     for(auto var_scal : scalings) {
+        ARIADNE_PRECONDITION(var_scal.second>0);
         this->_scalings.insert(var_scal.first.name(),var_scal.second);
     }
 }
 
 inline Grid Scalings::grid(RealSpace const& spc) const {
-    return Grid(Vector<ExactDouble>(spc.dimension(),[this,&spc](SizeType i){return this->scaling(spc[i]);}));
+    Vector<ExactDouble> lengths(spc.dimension(),1.0_x);
+    for(SizeType i=0; i<spc.dimension(); ++i) { lengths[i]=this->scaling(spc[i]); }
+    return Grid(lengths);
 }
 
 } // namespace Ariadne

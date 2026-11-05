@@ -24,6 +24,7 @@
 #include "evolution/first_order_pde.hpp"
 
 #include <cmath>
+#include <algorithm>
 #include <limits>
 
 #include "numeric/floatdp.hpp"
@@ -39,11 +40,11 @@
 
 namespace Ariadne {
 
-// The original discretisation counts truncate positive floating-point values.
-// Validate their range before the explicit floating-point-to-integer conversion.
+// All callers supply a clamped logarithm, a positive power of two, or that
+// power times tmax=1/4, hence a nonnegative value. The finite upper bound
+// also rejects NaN and positive infinity before floating-to-integer conversion.
 template<class IntegerType> IntegerType discretisation_count(double value) {
-    ARIADNE_ASSERT_MSG(std::isfinite(value) && value>=0.0
-                       && value<static_cast<double>(std::numeric_limits<IntegerType>::max()),
+    ARIADNE_PRECONDITION_MSG(value<static_cast<double>(std::numeric_limits<IntegerType>::max()),
                        "Invalid or out-of-range PDE discretisation count: "<<value);
     return static_cast<IntegerType>(value);
 }
@@ -61,15 +62,6 @@ template<class X> decltype(auto) sup_norm(Matrix<X> const& A) {
     return s;
 }
 
-template<class IVL> decltype(mag(declval<IVL>())) mag(Box<IVL> const& bx) {
-    assert(bx.dimension()>0);
-    auto r=mag(bx[0]);
-    for(SizeType i=1; i!=bx.dimension(); ++i) {
-        r=max(r,mag(bx[i]));
-    }
-    return r;
-}
-
 template<class X> decltype(auto) mag(Differential<X> const& d) {
     auto r=mag(d.value());
     for (auto term : d.expansion()) {
@@ -84,10 +76,6 @@ template<class X> decltype(auto) mag(Vector<X> const& v) {
         r=max(r,mag(v[i]));
     }
     return r;
-}
-
-decltype(auto) mag_range(EffectiveVectorMultivariateFunction const& f, UpperBoxType const& bx) {
-    return mag(apply(f,bx));
 }
 
 template<class X0, class... XS> decltype(auto) maxs(X0 const& x0, XS const& ... xs) { return max(x0,maxs(xs...)); }
@@ -115,7 +103,6 @@ first_order_pde(FirstOrderPDE const& pde, EffectiveVectorMultivariateFunction co
     Array<Matrix<Real>>const& rBs=pde.spatial_matrices();
     Array<DiagonalMatrix<Real>>const& rDs=pde.characteristic_values();
     Array<Matrix<Real>>const& rTs=pde.characteristic_transformations();
-    EffectiveVectorMultivariateFunction const& f=pde.source();
 
     typedef RawFloat<PR> X;
 
@@ -127,13 +114,11 @@ first_order_pde(FirstOrderPDE const& pde, EffectiveVectorMultivariateFunction co
     DimensionType n = rA.row_size(); // Number of unknown functions u
     DimensionType m = rBs.size(); // Number of state variables x
 
-    ARIADNE_ASSERT(rA.row_size()==n);  ARIADNE_ASSERT(rA.column_size()==n);
-    ARIADNE_ASSERT(rBs.size()==m);
-    for (DimensionType i=0; i!=m; ++i) { ARIADNE_ASSERT(rBs[i].row_size()==n);  ARIADNE_ASSERT(rBs[i].column_size()==n); }
-    ARIADNE_ASSERT(f.argument_size()==m+1); ARIADNE_ASSERT(f.result_size()==n);
-    ARIADNE_ASSERT(phi0.argument_size()==m); ARIADNE_ASSERT(phi0.result_size()==n);
-
-    ARIADNE_ASSERT_MSG(m==2, "FirstOrderPDE solver currently supports exactly two spatial dimensions");
+    // pde.validate() establishes all matrix, source and direction dimensions.
+    // The initial data and the supported spatial dimension are caller contracts.
+    ARIADNE_PRECONDITION(phi0.argument_size()==m);
+    ARIADNE_PRECONDITION(phi0.result_size()==n);
+    ARIADNE_PRECONDITION_MSG(m==2, "FirstOrderPDE solver currently supports exactly two spatial dimensions");
 
 
     Matrix<Bounds<X>> A(rA,pr);
@@ -152,13 +137,15 @@ first_order_pde(FirstOrderPDE const& pde, EffectiveVectorMultivariateFunction co
     auto mag_ddphi = mag(ddphi);
 
     PositiveUpperBound<X> error_constant = 2u*sqrt(PositiveUpperBound<X>(cndA * max_nrm * mag_ddphi));
-    Nat N = discretisation_count<Nat>(log2((error_constant/tolerance).get_d())+1);
+    // A minimum of four cells ensures at least one step reaches tmax=1/4,
+    // including constant initial data whose error constant is zero.
+    Nat N = std::max(Nat(2),discretisation_count<Nat>(std::max(0.0,log2((error_constant/tolerance).get_d())+1)));
 
     SizeType two_pow_N = discretisation_count<SizeType>(std::pow(2.0,N));
     Positive<X> h(Dyadic(1,N),pr);
 
     auto courant_nrm = 1/(1/sup_norm(invA*B0)+1/sup_norm(invA*B1));
-    Nat L = discretisation_count<Nat>(log2(courant_nrm.get_d())+1);
+    Nat L = discretisation_count<Nat>(std::max(0.0,log2(courant_nrm.get_d())+1));
     Positive<X> tau(Dyadic(1,N+L),pr);
 
     Nat steps=discretisation_count<Nat>((tmax*pow(Natural(2u),N+L)).get_d());
@@ -175,8 +162,7 @@ first_order_pde(FirstOrderPDE const& pde, EffectiveVectorMultivariateFunction co
     Vector<Bounds<X>> zbn(n,zb);
     Vector<X> x(m,pr);
 
-    // FIXME: Relax size of rTs
-    assert(rTs.size()==2);
+    // validate() gives rTs.size()==m, and the spatial contract above gives m==2.
     Array<Matrix<Bounds<X>>> Ts(rTs.size(), [&](SizeType i){return Matrix<Bounds<X>>(rTs[i],pr);});
     Array<Matrix<Bounds<X>>> invTs(Ts.size(), [&](SizeType i){return inverse(Ts[i]);});
 

@@ -1,7 +1,9 @@
 include(CTest)
 set(UNIT_TESTS
+    test_orbit_collections
+    test_scalings
+    test_hybrid_time
     test_hybrid_enclosure
-    test_hybrid_evolution
     test_hybrid_evolver
     test_hybrid_simulator
     test_first_order_pde
@@ -10,6 +12,7 @@ set(UNIT_TESTS
     test_orbit_evolution_header
     test_differential_inclusion_evolver
     test_enclosure
+    test_enclosure_operations
     test_enclosure_precision
     test_iterated_map_evolver
     test_vector_field_evolver

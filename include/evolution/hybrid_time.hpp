@@ -30,6 +30,7 @@
 #define ARIADNE_HYBRID_TIME_HPP
 
 #include "numeric/numeric.hpp"
+#include "utility/container.hpp"
 #include "system/discrete_event.hpp"
 
 namespace Ariadne {

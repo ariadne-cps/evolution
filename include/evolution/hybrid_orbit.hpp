@@ -91,6 +91,8 @@ class Orbit<Vector<HybridApproximatePoint>>
   public:
     Orbit(const Vector<HybridApproximatePoint>& vhpt);
     Void insert(HybridTime ht, const HybridApproximatePoint& hpt, SizeType setNumber);
+    //! The number of independent trajectories represented by this orbit.
+    SizeType number_of_trajectories() const { return _curves_ptr->size(); }
     SizeType size(SizeType setNumber);
     const InterpolatedCurve& curve(Nat setNumber, Nat step);
     const List<HybridInterpolatedCurve>& curves(Nat setNumber) { return this->_curves_ptr->at(setNumber); }

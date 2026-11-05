@@ -77,12 +77,12 @@ class EnclosureConfiguration {
     explicit EnclosureConfiguration(ValidatedFunctionPatchFactory::Interface const& function_factory, SizeType reconditioning_num_blocks = 3u)
         : EnclosureConfiguration(ValidatedFunctionPatchFactory(function_factory.clone()),reconditioning_num_blocks) { }
     EnclosureConfiguration(ValidatedFunctionPatchFactory function_factory, Paver paver, SizeType reconditioning_num_blocks = 3u)
-        : _function_factory(function_factory), _paver(paver), _reconditioning_num_blocks(reconditioning_num_blocks) { }
+        : _function_factory(function_factory), _paver(paver), _reconditioning_num_blocks(reconditioning_num_blocks) { ARIADNE_PRECONDITION(reconditioning_num_blocks>0u); }
     ValidatedFunctionPatchFactory const& function_factory() const { return _function_factory; }
     Paver const& paver() const { return _paver; }
     SizeType reconditioning_num_blocks() const { return _reconditioning_num_blocks; }
     EnclosureConfiguration& set_paver(Paver paver) { _paver=paver; return *this; }
-    EnclosureConfiguration& set_reconditioning_num_blocks(SizeType num_blocks) { _reconditioning_num_blocks = num_blocks; return *this; }
+    EnclosureConfiguration& set_reconditioning_num_blocks(SizeType num_blocks) { ARIADNE_PRECONDITION(num_blocks>0u); _reconditioning_num_blocks = num_blocks; return *this; }
     friend OutputStream& operator<<(OutputStream& os, EnclosureConfiguration const& ec);
 };
 
@@ -96,6 +96,9 @@ List<Identifier> canonical_variable_names(const List<EnclosureVariableKind>& vks
 class Enclosure
     : public Drawable2dInterface
 {
+    // Public entry points validate dimensions before mutation. Factory creation,
+    // composition and restriction preserve argument dimensions; parameter
+    // extension embeds every map and appends its variable kind together.
     ExactBoxType _domain;
     EffectiveVectorMultivariateFunction _auxiliary_mapping;
     ValidatedVectorMultivariateFunctionPatch _state_function;
@@ -103,7 +106,6 @@ class Enclosure
     ValidatedScalarMultivariateFunctionPatch _dwell_time_function;
     List<ValidatedConstraintModel> _constraints;
     mutable ExactBoxType _reduced_domain;
-    mutable Bool _is_fully_reduced;
 
     List<EnclosureVariableKind> _variable_kinds;
 
@@ -176,6 +178,9 @@ class Enclosure
     Void substitute(SizeType j, ValidatedScalarMultivariateFunctionPatch v);
     //! \brief Substitutes the expression \f$x_j=c\f$ into the function and constraints.
     Void substitute(SizeType j, FloatDP c);
+
+    //! \brief Replace the absolute time map, preserving the dwell time and state.
+    Void set_time_function(ValidatedScalarMultivariateFunctionPatch const& time);
 
     //! \brief Set the time function to zero.
     Void clear_time();
@@ -284,7 +289,7 @@ class Enclosure
     Void reduce() const;
     //! \brief Reconditions the set to give an over-approximation with a simpler representation.
     Void recondition();
-    //! \brief Simplifies the representation by changing all uniform errors into independent variables.
+    //! \brief Changes uniform errors in state, absolute time and dwell time into independent variables.
     Void uniform_error_recondition();
     //! \brief Simplifies the representation by choosing most significant independent variables to keep, and merging the rest into a single error for each component.
     Void kuhn_recondition();
@@ -330,7 +335,6 @@ class Enclosure
     //! \brief Introduces a new independent variable with values in the interval \a ivl.
     //! Equivalent to constructing the set \f$S\times I\f$.
     Void _unchecked_new_variable(ExactIntervalType ivl, EnclosureVariableKind vk);
-    Void _check() const;
   private:
     friend Enclosure product(const Enclosure&, const ExactIntervalType&);
     friend Enclosure product(const Enclosure&, const ExactBoxType&);
@@ -406,6 +410,7 @@ class LabelledEnclosure
     const RealSpace auxiliary_space() const;
     const RealSpace state_auxiliary_space() const;
     const RealSpace state_time_auxiliary_space() const;
+    ValidatedVectorMultivariateFunctionPatch const state_time_auxiliary_function() const;
 
     Void set_auxiliary(const RealSpace& spc, const EffectiveVectorMultivariateFunction& aux);
 

@@ -23,6 +23,7 @@
  */
 
 #include <typeinfo>
+#include <algorithm>
 
 #include "numeric/numeric.hpp"
 #include "algebra/vector.hpp"
@@ -55,8 +56,6 @@ inline PositiveValidatedUpperNumber mag(PositiveValidatedUpperNumber y) { return
 static const FloatDP zero={0,dp};
 
 inline auto operator+(Int n, FloatDPBounds x) -> decltype(FloatDP(n,dp)+x) { return FloatDP(n,dp)+x; }
-inline auto operator-(Int n, FloatDPBounds x) -> decltype(FloatDP(n,dp)-x) { return FloatDP(n,dp)-x; }
-inline auto operator/(FloatDP x, Nat n) -> decltype(x/FloatDP(n,dp)) { return x/FloatDP(n,dp); }
 
 template<class PR> inline auto operator*(FloatUpperBound<PR> x1, PositiveFloat<PR> x2) -> FloatUpperBound<PR> {
     return FloatUpperBound<PR>(mul(up,x1._u,x2._v)); }
@@ -82,6 +81,7 @@ OutputStream& operator<<(OutputStream& os, const CrossingKind& crk) {
         case CrossingKind::DEGENERATE: os<<"DEGENERATE"; break;
         case CrossingKind::POSITIVE: os<<"POSITIVE"; break;
         case CrossingKind::NEGATIVE: os<<"NEGATIVE"; break;
+        case CrossingKind::MONOTONE: os<<"MONOTONE"; break;
         case CrossingKind::INCREASING: os<<"INCREASING"; break;
         case CrossingKind::DECREASING: os<<"DECREASING"; break;
         case CrossingKind::CONVEX: os<<"CONVEX"; break;
@@ -95,6 +95,8 @@ OutputStream& operator<<(OutputStream& os, const CrossingKind& crk) {
 OutputStream& operator<<(OutputStream& os, const StepKind& stpk) {
     switch(stpk) {
         case StepKind::CONSTANT_EVOLUTION_TIME: os<<"CONSTANT_EVOLUTION_TIME"; break;
+        case StepKind::SPACE_DEPENDENT_EVOLUTION_TIME: os<<"SPACE_DEPENDENT_EVOLUTION_TIME"; break;
+        case StepKind::TIME_DEPENDENT_EVOLUTION_TIME: os<<"TIME_DEPENDENT_EVOLUTION_TIME"; break;
         case StepKind::SPACETIME_DEPENDENT_EVOLUTION_TIME: os<<"SPACETIME_DEPENDENT_EVOLUTION_TIME"; break;
         case StepKind::PARAMETER_DEPENDENT_EVOLUTION_TIME: os<<"PARAMETER_DEPENDENT_EVOLUTION_TIME"; break;
         case StepKind::PARAMETER_DEPENDENT_FINISHING_TIME: os<<"PARAMETER_DEPENDENT_FINISHING_TIME"; break;
@@ -117,7 +119,7 @@ OutputStream& operator<<(OutputStream& os, const FinishingKind& fnshk) {
 OutputStream& operator<<(OutputStream& os, const TransitionData& transition) {
     os << "kind="<<transition.event_kind<<", guard="<<transition.guard_function<<", "
                  "target="<<transition.target;
-    if(transition.event_kind!=EventKind::INVARIANT) { os<<", reset="<<transition.reset_function; }
+    if(is_activating(transition.event_kind)) { os<<", reset="<<transition.reset_function; }
     return os;
 }
 
@@ -221,7 +223,7 @@ Set<DiscreteEvent> activating_events(const Map<DiscreteEvent,TransitionData>& tr
 
 Void set_auxiliary(HybridAutomatonInterface const& system, HybridEnclosure& enclosure) {
     DiscreteLocation initial_location=enclosure.location();
-    ARIADNE_ASSERT(system.state_space().has_location(initial_location))
+    ARIADNE_PRECONDITION(system.state_space().has_location(initial_location))
     RealSpace auxiliary_space=system.continuous_auxiliary_space(initial_location);
     EffectiveVectorMultivariateFunction auxiliary_function=system.auxiliary_function(initial_location);
     enclosure.set_auxiliary(auxiliary_space.variables(),auxiliary_function);
@@ -280,9 +282,20 @@ orbit(const HybridEnclosure& initial,
     ARIADNE_PRECONDITION(this->system().state_auxiliary_space()[initial.location()] == initial.state_auxiliary_space())
 
     auto result = std::make_shared<SynchronisedOrbit>(initial);
-    WorkloadType workload([termination](std::pair<HybridEnclosure,Bool> const& enclosure_jumped, SharedPointer<ProgressIndicator> indicator){
-                              indicator->update_current(enclosure_jumped.first.time_range().lower_bound().get_d());
-                              indicator->update_final(termination.maximum_time().get_d());
+    const double progress_start=initial.time_range().lower_bound().get_d();
+    const double progress_duration=termination.maximum_time().get_d()-progress_start;
+    WorkloadType workload([progress_start,progress_duration](std::pair<HybridEnclosure,Bool> const& enclosure_jumped, SharedPointer<ProgressIndicator> indicator){
+                              // Initial clocks may be negative or already past the horizon.
+                              // ProgressIndicator requires a nonnegative numerator and a
+                              // positive denominator when converting its ratio to unsigned.
+                              if(progress_duration>0.0) {
+                                  const double elapsed=enclosure_jumped.first.time_range().lower_bound().get_d()-progress_start;
+                                  indicator->update_current(std::clamp(elapsed,0.0,progress_duration));
+                                  indicator->update_final(progress_duration);
+                              } else {
+                                  indicator->update_current(1.0);
+                                  indicator->update_final(1.0);
+                              }
                           },
                           std::bind_front(&HybridEvolverBase::_process_working_set,this),termination,semantics,result);
     workload.append({initial,true}).process();
@@ -391,6 +404,7 @@ _log_summary(HybridEnclosure const& starting_set, SharedPointer<SynchronisedOrbi
     std::streamsize old_precision = std::clog.precision();
     LOGGING_PRINTLN(
             "#r="<<std::setw(5)<<std::left<<result->reach_size()
+            <<" #i="<<std::setw(5)<<std::left<<result->intermediate_size()
             <<" #f="<<std::setw(4)<<std::left<<result->final_size()
             <<" #e="<<std::setw(3)<<std::left<<starting_set.previous_events().size()
             <<" #p="<<std::setw(2)<<std::left<<starting_set.number_of_parameters()
@@ -549,8 +563,9 @@ _compute_flow(EffectiveVectorMultivariateFunction dynamic,
     ValidatedVectorMultivariateFunctionPatch flow_model=integrator.flow_step(dynamic,initial_box,suggest(maximum_step_size));
     LOGGING_PRINTLN_AT(1,"twosided_flow_model="<<flow_model);
     ExactBoxType flow_domain=flow_model.domain();
-    StepSizeType step_size=static_cast<StepSizeType>(flow_domain[flow_domain.size()-1u].upper_bound());
-    ARIADNE_ASSERT(step_size<=maximum_step_size);
+    // IntegratorInterface permits an actual step larger than its suggestion.
+    // Restrict the validated flow to the configured maximum before using it.
+    StepSizeType step_size=min(static_cast<StepSizeType>(flow_domain[flow_domain.size()-1u].upper_bound()),maximum_step_size);
     flow_domain[flow_domain.size()-1u]=ExactIntervalType(0,step_size);
     flow_model=restriction(flow_model,flow_domain);
     LOGGING_PRINTLN_AT(1,"flow_model="<<flow_model);
@@ -612,7 +627,6 @@ _compute_crossings(Set<DiscreteEvent> const& active_events,
     const EquationSolverInterface& solver=*this->_solver_ptr;
 
     Map<DiscreteEvent,CrossingData> crossings;
-    crossings.clear();
 
     ExactBoxType flow_spacial_domain=project(flow.domain(),range(0,flow.argument_size()-1u));
     ExactIntervalType flow_time_domain=flow.domain()[flow.argument_size()-1u];
@@ -647,12 +661,6 @@ _compute_crossings(Set<DiscreteEvent> const& active_events,
                 crossings[event]=CrossingData(CrossingKind::TRANSVERSE,crossing_time);
                 LOGGING_PRINTLN_AT(2,"crossing_time="<<crossing_time);
             }
-            catch(const UnknownSolutionException& e) {
-                // If the crossing time cannot be computed, then we can still
-                // use the fact that the crossing occurs as soon as $g(x(t))=0$.
-                LOGGING_PRINTLN_AT(2,"Error in computing crossing time for event "<<*event_iter<<":"<<e.what());
-                crossings[event]=CrossingData(CrossingKind::INCREASING);
-            }
             catch(const EquationSolverException& e) {
                 // If the crossing time cannot be computed, then we can still
                 // use the fact that the crossing occurs as soon as $g(x(t))=0$.
@@ -661,8 +669,7 @@ _compute_crossings(Set<DiscreteEvent> const& active_events,
             }
             catch(const std::runtime_error& e) {
                 LOGGING_PRINTLN_AT(2,"Unexpected error in computing crossing time for event "<<*event_iter<<": "<<e.what());
-                ARIADNE_FAIL_MSG("ERROR!!");
-                crossings[event]=CrossingData(CrossingKind::INCREASING);
+                throw;
             }
         } else if(definitely(guard_derivative_range.upper_bound()<zero)) {
             // If the guard derivative is strictly negative over the bounding box for the flow,
@@ -726,7 +733,7 @@ _compute_crossings(Set<DiscreteEvent> const& active_events,
                     ValidatedScalarMultivariateFunctionPatch critical_time=solver.implicit(compose(guard_derivative,flow),flow_spacial_domain,flow_time_domain);
                     UpperIntervalType critical_time_range=critical_time.range();
                     LOGGING_PRINTLN_AT(2,"critical_time_range="<<critical_time_range);
-                    if (possibly(critical_time.error()>1e-8_x)) {
+                    if (possibly(critical_time.error()>1e-8_pr)) {
                         LOGGING_PRINTLN_AT(2,event<<": critical_time: error="<<critical_time.error()<<", range="<<critical_time.range()); }
 
                     HybridEnclosure evolve_set_at_critical_time=initial_set;
@@ -741,7 +748,7 @@ _compute_crossings(Set<DiscreteEvent> const& active_events,
                     LOGGING_PRINTLN_AT(2,"guard_range_at_critical_time="<<guard_range_at_critical_time);
                     if(definitely(guard_range_at_critical_time.upper_bound()<0)) {
                         // No crossing
-                        const_cast<Set<DiscreteEvent>&>(active_events).erase(event); // WARNING: Maybe removing event is unsafe
+                        // Omit this event from the returned crossing map.
                     } else if(definitely(guard_range_at_critical_time.lower_bound()>0)) {
                         LOGGING_PRINTLN_AT(2,"guard range eventually positive");
                         // Transverse crossing
@@ -936,9 +943,10 @@ _apply_guard_step(HybridEnclosure& set,
                 case CrossingKind::NEGATIVE:
                 case CrossingKind::POSITIVE:
                 case CrossingKind::DECREASING:
-                    {
-                        ARIADNE_WARN("Crossing "<<crossing_data<<" does not introduce additional restrictions on flow");
-                    }
+                    // There is no future entry into a decreasing guard.
+                    // Only its initially active subset may jump. In the
+                    // constant-sign cases activation is either empty or all.
+                    jump_set.new_activation(event,transition_data.guard_function);
                     break;
                 default:
                     ARIADNE_FAIL_MSG("Unhandled crossing kind in "<<crossing_data);
@@ -992,9 +1000,12 @@ _apply_guard(List<HybridEnclosure>& sets,
         starting_state_function = embed(starting_state_function,elapsed_time_domain);
     }
 
-    List<HybridEnclosure>::Iterator end=sets.end(); // Store current end set since we may adjoin new sets at end
-    for(List<HybridEnclosure>::Iterator iter=sets.begin(); iter!=end; ++iter) {
-        HybridEnclosure& set=*iter;
+    // List is vector-backed: appending invalidates end() and may invalidate all
+    // iterators/references. Process only the original sets, reacquiring each by
+    // index after any append in the previous iteration.
+    const SizeType original_size=sets.size();
+    for(SizeType set_index=0; set_index!=original_size; ++set_index) {
+        HybridEnclosure& set=sets[set_index];
         LOGGING_PRINTLN_AT(1,"set.parameter_domain()="<<set.parameter_domain());
         ARIADNE_ASSERT(set.parameter_domain()==elapsed_time_function.domain());
         switch(guard_crossing_data.crossing_kind) {
@@ -1016,19 +1027,17 @@ _apply_guard(List<HybridEnclosure>& sets,
                 ValidatedScalarMultivariateFunctionPatch maximal_guard_function
                     = compose( guard_function, unchecked_compose( flow, join(starting_state_function, critical_time_function) ) );
                 UpperIntervalType guard_range_at_critical_time = guard_crossing_data.guard_range_at_critical_time;
-                ARIADNE_ASSERT_MSG(starting_state_function.argument_size()==set.parameter_domain().size(),
-                                   starting_state_function<<" "<<set);
-                ARIADNE_ASSERT_MSG(critical_time_function.argument_size()==set.parameter_domain().size(),
-                                   critical_time_function<<" "<<set);
-                ARIADNE_ASSERT_MSG(maximal_guard_function.argument_size()==set.parameter_domain().size(),
-                                   maximal_guard_function<<" "<<set);
-                ARIADNE_ASSERT_MSG(final_guard_function.argument_size()==set.parameter_domain().size(),
-                                   final_guard_function<<" "<<set);
+                // Embedding above gives the starting map the elapsed-time
+                // domain; composition and join preserve that argument domain.
+                // The per-set domain check already establishes compatibility.
 
                 // If no points in the set arise from trajectories which will later leave the progress set,
                 // then we only need to look at the maximum value of the guard.
                 HybridEnclosure eventually_hitting_set=set;
-                eventually_hitting_set.new_parameter_constraint( event, elapsed_time_function <= critical_time_function );
+                // Test whether the trajectory can hit at any future time
+                // from its starting state. An endpoint already beyond the
+                // maximum may have crossed and returned; it is not a miss.
+                eventually_hitting_set.new_parameter_constraint( event, zero <= critical_time_function );
                 eventually_hitting_set.new_parameter_constraint( event, maximal_guard_function >= zero);
                 LOGGING_PRINTLN_AT(1,"eventually_hitting_set.is_empty()="<<eventually_hitting_set.is_empty());
                 if(definitely(eventually_hitting_set.is_empty())) {
@@ -1136,7 +1145,7 @@ _process_jumped_set(WorkloadType::Access& workload,
     LOGGING_PRINTLN_AT(2,"initial_set="<<initial_set);
 
     LOGGING_RUN_MUTED(auto time_range = initial_set.time_range());
-    if(definitely(time_range.lower_bound()>=final_time)) {
+    if(definitely(time_range.lower_bound()>final_time)) {
         ARIADNE_WARN("initial_set.time_range()="<<time_range<<" which exceeds final time="<<final_time);
         return;
     }
@@ -1152,6 +1161,16 @@ _process_jumped_set(WorkloadType::Access& workload,
     LOGGING_PRINTLN_AT(2,"dynamic="<<dynamic);
     LOGGING_PRINTLN_AT(2,"initial_set "<<initial_set);
     LOGGING_PRINTLN_AT(2,"transitions="<<transitions);
+
+    if(definitely(time_range.lower_bound()>=final_time)) {
+        // The closed horizon includes points at t=T, including a reset that
+        // lands exactly there. Retain its invariant-valid slice before any
+        // further continuous or discrete evolution.
+        this->_apply_invariants(initial_set,transitions);
+        initial_set.set_time(final_time);
+        if(!definitely(initial_set.is_empty())) { result->adjoin_final(initial_set); }
+        return;
+    }
 
     // Test if maximum number of steps has been exceeded; if so, the set should be discarded.
     // NOTE: We could also place a test for the maximum number of steps being reaches which computing jump sets
@@ -1231,10 +1250,12 @@ _evolution_step(WorkloadType::Access& workload,
 
     // Test to see if set requires reconditioning
     if(this->_configuration_ptr->enable_reconditioning() &&
-            possibly(norm(starting_set.state_function().errors()) > this->_configuration_ptr->maximum_spacial_error())) {
+            (possibly(norm(starting_set.state_function().errors()) > this->_configuration_ptr->maximum_spacial_error())
+             || possibly(starting_set.time_function().error() > this->_configuration_ptr->maximum_spacial_error())
+             || possibly(starting_set.continuous_set().dwell_time_function().error() > this->_configuration_ptr->maximum_spacial_error()))) {
         LOGGING_PRINTLN_AT(1,"reconditioning: errors "<<starting_set.state_function().errors());
         HybridEnclosure reconditioned_set=starting_set;
-        reconditioned_set.recondition();
+        this->_recondition(reconditioned_set);
         workload.append({reconditioned_set,false});
         return;
     }
@@ -1280,6 +1301,9 @@ _evolution_step(WorkloadType::Access& workload,
     // Compute the kind of crossing (increasing, convex, etc);
     Map<DiscreteEvent,CrossingData> crossings =
         this->_compute_crossings(active_events,dynamic,guard_functions,flow_model,starting_set);
+    // Crossing computation is read-only; prune conservative candidates here,
+    // after iteration has finished, using the events that can actually cross.
+    active_events=crossings.keys();
     LOGGING_PRINTLN_AT(1,"crossings="<<crossings);
 
     // Compute end conditions for flow
@@ -1439,7 +1463,8 @@ _apply_evolution_step(WorkloadType::Access& workload,
         {
             HybridEnclosure& reach_set=*reach_set_iter;
             //reach_set.continuous_set().reduce();
-            if(possibly(reach_set.time_range().upper_bound()>timing_data.final_time)) {
+            // The closed reach interval also contains the final time at its upper endpoint.
+            if(possibly(reach_set.time_range().upper_bound()>=FloatDPBounds(timing_data.final_time,dp))) {
                 HybridEnclosure final_set=reach_set;
                 final_set.set_time(timing_data.final_time);
                 if(timing_data.finishing_kind!=FinishingKind::BEFORE_FINAL_TIME && !definitely(final_set.is_empty())) {
@@ -1611,6 +1636,43 @@ GeneralHybridEvolver::GeneralHybridEvolver(
 }
 
 
+GeneralHybridEvolver::GeneralHybridEvolver(GeneralHybridEvolver const& other)
+    : HybridEvolverBase(other.system(),other.function_factory())
+{
+    this->_copy_configuration_from(other);
+}
+
+GeneralHybridEvolver& GeneralHybridEvolver::operator=(GeneralHybridEvolver const& other)
+{
+    if(this!=&other) {
+        this->_sys_ptr.reset(other.system().clone());
+        this->set_function_factory(other.function_factory());
+        this->_copy_configuration_from(other);
+    }
+    return *this;
+}
+
+Void GeneralHybridEvolver::_copy_configuration_from(GeneralHybridEvolver const& other)
+{
+    // The configuration stores its owning evolver by reference. Rebuild that
+    // relationship so copies remain independent and outlive the original.
+    auto integrator=std::shared_ptr<IntegratorInterface>(other._integrator_ptr->clone());
+    auto solver=std::shared_ptr<EquationSolverInterface>(other._solver_ptr->clone());
+    this->_configuration_ptr.reset(new GeneralHybridEvolverConfiguration(*this));
+    auto const& source=other.configuration();
+    auto& target=this->configuration();
+    target.set_flow_accuracy(source.flow_accuracy());
+    target.set_maximum_step_size(source.maximum_step_size());
+    target.set_maximum_enclosure_radius(source.maximum_enclosure_radius());
+    target.set_maximum_spacial_error(source.maximum_spacial_error());
+    target.set_enable_reconditioning(source.enable_reconditioning());
+    target.set_enable_subdivisions(source.enable_subdivisions());
+    this->_integrator_ptr=std::move(integrator);
+    this->_solver_ptr=std::move(solver);
+    this->ALLOW_CREEP=other.ALLOW_CREEP;
+    this->ALLOW_UNWIND=other.ALLOW_UNWIND;
+}
+
 TimingData
 GeneralHybridEvolver::
 _estimate_timing(Set<DiscreteEvent>&,
@@ -1666,16 +1728,9 @@ _estimate_timing(Set<DiscreteEvent>&,
         // Some of the points may already have reached the final time.
         // Don't try anything fancy, just do a simple constant time step.
         if(definitely(remaining_time_range.upper_bound()<=step_size)) {
-            if(false) {
-                // Within one time step we can go beyond final time
-                result.step_kind=StepKind::CONSTANT_EVOLUTION_TIME;
-                result.finishing_kind=FinishingKind::AFTER_FINAL_TIME;
-                temporal_evolution_time=FloatDPBounds(step_size); //   remaining_time_range.upper_bound();
-            } else {
-                result.step_kind=StepKind::CONSTANT_FINISHING_TIME;
-                result.finishing_kind=FinishingKind::AT_FINAL_TIME;
-                temporal_evolution_time=final_time_bounds-time_identity;
-            }
+            result.step_kind=StepKind::CONSTANT_FINISHING_TIME;
+            result.finishing_kind=FinishingKind::AT_FINAL_TIME;
+            temporal_evolution_time=final_time_bounds-time_identity;
         } else {
             result.step_kind=StepKind::CONSTANT_EVOLUTION_TIME;
             result.finishing_kind=FinishingKind::STRADDLE_FINAL_TIME;
@@ -1716,9 +1771,6 @@ _estimate_timing(Set<DiscreteEvent>&,
 
     ValidatedScalarMultivariateFunctionPatch spacial_evolution_time=this->function_factory().create_constant(state_domain,FloatDP(step_size));
 
-    // Select one of GUARD_CREEP or TIME_CREEP
-    static const Bool GUARD_CREEP=true;
-    static const Bool TIME_CREEP=false;
 
     Bool creep=false;
 
@@ -1794,49 +1846,7 @@ _estimate_timing(Set<DiscreteEvent>&,
 
     if(ALLOW_CREEP && creep==false) { LOGGING_PRINTLN("No creep"); }
 
-    if(TIME_CREEP && creep==true) {
-        // Compute reduced evolution time; note that for every remaining increasing crossing, we have
-        // crossing_time_range.lower_bound()>zero and crossing_time_range.upper_bound()>step_size.
-
-        for(Map<DiscreteEvent,CrossingData>::ConstIterator crossing_iter=crossings.begin();
-            crossing_iter!=crossings.end(); ++crossing_iter)
-        {
-            if(crossing_iter->second.crossing_kind==CrossingKind::TRANSVERSE) {
-                // Modify the crossing time function to be the smallest possible; this ensures that the evaluation time is
-                // essentially exact
-                ValidatedScalarMultivariateFunctionPatch lower_crossing_time=crossing_iter->second.crossing_time;
-                ValidatedErrorNumber crossing_time_error=lower_crossing_time.error();
-                lower_crossing_time.clobber();
-                // TODO: Remove use of casts
-                lower_crossing_time-=static_cast<Dyadic>(cast_exact(crossing_time_error.get(dp)));
-
-                // One possibility is to use quadratic restrictions
-                //   If 0<=x<=2h, then x(1-x/4h)<=min(x,h)
-                //   If 0<=x<=4h, then x(1-x/8h)<=min(x,2h)
-                // Formula below works if x<=2h
-                //   evolution_time=evolution_time*(crossing_time/result.step_size)*(1.0-crossing_time/(4*result.step_size));
-
-                // Prefer simpler linear restrictions.
-                // Multiply evolution time by crossing_time/max_crossing_time
-                spacial_evolution_time=spacial_evolution_time*lower_crossing_time/static_cast<Dyadic>(cast_exact(lower_crossing_time.range().upper_bound()));
-            }
-        }
-        // Erase increasing transverse crossings since these cannot occur
-        for(Map<DiscreteEvent,CrossingData>::Iterator crossing_iter=crossings.begin();
-            crossing_iter!=crossings.end(); )
-        {
-            if(crossing_iter->second.crossing_kind==CrossingKind::TRANSVERSE) {
-                crossings.erase(crossing_iter++);
-            } else {
-                ++crossing_iter;
-            }
-        }
-        LOGGING_PRINTLN("Creep step: spacial_evolution_time="<<spacial_evolution_time);
-        result.step_kind=StepKind::SPACETIME_DEPENDENT_EVOLUTION_TIME;
-        result.finishing_kind=FinishingKind::BEFORE_FINAL_TIME;
-    }
-
-    if(GUARD_CREEP && creep==true) {
+    if(creep) {
         // If an event is possible, but only some points reach the guard set
         // after a full time step, then terminating the evolution here will
         // cause a splitting of the enclosure set. To prevent this, attempt
@@ -1877,8 +1887,7 @@ _estimate_timing(Set<DiscreteEvent>&,
                 UpperIntervalType guard_derivative_range = compose(lie_derivative(guard_function,dynamic),flow).range();
 
                 FloatDPBounds alpha_val=(1+flow.step_size()*cast_exact(guard_derivative_range.lower_bound())/cast_exact(guard_range.lower_bound()));
-                FloatDP alpha=cast_exact(alpha_val);
-                ARIADNE_ASSERT(alpha_val.value()==alpha);
+                FloatDP alpha=alpha_val.value();
                 LOGGING_PRINTLN_AT(1,"step_size: "<<flow.step_size()<<", guard_range: "<<guard_range<<", guard_derivative_range: "<<guard_derivative_range<<", alpha: "<<alpha);
                 if(alpha>0 && alpha<=1) {
                     ValidatedScalarMultivariateFunctionPatch guard_creep_time;

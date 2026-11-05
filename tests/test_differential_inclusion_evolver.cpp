@@ -37,6 +37,7 @@
 #include "expression-set/expression_set.hpp"
 
 #include "macro/testing.hpp"
+#include "test_logging.hpp"
 
 using namespace Ariadne;
 
@@ -96,6 +97,7 @@ class TestDifferentialInclusionEvolver {
 };
 
 int main(int argc, const char* argv[]) {
+    redirect_test_logging_to_null();
     if (not DrawingCommandLineInterface().acquire(argc,argv)) return -1;
     TestDifferentialInclusionEvolver().test();
     return ARIADNE_TEST_FAILURES;

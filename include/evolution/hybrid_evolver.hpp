@@ -157,7 +157,7 @@ class HybridEvolverBase
     const ConfigurationType& configuration() const;
 
     //! \brief Change the configuration from a \a domain and \a lengths (NOT IMPLEMENTED).
-    virtual Void reconfigure(const HybridExactBoxes&, const HybridExactFloatVector&) { }
+    virtual Void reconfigure(const HybridExactBoxes&, const HybridExactFloatVector&) { ARIADNE_NOT_IMPLEMENTED; }
 
     //! \brief The class which constructs functions for the enclosures.
     const FunctionFactoryType function_factory() const;
@@ -709,6 +709,8 @@ class GeneralHybridEvolver
   public:
 
     GeneralHybridEvolver(const SystemType& system);
+    GeneralHybridEvolver(GeneralHybridEvolver const& other);
+    GeneralHybridEvolver& operator=(GeneralHybridEvolver const& other);
     GeneralHybridEvolver(const SystemType& system,
                          const FunctionFactoryType& factory);
     virtual GeneralHybridEvolver* clone() const { return new GeneralHybridEvolver(*this); }
@@ -723,6 +725,8 @@ class GeneralHybridEvolver
                      Map<DiscreteEvent,CrossingData>& crossings,
                      Map<DiscreteEvent,TransitionData> const& transitions,
                      HybridEnclosure const& initial_set) const;
+  private:
+    Void _copy_configuration_from(GeneralHybridEvolver const& other);
 };
 
 

@@ -89,6 +89,7 @@ template<class SYS, class ES, class TRM>
 class EvolverFactoryInterface
 {
   public:
+    virtual ~EvolverFactoryInterface() = default;
 
     //! \brief Create a copy of the factory.
     virtual EvolverFactoryInterface* clone() const = 0;

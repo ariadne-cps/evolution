@@ -1,4 +1,4 @@
-import pyariadne as a
+import pyariadne_evolution as a
 
 def test_evolution_bindings():
     names = ("Semantics", "Enclosure", "VectorFieldSimulator",
@@ -10,7 +10,7 @@ def test_evolution_bindings():
 
 
 def test_iterated_map_configuration():
-    from pyariadne import IteratedMap, IteratedMapEvolver, RealVariable, next
+    from pyariadne_evolution import IteratedMap, IteratedMapEvolver, RealVariable, next
     x = RealVariable("x")
     evolver = IteratedMapEvolver(IteratedMap([next(x) << x / 2]))
     config = evolver.configuration()

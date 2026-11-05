@@ -19,7 +19,7 @@ evolution capabilities with bounded scenarios:
 The Python program builds a contracting `IteratedMap`, computes one validated
 upper-semantics iteration using `IteratedMapEvolver`, and constructs the same
 discrete-only `HybridAutomaton` used in C++. Both examples use the installed
-`pyariadne` extension. `IteratedMapEvolverConfiguration` is exposed so that
+`pyariadne_evolution` extension. `IteratedMapEvolverConfiguration` is exposed so that
 its enclosure-radius and subdivision options can be configured.
 
 Python parity remains incomplete: the C++ tutorial also executes

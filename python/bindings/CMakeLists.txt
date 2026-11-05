@@ -20,4 +20,4 @@ target_link_libraries(pyariadne-evolution INTERFACE
     pyariadne-equation_solving
     pyariadne-integration
     pyariadne-system)
-ariadne_add_python_module(NAME evolution MODULE_SOURCE evolution_module.cpp)
+ariadne_add_python_module(NAME evolution MODULE_IMPORT_NAME pyariadne_evolution MODULE_SOURCE evolution_module.cpp)

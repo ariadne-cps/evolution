@@ -76,18 +76,6 @@ jobs:
         if: matrix.build_type == 'Release'
         run: cmake --install build --prefix "${{ runner.workspace }}/install"
 
-      - name: Run installed Python Evolution tutorial
-        if: matrix.build_type == 'Release'
-        shell: pwsh
-        working-directory: ${{ github.workspace }}/tutorial
-        run: |
-          $env:PYTHONPATH = "${{ runner.workspace }}\install\Lib\site-packages"
-          $env:PATH = "${{ runner.workspace }}\install\bin;$env:PATH"
-          python -c "import pyariadne; print(pyariadne.__file__)"
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          python tutorial_evolution.py
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-
       - name: Prepare C++ Evolution tutorial
         if: matrix.build_type == 'Release'
         shell: pwsh
@@ -105,3 +93,15 @@ jobs:
           $env:PATH = "${{ runner.workspace }}\install\bin;$env:PATH"
           & ".\build\tutorial_evolution.exe"
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Run installed Python Evolution tutorial
+        if: matrix.build_type == 'Release'
+        shell: pwsh
+        working-directory: ${{ github.workspace }}/tutorial
+        run: |
+          $env:PYTHONPATH = "${{ runner.workspace }}\install\Lib\site-packages"
+          $env:PATH = "${{ runner.workspace }}\install\bin;$env:PATH"
+          python -c "import pyariadne_evolution; print(pyariadne_evolution.__file__)"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python tutorial_evolution.py
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""Bounded discrete and hybrid Evolution workflows using installed pyariadne."""
+"""Bounded discrete and hybrid Evolution workflows using installed pyariadne_evolution."""
 
-from pyariadne import (
+from pyariadne_evolution import (
     DiscreteEvent, DiscreteLocation, HybridAutomaton, HybridSimulator,
     HybridTime, Integer, Rational, Real, Semantics, RealVariable,
     IteratedMap, IteratedMapEvolver, RealExpressionBoundedConstraintSet,

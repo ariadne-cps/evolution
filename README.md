@@ -32,11 +32,7 @@ The standalone build provides `ariadne-evolution`; the exported module target is
 
 ## Python bindings
 
-The `pyariadne-evolution` target composes the upstream Python bindings with the Evolution registrations. A standalone build creates a combined `pyariadne` extension and runs an Evolution smoke test with `ctest --test-dir build -L python --output-on-failure`. Python bindings are compiled across CI platforms; sanitizer jobs exclude Python import tests while retaining their compilation.
-
-## License
-
-Ariadne Evolution is distributed under the GNU General Public License v3.0. See [LICENSE](LICENSE).
+The `pyariadne-evolution` target composes the upstream Python bindings with the Evolution registrations. A standalone build creates a combined `pyariadne_evolution` extension and runs an Evolution smoke test with `ctest --test-dir build -L python --output-on-failure`. Python bindings are compiled across CI platforms; sanitizer jobs exclude Python import tests while retaining their compilation.
 
 ## Watertank benchmark
 

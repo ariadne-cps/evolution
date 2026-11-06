@@ -16,10 +16,11 @@ endif()
 if(EXISTS "${PROJECT_SOURCE_DIR}/.git")
     require_same_dependency_commit(Build CHAINS
         "build" "integration|build" "equation-solving|build"
-        "system|build" "system|hybrid|build")
+        "system|build" "system|hybrid|build" "system|neural-set|build")
     require_same_dependency_commit(Function CHAINS
         "integration|function" "equation-solving|function"
-        "system|hybrid|labelled|expression-set|symbolic|function")
+        "system|hybrid|labelled|expression-set|symbolic|function"
+        "system|neural-set|set|constraint-solving|nonlinear-programming|function")
 endif()
 
 setup_project()

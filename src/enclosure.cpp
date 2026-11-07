@@ -54,7 +54,7 @@
 
 #include "paving/paving_interface.hpp"
 #include "paving/paver.hpp"
-#include "paving/grid_paving.hpp"
+#include "paving/binary_tree_paving.hpp"
 
 #include "constraint-solving/constraint_solver.hpp"
 #include "nonlinear-programming/nonlinear_programming.hpp"

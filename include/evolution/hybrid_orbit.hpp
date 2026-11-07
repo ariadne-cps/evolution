@@ -54,10 +54,10 @@ template<class X> class Point;
 
 class Grid;
 class GridCell;
-class GridTreePaving;
+class BinaryTreePaving;
 class HybridGrid;
 class HybridGridCell;
-class HybridGridTreePaving;
+class HybridBinaryTreePaving;
 class HybridTime;
 
 class HybridAutomatonInterface;

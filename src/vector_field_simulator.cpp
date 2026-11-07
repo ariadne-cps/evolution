@@ -93,7 +93,7 @@ template<class X> List<LabelledPoint<X>> make_state_auxiliary_point(const List<L
     return pointLst;
 }
 
-GridTreePaving create_paving(UpperBoxType box, Space<Real> spc, subspace sspc) {
+BinaryTreePaving create_paving(UpperBoxType box, Space<Real> spc, subspace sspc) {
     for(auto const& entry : sspc) {
         ARIADNE_PRECONDITION(spc.contains(entry.first));
     }
@@ -120,17 +120,17 @@ GridTreePaving create_paving(UpperBoxType box, Space<Real> spc, subspace sspc) {
         origin[i] = tmpPointCenter[i];
     }
     Grid grid(origin, lengths);
-    GridTreePaving gridPaving(grid);
+    BinaryTreePaving gridPaving(grid);
 
     return gridPaving;
 }
 
-List<LabelledPoint<FloatDPApproximation>> create_point_list(GridTreePaving& paving, RealSpace spc, DiscretisationType discretisation_type, Nat mince_dimension){
+List<LabelledPoint<FloatDPApproximation>> create_point_list(BinaryTreePaving& paving, RealSpace spc, DiscretisationType discretisation_type, Nat mince_dimension){
 
     if(discretisation_type == DiscretisationType::Mince) paving.mince(mince_dimension);
     else if(discretisation_type == DiscretisationType::Recombine) paving.recombine();
 
-    GridTreePaving::ConstIterator iter = paving.begin();
+    BinaryTreePaving::ConstIterator iter = paving.begin();
     List<LabelledPoint<FloatDPApproximation>> result(paving.size(), LabelledPoint(spc, Point<FloatDPApproximation>()));
     SizeType k(0);
     for( ; iter != paving.end(); ++iter){
@@ -172,7 +172,7 @@ auto VectorFieldSimulator::orbit(const RealBoxType& init_bx, const TerminationTy
 auto VectorFieldSimulator::orbit(UpperBoxType& initial_box, const TerminationType& termination) const
 -> OrbitType
 {
-    GridTreePaving gridPaving = create_paving(initial_box, _system->state_space(), _configuration->get_subspace());
+    BinaryTreePaving gridPaving = create_paving(initial_box, _system->state_space(), _configuration->get_subspace());
     Nat subdivisions=_configuration->is_using_subspace() ? 0u : _configuration->num_subdivisions();
     gridPaving.adjoin_outer_approximation(initial_box,subdivisions);
     ApproximateListPointType pointList = create_point_list(gridPaving, _system->state_space(),

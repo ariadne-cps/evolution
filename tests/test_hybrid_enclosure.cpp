@@ -190,12 +190,12 @@ class TestHybridEnclosure : public Ariadne::Testing::ContextFixture {
         ARIADNE_TESTING_PROVE(full.str().find("HybridEnclosure")!=std::string::npos);
         MonolithicHybridSpace hybrid_space;
         hybrid_space.new_location(q,space);
-        HybridGridTreePaving paving{HybridGrid(HybridSpace(hybrid_space))};
+        HybridBinaryTreePaving paving{HybridGrid(HybridSpace(hybrid_space))};
         initial.adjoin_outer_approximation_to(paving,0u);
         ARIADNE_TESTING_PROVE(paving[q].size()>0u);
         MonolithicHybridSpace incompatible;
         incompatible.new_location(q,RealSpace({y,x}));
-        HybridGridTreePaving wrong{HybridGrid(HybridSpace(incompatible))};
+        HybridBinaryTreePaving wrong{HybridGrid(HybridSpace(incompatible))};
         ARIADNE_TESTING_EXPECT_EXCEPTION(initial.adjoin_outer_approximation_to(wrong,0u));
         sets.clear();
         ARIADNE_TESTING_EXPECT_EQUAL(sets.size(),0u);

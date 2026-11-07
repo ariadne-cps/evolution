@@ -34,7 +34,7 @@
 #include "algebra/polynomial.hpp"
 #include "function/taylor_function.hpp"
 #include "geometry/box.hpp"
-#include "paving/grid_paving.hpp"
+#include "paving/binary_tree_paving.hpp"
 #include "hybrid/hybrid_set.hpp"
 #include "hybrid/hybrid_paving.hpp"
 #include "evolution/hybrid_time.hpp"
@@ -582,14 +582,14 @@ ValidatedLowerKleenean inside(const HybridEnclosure& he, const HybridRealBox& hb
     return he.inside(under_approximation(hbx));
 }
 
-Void HybridEnclosure::adjoin_outer_approximation_to(HybridGridTreePaving& hgtp, Nat fineness) const {
+Void HybridEnclosure::adjoin_outer_approximation_to(HybridBinaryTreePaving& hgtp, Nat fineness) const {
     DiscreteLocation location=this->location();
     const Enclosure& set = this->continuous_set();
     RealSpace paving_space=hgtp.space(location);
     RealSpace state_space=this->state_space();
     ARIADNE_PRECONDITION_MSG(state_space==paving_space,
         "HybridEnclosure's state variables "<<state_space<<" do not match variables "<<paving_space<<" of HybridStorage in location "<<location);
-    GridTreePaving& paving=hgtp[location];
+    BinaryTreePaving& paving=hgtp[location];
     set.configuration().paver().adjoin_outer_approximation(paving,set.state_set(),fineness);
 }
 

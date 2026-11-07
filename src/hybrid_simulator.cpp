@@ -105,13 +105,13 @@ template<class X> Void make_point_list(const HybridPoint<X>& list, Vector<Point<
     }
 }
 
-Vector<HybridPoint<FloatDPApproximation>> create_hybrid_point_list(GridTreePaving& grid, DiscreteLocation loc , RealSpace spc, DiscretizationHybridType _dtype, Nat fineness, UpperBoxType const& sampling_box)
+Vector<HybridPoint<FloatDPApproximation>> create_hybrid_point_list(BinaryTreePaving& grid, DiscreteLocation loc , RealSpace spc, DiscretizationHybridType _dtype, Nat fineness, UpperBoxType const& sampling_box)
 {
     if(_dtype == DiscretizationHybridType::HMince){
         grid.mince(fineness);
     }else{ grid.recombine(); }
 
-    GridTreePaving::ConstIterator iter = grid.begin();
+    BinaryTreePaving::ConstIterator iter = grid.begin();
     Vector<HybridPoint<FloatDPApproximation>> approxPointList(grid.size(),HybridPoint<FloatDPApproximation>());
     SizeType k(0);
     for( ; iter!=grid.end(); ++iter){
@@ -127,7 +127,7 @@ Vector<HybridPoint<FloatDPApproximation>> create_hybrid_point_list(GridTreePavin
     return approxPointList;
 }
 
-GridTreePaving create_hybrid_grid(UpperBoxType box){
+BinaryTreePaving create_hybrid_grid(UpperBoxType box){
     Point<FloatDP> tmpPointCenter = Point(box.centre());
     Vector<FloatDP> origin(tmpPointCenter.dimension(), FloatDP(0, dp));
     Vector<FloatDP> lengths(box.widths().size(), FloatDP(0, dp));
@@ -136,7 +136,7 @@ GridTreePaving create_hybrid_grid(UpperBoxType box){
         lengths[i] = box.widths().at(i).raw();
     }
     Grid grid(origin, lengths);
-    GridTreePaving gridPaving(grid);
+    BinaryTreePaving gridPaving(grid);
 
     return gridPaving;
 }
@@ -318,7 +318,7 @@ auto HybridSimulator::orbit(HybridUpperBox const& initial_box, DiscreteLocation 
         // A partially flat box needs positive grid lengths in every coordinate.
         box=widen(box,FloatDPUpperBound(0.0001_q,dp));
     }
-    GridTreePaving gridPaving=create_hybrid_grid(box);
+    BinaryTreePaving gridPaving=create_hybrid_grid(box);
     gridPaving.adjoin_outer_approximation(box,_configuration->fineness());
     HybridApproximateListPointType pointList=create_hybrid_point_list(gridPaving,loc,this->_sys_ptr->continuous_state_space(loc),_configuration->d_type(),_configuration->fineness(),initial_box.euclidean_set(space[loc]));
     return orbit(pointList, termination);

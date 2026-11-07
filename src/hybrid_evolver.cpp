@@ -31,7 +31,7 @@
 #include "function/function.hpp"
 #include "function/function_patch.hpp"
 #include "function/function_model.hpp"
-#include "paving/grid_paving.hpp"
+#include "paving/binary_tree_paving.hpp"
 #include "evolution/hybrid_time.hpp"
 #include "system/hybrid_automaton_interface.hpp"
 #include "evolution/hybrid_evolver.hpp"

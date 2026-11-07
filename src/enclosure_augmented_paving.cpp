@@ -5,7 +5,7 @@
 #include "evolution/enclosure_augmented_paving.hpp"
 #include "hybrid/hybrid_augmented_paving.hpp"
 #include "evolution/hybrid_enclosure.hpp"
-#include "paving/grid_paving.hpp"
+#include "paving/binary_tree_paving.hpp"
 #include "symbolic/space.hpp"
 #include "labelled/figure.hpp"
 #include "logging/logging.hpp"

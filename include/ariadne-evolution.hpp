@@ -19,6 +19,7 @@
 #include "evolution/first_order_pde.hpp"
 #include "evolution/hybrid_time.hpp"
 #include "evolution/hybrid_enclosure.hpp"
+#include "evolution/enclosure_augmented_paving.hpp"
 #include "evolution/hybrid_orbit.hpp"
 #include "evolution/hybrid_evolver_interface.hpp"
 #include "evolution/hybrid_evolver.hpp"

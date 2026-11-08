@@ -77,6 +77,11 @@ jobs:
       run: ctest -j "$NPROC" --output-on-failure
 
 
+    - name: Build Release benchmarks
+      if: matrix.build_type == 'Release'
+      working-directory: ${{ runner.workspace }}/build
+      run: cmake --build . --parallel "$NPROC" --target benchmarks
+
     - name: Install Evolution
       if: matrix.build_type == 'Release'
       working-directory: ${{ runner.workspace }}/build

@@ -51,7 +51,7 @@ setup_project_library(
     OBJECTS EVOLUTION_SRC
     LINK_LIBRARIES evolution)
 
-setup_standalone_project_tests(
+setup_standalone_project(
     TARGET ariadne-evolution
     TEST_DIRECTORY tests
     TEST_TARGET tests

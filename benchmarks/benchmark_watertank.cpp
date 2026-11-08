@@ -3,6 +3,8 @@
 #include "evolution/hybrid_time.hpp"
 #include "system/hybrid_automata.hpp"
 #include "integration/integrator.hpp"
+#include "threading/thread_manager.hpp"
+#include "threading/threading_command_line_interface.hpp"
 #include "ariadne-benchmarking.hpp"
 #include <cmath>
 #include <stdexcept>
@@ -94,6 +96,8 @@ int main(int argc,const char* argv[]) {
     try {
         Options options;
         Bench::CommandLine cli;
+    ThreadManager::instance();
+    cli.add(threading_command_line_contribution());
         cli.add(CommandLineContribution("evolution-watertank-benchmark",
                                         argument_parsers(options)));
         if(!cli.acquire(argc,argv))return 0;

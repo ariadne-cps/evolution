@@ -90,7 +90,6 @@ Measurement measure(GeneralHybridEvolver const& evolver,
 }
 
 }
-}
 int main(int argc,const char* argv[]) {
     try {
         Options options;

@@ -17,7 +17,3 @@
 [submodule "bmk"]
 	path = ss/bmk
 	url = https://github.com/ariadne-cps/benchmarking
-
-[submodule "thr"]
-	path = ss/thr
-	url = https://github.com/ariadne-cps/threading

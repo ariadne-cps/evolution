@@ -12,3 +12,8 @@ endif()
 if(NOT TARGET ariadne-testing)
     ariadne_add_submodule(testing)
 endif()
+
+# Explicit development-only dependency for benchmark CLI composition.
+if(NOT TARGET threading)
+    ariadne_add_submodule(threading)
+endif()

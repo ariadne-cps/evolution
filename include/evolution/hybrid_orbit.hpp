@@ -57,7 +57,7 @@ class GridCell;
 class BinaryTreePaving;
 class HybridGrid;
 class HybridGridCell;
-class HybridBinaryTreePaving;
+class HybridPaving;
 class HybridTime;
 
 class HybridAutomatonInterface;

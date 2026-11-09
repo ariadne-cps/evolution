@@ -73,7 +73,7 @@ template<class ES> class HybridListSet;
 template<class EBS> class HybridBasicSet;
 
 class HybridEnclosure;
-class HybridBinaryTreePaving;
+class HybridPaving;
 template<> class ListSet<HybridEnclosure>;
 
 //! \ingroup HybridSetSubModule
@@ -294,7 +294,7 @@ class HybridEnclosure
     Void restrict(const ExactBoxType& subdomain);
     //! \brief Adjoins an outer approximation of the set to the grid-based set \a paving, with accuracy given by
     //! \a fineness subdivisions in each component.
-    Void adjoin_outer_approximation_to(HybridBinaryTreePaving& paving, Nat fineness) const;
+    Void adjoin_outer_approximation_to(HybridPaving& paving, Nat fineness) const;
 
     //! \brief Splits into two smaller subsets along parameter direction \a dim.
     Pair<HybridEnclosure,HybridEnclosure> split(SizeType dim) const;
@@ -340,7 +340,7 @@ inline OutputStream& operator<<(OutputStream& os, const HybridEnclosure& s) { re
 
 
 class HybridGrid;
-class HybridBinaryTreePaving;
+class HybridPaving;
 
 template<>
 class ListSet<HybridEnclosure>
@@ -381,7 +381,7 @@ class ListSet<HybridEnclosure>
         ValidatedLowerKleenean result=true; for(auto iter=set.begin(); iter!=set.end(); ++iter) { result = result && inside(*iter,bx); } return result; }
     friend OutputStream& operator<<(OutputStream& os, const ListSet<HybridEnclosure>& hls) {
         return os << hls._list; };
-    friend HybridBinaryTreePaving outer_approximation(const ListSet<HybridEnclosure>& hls, const HybridGrid& g, Int dpth);
+    friend HybridPaving outer_approximation(const ListSet<HybridEnclosure>& hls, const HybridGrid& g, Int dpth);
   private:
     List<HybridEnclosure> _list;
 };

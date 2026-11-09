@@ -582,14 +582,14 @@ ValidatedLowerKleenean inside(const HybridEnclosure& he, const HybridRealBox& hb
     return he.inside(under_approximation(hbx));
 }
 
-Void HybridEnclosure::adjoin_outer_approximation_to(HybridBinaryTreePaving& hgtp, Nat fineness) const {
+Void HybridEnclosure::adjoin_outer_approximation_to(HybridPaving& hgtp, Nat fineness) const {
     DiscreteLocation location=this->location();
     const Enclosure& set = this->continuous_set();
     RealSpace paving_space=hgtp.space(location);
     RealSpace state_space=this->state_space();
     ARIADNE_PRECONDITION_MSG(state_space==paving_space,
         "HybridEnclosure's state variables "<<state_space<<" do not match variables "<<paving_space<<" of HybridStorage in location "<<location);
-    BinaryTreePaving& paving=hgtp[location];
+    Paving& paving=hgtp[location];
     set.configuration().paver().adjoin_outer_approximation(paving,set.state_set(),fineness);
 }
 

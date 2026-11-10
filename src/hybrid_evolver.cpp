@@ -1007,10 +1007,10 @@ _apply_guard(List<HybridEnclosure>& sets,
     for(SizeType set_index=0; set_index!=original_size; ++set_index) {
         HybridEnclosure& set=sets[set_index];
         LOGGING_PRINTLN_AT(1,"set.parameter_domain()="<<set.parameter_domain());
-        ARIADNE_ASSERT(set.parameter_domain()==elapsed_time_function.domain());
+        ARIADNE_PRECONDITION(set.parameter_domain()==elapsed_time_function.domain());
         switch(guard_crossing_data.crossing_kind) {
             case CrossingKind::TRANSVERSE:
-                ARIADNE_ASSERT(set.parameter_domain()==starting_state_function.domain());
+                ARIADNE_PRECONDITION(set.parameter_domain()==starting_state_function.domain());
                 set.new_parameter_constraint(event, elapsed_time_function <= unchecked_compose(guard_crossing_data.crossing_time,starting_state_function));
                 // Alternatively:
                 // set.new_invariant(event, guard_function);

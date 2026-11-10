@@ -5,6 +5,7 @@ set(UNIT_TESTS
     test_hybrid_time
     test_hybrid_enclosure
     test_hybrid_evolver
+    test_hybrid_step_contracts
     test_hybrid_simulator
     test_first_order_pde
     test_first_order_pde_evolution_header
@@ -17,6 +18,7 @@ set(UNIT_TESTS
     test_enclosure_precision
     test_iterated_map_evolver
     test_vector_field_evolver
+    test_vector_field_evolver_header
     test_vector_field_simulator
     test_evolution_dependency_boundary
 )

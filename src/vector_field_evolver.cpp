@@ -113,12 +113,12 @@ namespace EvolutionDetail {
 
 Dyadic limit_step_to_remaining_time(Dyadic const& configured,Dyadic const& remaining) {
     FloatDP const representable(remaining,FloatDP::ROUND_DOWNWARD,DoublePrecision());
-    Dyadic const rounded(representable);
-    if(rounded==Dyadic(0u)) {
+    Dyadic const binary64_step(representable);
+    if(binary64_step==Dyadic(0u)) {
         throw std::runtime_error(
             "VectorFieldEvolver: remaining time is too small for a positive binary64 step");
     }
-    return min(configured,rounded);
+    return min(configured,binary64_step);
 }
 
 Void

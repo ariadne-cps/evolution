@@ -38,12 +38,54 @@
 #include "ariadne-testing.hpp"
 #include "test_logging.hpp"
 #include "log_verbosity_scope.hpp"
+#include "../src/inclusion_evolver_state.hpp"
+#include <limits>
 #include <sstream>
 
 using namespace Ariadne;
 
 class TestDifferentialInclusionEvolver : public Ariadne::Testing::ContextFixture {
   public:
+    void test_scheduler_preserves_rigorous_reach_when_affine_wins() {
+        RealVariable x("x"),u("u");
+        DifferentialInclusion system({dot(x)=u-x},RealVariablesBox({-1<=u<=1}));
+        TaylorPicardIntegrator integrator(step_maximum_error=1e-5);
+        InclusionEvolverState state(system,{ZeroApproximation(),ConstantApproximation(),AffineApproximation()},integrator);
+        auto available=state.approximators_to_use();
+        auto best=available[0];
+        for(auto const& approximation:available)
+            if(approximation.index()==AffineApproximation().index()) best=approximation;
+        ARIADNE_TESTING_PROVE(not best.is_reach_rigorous());
+        state.update_with_best(best);
+        for(auto const& approximation:available) {
+            Nat expected=approximation.index()==ZeroApproximation().index() ? 1u : 0u;
+            ARIADNE_TESTING_EXPECT_EQUAL(state.check_delay()[approximation],expected);
+        }
+        ARIADNE_TESTING_EXPECT_EQUAL(state.global_optima_count()[best],1u);
+        ARIADNE_TESTING_EXPECT_EQUAL(state.local_optima_count()[best],1u);
+        state.reset_local_optima_count();
+        ARIADNE_TESTING_EXPECT_EQUAL(state.local_optima_count()[best],0u);
+        state.next_step();
+        ARIADNE_TESTING_EXPECT_EQUAL(state.step(),1u);
+        auto next=state.approximators_to_use();
+        ARIADNE_TESTING_EXPECT_EQUAL(next.size(),2u);
+        for(auto const& approximation:next)
+            ARIADNE_TESTING_PROVE(approximation.index()!=ZeroApproximation().index());
+        state.update_with_best(next[0]);
+        state.next_step();
+        ARIADNE_TESTING_EXPECT_EQUAL(state.step(),2u);
+        ARIADNE_TESTING_PROVE(state.approximators_to_use().size()>=2u);
+    }
+
+    void test_scheduler_integer_boundaries() {
+        Nat const maximum=std::numeric_limits<Nat>::max();
+        Nat const bits=std::numeric_limits<Nat>::digits;
+        ARIADNE_TESTING_EXPECT_EQUAL(EvolutionDetail::scheduled_step(0u,0u),1u);
+        ARIADNE_TESTING_EXPECT_EQUAL(EvolutionDetail::scheduled_step(0u,bits-1u),Nat(1u)<<(bits-1u));
+        ARIADNE_TESTING_EXPECT_EQUAL(EvolutionDetail::scheduled_step(maximum-1u,0u),maximum);
+        ARIADNE_TESTING_EXPECT_THROWS(std::overflow_error,EvolutionDetail::scheduled_step(0u,bits));
+        ARIADNE_TESTING_EXPECT_THROWS(std::overflow_error,EvolutionDetail::scheduled_step(maximum,0u));
+    }
     using Ariadne::Testing::ContextFixture::ContextFixture;
 
     // One scalar affine inclusion: cheap even under MSVC Debug, but still
@@ -144,6 +186,8 @@ class TestDifferentialInclusionEvolver : public Ariadne::Testing::ContextFixture
 int main(int argc, const char* argv[]) {
     redirect_test_logging_to_null();
     ARIADNE_TESTING_SUITE("test_differential_inclusion_evolver");
+    ARIADNE_TESTING_ADD_TEST(TestDifferentialInclusionEvolver, test_scheduler_preserves_rigorous_reach_when_affine_wins);
+    ARIADNE_TESTING_ADD_TEST(TestDifferentialInclusionEvolver, test_scheduler_integer_boundaries);
     ARIADNE_TESTING_ADD_TEST(TestDifferentialInclusionEvolver, test_uncertain_input);
     ARIADNE_TESTING_ADD_TEST(TestDifferentialInclusionEvolver, test_periodic_reconditioning);
     ARIADNE_TESTING_ADD_TEST(TestDifferentialInclusionEvolver, test_scheduling_and_diagnostic_configuration);

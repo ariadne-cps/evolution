@@ -80,7 +80,8 @@ DifferentialInclusionEvolver::DifferentialInclusionEvolver(SystemType const& sys
     , _reconditioner(reconditioner)
     , _configuration(new ConfigurationType())
 {
-    ARIADNE_PRECONDITION(system.inputs().size() > 0);
+    // DifferentialInclusion's sole value constructor already requires a
+    // nonempty input domain; inputs are immutable after construction.
     LOGGING_SCOPE_CREATE;
 }
 
@@ -149,11 +150,11 @@ auto DifferentialInclusionEvolver::orbit(RealVariablesBox const& initial, Real c
 
         TimeStepType new_t = lower_bound(t+h);
 
-        Optional<ValidatedVectorMultivariateFunctionPatch> best_reach_function;
         Optional<ValidatedVectorMultivariateFunctionPatch> best_evolve_function;
         InclusionIntegrator best = approximators_to_use.at(0);
         FloatDPApproximation best_volume(inf,dp);
         Optional<ValidatedVectorMultivariateFunctionPatch> best_reach_rigorous_function;
+        InclusionIntegrator best_reach_rigorous = approximators_to_use.at(0);
         FloatDPApproximation best_reach_rigorous_volume(inf,dp);
 
         for (auto const& approximator : approximators_to_use) {
@@ -166,29 +167,27 @@ auto DifferentialInclusionEvolver::orbit(RealVariablesBox const& initial, Real c
             if (decide(current_volume < best_volume)) {
                 best = approximator;
                 LOGGING_PRINTLN_AT(3,"best approximator: " << best);
-                if (best.is_reach_rigorous()) {
-                    best_reach_function = current_reach.at(0);
-                }
                 best_evolve_function = current_evolve;
                 best_volume = current_volume;
             }
 
             if (approximator.is_reach_rigorous() and decide(current_volume < best_reach_rigorous_volume)) {
+                best_reach_rigorous = approximator;
                 best_reach_rigorous_function = current_reach.at(0);
                 best_reach_rigorous_volume = current_volume;
             }
         }
 
-        if (not best.is_reach_rigorous())
-            best_reach_function = best_reach_rigorous_function;
-
         if (approximators_to_use.size() > 1)
-            LOGGING_PRINTLN_AT(2,"chosen approximator: " << best << (best.is_reach_rigorous() ? "" : " (reach taken from other approximator)"));
+            LOGGING_PRINTLN_AT(2,"chosen approximator: " << best << ", reach approximator: " << best_reach_rigorous);
 
         state.update_with_best(best);
 
         evolve_function = best_evolve_function.value();
-        ValidatedVectorMultivariateFunctionPatch reach_function = best_reach_function.value();
+        // Both minimisations use the same strict score ordering. If the
+        // overall winner is rigorous it is also the rigorous winner;
+        // otherwise reach still comes from the best rigorous candidate.
+        ValidatedVectorMultivariateFunctionPatch reach_function = best_reach_rigorous_function.value();
 
         LOGGING_PRINTLN_AT(2,"evolve bounds="<<evolve_function.range());
 

@@ -21,6 +21,55 @@ class TestHybridStepContracts : public Testing::ContextFixture {
 public:
     using ContextFixture::ContextFixture;
 
+    void test_constant_and_decreasing_guard_steps() {
+        DiscreteLocation q(1);
+        DiscreteEvent event("guard");
+        RealVariable x("x"),y("y");
+        RealSpace space({x,y});
+        HybridAutomaton system;
+        system.new_mode(q,{dot(x)=1,dot(y)=0});
+        StepProbe probe(system);
+        auto initial=probe.enclosure(HybridExactBox(q,space,ExactBoxType({{-1,1},{-1,1}})));
+        auto dynamic=system.dynamic_function(q);
+        FlowFunctionModel flow=probe._compute_flow(dynamic,cast_exact_box(initial.state_bounding_box()),Dyadic(0.5_x));
+        Map<DiscreteEvent,CrossingData> crossings;
+        Map<DiscreteEvent,TransitionData> transitions;
+        Set<DiscreteEvent> active;
+        auto timing=probe._estimate_timing(active,Real(2),flow,crossings,transitions,initial);
+        for(auto kind:{CrossingKind::NEGATIVE,CrossingKind::POSITIVE,CrossingKind::DECREASING}) {
+            TransitionData transition;
+            transition.event=event;
+            transition.event_kind=EventKind::URGENT;
+            RealExpression guard=kind==CrossingKind::DECREASING ? -RealExpression(x)
+                : RealExpression(kind==CrossingKind::POSITIVE ? 1 : -1);
+            transition.guard_function=make_function(space,guard);
+            auto jump=initial;
+            probe._apply_guard_step(jump,dynamic,flow,timing,transition,CrossingData(kind),Semantics::UPPER);
+            ARIADNE_TESTING_EXPECT_EQUAL(jump.number_of_parameters(),initial.number_of_parameters());
+            ARIADNE_TESTING_EXPECT_EQUAL(definitely(jump.is_empty()),kind==CrossingKind::NEGATIVE);
+        }
+    }
+
+    void test_invariant_rejects_initial_jump_and_empty_split_halves() {
+        DiscreteLocation q(1),target(2);
+        DiscreteEvent guard("jump"),invariant("invariant");
+        RealVariable x("x"),y("y");
+        RealSpace space({x,y});
+        HybridAutomaton system;
+        system.new_mode(q,{dot(x)=1,dot(y)=0});
+        system.new_mode(target,{dot(x)=0,dot(y)=0});
+        system.new_invariant(q,x<=-0.5_dec,invariant);
+        system.new_transition(q,guard,target,{next(x)=x,next(y)=y},x>=0,EventKind::URGENT);
+        StepProbe probe(system);
+        probe.configuration().set_maximum_enclosure_radius(0.25_x);
+        probe.configuration().set_enable_subdivisions(true);
+        auto orbit=probe.orbit(HybridExactBox(q,space,ExactBoxType({{-1,1},{0,0}})),
+            HybridTime(0.03125_x,1),Semantics::UPPER);
+        ARIADNE_TESTING_PROVE(orbit.final().size()>0u);
+        for(auto const& set:orbit.reach()) ARIADNE_TESTING_PROVE(set.location()==q);
+        for(auto const& set:orbit.intermediate()) ARIADNE_TESTING_PROVE(set.location()==q);
+    }
+
     void test_rejected_step_and_guard_inputs() {
         LogVerbosityScope logging(100u);
         DiscreteLocation q(1);
@@ -110,6 +159,8 @@ public:
 int main(int argc,char** argv) {
     redirect_test_logging_to_null();
     ARIADNE_TESTING_SUITE("test_hybrid_step_contracts");
+    ARIADNE_TESTING_ADD_TEST(TestHybridStepContracts,test_constant_and_decreasing_guard_steps);
+    ARIADNE_TESTING_ADD_TEST(TestHybridStepContracts,test_invariant_rejects_initial_jump_and_empty_split_halves);
     ARIADNE_TESTING_ADD_TEST(TestHybridStepContracts,test_rejected_step_and_guard_inputs);
     ARIADNE_TESTING_ADD_TEST(TestHybridStepContracts,test_grazing_whose_maximum_is_in_the_past);
     return ARIADNE_TESTING_RUN_TESTS_WITH_ARGS(argc,argv);

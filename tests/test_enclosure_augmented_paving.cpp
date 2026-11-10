@@ -26,6 +26,12 @@ class TestEnclosureAugmentedPaving : public Ariadne::Testing::ContextFixture {
         ARIADNE_TESTING_PROVE(explicit_paving.size()>0u);
         ARIADNE_TESTING_PROVE(subset(generated.state_paving(),explicit_paving.state_paving()));
         ARIADNE_TESTING_PROVE(subset(explicit_paving.state_paving(),generated.state_paving()));
+        AugmentedPaving independent(grid,EffectiveVectorMultivariateFunction::identity(2u));
+        adjoin_outer_approximation_to(enclosure,independent,2u);
+        ARIADNE_TESTING_PROVE(subset(independent.state_paving(),generated.state_paving()));
+        Enclosure without_auxiliary(domain,config);
+        auto state_only=outer_approximation(without_auxiliary,grid,2u);
+        ARIADNE_TESTING_PROVE(subset(state_only.state_paving(),generated.state_paving()));
     }
 
     Void test_hybrid() {

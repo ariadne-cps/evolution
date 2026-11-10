@@ -111,6 +111,18 @@ public:
         auto finishing=probe._estimate_timing(active,Real(1/4_q),flow,crossings,transitions,initial);
         ARIADNE_TESTING_EXPECT_EQUAL(finishing.finishing_kind,FinishingKind::AT_FINAL_TIME);
         ARIADNE_TESTING_EXPECT_EQUAL(finishing.step_kind,StepKind::CONSTANT_FINISHING_TIME);
+        initial.set_time_function(factory.create_coordinate(initial.parameter_domain(),0u));
+        auto straddling_crossing=probe._estimate_timing(active,Real(1/8_q),flow,crossings,transitions,initial);
+        ARIADNE_TESTING_EXPECT_EQUAL(straddling_crossing.finishing_kind,FinishingKind::STRADDLE_FINAL_TIME);
+
+        // Conservative active-event detection may retain a future crossing.
+        // It must not shorten a step toward a guard that is not yet reached.
+        initial.set_time_function(factory.create_constant(initial.parameter_domain(),Real(0)));
+        crossings[event].crossing_time=3-factory.create_coordinate(flow.space_domain(),0u);
+        transitions[event].guard_function=make_function(space,x-3);
+        auto future=probe._estimate_timing(active,Real(2),flow,crossings,transitions,initial);
+        ARIADNE_TESTING_EXPECT_EQUAL(future.step_kind,StepKind::CONSTANT_EVOLUTION_TIME);
+        ARIADNE_TESTING_EXPECT_EQUAL(future.finishing_kind,FinishingKind::BEFORE_FINAL_TIME);
     }
 
     void test_rejected_step_and_guard_inputs() {

@@ -47,6 +47,7 @@
 #include "test_logging.hpp"
 #include "log_verbosity_scope.hpp"
 #include "../src/carried_expansion_diagnostics.hpp"
+#include "../src/evolution_time.hpp"
 
 using namespace Ariadne;
 using namespace std;
@@ -59,6 +60,24 @@ class TestVectorFieldEvolver : public Ariadne::Testing::ContextFixture {
     using Ariadne::Testing::ContextFixture::ContextFixture;
 
 public:
+    Void test_binary64_step_limits() {
+        using EvolutionDetail::limit_step_to_remaining_time;
+        Dyadic const quarter(0.25_x),half(0.5_x);
+        ARIADNE_TESTING_EXPECT_EQUAL(limit_step_to_remaining_time(half,quarter),quarter);
+        ARIADNE_TESTING_EXPECT_EQUAL(limit_step_to_remaining_time(quarter,half),quarter);
+        Dyadic const smallest(Integer(1),std::size_t(1074u));
+        ARIADNE_TESTING_EXPECT_EQUAL(limit_step_to_remaining_time(half,smallest),smallest);
+        Dyadic const unrepresentable(Integer(1),std::size_t(1100u));
+        ARIADNE_TESTING_EXPECT_THROWS(std::runtime_error,
+            limit_step_to_remaining_time(half,unrepresentable));
+        Dyadic const between(Integer(9007199254740993ULL),std::size_t(54u));
+        ARIADNE_TESTING_EXPECT_EQUAL(limit_step_to_remaining_time(Dyadic(1u),between),half);
+    }
+
+    Void test_lower_termination_diagnostics() {
+        LogVerbosityScope logging(100u);
+        test_subdivide_along_evolution();
+    }
     Void test_constrained_initial_subdivision_and_tiny_horizon() {
         LogVerbosityScope logging(100u);
         RealVariable x("x");
@@ -318,5 +337,7 @@ int main(int argc, const char* argv[]) {
     ARIADNE_TESTING_ADD_TEST(TestVectorFieldEvolver, test_carried_expansion_diagnostics_checkpoints);
     ARIADNE_TESTING_ADD_TEST(TestVectorFieldEvolver, test_carried_expansion_profile_buckets);
     ARIADNE_TESTING_ADD_TEST(TestVectorFieldEvolver, test_constrained_initial_subdivision_and_tiny_horizon);
+    ARIADNE_TESTING_ADD_TEST(TestVectorFieldEvolver, test_binary64_step_limits);
+    ARIADNE_TESTING_ADD_TEST(TestVectorFieldEvolver, test_lower_termination_diagnostics);
     return ARIADNE_TESTING_RUN_TESTS_WITH_ARGS(argc, argv);
 }

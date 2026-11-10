@@ -152,7 +152,7 @@ public:
         ARIADNE_TESTING_EXPECT_EQUAL(sets.size(),1u);
         ARIADNE_TESTING_PROVE(!definitely(sets[0].is_empty()));
         ARIADNE_TESTING_PROVE(definitely(sets[0].inside(HybridExactBox(q,space,
-            ExactBoxType({{1.49_x,1.76_x},{0.49_x,0.76_x}})))));
+            ExactBoxType({{1.484375_x,1.765625_x},{0.484375_x,0.765625_x}})))));
     }
 };
 

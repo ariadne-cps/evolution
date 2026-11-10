@@ -68,6 +68,49 @@ public:
         ARIADNE_TESTING_PROVE(orbit.final().size()>0u);
         for(auto const& set:orbit.reach()) ARIADNE_TESTING_PROVE(set.location()==q);
         for(auto const& set:orbit.intermediate()) ARIADNE_TESTING_PROVE(set.location()==q);
+        auto excluded=probe.orbit(HybridExactBox(q,space,ExactBoxType({{1,2},{0,0}})),
+            HybridTime(0.03125_x,1),Semantics::UPPER);
+        ARIADNE_TESTING_EXPECT_EQUAL(excluded.final().size(),0u);
+        ARIADNE_TESTING_EXPECT_EQUAL(excluded.intermediate().size(),0u);
+    }
+
+    void test_timing_straddles_final_time_without_unwinding() {
+        DiscreteLocation q(1);
+        RealVariable x("x"),y("y");
+        RealSpace space({x,y});
+        HybridAutomaton system;
+        system.new_mode(q,{dot(x)=1,dot(y)=0});
+        StepProbe probe(system);
+        probe.ALLOW_UNWIND=true;
+        auto initial=probe.enclosure(HybridExactBox(q,space,ExactBoxType({{-1,1},{-1,1}})));
+        auto factory=probe.function_factory();
+        initial.set_time_function(factory.create_coordinate(initial.parameter_domain(),0u));
+        auto dynamic=system.dynamic_function(q);
+        FlowFunctionModel flow=probe._compute_flow(dynamic,cast_exact_box(initial.state_bounding_box()),Dyadic(0.5_x));
+        Set<DiscreteEvent> active;
+        Map<DiscreteEvent,CrossingData> crossings;
+        Map<DiscreteEvent,TransitionData> transitions;
+        auto timing=probe._estimate_timing(active,Real(1/8_q),flow,crossings,transitions,initial);
+        ARIADNE_TESTING_EXPECT_EQUAL(timing.step_kind,StepKind::CONSTANT_EVOLUTION_TIME);
+        ARIADNE_TESTING_EXPECT_EQUAL(timing.finishing_kind,FinishingKind::STRADDLE_FINAL_TIME);
+        ARIADNE_TESTING_PROVE(definitely(timing.parameter_dependent_evolution_time.range().lower_bound()>0));
+
+        // A guard can be active even though the complete set finishes in
+        // this step. Creep must preserve the exact final-time termination.
+        initial.set_time_function(factory.create_constant(initial.parameter_domain(),Real(0)));
+        DiscreteEvent event("crossing");
+        CrossingData crossing(CrossingKind::TRANSVERSE);
+        crossing.crossing_time=0.125_x-factory.create_coordinate(flow.space_domain(),0u);
+        crossings.insert(event,crossing);
+        TransitionData transition;
+        transition.event=event;
+        transition.event_kind=EventKind::URGENT;
+        transition.guard_function=make_function(space,x-0.125_dec);
+        transitions.insert(event,transition);
+        active.insert(event);
+        auto finishing=probe._estimate_timing(active,Real(1/4_q),flow,crossings,transitions,initial);
+        ARIADNE_TESTING_EXPECT_EQUAL(finishing.finishing_kind,FinishingKind::AT_FINAL_TIME);
+        ARIADNE_TESTING_EXPECT_EQUAL(finishing.step_kind,StepKind::CONSTANT_FINISHING_TIME);
     }
 
     void test_rejected_step_and_guard_inputs() {
@@ -161,6 +204,7 @@ int main(int argc,char** argv) {
     ARIADNE_TESTING_SUITE("test_hybrid_step_contracts");
     ARIADNE_TESTING_ADD_TEST(TestHybridStepContracts,test_constant_and_decreasing_guard_steps);
     ARIADNE_TESTING_ADD_TEST(TestHybridStepContracts,test_invariant_rejects_initial_jump_and_empty_split_halves);
+    ARIADNE_TESTING_ADD_TEST(TestHybridStepContracts,test_timing_straddles_final_time_without_unwinding);
     ARIADNE_TESTING_ADD_TEST(TestHybridStepContracts,test_rejected_step_and_guard_inputs);
     ARIADNE_TESTING_ADD_TEST(TestHybridStepContracts,test_grazing_whose_maximum_is_in_the_past);
     return ARIADNE_TESTING_RUN_TESTS_WITH_ARGS(argc,argv);

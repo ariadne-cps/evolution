@@ -1329,15 +1329,9 @@ _apply_evolution_step(WorkloadType::Access& workload,
 {
     LOGGING_SCOPE_CREATE;
 
+    // The sole caller, _evolution_step, has already rejected an empty set.
+    // Flow/crossing/timing estimation does not mutate starting_set.
     EvolutionStepData _step_data;
-    HybridEnclosure starting_set_copy=starting_set;
-    ValidatedLowerKleenean starting_set_empty=starting_set_copy.is_empty();
-
-    if(definitely(starting_set_empty)) {
-        ExactBoxType reduced_domain=starting_set.continuous_set().reduced_domain();
-        ARIADNE_WARN("empty starting_set "<<starting_set);
-        return;
-    }
 
     // Compute events enabling transitions and events blocking continuous evolution
     Set<DiscreteEvent> active_events=crossings.keys();
@@ -1443,9 +1437,9 @@ _apply_evolution_step(WorkloadType::Access& workload,
                 }
             } else {
                 // Bound time if necessary
-                if(possibly(evolve_set_time_range.upper_bound()>timing_data.final_time)) {
-                    evolve_set.bound_time(timing_data.final_time);
-                }
+                // This arm is the negation of the preceding definite <=
+                // test, hence exceeding final_time is already possible.
+                evolve_set.bound_time(timing_data.final_time);
                 // Only continue evolution if the time-bounded evolve set is nonempty;
                 // However, continue evolution without adding time constraint,
                 // since this will be introduced in the next step
@@ -1495,21 +1489,12 @@ _apply_evolution_step(WorkloadType::Access& workload,
         _apply_guard_step(jump_set,dynamic,flow,timing_data,transitions[event],crossings[event],semantics);
         ValidatedScalarMultivariateFunctionPatch jump_step_time=reach_step_time;
         if(reach_step_time.argument_size()!=jump_set.number_of_parameters()) {
-            ARIADNE_ASSERT(starting_set.number_of_parameters()==jump_set.number_of_parameters());
-            switch(crossings[event].crossing_kind) {
-                case CrossingKind::TRANSVERSE:
-                    jump_step_time=unchecked_compose(crossings[event].crossing_time,starting_set.state_function());
-                    break;
-                case CrossingKind::INCREASING: case CrossingKind::CONVEX: case CrossingKind::CONCAVE: case CrossingKind::DEGENERATE:
-                    // Apply guard using equation
-                case CrossingKind::GRAZING:
-                    // Apply guard using equation; critical time not used for flow time
-                case CrossingKind::DECREASING: case CrossingKind::POSITIVE: case CrossingKind::NEGATIVE:
-                    // Crossing time should not be used
-                    break;
-                default:
-                    ARIADNE_FAIL_MSG("Unknown crossing kind in "<<crossings[event]);
-            }
+            // Guard steps either preserve the starting parameters or add
+            // exactly the reach-time parameter. Only a transverse crossing
+            // supplies its own time; all other crossings use the equation
+            // in _apply_guard below, which also rejects invalid kinds.
+            if(crossings[event].crossing_kind==CrossingKind::TRANSVERSE)
+                jump_step_time=unchecked_compose(crossings[event].crossing_time,starting_set.state_function());
         }
 
         // Apply maximum time bound, as this will be applied after the next flow step
@@ -1806,7 +1791,9 @@ _estimate_timing(Set<DiscreteEvent>&,
                 LOGGING_PRINTLN_AT(1,"crossing_time_range="<<crossing_iter->second.crossing_time.range());
                 const ValidatedScalarMultivariateFunctionPatch& crossing_time=crossing_iter->second.crossing_time;
                 UpperIntervalType crossing_time_range=crossing_time.range();
-                if(Ariadne::is_blocking(event_kind) && definitely(crossing_time_range.upper_bound()<step_size)) {
+                // Every supported non-permissive event blocks evolution;
+                // the enclosing condition has already excluded PERMISSIVE.
+                if(definitely(crossing_time_range.upper_bound()<step_size)) {
                     // NOTE: Use strict comparison here so that guard is fully crossed
                     // In principle this is not necessary, but this would involve testing
                     // to ensure that the evolved set is not propagated

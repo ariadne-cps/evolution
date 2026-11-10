@@ -24,6 +24,7 @@
 
 #include <fstream>
 #include <iostream>
+#include <sstream>
 
 #include "utility/tuple.hpp"
 #include "numeric/rational.hpp"
@@ -44,6 +45,8 @@
 
 #include "ariadne-testing.hpp"
 #include "test_logging.hpp"
+#include "log_verbosity_scope.hpp"
+#include "../src/carried_expansion_diagnostics.hpp"
 
 using namespace Ariadne;
 using namespace std;
@@ -56,6 +59,83 @@ class TestVectorFieldEvolver : public Ariadne::Testing::ContextFixture {
     using Ariadne::Testing::ContextFixture::ContextFixture;
 
 public:
+    Void test_constrained_initial_subdivision_and_tiny_horizon() {
+        LogVerbosityScope logging(100u);
+        RealVariable x("x");
+        VectorField field(List<DottedRealAssignment>{dot(x)=0});
+        TaylorPicardIntegrator integrator(step_maximum_error=1e-6);
+        VectorFieldEvolver evolver(field,integrator);
+        evolver.configuration().set_enable_reconditioning(false);
+        evolver.configuration().set_maximum_enclosure_radius(0.75);
+        for(auto const& constraint:List<ContinuousPredicate>{x<=0.25_dec,x>=1.75_dec}) {
+            RealExpressionBoundedConstraintSet initial({0<=x<=2},{constraint});
+            auto result=evolver.orbit(initial,Real(0),Semantics::UPPER);
+            ARIADNE_TESTING_EXPECT_EQUAL(result.final().size(),1u);
+            ARIADNE_TESTING_EXPECT_EQUAL(result.reach().size(),0u);
+        }
+        auto result=evolver.orbit(RealVariablesBox({0<=x<=0}),
+            rec(pow(Real(2),1100u)),Semantics::LOWER);
+        ARIADNE_TESTING_EXPECT_EQUAL(result.final().size(),1u);
+        ARIADNE_TESTING_EXPECT_EQUAL(result.reach().size(),0u);
+    }
+    Void test_carried_expansion_profile_buckets() {
+        Sweeper<FloatDP> sweeper=ThresholdSweeper<FloatDP>(dp,0.0);
+        auto coordinate=ValidatedTaylorModelDP::coordinate(1u,0u,sweeper);
+        auto model=coordinate+pow(coordinate,3)*FloatDPBounds(ExactDouble(1e-13),dp)
+            +pow(coordinate,32)*FloatDPBounds(ExactDouble(1e-14),dp);
+        ExactBoxType domain=ExactBoxType::unit_box(1u);
+        ValidatedVectorMultivariateTaylorFunctionModelDP mapping(
+            domain,Vector<ValidatedTaylorModelDP>{model});
+        std::ostringstream text;
+        EvolutionDetail::print_carried_expansion_snapshot(text,"test",42u,mapping,sweeper);
+        auto const result=text.str();
+        ARIADNE_TESTING_PROVE(result.find("stage=test step=42")!=std::string::npos);
+        ARIADNE_TESTING_PROVE(result.find("degree=31 below_3e-14_count=1")!=std::string::npos);
+        ARIADNE_TESTING_PROVE(result.find("degree=3 below_3e-14_count=0 bridge_3e-14_to_1e-12_count=1")!=std::string::npos);
+        ARIADNE_TESTING_PROVE(result.find("above_1e-12_count=1")!=std::string::npos);
+        ValidatedVectorMultivariateTaylorFunctionModelDP empty(
+            domain,Vector<ValidatedTaylorModelDP>(0u,model));
+        std::ostringstream empty_text;
+        EvolutionDetail::print_carried_expansion_snapshot(empty_text,"empty",0u,empty,sweeper);
+        ARIADNE_TESTING_PROVE(empty_text.str().empty());
+    }
+    Void test_components_and_preconditioned_orbits() {
+        LogVerbosityScope logging(100u);
+        RealVariable x("x"),other("other");
+        VectorField field(List<DottedRealAssignment>{dot(x)=1});
+        for(auto mode:{TaylorSeriesPreconditioning::IDENTITY,TaylorSeriesPreconditioning::QR}) {
+            PreconditionedGradedTaylorSeriesIntegrator integrator(step_maximum_error=1e-6);
+            integrator.set_preconditioning(mode);
+            integrator.set_diagnostics(true);
+            VectorFieldEvolver evolver(field,integrator);
+            evolver.configuration().set_maximum_step_size(0.03125);
+            evolver.configuration().set_enable_reconditioning(false);
+            auto initial=evolver.enclosure(ExactBoxType({{-0.03125_x,0.03125_x}}));
+            std::unique_ptr<VectorFieldEvolver> clone(evolver.clone());
+            VectorFieldEvolver const& immutable=*clone;
+            ARIADNE_TESTING_EXPECT_EQUAL(immutable.configuration().maximum_step_size(),0.03125_x);
+            auto result=immutable.orbit(initial,Real(1),Semantics::UPPER);
+            ARIADNE_TESTING_PROVE(result.final().size()>0u);
+            auto box=result.final().bounding_box().euclidean_set();
+            ARIADNE_TESTING_PROVE(subset(box,RealBox({{0.96_dec,1.04_dec}})));
+            auto wrong=LabelledEnclosure(ExactBoxType({{-0.03125_x,0.03125_x}}),
+                RealSpace({other}),EnclosureConfiguration(integrator.function_factory()));
+            ARIADNE_TESTING_EXPECT_EXCEPTION(evolver.orbit(wrong,Real(1),Semantics::UPPER));
+        }
+    }
+
+    Void test_carried_expansion_diagnostics_checkpoints() {
+        RealVariable x("x");
+        VectorField field(List<DottedRealAssignment>{dot(x)=0});
+        PreconditionedGradedTaylorSeriesIntegrator integrator(step_maximum_error=1e-6);
+        integrator.set_carried_expansion_diagnostics(true);
+        VectorFieldEvolver evolver(field,integrator);
+        evolver.configuration().set_maximum_step_size(1.0/2048.0);
+        auto result=evolver.orbit(RealVariablesBox({0.9_dec<=x<=1.1_dec}),Real(1),Semantics::UPPER);
+        ARIADNE_TESTING_EXPECT_EQUAL(result.reach().size(),2048u);
+        ARIADNE_TESTING_PROVE(subset(result.final().bounding_box().euclidean_set(),
+            RealBox({{0.89_dec,1.11_dec}})));
+    }
     
 
     Void test_single_trajectory() {
@@ -234,5 +314,9 @@ int main(int argc, const char* argv[]) {
     ARIADNE_TESTING_ADD_TEST(TestVectorFieldEvolver, test_failure);
     ARIADNE_TESTING_ADD_TEST(TestVectorFieldEvolver, test_subdivide_initially);
     ARIADNE_TESTING_ADD_TEST(TestVectorFieldEvolver, test_subdivide_along_evolution);
+    ARIADNE_TESTING_ADD_TEST(TestVectorFieldEvolver, test_components_and_preconditioned_orbits);
+    ARIADNE_TESTING_ADD_TEST(TestVectorFieldEvolver, test_carried_expansion_diagnostics_checkpoints);
+    ARIADNE_TESTING_ADD_TEST(TestVectorFieldEvolver, test_carried_expansion_profile_buckets);
+    ARIADNE_TESTING_ADD_TEST(TestVectorFieldEvolver, test_constrained_initial_subdivision_and_tiny_horizon);
     return ARIADNE_TESTING_RUN_TESTS_WITH_ARGS(argc, argv);
 }

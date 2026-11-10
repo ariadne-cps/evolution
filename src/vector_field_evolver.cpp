@@ -44,6 +44,7 @@
 
 #include "system/vector_field.hpp"
 #include "evolution/vector_field_evolver.hpp"
+#include "carried_expansion_diagnostics.hpp"
 
 #include "symbolic/space.hpp"
 #include "symbolic/assignment.hpp"
@@ -78,16 +79,12 @@ struct CarriedExpansionSnapshot {
 };
 
 CarriedExpansionSnapshot
-carried_expansion_snapshot(ValidatedVectorMultivariateFunctionPatch const& mapping)
+carried_expansion_snapshot(ValidatedVectorMultivariateTaylorFunctionModelDP const& mapping)
 {
     CarriedExpansionSnapshot profile;
     for(SizeType component=0u; component!=mapping.result_size(); ++component) {
-        auto const& generic_component=mapping.get(component);
-        auto const* taylor_component=
-            dynamic_cast<ValidatedScalarMultivariateTaylorFunctionModelDP const*>(
-                generic_component.raw_pointer());
-        ARIADNE_ASSERT(taylor_component!=nullptr);
-        auto const& expansion=taylor_component->expansion();
+        auto const component_mapping=mapping[component];
+        auto const& expansion=component_mapping.model().expansion();
         for(auto const& term : expansion) {
             auto bucket_degree=static_cast<std::size_t>(term.index().degree());
             if(bucket_degree>=CarriedExpansionSnapshot::degree_slots) {
@@ -109,11 +106,15 @@ carried_expansion_snapshot(ValidatedVectorMultivariateFunctionPatch const& mappi
     return profile;
 }
 
+} // namespace
+
+namespace EvolutionDetail {
+
 Void
 print_carried_expansion_snapshot(
-    String const& stage,
+    OutputStream& output, String const& stage,
     SizeType step,
-    ValidatedVectorMultivariateFunctionPatch const& mapping,
+    ValidatedVectorMultivariateTaylorFunctionModelDP const& mapping,
     Sweeper<FloatDP> const& sweeper)
 {
     auto const profile=carried_expansion_snapshot(mapping);
@@ -124,7 +125,7 @@ print_carried_expansion_snapshot(
             +profile.bridge_count[bucket_degree]
             +profile.above_loose_count[bucket_degree];
         if(total_count==0u) { continue; }
-        std::cerr << "[CarriedExpansionSnapshot]"
+        output << "[CarriedExpansionSnapshot]"
                   << " sweeper=" << sweeper
                   << " stage=" << stage
                   << " step=" << step
@@ -139,7 +140,7 @@ print_carried_expansion_snapshot(
     }
 }
 
-} // namespace
+} // namespace EvolutionDetail
 
 VectorFieldEvolver::VectorFieldEvolver(const SystemType& system, const IntegratorInterface& i)
     : _system(system.clone())
@@ -369,9 +370,10 @@ _process_timed_enclosure_step(WorkloadType::Access& workload,
             || diagnostic_step==1500u || diagnostic_step==2000u;
         if(preconditioned_integrator->carried_expansion_diagnostics()
            && carried_snapshot_step) {
-            print_carried_expansion_snapshot(
-                "input",diagnostic_step,
-                local_state.normalised_mapping(),
+            EvolutionDetail::print_carried_expansion_snapshot(
+                std::cerr,"input",diagnostic_step,
+                dynamic_cast<ValidatedVectorMultivariateTaylorFunctionModelDP const&>(
+                    local_state.normalised_mapping().reference()),
                 preconditioned_integrator->sweeper());
         }
 
@@ -381,9 +383,10 @@ _process_timed_enclosure_step(WorkloadType::Access& workload,
 
         if(preconditioned_integrator->carried_expansion_diagnostics()
            && carried_snapshot_step) {
-            print_carried_expansion_snapshot(
-                "output",diagnostic_step,
-                local_step.final_state().normalised_mapping(),
+            EvolutionDetail::print_carried_expansion_snapshot(
+                std::cerr,"output",diagnostic_step,
+                dynamic_cast<ValidatedVectorMultivariateTaylorFunctionModelDP const&>(
+                    local_step.final_state().normalised_mapping().reference()),
                 preconditioned_integrator->sweeper());
         }
 

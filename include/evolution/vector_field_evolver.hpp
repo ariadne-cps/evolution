@@ -42,6 +42,8 @@
 #include "evolution/configuration_interface.hpp"
 #include "integration/integrator_interface.hpp"
 #include "evolution/evolver_interface.hpp"
+#include "evolution/enclosure.hpp"
+#include "evolution/orbit.hpp"
 
 #include "threading/workload.hpp"
 

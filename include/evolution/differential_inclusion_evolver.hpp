@@ -190,7 +190,7 @@ class DifferentialInclusionEvolverConfiguration : public ConfigurationInterface
     Void set_enable_parameter_reduction(const Bool value) { _enable_parameter_reduction = value; }
 
     List<InputApproximation> const& approximations() const { return _approximations; }
-    Void set_approximations(List<InputApproximation> const& value) { assert(value.size() > 0); _approximations = value; }
+    Void set_approximations(List<InputApproximation> const& value) { ARIADNE_PRECONDITION(value.size() > 0); _approximations = value; }
 
   public:
 

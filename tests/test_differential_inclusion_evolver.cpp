@@ -37,6 +37,8 @@
 
 #include "ariadne-testing.hpp"
 #include "test_logging.hpp"
+#include "log_verbosity_scope.hpp"
+#include <sstream>
 
 using namespace Ariadne;
 
@@ -48,7 +50,7 @@ class TestDifferentialInclusionEvolver : public Ariadne::Testing::ContextFixture
     // exercises uncertain inputs and periodic parameter reconditioning.
     void run_case(const List<InputApproximation>& approximations,
                   Nat reduction_period, ExactDouble ratio,
-                  Real evolution_time, ExactDouble maximum_step) {
+                  Real evolution_time, ExactDouble maximum_step, Bool combined=false) {
         RealVariable x("x"), u("u");
         DottedRealAssignments dynamics={dot(x)=u-x};
         RealVariablesBox inputs={0.5_dec<=u<=1.5_dec};
@@ -70,12 +72,13 @@ class TestDifferentialInclusionEvolver : public Ariadne::Testing::ContextFixture
 
         for(auto approximation : approximations) {
             DifferentialInclusionEvolver evolver(inclusion,integrator,reconditioner);
-            List<InputApproximation> selected={approximation};
+            List<InputApproximation> selected=combined ? approximations : List<InputApproximation>{approximation};
             evolver.configuration().set_approximations(selected);
             evolver.configuration().set_maximum_step_size(maximum_step);
             auto orbit=evolver.orbit(initial,evolution_time);
             ARIADNE_TESTING_PROVE(orbit.reach().size()>0u);
             ARIADNE_TESTING_PROVE(orbit.final().size()>0u);
+            if(combined) break;
         }
     }
 
@@ -92,6 +95,48 @@ class TestDifferentialInclusionEvolver : public Ariadne::Testing::ContextFixture
                  2,1.25_x,1/8_q,1.0_x/pow(two,5));
     }
 
+    void test_scheduling_and_diagnostic_configuration() {
+        LogVerbosityScope logging(100u);
+        run_case({ZeroApproximation(),ConstantApproximation(),AffineApproximation(),
+                  SinusoidalApproximation(),PiecewiseApproximation()},
+                 2,1.25_x,1/4_q,0.03125_x,true);
+        run_case({AffineApproximation()},0,3.0_x,1/16_q,0.03125_x);
+        DifferentialInclusionEvolverConfiguration config;
+        config.set_maximum_enclosure_radius(2.0_x);
+        config.set_enable_parameter_reduction(false);
+        ARIADNE_TESTING_EXPECT_EQUAL(config.maximum_enclosure_radius(),2.0_x);
+        ARIADNE_TESTING_PROVE(!config.enable_parameter_reduction());
+        ARIADNE_TESTING_EXPECT_EXCEPTION(config.set_approximations({}));
+        std::ostringstream text;
+        text<<config;
+        ARIADNE_TESTING_PROVE(text.str().find("approximations=")!=std::string::npos);
+        LohnerReconditioner policy(1u,1u,2u,1.25_x);
+        std::unique_ptr<ReconditionerInterface> clone(policy.clone());
+        ARIADNE_TESTING_PROVE(clone.get()!=&policy);
+    }
+
+    void test_error_preserving_reconditioner_and_empty_inputs() {
+        struct ErrorPreservingReconditioner : LohnerReconditioner {
+            ErrorPreservingReconditioner() : LohnerReconditioner(1u,1u,0u,1.0_x) { }
+            Bool must_incorporate_errors(InclusionEvolverState const&) const override { return false; }
+            ErrorPreservingReconditioner* clone() const override {
+                return new ErrorPreservingReconditioner(*this);
+            }
+        } policy;
+        RealVariable x("x"),u("u");
+        TaylorPicardIntegrator integrator(step_maximum_error=1e-5);
+        DifferentialInclusion system({dot(x)=u-x},RealVariablesBox({0<=u<=1}));
+        DifferentialInclusionEvolver evolver(system,integrator,policy);
+        evolver.configuration().set_approximations({ConstantApproximation()});
+        evolver.configuration().set_maximum_step_size(0.03125_x);
+        DifferentialInclusionEvolver const& immutable=evolver;
+        ARIADNE_TESTING_EXPECT_EQUAL(immutable.configuration().maximum_step_size(),0.03125_x);
+        auto result=evolver.orbit(RealVariablesBox({0<=x<=0}),Real(1/16_q));
+        ARIADNE_TESTING_PROVE(result.final().size()>0u);
+        // The system rejects a zero-input domain before an evolver exists.
+        ARIADNE_TESTING_EXPECT_EXCEPTION((DifferentialInclusion({dot(x)=-x},RealVariablesBox{})));
+    }
+
     
 };
 
@@ -101,5 +146,7 @@ int main(int argc, const char* argv[]) {
     ARIADNE_TESTING_SUITE("test_differential_inclusion_evolver");
     ARIADNE_TESTING_ADD_TEST(TestDifferentialInclusionEvolver, test_uncertain_input);
     ARIADNE_TESTING_ADD_TEST(TestDifferentialInclusionEvolver, test_periodic_reconditioning);
+    ARIADNE_TESTING_ADD_TEST(TestDifferentialInclusionEvolver, test_scheduling_and_diagnostic_configuration);
+    ARIADNE_TESTING_ADD_TEST(TestDifferentialInclusionEvolver, test_error_preserving_reconditioner_and_empty_inputs);
     return ARIADNE_TESTING_RUN_TESTS_WITH_ARGS(argc, argv);
 }

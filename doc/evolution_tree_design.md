@@ -14,7 +14,7 @@ that trajectory. These requirements replace the previous checkpoint-per-node
 proposal. A new set does not by itself create a new tree node.
 
 The generic structure belongs in
-`ariadne-cps/tree/doc/derivationtree_design.md`. Entry semantics, trajectory birth,
+`ariadne-cps/tree/doc/derivation_tree_design.md`. Entry semantics, trajectory birth,
 completion criteria and scheduling belong to Evolution.
 
 ## Trajectory object and metadata
@@ -75,9 +75,11 @@ first set need not equal its parent's source set.
 
 Record the particular parent entry responsible for birth, in addition to the
 reason/event. Parent identity alone is insufficient because its list can keep
-growing. An entry index is sufficient for an append-only initial history. Later
-insertion needs stable entry handles or an explicit reference-update policy.
-The precise representation is still open.
+growing. An entry index is sufficient for append-only progression. Backtracking
+prunes a future continuation and regrows from the retained checkpoint; it does
+not insert intermediate nodes or move existing subtrees. Truncating trajectory
+entries must also invalidate child trajectories derived from removed entries.
+The exact pruning boundary and origin-reference lifetime still need a contract.
 
 ## Completion is local to a trajectory
 
@@ -160,10 +162,12 @@ subset and numerical-alternative branches relate to the trajectory list. Do
 not flatten parallel pieces into an apparently sequential history. Additional
 internal representation or explicit relations may be needed.
 
-Stable IDs remain required: appending entries or adding children does not
-renumber existing nodes. Backtracking can still invalidate results derived from
-edited entries. Persistence, concurrent publication, general multi-input
-dependency graphs and reclamation are outside the initial scope.
+The structural model permits growth and pruning followed by regrowth. Existing
+nodes cannot be inserted between other nodes or reparented. Pruned IDs must
+become invalid and must not be reused; retained nodes keep their identities.
+Pruning is not implemented in the current generic container and is the next
+required structural capability. Persistence, concurrent publication and general
+multi-input dependency graphs remain outside the initial scope.
 
 ## Initial operations and verification
 

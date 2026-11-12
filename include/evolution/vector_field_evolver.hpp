@@ -1,29 +1,29 @@
 /***************************************************************************
- *            dynamics/vector_field_evolver.hpp
+ *            vector_field_evolver.hpp
  *
  *  Copyright  2007-20  Alberto Casagrande, Pieter Collins
  *
  ****************************************************************************/
 
 /*
- *  This file is part of Ariadne.
+ *  This file is part of Ariadne Evolution.
  *
- *  Ariadne is free software: you can redistribute it and/or modify
+ *  Ariadne Evolution is free software: you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
  *  the Free Software Foundation, either version 3 of the License, or
  *  (at your option) any later version.
  *
- *  Ariadne is distributed in the hope that it will be useful,
+ *  Ariadne Evolution is distributed in the hope that it will be useful,
  *  but WITHOUT ANY WARRANTY; without even the implied warranty of
- *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
  *  GNU General Public License for more details.
  *
  *  You should have received a copy of the GNU General Public License
- *  along with Ariadne.  If not, see <https://www.gnu.org/licenses/>.
+ *  along with Ariadne Evolution. If not, see <https://www.gnu.org/licenses/>.
  */
 
-/*! \file dynamics/vector_field_evolver.hpp
- *  \brief Evolver for vector_field systems.
+/** @file evolution/vector_field_evolver.hpp
+ *  @brief Validated evolvers for vector fields.
  */
 
 #ifndef ARIADNE_VECTOR_FIELD_EVOLVER_HPP
@@ -52,15 +52,19 @@
 
 namespace Ariadne {
 
+/** @brief VectorField: validated evolvers for vector fields. */
 class VectorField;
 template<class ES> class Orbit;
 
 using Mutex = std::mutex;
 template<class T> using LockGuard = std::lock_guard<T>;
 
+/** @brief VectorFieldEvolverConfiguration: validated evolvers for vector fields. */
 class VectorFieldEvolverConfiguration;
+/** @brief PreconditionedTaylorSeriesState: validated evolvers for vector fields. */
 class PreconditionedTaylorSeriesState;
 
+/** @brief RealExpressionBoundedConstraintSet: validated evolvers for vector fields. */
 class RealExpressionBoundedConstraintSet;
 
 //! \brief A class for computing the evolution of a vector_field system.
@@ -79,6 +83,7 @@ class VectorFieldEvolver
     typedef TimeType TerminationType;
     typedef LabelledEnclosure EnclosureType;
     typedef ListSet<EnclosureType> EnclosureListType;
+    /** @brief TimedEnclosureType: validated evolvers for vector fields. */
     struct TimedEnclosureType {
         TimeStepType first;
         EnclosureType second;
@@ -137,7 +142,9 @@ class VectorFieldEvolver
     //! \name Evolution using abstract sets.
     //! \brief Compute an approximation to the orbit set using upper semantics.
     OrbitType orbit(EnclosureType const& initial_set, TimeType const& time, Semantics semantics) const;
+    /** @brief Perform the specified evolution operation. */
     OrbitType orbit(RealVariablesBox const& initial_set, TimeType const& time, Semantics semantics) const;
+    /** @brief Perform the specified evolution operation. */
     OrbitType orbit(RealExpressionBoundedConstraintSet const& initial_set, TimeType const& time, Semantics semantics) const;
 
     //!@}
@@ -150,6 +157,7 @@ class VectorFieldEvolver
     Void _process_timed_enclosure_step(WorkloadType::Access& workload, TimedEnclosureType const& current_timed_set,
                                        TimeType const& maximum_time, Semantics semantics, SharedPointer<SynchronisedOrbit> result) const;
 
+    /** @brief Perform the specified evolution operation. */
     Void _append_initial_set(WorkloadType& workload, TimeStepType const& initial_time, EnclosureType const& current_set) const;
 
   private:
@@ -211,6 +219,7 @@ class VectorFieldEvolverConfiguration : public ConfigurationInterface
 
   public:
 
+    /** @brief Perform the specified evolution operation. */
     OutputStream& _write(OutputStream& os) const override;
 };
 

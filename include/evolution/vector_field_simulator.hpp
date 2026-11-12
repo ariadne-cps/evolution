@@ -1,29 +1,29 @@
 /***************************************************************************
- *            dynamics/vector_field_simulator.hpp
+ *            vector_field_simulator.hpp
  *
  *  Copyright  2009-21  Luca Geretti, Mirko Albanese
  *
  ****************************************************************************/
 
 /*
- *  This file is part of Ariadne.
+ *  This file is part of Ariadne Evolution.
  *
- *  Ariadne is free software: you can redistribute it and/or modify
+ *  Ariadne Evolution is free software: you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
  *  the Free Software Foundation, either version 3 of the License, or
  *  (at your option) any later version.
  *
- *  Ariadne is distributed in the hope that it will be useful,
+ *  Ariadne Evolution is distributed in the hope that it will be useful,
  *  but WITHOUT ANY WARRANTY; without even the implied warranty of
- *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
  *  GNU General Public License for more details.
  *
  *  You should have received a copy of the GNU General Public License
- *  along with Ariadne.  If not, see <https://www.gnu.org/licenses/>.
+ *  along with Ariadne Evolution. If not, see <https://www.gnu.org/licenses/>.
  */
 
-/*! \file dynamics/vector_field_simulator.hpp
- *  \brief Simulator for continuous systems.
+/** @file evolution/vector_field_simulator.hpp
+ *  @brief Numerical simulation of continuous vector-field systems.
  */
 
 #ifndef ARIADNE_VECTOR_FIELD_SIMULATOR_HPP
@@ -43,6 +43,7 @@
 
 namespace Ariadne {
 
+/** @brief DiscretisationType: numerical simulation of continuous vector-field systems. */
 enum class DiscretisationType
 {
   None,
@@ -50,6 +51,7 @@ enum class DiscretisationType
   Recombine
 };
 
+/** @brief Perform the specified evolution operation. */
 inline OutputStream& operator<<(OutputStream& os, const DiscretisationType& dtype) {
 
     if(dtype == DiscretisationType::Mince){ os << "Mince"; }
@@ -58,9 +60,12 @@ inline OutputStream& operator<<(OutputStream& os, const DiscretisationType& dtyp
     return os;
 }
 
+/** @brief VectorField: numerical simulation of continuous vector-field systems. */
 class VectorField;
+/** @brief VectorFieldSimulatorConfiguration: numerical simulation of continuous vector-field systems. */
 class VectorFieldSimulatorConfiguration;
 
+/** @brief RealExpressionBoundedConstraintSet: numerical simulation of continuous vector-field systems. */
 class RealExpressionBoundedConstraintSet;
 
 template<class T> class Orbit;
@@ -87,6 +92,7 @@ class VectorFieldSimulator
     //! \brief Synchronised wrapping of orbit to allow concurrent adjoining
     struct SynchronisedOrbit : public OrbitType {
         SynchronisedOrbit(ApproximateListPointType const& initial_points) : OrbitType(initial_points) { }
+        /** @brief Perform the specified evolution operation. */
         void insert(FloatDP const& t, ApproximatePointType const& pt, SizeType const& curve_number) {
             std::lock_guard<std::mutex> lock(_mux); OrbitType::insert(t,pt,curve_number); }
       private:
@@ -108,12 +114,16 @@ class VectorFieldSimulator
     //! \name Simulation using points.
     //! \brief Compute an approximation to the orbit set.
     OrbitType orbit(RealBoxType const& initial_box, TerminationType const& termination) const;
+    /** @brief Perform the specified evolution operation. */
     OrbitType orbit(RealExpressionBoundedConstraintSet const& initial_set, TerminationType const& termination) const;
+    /** @brief Perform the specified evolution operation. */
     OrbitType orbit(ApproximateListPointType const& initial_list, TerminationType const& termination) const;
+    /** @brief Perform the specified evolution operation. */
     OrbitType orbit(UpperBoxType& initial_box, TerminationType const& termination) const;
 
   private:
 
+    /** @brief Perform the specified evolution operation. */
     void _simulate_from_point(Pair<SizeType,ApproximatePointType> indexed_initial, TerminationType const& termination, SharedPointer<SynchronisedOrbit> orbit) const;
   private:
     SharedPointer<SystemType> _system;
@@ -149,16 +159,21 @@ class VectorFieldSimulatorConfiguration : public ConfigurationInterface
     Void set_num_subdivisions(Nat num_subdivisions) { _num_subdivisions = num_subdivisions; }
     Nat const& num_subdivisions() const { return _num_subdivisions; }
 
+    /** @brief Perform the specified evolution operation. */
     Void insert_subspace(RealVariable v, Nat n) {
+        /** @brief Construct the object. */
         ARIADNE_PRECONDITION(n>0u);
+        /** @brief Construct the object. */
         ARIADNE_PRECONDITION(!_subspace.has_key(v));
         _subspace.insert(v,n);
     }
 
+    /** @brief Perform the specified evolution operation. */
     Void remove_keys() {
         _subspace.remove_keys(_subspace.keys());
     }
 
+    /** @brief Perform the specified evolution operation. */
     Void set_subspace(subspace _subspace_) {
         for(auto const& entry : _subspace_) { ARIADNE_PRECONDITION(entry.second>0u); }
         _subspace = _subspace_;
@@ -168,6 +183,7 @@ class VectorFieldSimulatorConfiguration : public ConfigurationInterface
 
     subspace const& get_subspace() const { return _subspace; }
 
+    /** @brief Perform the specified evolution operation. */
     virtual OutputStream& _write(OutputStream& os) const;
 
 };

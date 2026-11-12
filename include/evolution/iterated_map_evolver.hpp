@@ -35,6 +35,7 @@
 #include <vector>
 
 #include "evolution/configuration_interface.hpp"
+#include "evolution/enclosure.hpp"
 #include "evolution/evolver_interface.hpp"
 #include "function/function_interface.hpp"
 #include "logging/logging.hpp"

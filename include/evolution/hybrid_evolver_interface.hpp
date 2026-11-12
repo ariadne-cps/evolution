@@ -35,6 +35,7 @@
 #include "hybrid/hybrid_set.decl.hpp"
 #include "logging/logging.hpp"
 #include "system/discrete_event.hpp"
+#include "system/hybrid_automaton_interface.hpp"
 
 namespace Ariadne {
 

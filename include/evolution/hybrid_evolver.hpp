@@ -527,21 +527,21 @@ enum class CrossingKind : std::uint8_t {
     NEGATIVE,   //!< The guard function is negative on the flow domain. No event occurs.
     POSITIVE,   //!< The guard function is negative on the domain. The event occurs immediately (if urgent) or at all times (if permissive).
     MONOTONE,   //!< The guard function is strictly increasing or decreasing along flow lines at a crossing point.
-              //! i.e. \f$\frac{d}{dt}g(\phi(x_0,t))>0\f$ whenever \f$g(\phi(x_0,t))=0\f$.
-              //! Implied by \f$L_{f}g \geq 0\f$.
+                //! i.e. \f$\frac{d}{dt}g(\phi(x_0,t))>0\f$ whenever \f$g(\phi(x_0,t))=0\f$.
+                //! Implied by \f$L_{f}g \geq 0\f$.
     INCREASING, //!< The guard function is strictly increasing along flow lines at a crossing point.
                 //! i.e. \f$\frac{d}{dt}g(\phi(x_0,t))>0\f$ whenever \f$g(\phi(x_0,t))=0\f$.
                 //! Implied by \f$L_{f}g \geq 0\f$.
     DECREASING, //!< The guard function is strictly decreasing along flow lines.
     CONCAVE,    //!< The guard function is positive over at most an interval.
-             //! Implied by concavity along flow lines, which is equivalent to \f$L_{f}^{2} g < 0\f$ within the reached set.
-    CONVEX, //!< The guard function is negative over at most an interval. Implied by convexity along flow lines.
-            //! Implied by convexity along flow lines, which is equivalent to \f$L_{f}^{2} g > 0\f$ within the reached set.
+                //! Implied by concavity along flow lines, which is equivalent to \f$L_{f}^{2} g < 0\f$ within the reached set.
+    CONVEX,     //!< The guard function is negative over at most an interval. Implied by convexity along flow lines.
+                //! Implied by convexity along flow lines, which is equivalent to \f$L_{f}^{2} g > 0\f$ within the reached set.
     TRANSVERSE, //!< The guard function is strictly increasing along flow lines, and
                 //! the crossing time can be computed as a smooth function of the initial state.
                 //! Given an initial point \f$x_0\f$, the crossing time is \f$\gamma(x_0)\f$.
-    GRAZING //!< The time at which the guard function reaches a maximum along flow lines is a smooth function \f$\mu(x_0)\f$ of the initial state \f$x_0\f$.
-            //! Implies by concavity along flow lines, which is equivalent to \f$L_{f}^{2} g < 0\f$ within the reached set.
+    GRAZING     //!< The time at which the guard function reaches a maximum along flow lines is a smooth function \f$\mu(x_0)\f$ of the initial state \f$x_0\f$.
+                //! Implies by concavity along flow lines, which is equivalent to \f$L_{f}^{2} g < 0\f$ within the reached set.
 };
 /** @brief Apply the requested operation. */
 OutputStream& operator<<(OutputStream& os, const CrossingKind& crk);

@@ -1,24 +1,29 @@
 /***************************************************************************
- *            dynamics/first_order_pde.cpp
+ *            first_order_pde.cpp
  *
  *  Copyright  2018-20  Pieter Collins, Svetlana Selivanova
  *
  ****************************************************************************/
 
 /*
- *  This program is free software; you can redistribute it and/or modify
+ *  This file is part of Ariadne Evolution.
+ *
+ *  Ariadne Evolution is free software: you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
- *  the Free Software Foundation; either version 2 of the License, or
+ *  the Free Software Foundation, either version 3 of the License, or
  *  (at your option) any later version.
  *
- *  This program is distributed in the hope that it will be useful,
+ *  Ariadne Evolution is distributed in the hope that it will be useful,
  *  but WITHOUT ANY WARRANTY; without even the implied warranty of
- *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- *  GNU Library General Public License for more details.
+ *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ *  GNU General Public License for more details.
  *
  *  You should have received a copy of the GNU General Public License
- *  along with this program; if not, write to the Free Software
- *  Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
+ *  along with Ariadne Evolution. If not, see <https://www.gnu.org/licenses/>.
+ */
+
+/** @file src/first_order_pde.cpp
+ *  @brief Implement numerical evolution of first-order PDE models.
  */
 
 #include "evolution/first_order_pde.hpp"

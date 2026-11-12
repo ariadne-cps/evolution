@@ -29,12 +29,12 @@
 #ifndef ARIADNE_EVOLVER_INTERFACE_HPP
 #define ARIADNE_EVOLVER_INTERFACE_HPP
 
-
 namespace Ariadne {
 
-
-template<class ES> class ListSet;
-template<class ES> class Orbit;
+template<class ES>
+class ListSet;
+template<class ES>
+class Orbit;
 
 //! \ingroup DynamicsModule
 //! \brief The semantics used to determine the trajectories of the system.
@@ -44,15 +44,13 @@ enum class Semantics : std::uint8_t {
     UPPER  //!< Over-approximations with all possibilities included as spacial discontinuities.
 };
 
-
 //! \ingroup DynamicsModule
 //! \brief Interface for evolving a dynamic system.
 //! \sa HybridEvolverInterface
 //! \sa ReachabilityAnalyserInterface
 template<class SYS, class ES, class TRM>
 /** @brief EvolverInterface: interfaces and semantics of time evolution. */
-class EvolverInterface
-{
+class EvolverInterface {
   public:
     //! \brief The type of system the evolver can compute the behaviour of.
     typedef SYS SystemType;
@@ -69,7 +67,7 @@ class EvolverInterface
     virtual ~EvolverInterface() = default;
 
     //! \brief Cloning operator.
-    virtual EvolverInterface<SystemType,EnclosureType,TerminationType>* clone() const = 0;
+    virtual EvolverInterface<SystemType, EnclosureType, TerminationType>* clone() const = 0;
 
     //! \brief Gets the system associated with the evolver.
     virtual const SystemType& system() const = 0;
@@ -82,26 +80,21 @@ class EvolverInterface
     virtual Orbit<EnclosureType> orbit(const EnclosureType& initial_set, const TerminationType& time, Semantics semantics) const = 0;
 
     //!@}
-
 };
 
 //! \brief Factory for evolver interface classes.
 template<class SYS, class ES, class TRM>
 /** @brief EvolverFactoryInterface: interfaces and semantics of time evolution. */
-class EvolverFactoryInterface
-{
+class EvolverFactoryInterface {
   public:
     virtual ~EvolverFactoryInterface() = default;
 
     //! \brief Create a copy of the factory.
     virtual EvolverFactoryInterface* clone() const = 0;
     //! \brief Create an evolver interface object around a \a system.
-    virtual EvolverInterface<SYS,ES,TRM>* create(const SYS& system) const = 0;
+    virtual EvolverInterface<SYS, ES, TRM>* create(const SYS& system) const = 0;
 };
 
-
 } // namespace Ariadne
-
-
 
 #endif // ARIADNE_EVOLVER_INTERFACE_HPP

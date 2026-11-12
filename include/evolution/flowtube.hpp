@@ -29,56 +29,72 @@
 #ifndef ARIADNE_FLOWTUBE_HPP
 #define ARIADNE_FLOWTUBE_HPP
 
-
 #include "function/function_model.hpp"
 #include "set/function_set.hpp"
 
 namespace Ariadne {
 
-template<class ES> class Orbit;
+template<class ES>
+class Orbit;
 
 using ValidatedImageSet = ValidatedConstrainedImageSet;
 
 /** @brief FlowTube: flow tubes for dynamical systems. */
 class FlowTube {
     ValidatedVectorMultivariateFunctionModelDP _phi;
+
   public:
     //! Construct a flow map phi(x,t) over its spatial and temporal domain.
-    explicit FlowTube(ValidatedVectorMultivariateFunctionModelDP const& phi) : _phi(phi) {
+    explicit FlowTube(const ValidatedVectorMultivariateFunctionModelDP& phi) : _phi(phi) {
         /** @brief Construct the object. */
-        ARIADNE_PRECONDITION(phi.argument_size()==phi.result_size()+1u);
+        ARIADNE_PRECONDITION(phi.argument_size() == phi.result_size() + 1u);
     }
     SizeType number_of_state_variables() const { return _phi.result_size(); }
     /** @brief Perform the specified evolution operation. */
-    template<class X, class T> requires Same<X,T> decltype(auto) operator()(Vector<X> const& x, Scalar<T> const& t) const {
-        return _phi(join(x,t)); }
-    decltype(auto) space_domain() const { SizeType n=this->number_of_state_variables(); return _phi.domain()[range(0,n)]; }
-    auto time_range() const { SizeType n=this->number_of_state_variables(); return _phi.domain()[n]; }
+    template<class X, class T>
+        requires Same<X, T>
+    decltype(auto) operator()(const Vector<X>& x, const Scalar<T>& t) const {
+        return _phi(join(x, t));
+    }
+    decltype(auto) space_domain() const {
+        SizeType n = this->number_of_state_variables();
+        return _phi.domain()[range(0, n)];
+    }
+    auto time_range() const {
+        SizeType n = this->number_of_state_variables();
+        return _phi.domain()[n];
+    }
     auto initial_time() const { return time_range().lower_bound(); }
     auto final_time() const { return time_range().upper_bound(); }
     ValidatedVectorMultivariateFunctionModelDP reach_function() const { return _phi; }
     /** @brief Return the requested evolution property. */
     ValidatedVectorMultivariateFunctionModelDP final_function() const {
-        return partial_evaluate(_phi,number_of_state_variables(),ValidatedNumber(final_time())); }
+        return partial_evaluate(_phi, number_of_state_variables(), ValidatedNumber(final_time()));
+    }
     /** @brief Return the requested evolution property. */
     ValidatedImageSet initial_set() const {
-        auto initial=partial_evaluate(_phi,number_of_state_variables(),ValidatedNumber(initial_time()));
-        return ValidatedImageSet(space_domain(),initial); }
-    ValidatedImageSet reach_set() const { return ValidatedImageSet(_phi.domain(),_phi); }
-    ValidatedImageSet final_set() const { return ValidatedImageSet(space_domain(),final_function()); }
+        auto initial = partial_evaluate(_phi, number_of_state_variables(), ValidatedNumber(initial_time()));
+        return ValidatedImageSet(space_domain(), initial);
+    }
+    ValidatedImageSet reach_set() const { return ValidatedImageSet(_phi.domain(), _phi); }
+    ValidatedImageSet final_set() const { return ValidatedImageSet(space_domain(), final_function()); }
 };
 
-template<class E, class R=E> struct OrbitStep {
+template<class E, class R = E>
+struct OrbitStep {
     OrbitStep* _previous;
-    E _initial; R _intermediate;
+    E _initial;
+    R _intermediate;
     List<OrbitStep> _next;
     List<E> _final;
 };
 
-template<> class Orbit<FlowTube> {
-    using ES=FlowTube;
+template<>
+class Orbit<FlowTube> {
+    using ES = FlowTube;
     OrbitStep<ES> _starting;
     List<OrbitStep<ES>*> _working;
+
   public:
     /** @brief Construct the object. */
     Orbit(const ES& set);

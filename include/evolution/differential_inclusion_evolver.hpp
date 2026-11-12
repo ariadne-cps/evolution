@@ -29,37 +29,36 @@
 #ifndef ARIADNE_DIFFERENTIAL_INCLUSION_EVOLVER_HPP
 #define ARIADNE_DIFFERENTIAL_INCLUSION_EVOLVER_HPP
 
-#include "utility/typedefs.hpp"
-#include "utility/attribute.hpp"
-#include "numeric/numeric.hpp"
-#include "algebra/sweeper.hpp"
 #include "algebra/algebra.hpp"
-#include "function/domain.hpp"
-#include "function/function_patch.hpp"
-#include "function/function_model.hpp"
-#include "function/formula.hpp"
-#include "function/symbolic_function.hpp"
-#include "expression-set/expression_set.hpp"
-#include "logging/logging.hpp"
-#include "integration/integrator_interface.hpp"
-#include "integration/inclusion_integrator.hpp"
+#include "algebra/sweeper.hpp"
 #include "evolution/configuration_interface.hpp"
-#include "system/differential_inclusion.hpp"
 #include "evolution/traits.hpp"
+#include "function/domain.hpp"
+#include "function/formula.hpp"
+#include "function/function_model.hpp"
+#include "function/function_patch.hpp"
+#include "function/symbolic_function.hpp"
+#include "integration/inclusion_integrator.hpp"
+#include "integration/integrator_interface.hpp"
+#include "logging/logging.hpp"
+#include "numeric/numeric.hpp"
+#include "system/differential_inclusion.hpp"
+#include "utility/attribute.hpp"
+#include "utility/typedefs.hpp"
 
+#include "expression-set/expression_set.hpp"
 
 namespace Ariadne {
-
 
 /** @brief Real: evolver implementations for differential inclusions. */
 class Real;
 
 /** @brief StepSize: evolver implementations for differential inclusions. */
-struct StepSize : public Attribute<StepSizeType> { };
+struct StepSize : public Attribute<StepSizeType> {};
 /** @brief NumberOfStepsBetweenSimplifications: evolver implementations for differential inclusions. */
-struct NumberOfStepsBetweenSimplifications : public Attribute<Nat> { };
+struct NumberOfStepsBetweenSimplifications : public Attribute<Nat> {};
 /** @brief NumberOfVariablesToKeep: evolver implementations for differential inclusions. */
-struct NumberOfVariablesToKeep : public Attribute<Nat> { };
+struct NumberOfVariablesToKeep : public Attribute<Nat> {};
 
 static const Generator<StepSize> step_size = Generator<StepSize>();
 static const Generator<NumberOfStepsBetweenSimplifications> number_of_steps_between_simplifications = Generator<NumberOfStepsBetweenSimplifications>();
@@ -73,25 +72,27 @@ using SweeperDP = Sweeper<FloatDP>;
 using TimeStepType = Dyadic;
 
 /** @brief Perform the specified evolution operation. */
-FloatDP volume(Vector<ApproximateIntervalType> const& box);
+FloatDP volume(const Vector<ApproximateIntervalType>& box);
 
 /** @brief InclusionEvolverState: evolver implementations for differential inclusions. */
 class InclusionEvolverState;
-template<class T> class Orbit;
+template<class T>
+class Orbit;
 
 /** @brief ReconditionerInterface: evolver implementations for differential inclusions. */
 class ReconditionerInterface {
   public:
     /** @brief Perform the specified evolution operation. */
-    virtual Bool must_reduce_parameters(InclusionEvolverState const& state) const = 0;
+    virtual Bool must_reduce_parameters(const InclusionEvolverState& state) const = 0;
     /** @brief Perform the specified evolution operation. */
-    virtual Bool must_incorporate_errors(InclusionEvolverState const& state) const = 0;
+    virtual Bool must_incorporate_errors(const InclusionEvolverState& state) const = 0;
     /** @brief Perform the specified evolution operation. */
     virtual Void reduce_parameters(ValidatedVectorMultivariateFunctionPatch& phi) const = 0;
     /** @brief Perform the specified evolution operation. */
-    virtual ValidatedVectorMultivariateFunctionPatch incorporate_errors(ValidatedVectorMultivariateFunctionPatch const& Phi) const = 0;
+    virtual ValidatedVectorMultivariateFunctionPatch incorporate_errors(const ValidatedVectorMultivariateFunctionPatch& Phi) const = 0;
     /** @brief Compute or update an evolution step. */
-    virtual Void update_from(InclusionEvolverState const& state) = 0;
+    virtual Void update_from(const InclusionEvolverState& state) = 0;
+
   public:
     /** @brief Perform the specified evolution operation. */
     virtual ReconditionerInterface* clone() const = 0;
@@ -105,38 +106,39 @@ class LohnerReconditioner : public ReconditionerInterface {
     Nat _number_of_steps_between_simplifications;
     Nat _number_of_parameters_to_keep;
     ExactDouble _ratio_of_parameters_to_keep;
-public:
+
+  public:
     LohnerReconditioner(Nat number_of_variables, Nat number_of_inputs, Nat number_of_steps_between_simplifications_, ApproximateDouble ratio_of_parameters_to_keep)
         : _number_of_variables(number_of_variables),
           _number_of_inputs(number_of_inputs),
           _number_of_steps_between_simplifications(number_of_steps_between_simplifications_),
           _number_of_parameters_to_keep(USHRT_MAX),
-          _ratio_of_parameters_to_keep(cast_exact(ratio_of_parameters_to_keep)) { }
+          _ratio_of_parameters_to_keep(cast_exact(ratio_of_parameters_to_keep)) {}
     virtual LohnerReconditioner* clone() const override { return new LohnerReconditioner(*this); }
     /** @brief Perform the specified evolution operation. */
-    virtual ValidatedVectorMultivariateFunctionPatch incorporate_errors(ValidatedVectorMultivariateFunctionPatch const& f) const override;
+    virtual ValidatedVectorMultivariateFunctionPatch incorporate_errors(const ValidatedVectorMultivariateFunctionPatch& f) const override;
     /** @brief Perform the specified evolution operation. */
     virtual Void reduce_parameters(ValidatedVectorMultivariateFunctionPatch& f) const override;
     /** @brief Perform the specified evolution operation. */
-    virtual Bool must_reduce_parameters(InclusionEvolverState const& state) const override;
+    virtual Bool must_reduce_parameters(const InclusionEvolverState& state) const override;
     /** @brief Perform the specified evolution operation. */
-    virtual Bool must_incorporate_errors(InclusionEvolverState const& state) const override;
+    virtual Bool must_incorporate_errors(const InclusionEvolverState& state) const override;
     /** @brief Compute or update an evolution step. */
-    virtual Void update_from(InclusionEvolverState const& state) override;
+    virtual Void update_from(const InclusionEvolverState& state) override;
 };
 
 /** @brief Reconditioner: evolver implementations for differential inclusions. */
 class Reconditioner : public Handle<ReconditionerInterface> {
-public:
+  public:
     using Handle<ReconditionerInterface>::Handle;
 
-    Bool must_reduce_parameters(InclusionEvolverState const& state) const { return _ptr->must_reduce_parameters(state); }
-    Bool must_incorporate_errors(InclusionEvolverState const& state) const { return _ptr->must_incorporate_errors(state); }
+    Bool must_reduce_parameters(const InclusionEvolverState& state) const { return _ptr->must_reduce_parameters(state); }
+    Bool must_incorporate_errors(const InclusionEvolverState& state) const { return _ptr->must_incorporate_errors(state); }
 
     Void reduce_parameters(ValidatedVectorMultivariateFunctionPatch& phi) const { _ptr->reduce_parameters(phi); }
-    ValidatedVectorMultivariateFunctionPatch incorporate_errors(ValidatedVectorMultivariateFunctionPatch const& Phi) const { return _ptr->incorporate_errors(Phi); }
+    ValidatedVectorMultivariateFunctionPatch incorporate_errors(const ValidatedVectorMultivariateFunctionPatch& Phi) const { return _ptr->incorporate_errors(Phi); }
 
-    Void update_from(InclusionEvolverState const& state) {_ptr->update_from(state); }
+    Void update_from(const InclusionEvolverState& state) { _ptr->update_from(state); }
 
     virtual ~Reconditioner() = default;
 };
@@ -151,14 +153,16 @@ class DifferentialInclusionEvolver {
     typedef DifferentialInclusion SystemType;
     typedef typename EvolutionTraits<SystemType>::EnclosureType EnclosureType;
     typedef Orbit<EnclosureType> OrbitType;
+
   protected:
     SystemType _system;
     SharedPointer<IntegratorInterface> _integrator;
     Reconditioner _reconditioner;
     SharedPointer<ConfigurationType> _configuration;
+
   public:
     /** @brief Construct the object. */
-    DifferentialInclusionEvolver(SystemType const& system, IntegratorInterface const& integrator, Reconditioner const& reconditioner);
+    DifferentialInclusionEvolver(const SystemType& system, const IntegratorInterface& integrator, const Reconditioner& reconditioner);
 
     //!@{
     //! \name Configuration for the class.
@@ -168,15 +172,15 @@ class DifferentialInclusionEvolver {
 
   public:
     /** @brief Compute or update an evolution step. */
-    OrbitType orbit(RealVariablesBox const& initial, Real const& T);
+    OrbitType orbit(const RealVariablesBox& initial, const Real& T);
+
   private:
     /** @brief Perform the specified evolution operation. */
     Void _recondition_and_update(ValidatedVectorMultivariateFunctionPatch& function, InclusionEvolverState& state);
 };
 
 //! \brief Configuration for an DifferentialInclusionEvolver, essentially for controlling the accuracy of continuous evolution methods.
-class DifferentialInclusionEvolverConfiguration : public ConfigurationInterface
-{
+class DifferentialInclusionEvolverConfiguration : public ConfigurationInterface {
   public:
     typedef ExactDouble RealType;
     typedef ApproximateDouble ApproximateRealType;
@@ -187,7 +191,6 @@ class DifferentialInclusionEvolverConfiguration : public ConfigurationInterface
     virtual ~DifferentialInclusionEvolverConfiguration() = default;
 
   private:
-
     //! \brief The maximum allowable step size for integration.
     //! Decreasing this value increases the accuracy of the computation.
     RealType _maximum_step_size;
@@ -204,7 +207,6 @@ class DifferentialInclusionEvolverConfiguration : public ConfigurationInterface
     List<InputApproximation> _approximations;
 
   public:
-
     const RealType& maximum_step_size() const { return _maximum_step_size; }
     Void set_maximum_step_size(const ApproximateRealType value) { _maximum_step_size = cast_exact(value); }
 
@@ -214,15 +216,17 @@ class DifferentialInclusionEvolverConfiguration : public ConfigurationInterface
     const Bool& enable_parameter_reduction() const { return _enable_parameter_reduction; }
     Void set_enable_parameter_reduction(const Bool value) { _enable_parameter_reduction = value; }
 
-    List<InputApproximation> const& approximations() const { return _approximations; }
-    Void set_approximations(List<InputApproximation> const& value) { ARIADNE_PRECONDITION(value.size() > 0); _approximations = value; }
+    const List<InputApproximation>& approximations() const { return _approximations; }
+    Void set_approximations(const List<InputApproximation>& value) {
+        ARIADNE_PRECONDITION(value.size() > 0);
+        _approximations = value;
+    }
 
   public:
-
     /** @brief Perform the specified evolution operation. */
     virtual OutputStream& _write(OutputStream& os) const;
 };
 
-} // namespace Ariadne;
+} // namespace Ariadne
 
 #endif // ARIADNE_DIFFERENTIAL_INCLUSION_EVOLVER_HPP

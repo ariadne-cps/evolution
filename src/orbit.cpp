@@ -26,67 +26,58 @@
  *  @brief Implement orbit operations.
  */
 
-#include "function/functional.hpp"
-
+#include "evolution/orbit.hpp"
 
 #include <utility>
 
-#include "evolution/orbit.hpp"
-
+#include "function/functional.hpp"
 #include "geometry/box.hpp"
 #include "geometry/point.hpp"
+#include "rendering/figure.hpp"
 #include "set/curve.hpp"
 #include "set/function_set.hpp"
 #include "set/list_set.hpp"
-#include "rendering/figure.hpp"
 
 namespace Ariadne {
 
+template<class F>
+Orbit<ExactPoint<F>>::Orbit(const ExactPoint<F>& pt)
+    : _curve(new InterpolatedCurve(0, pt)) {}
 
-template<class F> Orbit<ExactPoint<F>>::Orbit(const ExactPoint<F>& pt)
-    : _curve(new InterpolatedCurve(0,pt))
-{ }
-
-template<class F> Void
-Orbit<ExactPoint<F>>::insert(F t, const ExactPoint<F>& pt)
-{
-    _curve->insert(t,pt);
+template<class F>
+Void Orbit<ExactPoint<F>>::insert(F t, const ExactPoint<F>& pt) {
+    _curve->insert(t, pt);
 }
 
-
-template<class F> Orbit<List<Point<Approximation<F>>>>::Orbit(List<Point<Approximation<F>>> const& ptLst)
-    : _curves(new List<InterpolatedCurve>())
-{
-    for (SizeType i=0; i<ptLst.size(); ++i) {
+template<class F>
+Orbit<List<Point<Approximation<F>>>>::Orbit(const List<Point<Approximation<F>>>& ptLst)
+    : _curves(new List<InterpolatedCurve>()) {
+    for (SizeType i = 0; i < ptLst.size(); ++i) {
         _curves->push_back(InterpolatedCurve(ptLst.at(i)));
     }
 }
 
-template<class F> Void Orbit<List<Point<Approximation<F>>>>::insert(F t, const Point<Approximation<F>>& pt, SizeType curveNumber)
-{
-    _curves->at(curveNumber).insert(t,pt);
+template<class F>
+Void Orbit<List<Point<Approximation<F>>>>::insert(F t, const Point<Approximation<F>>& pt, SizeType curveNumber) {
+    _curves->at(curveNumber).insert(t, pt);
 }
 
-
-template<class F> Orbit<List<LabelledPoint<Approximation<F>>>>::Orbit(const List<LabelledPoint<Approximation<F>>>& ptLst)
-    : _curves(new List<LabelledInterpolatedCurve>())
-{
-    for (SizeType i=0; i<ptLst.size(); ++i) {
+template<class F>
+Orbit<List<LabelledPoint<Approximation<F>>>>::Orbit(const List<LabelledPoint<Approximation<F>>>& ptLst)
+    : _curves(new List<LabelledInterpolatedCurve>()) {
+    for (SizeType i = 0; i < ptLst.size(); ++i) {
         _curves->push_back(LabelledInterpolatedCurve(ptLst.at(i)));
     }
 }
 
-template<class F> Void Orbit<List<LabelledPoint<Approximation<F>>>>::insert(F t, const LabelledPoint<Approximation<F>>& pt, SizeType curveNumber) {
+template<class F>
+Void Orbit<List<LabelledPoint<Approximation<F>>>>::insert(F t, const LabelledPoint<Approximation<F>>& pt, SizeType curveNumber) {
     _curves->at(curveNumber).insert(static_cast<const RawFloatDP>(t), pt);
 }
-
 
 template class Orbit<Point<Approximation<FloatDP>>>;
 template class Orbit<List<Point<Approximation<FloatDP>>>>;
 template class Orbit<LabelledPoint<Approximation<FloatDP>>>;
 template class Orbit<List<LabelledPoint<Approximation<FloatDP>>>>;
-
-
-
 
 } // namespace Ariadne

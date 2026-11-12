@@ -33,25 +33,25 @@
 
 #include "evolution/enclosure.hpp"
 #include "evolution/hybrid_enclosure.hpp"
-#include "paving/augmented_paving.hpp"
 #include "hybrid/hybrid_augmented_paving.hpp"
+#include "paving/augmented_paving.hpp"
 
 namespace Ariadne {
 
 /** @brief Add a validated outer approximation of a continuous enclosure to an augmented paving.
  *  The enclosure's configured paver controls the approximation.
  */
-Void adjoin_outer_approximation_to(Enclosure const& enclosure, AugmentedPaving& paving, Nat fineness);
+Void adjoin_outer_approximation_to(const Enclosure& enclosure, AugmentedPaving& paving, Nat fineness);
 
 /** @brief Construct an augmented paving carrying the enclosure's auxiliary mapping
  *  and a validated outer approximation of its state set.
  */
-AugmentedPaving outer_approximation(Enclosure const& enclosure, Grid const& grid, Nat fineness);
+AugmentedPaving outer_approximation(const Enclosure& enclosure, const Grid& grid, Nat fineness);
 
 /** @brief Add the location-aware outer approximation of a hybrid enclosure
  *  without coupling to an automaton or reasoning-layer objects.
  */
-Void adjoin_outer_approximation_to(HybridEnclosure const& enclosure, HybridAugmentedPaving& paving, Nat fineness);
+Void adjoin_outer_approximation_to(const HybridEnclosure& enclosure, HybridAugmentedPaving& paving, Nat fineness);
 
 } // namespace Ariadne
 

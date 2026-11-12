@@ -30,8 +30,8 @@
 #define ARIADNE_HYBRID_TIME_HPP
 
 #include "numeric/numeric.hpp"
-#include "utility/container.hpp"
 #include "system/discrete_event.hpp"
+#include "utility/container.hpp"
 
 namespace Ariadne {
 
@@ -47,8 +47,7 @@ class DiscreteEvent;
 //! stop when <em>either</em> the continuous time or the discrete time reaches the bounding
 //! value. This is to ensure that the evolution time is finite; in particular, that no
 //! Zeno behaviour occurs.
-class HybridTime
-{
+class HybridTime {
   public:
     //! \brief The type used for continuous (real, physical) time.
     typedef Real ContinuousTimeType;
@@ -59,107 +58,112 @@ class HybridTime
     const ContinuousTimeType& continuous_time() const { return this->_continuous_time; }
     //! \brief The number of discrete steps taken.
     const DiscreteTimeType& discrete_time() const { return this->_discrete_time; }
-  private: public:
+
+  private:
+
+  public:
     //! \brief The continuous (real, physical) time.
     ContinuousTimeType _continuous_time;
     //! \brief The number of discrete steps taken.
     DiscreteTimeType _discrete_time;
+
   public:
     explicit HybridTime()
-      : _continuous_time(0), _discrete_time(-1) { }
+        : _continuous_time(0), _discrete_time(-1) {}
     explicit HybridTime(Real t)
-      : _continuous_time(t), _discrete_time(-1) { }
+        : _continuous_time(t), _discrete_time(-1) {}
     //! \brief Create the hybrid time moment with continuous-time \a t and discrete-time steps \a n.
     HybridTime(Real t, Integer n)
-      : _continuous_time(t), _discrete_time(n) { }
+        : _continuous_time(t), _discrete_time(n) {}
     // A binary floating-point value is an exact dyadic rational.
     HybridTime(FloatDP t, Integer n)
-      : _continuous_time(Dyadic(t)), _discrete_time(n) { }
+        : _continuous_time(Dyadic(t)), _discrete_time(n) {}
     HybridTime(ExactDouble t, Int n)
-      : _continuous_time(t), _discrete_time(n) { }
+        : _continuous_time(t), _discrete_time(n) {}
     HybridTime(ExactDouble t, Nat m)
-      : _continuous_time(t), _discrete_time(m) { }
+        : _continuous_time(t), _discrete_time(m) {}
     HybridTime(ExactDouble t, double n) = delete;
     //! \brief The arguments for the HybridTime constructor must be ordered continuous-time, then discrete-time.
     HybridTime(Integer n, double t) = delete;
 
     /** @brief Apply the requested operation. */
     friend HybridTime operator*(const Integer& c, const HybridTime& ht) {
-        return HybridTime(c*ht._continuous_time,c*ht._discrete_time);
+        return HybridTime(c * ht._continuous_time, c * ht._discrete_time);
     }
 
     /** @brief Apply the requested operation. */
     friend HybridTime operator-(const HybridTime& ht1, const HybridTime& ht2) {
-        return HybridTime(ht1._continuous_time-ht2._continuous_time,max(ht1._discrete_time-ht2._discrete_time,Integer(0)));
+        return HybridTime(ht1._continuous_time - ht2._continuous_time, max(ht1._discrete_time - ht2._discrete_time, Integer(0)));
     }
 
     /** @brief Perform the specified evolution operation. */
     friend Bool same(const HybridTime& ht1, const HybridTime& ht2) {
-        return same(ht1._continuous_time,ht2._continuous_time) &&
-            ht1._discrete_time==ht2._discrete_time;
+        return same(ht1._continuous_time, ht2._continuous_time) &&
+               ht1._discrete_time == ht2._discrete_time;
     }
 
     /** @brief Apply the requested operation. */
     friend NegatedSierpinskian operator==(const HybridTime& ht1, const HybridTime& ht2) {
-        return ht1._continuous_time==ht2._continuous_time &&
-            ht1._discrete_time==ht2._discrete_time;
+        return ht1._continuous_time == ht2._continuous_time &&
+               ht1._discrete_time == ht2._discrete_time;
     }
 
     /** @brief Apply the requested operation. */
     friend Sierpinskian operator!=(const HybridTime& ht1, const HybridTime& ht2) {
-        return ht1._continuous_time!=ht2._continuous_time ||
-            ht1._discrete_time!=ht2._discrete_time;
+        return ht1._continuous_time != ht2._continuous_time ||
+               ht1._discrete_time != ht2._discrete_time;
     }
 
     /** @brief Apply the requested operation. */
     friend Kleenean operator<=(const HybridTime& ht1, const HybridTime& ht2) {
-        return Kleenean(ht1._continuous_time<=ht2._continuous_time) &&
-            /** @brief Construct the object. */
-            Boolean(ht1._discrete_time<=ht2._discrete_time);
+        return Kleenean(ht1._continuous_time <= ht2._continuous_time) &&
+               /** @brief Construct the object. */
+               Boolean(ht1._discrete_time <= ht2._discrete_time);
     }
 
     /** @brief Apply the requested operation. */
     friend Kleenean operator<(const HybridTime& ht1, const HybridTime& ht2) {
-        return Kleenean(ht1._continuous_time< ht2._continuous_time) &&
-            /** @brief Construct the object. */
-            Boolean(ht1._discrete_time<ht2._discrete_time);
+        return Kleenean(ht1._continuous_time < ht2._continuous_time) &&
+               /** @brief Construct the object. */
+               Boolean(ht1._discrete_time < ht2._discrete_time);
     }
 
     /** @brief Apply the requested operation. */
     friend Kleenean operator>(const HybridTime& ht1, const HybridTime& ht2) {
-        return Kleenean(ht1._continuous_time> ht2._continuous_time) &&
-            /** @brief Construct the object. */
-            Boolean(ht1._discrete_time>ht2._discrete_time);
+        return Kleenean(ht1._continuous_time > ht2._continuous_time) &&
+               /** @brief Construct the object. */
+               Boolean(ht1._discrete_time > ht2._discrete_time);
     }
 
     /** @brief Apply the requested operation. */
     friend Kleenean operator>(const HybridTime& ht1, const ContinuousTimeType& ct2) {
-        return Kleenean(ht1._continuous_time> ct2);
+        return Kleenean(ht1._continuous_time > ct2);
     }
 
     /** @brief Apply the requested operation. */
     friend OutputStream& operator<<(OutputStream& os, const HybridTime& ht) {
-        return os << "(time="<<ht._continuous_time<<", steps="<<ht._discrete_time<<")";
+        return os << "(time=" << ht._continuous_time << ", steps=" << ht._discrete_time << ")";
     }
 };
 
 /** @brief HybridTerminationCriterion represents time representation and termination criteria for hybrid systems. */
-class HybridTerminationCriterion
-{
+class HybridTerminationCriterion {
   public:
     typedef HybridTime::ContinuousTimeType ContinuousTimeType;
     typedef HybridTime::DiscreteTimeType DiscreteTimeType;
+
   private:
     ContinuousTimeType _maximum_time;
     DiscreteTimeType _maximum_steps;
     Set<DiscreteEvent> _terminating_events;
+
   public:
     HybridTerminationCriterion(ContinuousTimeType tmax, DiscreteTimeType nmax, Set<DiscreteEvent> evnts)
-            : _maximum_time(tmax), _maximum_steps(nmax), _terminating_events(evnts) { } //!< .
+        : _maximum_time(tmax), _maximum_steps(nmax), _terminating_events(evnts) {} //!< .
     HybridTerminationCriterion(ContinuousTimeType tmax, DiscreteTimeType nmax)
-            : HybridTerminationCriterion(tmax,nmax,Set<DiscreteEvent>()) { } //!< .
+        : HybridTerminationCriterion(tmax, nmax, Set<DiscreteEvent>()) {} //!< .
     HybridTerminationCriterion(const HybridTime& maximum_time)
-            : HybridTerminationCriterion(maximum_time.continuous_time(),maximum_time.discrete_time()) { } //!< .
+        : HybridTerminationCriterion(maximum_time.continuous_time(), maximum_time.discrete_time()) {} //!< .
     //! \brief The maximum continuous (real, physical) time.
     const ContinuousTimeType& maximum_time() const { return this->_maximum_time; }
     //! \brief The maximum number of discrete steps taken.
@@ -170,8 +174,8 @@ class HybridTerminationCriterion
 /** @brief Apply the requested operation. */
 inline OutputStream& operator<<(OutputStream& os, const HybridTerminationCriterion& termination) {
     return os << "HybridTerminationCriterion( maximum_time=" << termination.maximum_time()
-              << ", maximum_steps="<<termination.maximum_steps()
-              << ", terminating_events="<<termination.terminating_events() << " )";
+              << ", maximum_steps=" << termination.maximum_steps()
+              << ", terminating_events=" << termination.terminating_events() << " )";
 }
 
 } // namespace Ariadne

@@ -30,20 +30,19 @@
 #define ARIADNE_ENCLOSURE_HPP
 
 #include <iosfwd>
-#include "utility/container.hpp"
-#include "numeric/numeric.hpp"
+
 #include "algebra/vector.hpp"
-#include "geometry/set_interface.hpp"
-#include "symbolic/identifier.hpp"
-#include "labelled/graphics_interface.hpp"
 #include "drawing/drawer_interface.hpp"
-
-#include "function/function_patch.hpp"
-#include "function/function_model.hpp"
 #include "function/constraint.hpp"
-
+#include "function/function_model.hpp"
+#include "function/function_patch.hpp"
 #include "geometry/box.hpp"
+#include "geometry/set_interface.hpp"
+#include "labelled/graphics_interface.hpp"
+#include "numeric/numeric.hpp"
 #include "paving/paver.hpp"
+#include "symbolic/identifier.hpp"
+#include "utility/container.hpp"
 
 namespace Ariadne {
 
@@ -55,19 +54,21 @@ class ValidatedAffineConstrainedImageSet;
 /** @brief BoundedConstraintSet: validated enclosures for continuous dynamics. */
 class BoundedConstraintSet;
 
-template<class BS> class ListSet;
+template<class BS>
+class ListSet;
 
-
-template<class T> class Space;
+template<class T>
+class Space;
 using RealSpace = Space<Real>;
 
-template<class IVL> class VariablesBox;
+template<class IVL>
+class VariablesBox;
 using RealVariablesBox = VariablesBox<RealInterval>;
 
 /** @brief Variables2d: validated enclosures for continuous dynamics. */
 struct Variables2d;
 
-typedef Constraint<ValidatedScalarMultivariateFunctionPatch,FloatDPBounds> ValidatedConstraintModel;
+typedef Constraint<ValidatedScalarMultivariateFunctionPatch, FloatDPBounds> ValidatedConstraintModel;
 
 typedef Dyadic StepSizeType;
 
@@ -77,24 +78,38 @@ class EnclosureConfiguration {
     ValidatedFunctionPatchFactory _function_factory;
     Paver _paver;
     SizeType _reconditioning_num_blocks;
+
   public:
     /** @brief Construct the object. */
     explicit EnclosureConfiguration(ValidatedFunctionPatchFactory function_factory, SizeType reconditioning_num_blocks = 3u);
-    explicit EnclosureConfiguration(ValidatedFunctionPatchFactory::Interface const& function_factory, SizeType reconditioning_num_blocks = 3u)
-        : EnclosureConfiguration(ValidatedFunctionPatchFactory(function_factory.clone()),reconditioning_num_blocks) { }
+    explicit EnclosureConfiguration(const ValidatedFunctionPatchFactory::Interface& function_factory, SizeType reconditioning_num_blocks = 3u)
+        : EnclosureConfiguration(ValidatedFunctionPatchFactory(function_factory.clone()), reconditioning_num_blocks) {}
     EnclosureConfiguration(ValidatedFunctionPatchFactory function_factory, Paver paver, SizeType reconditioning_num_blocks = 3u)
-        : _function_factory(function_factory), _paver(paver), _reconditioning_num_blocks(reconditioning_num_blocks) { ARIADNE_PRECONDITION(reconditioning_num_blocks>0u); }
-    ValidatedFunctionPatchFactory const& function_factory() const { return _function_factory; }
-    Paver const& paver() const { return _paver; }
+        : _function_factory(function_factory), _paver(paver), _reconditioning_num_blocks(reconditioning_num_blocks) { ARIADNE_PRECONDITION(reconditioning_num_blocks > 0u); }
+    const ValidatedFunctionPatchFactory& function_factory() const { return _function_factory; }
+    const Paver& paver() const { return _paver; }
     SizeType reconditioning_num_blocks() const { return _reconditioning_num_blocks; }
-    EnclosureConfiguration& set_paver(Paver paver) { _paver=paver; return *this; }
-    EnclosureConfiguration& set_reconditioning_num_blocks(SizeType num_blocks) { ARIADNE_PRECONDITION(num_blocks>0u); _reconditioning_num_blocks = num_blocks; return *this; }
+    EnclosureConfiguration& set_paver(Paver paver) {
+        _paver = paver;
+        return *this;
+    }
+    EnclosureConfiguration& set_reconditioning_num_blocks(SizeType num_blocks) {
+        ARIADNE_PRECONDITION(num_blocks > 0u);
+        _reconditioning_num_blocks = num_blocks;
+        return *this;
+    }
     /** @brief Apply the specified operation. */
-    friend OutputStream& operator<<(OutputStream& os, EnclosureConfiguration const& ec);
+    friend OutputStream& operator<<(OutputStream& os, const EnclosureConfiguration& ec);
 };
 
 /** @brief EnclosureVariableKind: validated enclosures for continuous dynamics. */
-enum class EnclosureVariableKind : std::uint8_t { INITIAL, TEMPORAL, PARAMETER, INPUT, NOISE, ERROR, UNKNOWN };
+enum class EnclosureVariableKind : std::uint8_t { INITIAL,
+                                                  TEMPORAL,
+                                                  PARAMETER,
+                                                  INPUT,
+                                                  NOISE,
+                                                  ERROR,
+                                                  UNKNOWN };
 /** @brief Apply the specified operation. */
 OutputStream& operator<<(OutputStream& os, const EnclosureVariableKind& vk);
 /** @brief Perform the specified evolution operation. */
@@ -104,8 +119,7 @@ List<Identifier> canonical_variable_names(const List<EnclosureVariableKind>& vks
 //! \brief An enclosure for part of the reachable or evolved set of a dynamical system.
 //! Defined as \f$x=f(s)\f$ for \f$s\in D\f$ satisfying \f$g(s)\leq0\f$ and \f$h(s)=0\f$.
 class Enclosure
-    : public Drawable2dInterface
-{
+    : public Drawable2dInterface {
     // Public entry points validate dimensions before mutation. Factory creation,
     // composition and restriction preserve argument dimensions; parameter
     // extension embeds every map and appends its variable kind together.
@@ -120,13 +134,15 @@ class Enclosure
     List<EnclosureVariableKind> _variable_kinds;
 
     EnclosureConfiguration _configuration;
+
   public:
     typedef EnclosureConfiguration ConfigurationType;
+
   public:
     //! \brief Construct a set with \f$D=\emptyset\f$ in \f$\mathbb{R}^0\f$.
     explicit Enclosure();
     //! \brief Construct a set with \f$D=\emptyset\f$ in \f$\mathbb{R}^0\f$.
-    explicit Enclosure(EnclosureConfiguration const& config);
+    explicit Enclosure(const EnclosureConfiguration& config);
     //! \brief Construct a representation of the box \a bx.
     explicit Enclosure(const RealBox& bx, const EnclosureConfiguration& config);
     //! \brief Construct a representation of the box \a bx.
@@ -158,32 +174,31 @@ class Enclosure
     //! \brief An over-approximation to the image of \f$D\f$ under \f$f\f$.
     ExactBoxType codomain() const;
     //! \brief The function giving the state \c x in terms of parameters \c s, \f$x=\xi(s)\f$.
-    ValidatedVectorMultivariateFunctionPatch const& state_function() const;
+    const ValidatedVectorMultivariateFunctionPatch& state_function() const;
     //! \brief The function giving the time \c t in terms of parameters \c s, \f$t=\tau(s)\f$.
-    ValidatedScalarMultivariateFunctionPatch const& time_function() const;
+    const ValidatedScalarMultivariateFunctionPatch& time_function() const;
     //! \brief The function giving the auxiliary variables in terms of parameters \c s.
-    ValidatedVectorMultivariateFunctionPatch const  auxiliary_function() const;
+    const ValidatedVectorMultivariateFunctionPatch auxiliary_function() const;
     //! \brief The function giving the state and auxiliary variables in terms of parameters \c s.
-    ValidatedVectorMultivariateFunctionPatch const  state_auxiliary_function() const;
+    const ValidatedVectorMultivariateFunctionPatch state_auxiliary_function() const;
     //! \brief The function giving the state, time and auxiliary variables in terms of parameters \c s.
-    ValidatedVectorMultivariateFunctionPatch const  state_time_auxiliary_function() const;
+    const ValidatedVectorMultivariateFunctionPatch state_time_auxiliary_function() const;
     //! \brief The function giving the time since the last discrete jump in terms of the parameters \c s.
-    ValidatedScalarMultivariateFunctionPatch const& dwell_time_function() const;
+    const ValidatedScalarMultivariateFunctionPatch& dwell_time_function() const;
     //! \brief The function \c g of the constrants \f$g(s)\in C\f$.
-    ValidatedVectorMultivariateFunctionPatch const  constraint_function() const;
+    const ValidatedVectorMultivariateFunctionPatch constraint_function() const;
     //! \brief The bounds \c C of the constrants \f$g(s)\in C\f$.
-    ExactBoxType const constraint_bounds() const;
+    const ExactBoxType constraint_bounds() const;
     //! \brief The function of parameters \a s giving the \a i<sup>th</sup> state variable.
-    ValidatedScalarMultivariateFunctionPatch const  get_function(SizeType i) const;
+    const ValidatedScalarMultivariateFunctionPatch get_function(SizeType i) const;
 
     //! \brief Set the auxiliary function.
-    Void set_auxiliary_mapping(EffectiveVectorMultivariateFunction const& aux);
+    Void set_auxiliary_mapping(const EffectiveVectorMultivariateFunction& aux);
     //! \brief Get the auxiliary function.
-    EffectiveVectorMultivariateFunction const& auxiliary_mapping() const;
-
+    const EffectiveVectorMultivariateFunction& auxiliary_mapping() const;
 
     //! \brief A list detailing the kind of variable each of the domain parameters represents.
-    List<EnclosureVariableKind> const& variable_kinds() const;
+    const List<EnclosureVariableKind>& variable_kinds() const;
     //! \brief Substitutes the expression \f$x_j=v(x_1,\ldots,x_{j-1},x_{j+1}\ldots,x_n)\f$ into the function and constraints.
     //! Requires that \f$v(D_1,\ldots,D_{j-1},D_{j+1}\ldots,D_n) \subset D_j\f$ where \f$D\f$ is the domain.
     Void substitute(SizeType j, ValidatedScalarMultivariateFunctionPatch v);
@@ -191,7 +206,7 @@ class Enclosure
     Void substitute(SizeType j, FloatDP c);
 
     //! \brief Replace the absolute time map, preserving the dwell time and state.
-    Void set_time_function(ValidatedScalarMultivariateFunctionPatch const& time);
+    Void set_time_function(const ValidatedScalarMultivariateFunctionPatch& time);
 
     //! \brief Set the time function to zero.
     Void clear_time();
@@ -227,12 +242,12 @@ class Enclosure
     Void apply_spacetime_reach_step(ValidatedVectorMultivariateFunctionPatch phi, ValidatedScalarMultivariateFunction elps);
     //! \brief Set \f$\xi'(s,r)=\phi(\xi(s),r)\f$ and \f$\tau'(s,r)=\tau(s)+r\f$ for \f$0\leq r\leq\epsilon(s)\f$.
     Void apply_parameter_reach_step(ValidatedVectorMultivariateFunctionPatch phi, ValidatedScalarMultivariateFunction elps);
-/*
-    //! \brief Apply the flow \f$\phi(x,t)\f$ for \f$t\in[0,h]\f$
-    Void apply_reach_step(ValidatedVectorMultivariateFunction phi, FloatDP h);
-    //! \brief Apply the flow \f$\phi(x,t)\f$ for \f$t\in[0,\max(h,\epsilon(x))]\f$
-    Void apply_reach_step(ValidatedVectorMultivariateFunction phi, ValidatedScalarMultivariateFunction elps);
-*/
+    /*
+        //! \brief Apply the flow \f$\phi(x,t)\f$ for \f$t\in[0,h]\f$
+        Void apply_reach_step(ValidatedVectorMultivariateFunction phi, FloatDP h);
+        //! \brief Apply the flow \f$\phi(x,t)\f$ for \f$t\in[0,\max(h,\epsilon(x))]\f$
+        Void apply_reach_step(ValidatedVectorMultivariateFunction phi, ValidatedScalarMultivariateFunction elps);
+    */
 
     //! \brief Introduces the constraint \f$c\f$ applied to the state \f$x=f(s)\f$.
     Void new_state_constraint(ValidatedConstraint c);
@@ -257,11 +272,11 @@ class Enclosure
     //! \brief The number of negative constraints.
     SizeType number_of_constraints() const;
     //! \brief All equality and inequality constraints.
-    List<ValidatedConstraintModel> const& constraint_models() const;
+    const List<ValidatedConstraintModel>& constraint_models() const;
     //! \brief All equality and inequality constraints.
-    List<ValidatedConstraint> const constraints() const;
+    const List<ValidatedConstraint> constraints() const;
     //! \brief The \a i<sup>th</sup> constraint.
-    ValidatedConstraintModel const& constraint(SizeType i) const;
+    const ValidatedConstraintModel& constraint(SizeType i) const;
 
     //! \brief  Returns true if \f$g(x)>0\f$ over the whole set,
     //! false \f$g(x)<0\f$ over the whole set,
@@ -309,8 +324,7 @@ class Enclosure
     //! resulting in more accurate computations.
     Void restrict(const ExactBoxType& subdomain);
     //! \brief The set obtained by restricting to the \a subdomain.
-    friend Enclosure restriction(Enclosure const&, const ExactBoxType& subdomain);
-
+    friend Enclosure restriction(const Enclosure&, const ExactBoxType& subdomain);
 
     //! \brief A collection of parameter subdomains chosen to make the bounding boxes as small as possible.
     List<ExactBoxType> splitting_subdomains_zeroth_order() const;
@@ -321,17 +335,16 @@ class Enclosure
     SizeType splitting_index_zeroth_order() const;
     //! \brief Split into two by splitting the parameter domain along
     //! the direction which reduces the size of the bounding box.
-    Pair<Enclosure,Enclosure> split_zeroth_order() const;
+    Pair<Enclosure, Enclosure> split_zeroth_order() const;
     //! \brief Split into two by splitting the parameter domain along
     //! the direction which reduces the nonlinearity of the set.
-    Pair<Enclosure,Enclosure> split_first_order() const;
+    Pair<Enclosure, Enclosure> split_first_order() const;
     //! \brief Split into two by splitting the parameter domain along a suitably-chosed direction.
     //! Currently defaults to split_zeroth_order().
-    Pair<Enclosure,Enclosure> split() const;
+    Pair<Enclosure, Enclosure> split() const;
     //! \brief Split into two by splitting the parameter domain along
     //! the \a k<sup>th</sup> direction.
-    Pair<Enclosure,Enclosure> split(SizeType k) const;
-
+    Pair<Enclosure, Enclosure> split(SizeType k) const;
 
     /** @brief Return the requested evolution property. */
     ValidatedConstrainedImageSet state_set() const;
@@ -345,10 +358,12 @@ class Enclosure
 
     //! \brief Write to an output stream.
     OutputStream& _write(OutputStream&) const;
+
   private:
     //! \brief Introduces a new independent variable with values in the interval \a ivl.
     //! Equivalent to constructing the set \f$S\times I\f$.
     Void _unchecked_new_variable(ExactIntervalType ivl, EnclosureVariableKind vk);
+
   private:
     /** @brief Perform the specified evolution operation. */
     friend Enclosure product(const Enclosure&, const ExactIntervalType&);
@@ -376,68 +391,73 @@ Enclosure unchecked_apply(const ValidatedVectorMultivariateFunctionPatch& functi
 } // namespace Ariadne
 
 #include "symbolic/space.hpp"
+
 #include "expression-set/expression_set.hpp"
 
 namespace Ariadne {
 
-template<class S> class LabelledSet;
+template<class S>
+class LabelledSet;
 
-template<class UB> using LabelledInterval = VariableInterval<UB>;
+template<class UB>
+using LabelledInterval = VariableInterval<UB>;
 using LabelledExactIntervalType = LabelledInterval<typename ExactIntervalType::UpperBoundType>;
 
-template<class IVL> class LabelledBox;
+template<class IVL>
+class LabelledBox;
 using LabelledExactBoxType = LabelledBox<ExactIntervalType>;
 using LabelledUpperBoxType = LabelledBox<UpperIntervalType>;
 using LabelledRealBox = LabelledSet<RealBox>;
 
 /** @brief LabelledEnclosure: validated enclosures for continuous dynamics. */
 class LabelledEnclosure
-    : public LabelledDrawable2dInterface, public Enclosure
-{
+    : public LabelledDrawable2dInterface,
+      public Enclosure {
   public:
     typedef LabelledDrawable2dInterface DrawableInterfaceType;
     typedef Box<UpperIntervalType> EuclideanBoundingBoxType;
     typedef LabelledUpperBoxType BoundingBoxType;
+
   public:
-    LabelledEnclosure() : Enclosure() { }
-    LabelledEnclosure(EnclosureConfiguration const& config) : Enclosure(config) { }
+    LabelledEnclosure() : Enclosure() {}
+    LabelledEnclosure(const EnclosureConfiguration& config) : Enclosure(config) {}
     /** @brief Construct the object. */
-    LabelledEnclosure(LabelledRealBox const& bx, EnclosureConfiguration const& config);
+    LabelledEnclosure(const LabelledRealBox& bx, const EnclosureConfiguration& config);
     /** @brief Construct the object. */
-    LabelledEnclosure(LabelledExactBoxType const& bx, EnclosureConfiguration const& config);
+    LabelledEnclosure(const LabelledExactBoxType& bx, const EnclosureConfiguration& config);
     /** @brief Construct the object. */
-    LabelledEnclosure(ExactBoxType const& bx, RealSpace const& state_space, EnclosureConfiguration const& config);
+    LabelledEnclosure(const ExactBoxType& bx, const RealSpace& state_space, const EnclosureConfiguration& config);
     /** @brief Construct the object. */
-    LabelledEnclosure(RealVariablesBox const& bx, RealSpace const& state_space, EnclosureConfiguration const& config);
+    LabelledEnclosure(const RealVariablesBox& bx, const RealSpace& state_space, const EnclosureConfiguration& config);
     /** @brief Construct the object. */
-    LabelledEnclosure(RealBox const& bx, RealSpace const& state_space, EnclosureConfiguration const& config);
+    LabelledEnclosure(const RealBox& bx, const RealSpace& state_space, const EnclosureConfiguration& config);
     /** @brief Construct the object. */
-    LabelledEnclosure(BoundedConstraintSet const& set, RealSpace const& state_space, EnclosureConfiguration const& config);
+    LabelledEnclosure(const BoundedConstraintSet& set, const RealSpace& state_space, const EnclosureConfiguration& config);
     /** @brief Construct the object. */
-    LabelledEnclosure(Enclosure const& set, RealSpace const& state_space);
+    LabelledEnclosure(const Enclosure& set, const RealSpace& state_space);
     /** @brief Construct the object. */
-    LabelledEnclosure(Enclosure const& set, RealSpace const& state_space, RealSpace const& auxiliary_space);
+    LabelledEnclosure(const Enclosure& set, const RealSpace& state_space, const RealSpace& auxiliary_space);
 
     /** @brief Perform the specified evolution operation. */
     BoundingBoxType bounding_box() const;
 
     /** @brief Return the requested evolution property. */
     const RealSpace space() const;
-    Enclosure const& euclidean_set() const { return *this; }
+    const Enclosure& euclidean_set() const { return *this; }
     /** @brief Perform the specified evolution operation. */
-    Pair<LabelledEnclosure,LabelledEnclosure> split() const;
+    Pair<LabelledEnclosure, LabelledEnclosure> split() const;
     /** @brief Perform the specified evolution operation. */
     Void apply_full_reach_step(ValidatedVectorMultivariateFunctionPatch phi);
 
     /** @brief Perform the specified evolution operation. */
-    Void apply_map(ValidatedVectorMultivariateFunction const& f);
+    Void apply_map(const ValidatedVectorMultivariateFunction& f);
     /** @brief Perform the specified evolution operation. */
-    Void apply_map(ValidatedVectorMultivariateFunction const& f, RealSpace const& new_state_space);
-    Void apply_map(ValidatedVectorMultivariateFunction const& f, RealSpace const& new_state_space,
-                   EffectiveVectorMultivariateFunction const& a, RealSpace const& new_auxiliary_space);
+    Void apply_map(const ValidatedVectorMultivariateFunction& f, const RealSpace& new_state_space);
+    Void apply_map(const ValidatedVectorMultivariateFunction& f, const RealSpace& new_state_space,
+                   const EffectiveVectorMultivariateFunction& a, const RealSpace& new_auxiliary_space);
 
     /** @brief Perform the specified evolution operation. */
-    Void set_state_space(RealSpace const&);
+    Void set_state_space(const RealSpace&);
     /** @brief Return the requested evolution property. */
     const RealSpace state_space() const;
     /** @brief Return the requested evolution property. */
@@ -449,7 +469,7 @@ class LabelledEnclosure
     /** @brief Return the requested evolution property. */
     const RealSpace state_time_auxiliary_space() const;
     /** @brief Return the requested evolution property. */
-    ValidatedVectorMultivariateFunctionPatch const state_time_auxiliary_function() const;
+    const ValidatedVectorMultivariateFunctionPatch state_time_auxiliary_function() const;
 
     /** @brief Perform the specified evolution operation. */
     Void set_auxiliary(const RealSpace& spc, const EffectiveVectorMultivariateFunction& aux);
@@ -474,6 +494,7 @@ class LabelledEnclosure
 
     /** @brief Perform the specified evolution operation. */
     OutputStream& _write(OutputStream&) const;
+
   private:
     List<Identifier> _state_variables;
     List<Identifier> _auxiliary_variables;
@@ -484,20 +505,23 @@ inline OutputStream& operator<<(OutputStream& os, const LabelledEnclosure& s) { 
 
 using LabelledEnclosureListSet = LabelledSet<ListSet<Enclosure>>;
 
-template<> class ListSet<LabelledEnclosure> : public LabelledDrawable2dInterface {
-    using BS=LabelledEnclosure;
+template<>
+class ListSet<LabelledEnclosure> : public LabelledDrawable2dInterface {
+    using BS = LabelledEnclosure;
+
   private:
     List<BS> _data;
+
   public:
     typedef List<BS>::ConstIterator ConstIterator;
     Bool empty() const { return this->_data.empty(); }
     SizeType size() const { return this->_data.size(); }
-    BS const& operator[] (SizeType i) const { return this->_data[i]; }
+    BS const& operator[](SizeType i) const { return this->_data[i]; }
     ConstIterator begin() const { return this->_data.begin(); }
     ConstIterator end() const { return this->_data.end(); }
 
-    Void adjoin(LabelledEnclosure const& other) { this->_data.append(other); }
-    Void adjoin(ListSet<LabelledEnclosure> const& other) { this->_data.concatenate(other._data); }
+    Void adjoin(const LabelledEnclosure& other) { this->_data.append(other); }
+    Void adjoin(const ListSet<LabelledEnclosure>& other) { this->_data.concatenate(other._data); }
 
     /** @brief Perform the specified evolution operation. */
     LabelledUpperBoxType bounding_box() const;
@@ -511,6 +535,6 @@ template<> class ListSet<LabelledEnclosure> : public LabelledDrawable2dInterface
     virtual Void draw(CanvasInterface&, const Variables2d&) const override;
 };
 
-} //namespace Ariadne
+} // namespace Ariadne
 
 #endif /* ARIADNE_ENCLOSURE_HPP */

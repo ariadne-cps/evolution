@@ -29,35 +29,32 @@
 #ifndef ARIADNE_VECTOR_FIELD_EVOLVER_HPP
 #define ARIADNE_VECTOR_FIELD_EVOLVER_HPP
 
+#include <iostream>
+#include <list>
 #include <string>
 #include <vector>
-#include <list>
-#include <iostream>
 
-
-#include "utility/tuple.hpp"
-
-#include "system/vector_field.hpp"
-#include "function/function_interface.hpp"
 #include "evolution/configuration_interface.hpp"
-#include "integration/integrator_interface.hpp"
-#include "evolution/evolver_interface.hpp"
 #include "evolution/enclosure.hpp"
+#include "evolution/evolver_interface.hpp"
 #include "evolution/orbit.hpp"
-
-#include "threading/workload.hpp"
-
+#include "function/function_interface.hpp"
+#include "integration/integrator_interface.hpp"
 #include "logging/logging.hpp"
-
+#include "system/vector_field.hpp"
+#include "threading/workload.hpp"
+#include "utility/tuple.hpp"
 
 namespace Ariadne {
 
 /** @brief VectorField: validated evolvers for vector fields. */
 class VectorField;
-template<class ES> class Orbit;
+template<class ES>
+class Orbit;
 
 using Mutex = std::mutex;
-template<class T> using LockGuard = std::lock_guard<T>;
+template<class T>
+using LockGuard = std::lock_guard<T>;
 
 /** @brief VectorFieldEvolverConfiguration: validated evolvers for vector fields. */
 class VectorFieldEvolverConfiguration;
@@ -71,10 +68,9 @@ class RealExpressionBoundedConstraintSet;
 //!
 //! The actual evolution steps are performed by the Integrator class.
 class VectorFieldEvolver
-    : public EvolverInterface<VectorField,LabelledEnclosure,typename VectorField::TimeType>
-{
+    : public EvolverInterface<VectorField, LabelledEnclosure, typename VectorField::TimeType> {
   public:
-    typedef EvolverInterface<VectorField,LabelledEnclosure,typename VectorField::TimeType> Interface;
+    typedef EvolverInterface<VectorField, LabelledEnclosure, typename VectorField::TimeType> Interface;
     typedef VectorFieldEvolverConfiguration ConfigurationType;
     typedef VectorField SystemType;
     typedef IntegratorInterface IntegratorType;
@@ -89,34 +85,48 @@ class VectorFieldEvolver
         EnclosureType second;
         SharedPointer<PreconditionedTaylorSeriesState> preconditioned_state;
 
-        TimedEnclosureType(TimeStepType const& time, EnclosureType const& enclosure)
-            : first(time), second(enclosure), preconditioned_state() { }
+        TimedEnclosureType(const TimeStepType& time, const EnclosureType& enclosure)
+            : first(time), second(enclosure), preconditioned_state() {}
 
         TimedEnclosureType(
-                TimeStepType const& time,
-                EnclosureType const& enclosure,
-                SharedPointer<PreconditionedTaylorSeriesState> state)
+            const TimeStepType& time,
+            const EnclosureType& enclosure,
+            SharedPointer<PreconditionedTaylorSeriesState> state)
             : first(time), second(enclosure),
-              preconditioned_state(std::move(state)) { }
+              preconditioned_state(std::move(state)) {}
     };
     typedef Orbit<EnclosureType> OrbitType;
     typedef ValidatedFunctionPatchFactory FunctionFactoryType;
+
   private:
     //! \brief Synchronised wrapping of orbit to allow concurrent adjoining
     struct SynchronisedOrbit : public OrbitType {
-        SynchronisedOrbit(const EnclosureType& initial) : OrbitType(initial) { }
-        Void adjoin_reach(const EnclosureType& set) override { LockGuard<Mutex> lock(_mux); OrbitType::adjoin_reach(set); }
-        Void adjoin_intermediate(const EnclosureType& set) override { LockGuard<Mutex> lock(_mux); OrbitType::adjoin_intermediate(set); }
-        Void adjoin_final(const EnclosureType& set) override { LockGuard<Mutex> lock(_mux); OrbitType::adjoin_final(set); }
-        SizeType reach_size() { LockGuard<Mutex> lock(_mux); return OrbitType::reach().size(); }
+        SynchronisedOrbit(const EnclosureType& initial) : OrbitType(initial) {}
+        Void adjoin_reach(const EnclosureType& set) override {
+            LockGuard<Mutex> lock(_mux);
+            OrbitType::adjoin_reach(set);
+        }
+        Void adjoin_intermediate(const EnclosureType& set) override {
+            LockGuard<Mutex> lock(_mux);
+            OrbitType::adjoin_intermediate(set);
+        }
+        Void adjoin_final(const EnclosureType& set) override {
+            LockGuard<Mutex> lock(_mux);
+            OrbitType::adjoin_final(set);
+        }
+        SizeType reach_size() {
+            LockGuard<Mutex> lock(_mux);
+            return OrbitType::reach().size();
+        }
+
       private:
         Mutex _mux;
     };
-    typedef DynamicWorkload<TimedEnclosureType,TimeType const&,Semantics,SharedPointer<SynchronisedOrbit>> WorkloadType;
-  public:
+    typedef DynamicWorkload<TimedEnclosureType, const TimeType&, Semantics, SharedPointer<SynchronisedOrbit>> WorkloadType;
 
+  public:
     //! \brief Construct from parameters and an integrator to compute the flow.
-    VectorFieldEvolver(SystemType const&, IntegratorInterface const&);
+    VectorFieldEvolver(const SystemType&, const IntegratorInterface&);
 
     //! \brief Make a dynamically-allocated copy.
     VectorFieldEvolver* clone() const { return new VectorFieldEvolver(*this); }
@@ -125,7 +135,7 @@ class VectorFieldEvolver
     virtual const SystemType& system() const { return *_system; }
 
     //! \brief Make an enclosure from a computed box set.
-    EnclosureType enclosure(ExactBoxType const&) const;
+    EnclosureType enclosure(const ExactBoxType&) const;
 
     //!@{
     //! \name Configuration for the class.
@@ -141,24 +151,23 @@ class VectorFieldEvolver
     //!@{
     //! \name Evolution using abstract sets.
     //! \brief Compute an approximation to the orbit set using upper semantics.
-    OrbitType orbit(EnclosureType const& initial_set, TimeType const& time, Semantics semantics) const;
+    OrbitType orbit(const EnclosureType& initial_set, const TimeType& time, Semantics semantics) const;
     /** @brief Perform the specified evolution operation. */
-    OrbitType orbit(RealVariablesBox const& initial_set, TimeType const& time, Semantics semantics) const;
+    OrbitType orbit(const RealVariablesBox& initial_set, const TimeType& time, Semantics semantics) const;
     /** @brief Perform the specified evolution operation. */
-    OrbitType orbit(RealExpressionBoundedConstraintSet const& initial_set, TimeType const& time, Semantics semantics) const;
+    OrbitType orbit(const RealExpressionBoundedConstraintSet& initial_set, const TimeType& time, Semantics semantics) const;
 
     //!@}
 
   protected:
+    Void _process_timed_enclosure(WorkloadType::Access& workload, const TimedEnclosureType& current_timed_set,
+                                  const TimeType& maximum_time, Semantics semantics, SharedPointer<SynchronisedOrbit> result) const;
 
-    Void _process_timed_enclosure(WorkloadType::Access& workload, TimedEnclosureType const& current_timed_set,
-                                  TimeType const& maximum_time, Semantics semantics, SharedPointer<SynchronisedOrbit> result) const;
-
-    Void _process_timed_enclosure_step(WorkloadType::Access& workload, TimedEnclosureType const& current_timed_set,
-                                       TimeType const& maximum_time, Semantics semantics, SharedPointer<SynchronisedOrbit> result) const;
+    Void _process_timed_enclosure_step(WorkloadType::Access& workload, const TimedEnclosureType& current_timed_set,
+                                       const TimeType& maximum_time, Semantics semantics, SharedPointer<SynchronisedOrbit> result) const;
 
     /** @brief Perform the specified evolution operation. */
-    Void _append_initial_set(WorkloadType& workload, TimeStepType const& initial_time, EnclosureType const& current_set) const;
+    Void _append_initial_set(WorkloadType& workload, const TimeStepType& initial_time, const EnclosureType& current_set) const;
 
   private:
     SharedPointer<SystemType> _system;
@@ -166,10 +175,8 @@ class VectorFieldEvolver
     SharedPointer<ConfigurationType> _configuration;
 };
 
-
 //! \brief Configuration for a VectorFieldEvolver, essentially for controlling the accuracy of continuous evolution methods.
-class VectorFieldEvolverConfiguration : public ConfigurationInterface
-{
+class VectorFieldEvolverConfiguration : public ConfigurationInterface {
   public:
     typedef ExactDouble RealType;
     typedef ApproximateDouble ApproximateRealType;
@@ -180,7 +187,6 @@ class VectorFieldEvolverConfiguration : public ConfigurationInterface
     ~VectorFieldEvolverConfiguration() override = default;
 
   private:
-
     //! \brief The maximum allowable step size for integration.
     //! Decreasing this value increases the accuracy of the computation.
     RealType _maximum_step_size;
@@ -201,7 +207,6 @@ class VectorFieldEvolverConfiguration : public ConfigurationInterface
     Bool _enable_subdivisions;
 
   public:
-
     const RealType& maximum_step_size() const { return _maximum_step_size; }
     Void set_maximum_step_size(const ApproximateRealType value) { _maximum_step_size = cast_exact(value); }
 
@@ -218,7 +223,6 @@ class VectorFieldEvolverConfiguration : public ConfigurationInterface
     Void set_enable_subdivisions(const Bool value) { _enable_subdivisions = value; }
 
   public:
-
     /** @brief Perform the specified evolution operation. */
     OutputStream& _write(OutputStream& os) const override;
 };

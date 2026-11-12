@@ -30,15 +30,11 @@
 #define ARIADNE_HYBRID_EVOLVER_INTERFACE_HPP
 
 #include "evolution/evolver_interface.hpp"
-
+#include "evolution/hybrid_orbit.hpp"
 #include "evolution/hybrid_time.hpp"
 #include "hybrid/hybrid_set.decl.hpp"
-#include "evolution/hybrid_orbit.hpp"
-
-#include "system/discrete_event.hpp"
-
 #include "logging/logging.hpp"
-
+#include "system/discrete_event.hpp"
 
 namespace Ariadne {
 
@@ -52,8 +48,7 @@ class HybridEnclosure;
 //! \brief Interface for hybrid evolvers using HybridEnclosure as the enclosure type.
 //! \details The class is loggable in order to allow verbosity tuning at the analyser layer.
 class HybridEvolverInterface
-    : public EvolverInterface<HybridAutomatonInterface,HybridEnclosure,HybridTerminationCriterion>
-{
+    : public EvolverInterface<HybridAutomatonInterface, HybridEnclosure, HybridTerminationCriterion> {
   public:
     //! \brief Make a dynamically-allocated copy.
     virtual HybridEvolverInterface* clone() const = 0;
@@ -63,14 +58,14 @@ class HybridEvolverInterface
 
     //! \brief Compute an approximation to the orbit set using the given semantics, starting from an initial enclosure.
     //!   Useful for continuing a partially-computed orbit.
-    virtual Orbit<EnclosureType> orbit(const EnclosureType& initial_enclosure,const TerminationType& termination,Semantics semantics) const = 0;
+    virtual Orbit<EnclosureType> orbit(const EnclosureType& initial_enclosure, const TerminationType& termination, Semantics semantics) const = 0;
 
     //! \brief Compute an approximation to the orbit set using the given semantics, starting from a box.
     //!   Useful for computing the evolution starting from a cell of a grid.
-    virtual Orbit<EnclosureType> orbit(const HybridExactBoxType& initial_box,const TerminationType& termination,Semantics semantics) const = 0;
+    virtual Orbit<EnclosureType> orbit(const HybridExactBoxType& initial_box, const TerminationType& termination, Semantics semantics) const = 0;
     //! \brief Compute an approximation to the orbit set using the given semantics, starting from a set described by bounds and constraints.
     //!   Useful for computing the evolution starting from user-provided set.
-    virtual Orbit<EnclosureType> orbit(const HybridBoundedConstraintSet& initial_set,const TerminationType& termination,Semantics semantics) const = 0;
+    virtual Orbit<EnclosureType> orbit(const HybridBoundedConstraintSet& initial_set, const TerminationType& termination, Semantics semantics) const = 0;
 
     //!@}
 
@@ -83,16 +78,13 @@ class HybridEvolverInterface
     virtual EnclosureType enclosure(const HybridBoundedConstraintSet& initial_set) const = 0;
 
     //!@}
-
 };
-
 
 //! \ingroup AnalysisModule
 //! \ingroup HybridDynamicsSubModule
 //! \brief Factory for hybrid evolver interface classes.
 class HybridEvolverFactoryInterface
-    : public EvolverFactoryInterface<HybridAutomatonInterface,HybridEnclosure,HybridTerminationCriterion>
-{
+    : public EvolverFactoryInterface<HybridAutomatonInterface, HybridEnclosure, HybridTerminationCriterion> {
   public:
     ~HybridEvolverFactoryInterface() override = default;
 
@@ -101,7 +93,6 @@ class HybridEvolverFactoryInterface
     //! \brief Create a hybrid evolver interface object around a \a system.
     virtual HybridEvolverInterface* create(const HybridAutomatonInterface& system) const override = 0;
 };
-
 
 } // namespace Ariadne
 

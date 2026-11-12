@@ -28,8 +28,6 @@
 
 // Check that the Evolution module does not depend on the higher-level
 // reasoning and dynamics modules. This is a regular Ariadne Testing suite.
-#include "ariadne-testing.hpp"
-
 #include <cstddef>
 #include <filesystem>
 #include <fstream>
@@ -38,6 +36,8 @@
 #include <stdexcept>
 #include <string>
 #include <vector>
+
+#include "ariadne-testing.hpp"
 
 namespace fs = std::filesystem;
 
@@ -64,15 +64,17 @@ class TestEvolutionDependencyBoundary : public Ariadne::Testing::ContextFixture 
                 return directory;
             }
             const auto parent = directory.parent_path();
-            if (parent == directory || parent.empty()) break;
+            if (parent == directory || parent.empty())
+                break;
             directory = parent;
         }
         throw std::runtime_error("Unable to locate the Evolution source directory");
     }
 
-    static std::string read_file(fs::path const& file) {
+    static std::string read_file(const fs::path& file) {
         std::ifstream stream(file);
-        if (!stream) throw std::runtime_error("Cannot open " + file.string());
+        if (!stream)
+            throw std::runtime_error("Cannot open " + file.string());
         return std::string(std::istreambuf_iterator<char>(stream),
                            std::istreambuf_iterator<char>());
     }
@@ -84,13 +86,16 @@ class TestEvolutionDependencyBoundary : public Ariadne::Testing::ContextFixture 
             R"(^[ \t]*#[ \t]*include[ \t]*["<](reasoning/|dynamics/))");
         std::vector<std::string> violations;
         std::size_t scanned = 0;
-        for (const auto& entry : fs::directory_iterator(dir)) {
-            if (!entry.is_regular_file()) continue;
+        for (const auto& entry: fs::directory_iterator(dir)) {
+            if (!entry.is_regular_file())
+                continue;
             const auto ext = entry.path().extension();
-            if (ext != ".hpp" && ext != ".cpp") continue;
+            if (ext != ".hpp" && ext != ".cpp")
+                continue;
             ++scanned;
             std::ifstream stream(entry.path());
-            if (!stream) throw std::runtime_error("Cannot open " + entry.path().string());
+            if (!stream)
+                throw std::runtime_error("Cannot open " + entry.path().string());
             std::string line;
             std::size_t line_number = 0;
             while (std::getline(stream, line)) {
@@ -100,9 +105,10 @@ class TestEvolutionDependencyBoundary : public Ariadne::Testing::ContextFixture 
                                          std::to_string(line_number) + ": " + line);
                 }
             }
-            if (stream.bad()) throw std::runtime_error("Error reading " + entry.path().string());
+            if (stream.bad())
+                throw std::runtime_error("Error reading " + entry.path().string());
         }
-        for (const auto& violation : violations) {
+        for (const auto& violation: violations) {
             ARIADNE_TESTING_NOTE(violation);
         }
         ARIADNE_TESTING_PROVE(scanned > 0);

@@ -30,10 +30,10 @@
 #define ARIADNE_CONFIGURATION_INTERFACE_HPP
 
 #include <ostream>
+
 #include "utility/writable.hpp"
 
 namespace Ariadne {
-
 
 /*! \brief Configuration altering the model of a class.
  *
@@ -105,16 +105,15 @@ namespace Ariadne {
  *
  */
 class ConfigurationInterface : public WritableInterface {
-
   private:
     const ConfigurationInterface& operator=(const ConfigurationInterface& other) = delete;
+
   public:
     virtual ~ConfigurationInterface() = default;
     /** @brief Perform the specified evolution operation. */
     virtual OutputStream& _write(OutputStream& os) const = 0;
     friend OutputStream& operator<<(OutputStream& os, const ConfigurationInterface& config) { return config._write(os); }
 };
-
 
 } // namespace Ariadne
 

@@ -36,8 +36,8 @@ namespace Ariadne::EvolutionDetail {
  *  An explicit output stream avoids redirecting process-wide diagnostics.
  */
 Void print_carried_expansion_snapshot(
-    OutputStream& output, String const& stage, SizeType step,
-    ValidatedVectorMultivariateTaylorFunctionModelDP const& mapping,
-    Sweeper<FloatDP> const& sweeper);
+    OutputStream& output, const String& stage, SizeType step,
+    const ValidatedVectorMultivariateTaylorFunctionModelDP& mapping,
+    const Sweeper<FloatDP>& sweeper);
 
-}
+} // namespace Ariadne::EvolutionDetail

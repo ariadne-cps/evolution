@@ -29,29 +29,28 @@
 #ifndef ARIADNE_HYBRID_SIMULATOR_HPP
 #define ARIADNE_HYBRID_SIMULATOR_HPP
 
-#include "logging/logging.hpp"
 #include "evolution/configuration_interface.hpp"
-#include "numeric/numeric.hpp"
-#include "hybrid/hybrid_set.hpp"
 #include "hybrid/hybrid_paving.hpp"
-
-
+#include "hybrid/hybrid_set.hpp"
+#include "logging/logging.hpp"
+#include "numeric/numeric.hpp"
 
 namespace Ariadne {
 
 /** @brief DiscretizationHybridType represents simulation algorithms for hybrid dynamical systems. */
-enum class DiscretizationHybridType
-{
-  HMince,
-  HRecombine
+enum class DiscretizationHybridType {
+    HMince,
+    HRecombine
 };
 
 /** @brief Apply the requested operation. */
 inline OutputStream& operator<<(OutputStream& os, const DiscretizationHybridType& dtype) {
+    if (dtype == DiscretizationHybridType::HMince) {
+        os << "Mince";
+    } else {
+        os << "Recombine";
+    }
 
-    if(dtype == DiscretizationHybridType::HMince){ os << "Mince"; }
-    else{ os << "Recombine"; }
-    
     return os;
 }
 
@@ -67,12 +66,12 @@ class DiscreteLocation;
 /** @brief HybridSimulatorConfiguration represents simulation algorithms for hybrid dynamical systems. */
 class HybridSimulatorConfiguration;
 
-template<class T> class Orbit;
+template<class T>
+class Orbit;
 
 /*! \brief A class for computing the evolution of a hybrid system.
  */
-class HybridSimulator
-{
+class HybridSimulator {
   public:
     typedef HybridPoint<FloatDPApproximation> HybridApproximatePointType;
     typedef Vector<HybridApproximatePointType> HybridApproximateListPointType;
@@ -84,11 +83,12 @@ class HybridSimulator
     typedef Orbit<HybridApproximatePointType> OrbitType;
     typedef HybridTerminationCriterion TerminationType;
     typedef Orbit<HybridApproximateListPointType> OrbitListType;
+
   private:
     SharedPointer<SystemType> _sys_ptr;
     SharedPointer<ConfigurationType> _configuration;
-  public:
 
+  public:
     //! \brief Default constructor.
     HybridSimulator(const SystemType& system);
 
@@ -105,45 +105,45 @@ class HybridSimulator
     /** @brief Compute or update evolution information. */
     Orbit<HybridApproximatePointType> orbit(const HybridRealPoint& initial_point, const TerminationType& termination) const;
     //! \brief Currently simulates from the midpoint of the set in the first location only.
-    //Orbit<HybridApproximatePointType> orbit(const HybridBoundedConstraintSet& initial_set, const TerminationType& termination) const;
+    // Orbit<HybridApproximatePointType> orbit(const HybridBoundedConstraintSet& initial_set, const TerminationType& termination) const;
 
-    OrbitListType orbit(const HybridApproximateListPointType& initial_list, const TerminationType& termination) const;  //TO DO
-    OrbitListType orbit(const HybridBoundedConstraintSet& initial_set, const TerminationType& termination) const;       //TO DO
+    OrbitListType orbit(const HybridApproximateListPointType& initial_list, const TerminationType& termination) const; // TO DO
+    OrbitListType orbit(const HybridBoundedConstraintSet& initial_set, const TerminationType& termination) const;      // TO DO
     /** @brief Compute or update evolution information. */
-    OrbitListType orbit(const HybridUpperBox& initial_box, DiscreteLocation loc, HybridSpace spc, TerminationType const& termination) const;
+    OrbitListType orbit(const HybridUpperBox& initial_box, DiscreteLocation loc, HybridSpace spc, const TerminationType& termination) const;
 
   private:
     /** @brief Perform the specified evolution operation. */
-    Map<DiscreteEvent,EffectiveScalarMultivariateFunction> _guard_functions(const DiscreteLocation& location) const;
+    Map<DiscreteEvent, EffectiveScalarMultivariateFunction> _guard_functions(const DiscreteLocation& location) const;
     /** @brief Perform the specified evolution operation. */
     Bool _satisfies_invariants(const DiscreteLocation& location, const Point<FloatDPApproximation>& point) const;
 };
 
 /** @brief HybridSimulatorConfiguration represents simulation algorithms for hybrid dynamical systems. */
 class HybridSimulatorConfiguration : public ConfigurationInterface {
-public:
+  public:
     //! \brief Default constructor gives reasonable values.
     HybridSimulatorConfiguration();
 
     virtual ~HybridSimulatorConfiguration() = default;
 
-private:
-
+  private:
     //! \brief The step size for integration.
     //! Decreasing this value increases the accuracy of the computation.
     FloatDPApproximation _step_size;
     Nat _fineness;
     DiscretizationHybridType _discretization_type;
 
-public:
-
+  public:
     const FloatDPApproximation& step_size() const { return _step_size; }
-    Void set_step_size(ApproximateDouble value) { ARIADNE_PRECONDITION(decide(value>0)); _step_size = FloatDPApproximation(value,double_precision); }
+    Void set_step_size(ApproximateDouble value) {
+        ARIADNE_PRECONDITION(decide(value > 0));
+        _step_size = FloatDPApproximation(value, double_precision);
+    }
     const Nat& fineness() const { return _fineness; }
-    Void set_fineness(Nat value) { _fineness = value; } 
+    Void set_fineness(Nat value) { _fineness = value; }
     Void set_d_type(DiscretizationHybridType type) { _discretization_type = type; }
-    DiscretizationHybridType const& d_type() const { return _discretization_type; }
-
+    const DiscretizationHybridType& d_type() const { return _discretization_type; }
 
     /** @brief Perform the specified evolution operation. */
     virtual OutputStream& _write(OutputStream& os) const;

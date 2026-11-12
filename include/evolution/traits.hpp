@@ -56,24 +56,29 @@ class LabelledEnclosure;
 /** @brief HybridEnclosure: compile-time correspondence between systems, evolvers and enclosures. */
 class HybridEnclosure;
 
-template<class SYS> struct EvolutionTraits;
+template<class SYS>
+struct EvolutionTraits;
 
-template<> struct EvolutionTraits<IteratedMap> {
+template<>
+struct EvolutionTraits<IteratedMap> {
     using EvolverType = IteratedMapEvolver;
     using EnclosureType = LabelledEnclosure;
 };
 
-template<> struct EvolutionTraits<VectorField> {
+template<>
+struct EvolutionTraits<VectorField> {
     using EvolverType = VectorFieldEvolver;
     using EnclosureType = LabelledEnclosure;
 };
 
-template<> struct EvolutionTraits<DifferentialInclusion> {
+template<>
+struct EvolutionTraits<DifferentialInclusion> {
     using EvolverType = DifferentialInclusionEvolver;
     using EnclosureType = LabelledEnclosure;
 };
 
-template<> struct EvolutionTraits<HybridAutomatonInterface> {
+template<>
+struct EvolutionTraits<HybridAutomatonInterface> {
     using EvolverType = HybridEvolverInterface;
     using EnclosureType = HybridEnclosure;
 };

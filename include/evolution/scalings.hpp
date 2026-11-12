@@ -32,13 +32,12 @@
 #include <iostream>
 #include <map>
 
-#include "utility/container.hpp"
-#include "utility/stlio.hpp"
-
 #include "numeric/builtin.hpp"
 #include "paving/grid.hpp"
-#include "symbolic/variable.hpp"
 #include "symbolic/space.hpp"
+#include "symbolic/variable.hpp"
+#include "utility/container.hpp"
+#include "utility/stlio.hpp"
 
 namespace Ariadne {
 
@@ -49,41 +48,47 @@ typedef std::ostream OutputStream;
 //! \brief A class which defines the state space grid to use given the continuous state variables \a spc.
 class Scalings {
     ExactDouble _default_scaling;
-    Map<Identifier,ExactDouble> _scalings;
+    Map<Identifier, ExactDouble> _scalings;
+
   public:
     Scalings(ApproximateDouble default_scaling)
-        : _default_scaling(cast_exact(default_scaling)), _scalings() { ARIADNE_PRECONDITION(decide(default_scaling>0)); }
+        : _default_scaling(cast_exact(default_scaling)), _scalings() { ARIADNE_PRECONDITION(decide(default_scaling > 0)); }
     /** @brief Construct the object. */
-    Scalings(ExactDouble default_scaling, Map<RealVariable,ExactDouble> const& scalings);
+    Scalings(ExactDouble default_scaling, const Map<RealVariable, ExactDouble>& scalings);
     /** @brief Perform the specified evolution operation. */
-    Void set_scaling(RealVariable const& var, ApproximateDouble scal) {
-        ARIADNE_PRECONDITION(decide(scal>0)); _scalings[var.name()]=cast_exact(scal); }
+    Void set_scaling(const RealVariable& var, ApproximateDouble scal) {
+        ARIADNE_PRECONDITION(decide(scal > 0));
+        _scalings[var.name()] = cast_exact(scal);
+    }
     /** @brief Perform the specified evolution operation. */
     ExactDouble scaling(const RealVariable& var) const {
-        return (this->_scalings.has_key(var.name())) ? this->_scalings[var.name()] : this->_default_scaling; }
+        return (this->_scalings.has_key(var.name())) ? this->_scalings[var.name()] : this->_default_scaling;
+    }
     /** @brief Perform the specified evolution operation. */
-    Grid grid(RealSpace const& spc) const;
+    Grid grid(const RealSpace& spc) const;
     /** @brief Perform the specified evolution operation. */
-    friend OutputStream& operator<<(OutputStream& os, Scalings const& s) {
-        return os << "Scalings( " << s._scalings << " )"; }
+    friend OutputStream& operator<<(OutputStream& os, const Scalings& s) {
+        return os << "Scalings( " << s._scalings << " )";
+    }
 };
 
-inline Scalings::Scalings(ExactDouble default_scaling, Map<RealVariable,ExactDouble> const& scalings)
-    : _default_scaling(default_scaling), _scalings()
-{
+inline Scalings::Scalings(ExactDouble default_scaling, const Map<RealVariable, ExactDouble>& scalings)
+    : _default_scaling(default_scaling), _scalings() {
     /** @brief Construct the object. */
-    ARIADNE_PRECONDITION(default_scaling>0);
-    for(auto var_scal : scalings) {
+    ARIADNE_PRECONDITION(default_scaling > 0);
+    for (auto var_scal: scalings) {
         /** @brief Construct the object. */
-        ARIADNE_PRECONDITION(var_scal.second>0);
-        this->_scalings.insert(var_scal.first.name(),var_scal.second);
+        ARIADNE_PRECONDITION(var_scal.second > 0);
+        this->_scalings.insert(var_scal.first.name(), var_scal.second);
     }
 }
 
-inline Grid Scalings::grid(RealSpace const& spc) const {
+inline Grid Scalings::grid(const RealSpace& spc) const {
     /** @brief Perform the specified evolution operation. */
-    Vector<ExactDouble> lengths(spc.dimension(),1.0_x);
-    for(SizeType i=0; i<spc.dimension(); ++i) { lengths[i]=this->scaling(spc[i]); }
+    Vector<ExactDouble> lengths(spc.dimension(), 1.0_x);
+    for (SizeType i = 0; i < spc.dimension(); ++i) {
+        lengths[i] = this->scaling(spc[i]);
+    }
     return Grid(lengths);
 }
 

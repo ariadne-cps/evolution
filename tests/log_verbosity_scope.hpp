@@ -32,7 +32,8 @@
 // Exercise diagnostics without changing the caller's logging configuration.
 class LogVerbosityScope {
     unsigned _previous;
-public:
+
+  public:
     explicit LogVerbosityScope(unsigned verbosity)
         /** @brief Perform the specified evolution operation. */
         : _previous(Ariadne::Logger::instance().configuration().verbosity()) {

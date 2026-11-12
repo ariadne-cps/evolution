@@ -29,20 +29,17 @@
 #ifndef ARIADNE_ITERATED_MAP_EVOLVER_HPP
 #define ARIADNE_ITERATED_MAP_EVOLVER_HPP
 
+#include <iostream>
+#include <list>
 #include <string>
 #include <vector>
-#include <list>
-#include <iostream>
 
-#include "utility/tuple.hpp"
-
-#include "system/iterated_map.hpp"
-#include "function/function_interface.hpp"
 #include "evolution/configuration_interface.hpp"
 #include "evolution/evolver_interface.hpp"
-
+#include "function/function_interface.hpp"
 #include "logging/logging.hpp"
-
+#include "system/iterated_map.hpp"
+#include "utility/tuple.hpp"
 
 namespace Ariadne {
 
@@ -50,7 +47,8 @@ namespace Ariadne {
 class Enclosure;
 /** @brief IteratedMap represents evolution by iteration of discrete-time maps. */
 class IteratedMap;
-template<class ES> class Orbit;
+template<class ES>
+class Orbit;
 
 /** @brief IteratedMapEvolverConfiguration represents evolution by iteration of discrete-time maps. */
 class IteratedMapEvolverConfiguration;
@@ -58,10 +56,9 @@ class IteratedMapEvolverConfiguration;
 /*! \brief A class for computing the evolution of an iterated map.
  */
 class IteratedMapEvolver
-    : public EvolverInterface<IteratedMap,LabelledEnclosure,Integer>
-{
+    : public EvolverInterface<IteratedMap, LabelledEnclosure, Integer> {
   public:
-    typedef EvolverInterface<IteratedMap,LabelledEnclosure,Integer> Interface;
+    typedef EvolverInterface<IteratedMap, LabelledEnclosure, Integer> Interface;
     typedef IteratedMapEvolverConfiguration ConfigurationType;
     typedef IteratedMap SystemType;
     typedef Integer TimeType;
@@ -71,8 +68,8 @@ class IteratedMapEvolver
     typedef Orbit<EnclosureType> OrbitType;
     typedef ListSet<EnclosureType> EnclosureListType;
     typedef ValidatedFunctionPatchFactory FunctionFactoryType;
-  public:
 
+  public:
     //! \brief Default constructor.
     IteratedMapEvolver(const SystemType& system);
 
@@ -83,7 +80,7 @@ class IteratedMapEvolver
     virtual const SystemType& system() const { return *_system; }
 
     //! \brief Make an enclosure from a computed box set.
-    EnclosureType enclosure(ExactBoxType const&) const;
+    EnclosureType enclosure(const ExactBoxType&) const;
 
     //!@{
     //! \name Configuration for the class.
@@ -109,7 +106,7 @@ class IteratedMapEvolver
                             const EnclosureType& initial, const TerminationType& termination,
                             Semantics semantics) const;
 
-    virtual Void _evolution_step(List< TimedEnclosureType >& working_sets,
+    virtual Void _evolution_step(List<TimedEnclosureType>& working_sets,
                                  EnclosureListType& final, EnclosureListType& reachable, EnclosureListType& intermediate,
                                  const TimedEnclosureType& current_set, const TerminationType& termination,
                                  Semantics semantics) const;
@@ -119,10 +116,8 @@ class IteratedMapEvolver
     SharedPointer<ConfigurationType> _configuration;
 };
 
-
 //! \brief Configuration for a IteratedMapEvolver, essentially to control accuracy of evolution.
-class IteratedMapEvolverConfiguration : public ConfigurationInterface
-{
+class IteratedMapEvolverConfiguration : public ConfigurationInterface {
   public:
     typedef double RealType;
 
@@ -132,7 +127,6 @@ class IteratedMapEvolverConfiguration : public ConfigurationInterface
     virtual ~IteratedMapEvolverConfiguration() = default;
 
   private:
-
     //! \brief The maximum allowable radius of a basic set.
     //! Decreasing this value increases the accuracy of the computation of an over-approximation.
     RealType _maximum_enclosure_radius;
@@ -144,7 +138,6 @@ class IteratedMapEvolverConfiguration : public ConfigurationInterface
     Bool _enable_premature_termination;
 
   public:
-
     const RealType& maximum_enclosure_radius() const { return _maximum_enclosure_radius; }
     Void set_maximum_enclosure_radius(const RealType value) { _maximum_enclosure_radius = value; }
 
@@ -155,12 +148,9 @@ class IteratedMapEvolverConfiguration : public ConfigurationInterface
     Void set_enable_premature_termination(const Bool value) { _enable_premature_termination = value; }
 
   public:
-
     /** @brief Perform the specified evolution operation. */
     virtual OutputStream& _write(OutputStream& os) const;
-
 };
-
 
 } // namespace Ariadne
 

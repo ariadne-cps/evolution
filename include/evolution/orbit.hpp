@@ -29,84 +29,86 @@
 #ifndef ARIADNE_ORBIT_HPP
 #define ARIADNE_ORBIT_HPP
 
-#include <utility>
 #include <iostream>
-#include <vector>
 #include <map>
 #include <memory>
 #include <mutex>
+#include <utility>
+#include <vector>
 
-#include "numeric/numeric.hpp"
+#include "evolution/enclosure.hpp"
+#include "labelled/curve.hpp"
 #include "labelled/graphics_interface.hpp"
 #include "labelled/point.hpp"
-#include "labelled/curve.hpp"
+#include "numeric/numeric.hpp"
+#include "set/curve.hpp"
 #include "set/function_set.hpp"
 #include "set/list_set.hpp"
-#include "set/curve.hpp"
-#include "evolution/enclosure.hpp"
 #include "threading/using.hpp"
 
 namespace Ariadne {
 
 #ifdef DOXYGEN
 //! \brief Class for storing evolution data.
-template<class E> class Orbit {
+template<class E>
+class Orbit {
   public:
     //! The type used to store a single enclosure set.
     typedef E EnclosureType;
     //! The type used to store a list of enclosure sets.
     typedef EL EnclosureListType;
     //! The initial set of the orbit.
-    EnclosureType const& initial() const;
+    const EnclosureType& initial() const;
     //! The set of points reached by evolution from the given initial set over the evolution time.
-    EnclosureListType const& reach() const;
+    const EnclosureListType& reach() const;
     //! The set of points reached by evolution from the given initial set at the final evolution time.
-    EnclosureListType const& final() const;
+    const EnclosureListType& final() const;
 };
 #endif
 
-template<class ES> class Orbit;
+template<class ES>
+class Orbit;
 /** @brief Apply the requested operation. */
-template<class ES> OutputStream& operator<<(OutputStream&, const Orbit<ES>&);
+template<class ES>
+OutputStream& operator<<(OutputStream&, const Orbit<ES>&);
 
-template<class BS> class ListSet;
+template<class BS>
+class ListSet;
 
-template<class X> class Point;
+template<class X>
+class Point;
 /** @brief InterpolatedCurve represents orbit containers for continuous and discrete systems. */
 class InterpolatedCurve;
 
-
 template<class F>
 /** @brief Orbit represents orbit containers for continuous and discrete systems. */
-class Orbit<Point<F>>
-{
+class Orbit<Point<F>> {
   public:
     /** @brief Construct the object. */
     Orbit(const Point<F>& pt);
     /** @brief Perform the specified evolution operation. */
     Void insert(F t, const Point<F>& pt);
     const InterpolatedCurve& curve() const { return *this->_curve; }
+
   private:
     std::shared_ptr<InterpolatedCurve> _curve;
 };
 
 template<class F>
 /** @brief Orbit represents orbit containers for continuous and discrete systems. */
-class Orbit<Point<Approximation<F>>>
-{
-public:
-    Orbit(const Point<Approximation<F>>& pt) : _curve(new InterpolatedCurve(0,pt)) { }
-    Void insert(F t, const Point<Approximation<F>>& pt) { this->_curve->insert(t,pt); }
+class Orbit<Point<Approximation<F>>> {
+  public:
+    Orbit(const Point<Approximation<F>>& pt) : _curve(new InterpolatedCurve(0, pt)) {}
+    Void insert(F t, const Point<Approximation<F>>& pt) { this->_curve->insert(t, pt); }
     const InterpolatedCurve& curve() const { return *this->_curve; }
-private:
+
+  private:
     std::shared_ptr<InterpolatedCurve> _curve;
 };
 
-
 template<class F>
 /** @brief Orbit represents orbit containers for continuous and discrete systems. */
-class Orbit<List<Point<Approximation<F>>>>
-{
+class Orbit<List<Point<Approximation<F>>>> {
   public:
     /** @brief Construct the object. */
     Orbit(const List<Point<Approximation<F>>>& ptLst);
@@ -114,6 +116,7 @@ class Orbit<List<Point<Approximation<F>>>>
     Void insert(F t, const Point<Approximation<F>>& pt, SizeType curveNumber);
     const List<InterpolatedCurve>& curves() { return *_curves; }
     const InterpolatedCurve& curve(SizeType i) { return _curves->at(i); }
+
   private:
     std::shared_ptr<List<InterpolatedCurve>> _curves;
 };
@@ -121,24 +124,22 @@ class Orbit<List<Point<Approximation<F>>>>
 template<class F>
 /** @brief Orbit represents orbit containers for continuous and discrete systems. */
 class Orbit<LabelledPoint<Approximation<F>>>
-    : public LabelledDrawable2dInterface
-{
+    : public LabelledDrawable2dInterface {
   public:
-    Orbit(const LabelledPoint<Approximation<F>>& pt) : _curve(new LabelledInterpolatedCurve(pt)) { }
-    Void insert(F t, const LabelledPoint<Approximation<F>>& pt) { this->_curve->insert(t,pt); }
+    Orbit(const LabelledPoint<Approximation<F>>& pt) : _curve(new LabelledInterpolatedCurve(pt)) {}
+    Void insert(F t, const LabelledPoint<Approximation<F>>& pt) { this->_curve->insert(t, pt); }
     const LabelledInterpolatedCurve& curves() const { return *this->_curve; }
-    virtual Void draw(CanvasInterface& canvas, const Variables2d& axes) const override { _curve->draw(canvas,axes); }
+    virtual Void draw(CanvasInterface& canvas, const Variables2d& axes) const override { _curve->draw(canvas, axes); }
     virtual LabelledDrawable2dInterface* labelled_clone() const override { return new Orbit<LabelledPoint<Approximation<F>>>(*this); }
+
   private:
     std::shared_ptr<LabelledInterpolatedCurve> _curve;
 };
 
-
 template<class F>
 /** @brief Orbit represents orbit containers for continuous and discrete systems. */
 class Orbit<List<LabelledPoint<Approximation<F>>>>
-    : public LabelledDrawable2dInterface
-{
+    : public LabelledDrawable2dInterface {
   public:
     /** @brief Construct the object. */
     Orbit(const List<LabelledPoint<Approximation<F>>>& ptLst);
@@ -148,23 +149,27 @@ class Orbit<List<LabelledPoint<Approximation<F>>>>
     const LabelledInterpolatedCurve& curve(SizeType i) { return _curves->at(i); }
     /** @brief Perform the specified evolution operation. */
     virtual Void draw(CanvasInterface& canvas, const Variables2d& axes) const override {
-        for (SizeType i=0; i<_curves->size(); i++){ _curves->at(i).draw(canvas, axes); } }
+        for (SizeType i = 0; i < _curves->size(); i++) {
+            _curves->at(i).draw(canvas, axes);
+        }
+    }
     virtual LabelledDrawable2dInterface* labelled_clone() const override { return new Orbit<List<LabelledPoint<Approximation<F>>>>(*this); }
+
   private:
     std::shared_ptr<List<LabelledInterpolatedCurve>> _curves;
 };
 
 template<>
 /** @brief Orbit represents orbit containers for continuous and discrete systems. */
-class Orbit<Enclosure>
-{
+class Orbit<Enclosure> {
     typedef Enclosure ES;
     typedef ListSet<ES> ESL;
+
   public:
     typedef ES EnclosureType;
     typedef ListSet<ES> EnclosureListType;
 
-    Orbit(const ES& set) : _initial(set) { }
+    Orbit(const ES& set) : _initial(set) {}
     Void adjoin_reach(const EnclosureType& set) { this->_reach.adjoin(set); }
     Void adjoin_intermediate(const EnclosureType& set) { this->_intermediate.adjoin(set); }
     Void adjoin_final(const EnclosureType& set) { this->_final.adjoin(set); }
@@ -173,10 +178,11 @@ class Orbit<Enclosure>
     Void adjoin_intermediate(const EnclosureListType& set) { this->_intermediate.adjoin(set); }
     Void adjoin_final(const EnclosureListType& set) { this->_final.adjoin(set); }
 
-    EnclosureType const& initial() const { return this->_initial; }
-    EnclosureListType const& reach() const { return this->_reach; }
-    EnclosureListType const& intermediate() const { return this->_intermediate; }
-    EnclosureListType const& final() const { return this->_final; }
+    const EnclosureType& initial() const { return this->_initial; }
+    const EnclosureListType& reach() const { return this->_reach; }
+    const EnclosureListType& intermediate() const { return this->_intermediate; }
+    const EnclosureListType& final() const { return this->_final; }
+
   private:
     ES _initial;
     ESL _reach;
@@ -187,15 +193,15 @@ class Orbit<Enclosure>
 template<>
 /** @brief Orbit represents orbit containers for continuous and discrete systems. */
 class Orbit<LabelledEnclosure>
-    : public LabelledDrawable2dInterface
-{
+    : public LabelledDrawable2dInterface {
     typedef LabelledEnclosure ES;
     typedef ListSet<LabelledEnclosure> ESL;
+
   public:
     typedef ES EnclosureType;
     typedef ESL EnclosureListType;
 
-    Orbit(const ES& set) : _initial(set) { }
+    Orbit(const ES& set) : _initial(set) {}
     virtual Void adjoin_reach(const EnclosureType& set) { this->_reach.adjoin(set); }
     virtual Void adjoin_intermediate(const EnclosureType& set) { this->_intermediate.adjoin(set); }
     virtual Void adjoin_final(const EnclosureType& set) { this->_final.adjoin(set); }
@@ -204,13 +210,14 @@ class Orbit<LabelledEnclosure>
     virtual Void adjoin_intermediate(const EnclosureListType& set) { this->_intermediate.adjoin(set); }
     virtual Void adjoin_final(const EnclosureListType& set) { this->_final.adjoin(set); }
 
-    EnclosureType const& initial() const { return this->_initial; }
-    EnclosureListType const& reach() const { return this->_reach; }
-    EnclosureListType const& intermediate() const { return this->_intermediate; }
-    EnclosureListType const& final() const { return this->_final; }
+    const EnclosureType& initial() const { return this->_initial; }
+    const EnclosureListType& reach() const { return this->_reach; }
+    const EnclosureListType& intermediate() const { return this->_intermediate; }
+    const EnclosureListType& final() const { return this->_final; }
 
-    virtual Void draw(CanvasInterface& canvas, const Variables2d& axes) const override { _reach.draw(canvas,axes); }
+    virtual Void draw(CanvasInterface& canvas, const Variables2d& axes) const override { _reach.draw(canvas, axes); }
     virtual LabelledDrawable2dInterface* labelled_clone() const override { return new Orbit<LabelledEnclosure>(*this); }
+
   private:
     ES _initial;
     ESL _reach;
@@ -219,12 +226,12 @@ class Orbit<LabelledEnclosure>
 };
 
 /** @brief Apply the requested operation. */
-template<class ES> OutputStream& operator<<(OutputStream& os, const Orbit< ES >& orb);
+template<class ES>
+OutputStream& operator<<(OutputStream& os, const Orbit<ES>& orb);
 
 template<class ES>
 OutputStream&
-operator<<(OutputStream& os, const Orbit< ES >& orb)
-{
+    operator<<(OutputStream& os, const Orbit<ES>& orb) {
     os << "Orbit(\n  initial=" << orb.initial()
        << "\n  intermediate=" << orb.intermediate()
        << "\n  reach=" << orb.reach()
@@ -234,16 +241,23 @@ operator<<(OutputStream& os, const Orbit< ES >& orb)
 }
 
 /** @brief Perform the specified evolution operation. */
-template<class ES> Void draw(FigureInterface& figure, const Orbit<ES>& orbit) {
-    for(auto const& enclosure : orbit.reach()) { draw(figure,enclosure); }
+template<class ES>
+Void draw(FigureInterface& figure, const Orbit<ES>& orbit) {
+    for (const auto& enclosure: orbit.reach()) {
+        draw(figure, enclosure);
+    }
     /** @brief Perform the specified evolution operation. */
-    draw(figure,orbit.initial());
-    for(auto const& enclosure : orbit.final()) { draw(figure,enclosure); }
+    draw(figure, orbit.initial());
+    for (const auto& enclosure: orbit.final()) {
+        draw(figure, enclosure);
+    }
 }
 
 /** @brief Apply the requested operation. */
-template<class ES> FigureInterface& operator<<(FigureInterface& figure, const Orbit<ES>& orbit) {
-    draw(figure,orbit); return figure;
+template<class ES>
+FigureInterface& operator<<(FigureInterface& figure, const Orbit<ES>& orbit) {
+    draw(figure, orbit);
+    return figure;
 }
 
 } // namespace Ariadne

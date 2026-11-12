@@ -26,11 +26,11 @@
  *  @brief Test vector field evolver header behavior and numerical invariants.
  */
 
-#include "evolution/vector_field_evolver.hpp"
-
 #include <type_traits>
 
-static_assert(std::is_base_of_v<Ariadne::VectorFieldEvolver::Interface,
-                               Ariadne::VectorFieldEvolver>);
+#include "evolution/vector_field_evolver.hpp"
 
-int main() { }
+static_assert(std::is_base_of_v<Ariadne::VectorFieldEvolver::Interface,
+                                Ariadne::VectorFieldEvolver>);
+
+int main() {}

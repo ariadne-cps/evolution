@@ -29,31 +29,29 @@
 #ifndef ARIADNE_HYBRID_ENCLOSURE_HPP
 #define ARIADNE_HYBRID_ENCLOSURE_HPP
 
+#include <iostream>
+#include <list>
 #include <string>
 #include <vector>
-#include <list>
-#include <iostream>
 
+#include "algebra/declarations.hpp"
+#include "evolution/enclosure.hpp"
+#include "function/declarations.hpp"
+#include "geometry/box.hpp"
+#include "geometry/declarations.hpp"
+#include "hybrid/discrete_location.hpp"
+#include "hybrid/hybrid_graphics_interface.hpp"
+#include "hybrid/hybrid_set.decl.hpp"
 #include "logging/logging.hpp"
 #include "numeric/declarations.hpp"
-#include "algebra/declarations.hpp"
-#include "function/declarations.hpp"
-#include "geometry/declarations.hpp"
-#include "utility/pointer.hpp"
-#include "utility/container.hpp"
-
-#include "hybrid/hybrid_set.decl.hpp"
-#include "hybrid/discrete_location.hpp"
 #include "system/discrete_event.hpp"
-#include "hybrid/hybrid_graphics_interface.hpp"
-
-#include "geometry/box.hpp"
-#include "evolution/enclosure.hpp"
-
+#include "utility/container.hpp"
+#include "utility/pointer.hpp"
 
 namespace Ariadne {
 
-template<class X> class Vector;
+template<class X>
+class Vector;
 
 /** @brief Enclosure represents enclosures and representations for hybrid system states. */
 class Enclosure;
@@ -70,20 +68,26 @@ class Figure;
 /** @brief CanvasInterface represents enclosures and representations for hybrid system states. */
 class CanvasInterface;
 
-template<class L, class R> class Assignment;
-typedef Assignment<RealVariable,RealExpression> RealAssignment;
-template<class X> class Space;
+template<class L, class R>
+class Assignment;
+typedef Assignment<RealVariable, RealExpression> RealAssignment;
+template<class X>
+class Space;
 typedef Space<Real> RealSpace;
 typedef VariablesBox<UpperIntervalType> VariablesUpperBoxType;
-template<class ES> class ListSet;
-template<class ES> class HybridListSet;
-template<class EBS> class HybridBasicSet;
+template<class ES>
+class ListSet;
+template<class ES>
+class HybridListSet;
+template<class EBS>
+class HybridBasicSet;
 
 /** @brief HybridEnclosure represents enclosures and representations for hybrid system states. */
 class HybridEnclosure;
 /** @brief HybridPaving represents enclosures and representations for hybrid system states. */
 class HybridPaving;
-template<> class ListSet<HybridEnclosure>;
+template<>
+class ListSet<HybridEnclosure>;
 
 //! \ingroup HybridSetSubModule
 //! \brief A class representing an enclosure for a hybrid evolution.
@@ -123,21 +127,23 @@ template<> class ListSet<HybridEnclosure>;
 //! it is safe to remove a constraint \f$g_e(x_{i-1})\leq0\f$ and
 //! replace it with the constraint \f$g_e(x_i)\leq 0\f$.
 class HybridEnclosure
-    : public HybridDrawableInterface
-{
+    : public HybridDrawableInterface {
     friend class SimpleHybridEvolver;
     friend class ConstraintHybridEvolver;
+
   public:
     typedef Enclosure ContinuousStateSetType;
+
   private:
     DiscreteLocation _location;
     List<DiscreteEvent> _events;
     LabelledEnclosure _set;
+
   public:
     //! \brief An empty enclosure.
     HybridEnclosure();
     //! \brief An empty enclosure.
-    HybridEnclosure(EnclosureConfiguration const& config);
+    HybridEnclosure(const EnclosureConfiguration& config);
     //! \brief An enclosure corresponding to a hybrid box \a hbx with variables canonically ordered by \a spc.
     HybridEnclosure(const HybridBoxSet& hbx, const RealSpace& spc, const EnclosureConfiguration& config);
     //! \brief An enclosure corresponding to the hybrid set \a set using \a space to order the continuous variables.
@@ -210,7 +216,7 @@ class HybridEnclosure
     UpperIntervalType dwell_time_range() const;
 
     //! \brief The continuous state set.
-    friend HybridBasicSet<Enclosure> project(HybridEnclosure const&, RealSpace const& spc);
+    friend HybridBasicSet<Enclosure> project(const HybridEnclosure&, const RealSpace& spc);
     //! \brief The continuous state set.
     HybridBasicSet<Enclosure> state_set() const;
     //! \brief The continuous state set including time.
@@ -272,13 +278,12 @@ class HybridEnclosure
     //! \brief Introduces the new invariant (progress predicate) \f$c(x)\leq0\f$.
     Void new_invariant(DiscreteEvent e, ValidatedScalarMultivariateFunction c);
     //! \brief Introduces the new activation condition \f$g(x)\geq0\f$ for the event \a e.
-    Void new_activation(DiscreteEvent e,ValidatedScalarMultivariateFunction g);
+    Void new_activation(DiscreteEvent e, ValidatedScalarMultivariateFunction g);
     //! \brief Introduces the new guard condition \f$g(x)=0\f$ for the event \a e.
     //! More precisely, the continuous dynamics is restricted to \f$c(x)\leq0\f$, and the event happens when \f$c(x)\geq0\f$.
     Void new_guard(DiscreteEvent e, ValidatedScalarMultivariateFunction g);
     //! \brief Introduces the new guard condition \f$g(x)=0\f$ for the event \a e, with computed crossing time \f$\tau(s)\f$.
     Void new_guard(DiscreteEvent e, ValidatedScalarMultivariateFunction g, ValidatedScalarMultivariateFunction ct);
-
 
     //! \brief The dimension of the set. Returns the state-space dimension.
     DimensionType dimension() const;
@@ -289,12 +294,12 @@ class HybridEnclosure
     //! \brief Tests whether the set satisfies the constraint \a c.
     ValidatedKleenean satisfies(EffectiveConstraint c) const;
     //! \brief A list of the kind of quantity each parameter represents.
-    List<EnclosureVariableKind> const& variable_kinds() const;
+    const List<EnclosureVariableKind>& variable_kinds() const;
 
     //! \brief Returns a bounding box for the set. Computed by a simple interval evaluation of \f$f(D)\f$.
     HybridUpperBoxType bounding_box() const;
     //! \brief Returns an over-approximation to the range of \a g over the set.
-    UpperIntervalType range_of(EffectiveScalarMultivariateFunction const& g) const;
+    UpperIntervalType range_of(const EffectiveScalarMultivariateFunction& g) const;
     //! \brief Tests whether the set is disjoint from the box \a hbx.
     ValidatedLowerKleenean separated(const HybridExactBox& hbx) const;
     //! \brief Tests whether the set is a subset of the interior of the box \a hbx.
@@ -306,7 +311,7 @@ class HybridEnclosure
     Void adjoin_outer_approximation_to(HybridPaving& paving, Nat fineness) const;
 
     //! \brief Splits into two smaller subsets along parameter direction \a dim.
-    Pair<HybridEnclosure,HybridEnclosure> split(SizeType dim) const;
+    Pair<HybridEnclosure, HybridEnclosure> split(SizeType dim) const;
     //! \brief Splits into smaller subsets.
     List<HybridEnclosure> split() const;
 
@@ -327,7 +332,9 @@ class HybridEnclosure
     OutputStream& print(OutputStream&) const;
     //! \brief Write a full representation to an output stream which can be used in a constructor.
     OutputStream& repr(OutputStream&) const;
+
   private:
+
   public:
     // Compute the flow reach step xi'(s,t) = phi(xi(s),t) and tau'(s,t)=tau(s)+t for t in [0,h] .
     Void _apply_flow(ValidatedVectorMultivariateFunction phi, FloatDP step);
@@ -338,7 +345,6 @@ class HybridEnclosure
     Void _check() const; // Check that set is well-formed.
     // Compute constraints of the set
     List<ValidatedConstraint> constraints() const;
-
 };
 
 /** @brief Perform the specified evolution operation. */
@@ -348,7 +354,6 @@ inline ValidatedLowerKleenean separated(const HybridEnclosure& he, const HybridE
 
 inline OutputStream& operator<<(OutputStream& os, const HybridEnclosure& s) { return s._write(os); }
 
-
 /** @brief HybridGrid represents enclosures and representations for hybrid system states. */
 class HybridGrid;
 /** @brief HybridPaving represents enclosures and representations for hybrid system states. */
@@ -357,22 +362,24 @@ class HybridPaving;
 template<>
 /** @brief ListSet represents enclosures and representations for hybrid system states. */
 class ListSet<HybridEnclosure>
-    : public HybridDrawableInterface
-{
+    : public HybridDrawableInterface {
   public:
     typedef List<HybridEnclosure>::Iterator Iterator;
     typedef List<HybridEnclosure>::ConstIterator ConstIterator;
+
   public:
-    operator const List<HybridEnclosure>& () const { return _list; }
-    operator List<HybridEnclosure>& () { return _list; }
-    ListSet() { }
+    operator const List<HybridEnclosure>&() const { return _list; }
+    operator List<HybridEnclosure>&() { return _list; }
+    ListSet() {}
     ListSet(const HybridEnclosure& hes) { this->adjoin(hes); }
-    ListSet(const List<HybridEnclosure>& hel) : _list(hel) { }
+    ListSet(const List<HybridEnclosure>& hel) : _list(hel) {}
     Void adjoin(const HybridEnclosure& hes) { this->_list.append(hes); }
     /** @brief Compute or update evolution information. */
     Void adjoin(const ListSet<HybridEnclosure>& hels) {
-        for(List<HybridEnclosure>::ConstIterator iter=hels.begin(); iter!=hels.end(); ++iter) {
-            this->adjoin(*iter); } }
+        for (List<HybridEnclosure>::ConstIterator iter = hels.begin(); iter != hels.end(); ++iter) {
+            this->adjoin(*iter);
+        }
+    }
     Void append(const HybridEnclosure& hes) { this->_list.append(hes); }
     SizeType size() const { return _list.size(); }
     const HybridEnclosure& operator[](SizeType i) const { return get(i); }
@@ -381,7 +388,11 @@ class ListSet<HybridEnclosure>
     ListSet<HybridEnclosure::ContinuousStateSetType> operator[](const DiscreteLocation& loc) const;
     /** @brief Perform the specified evolution operation. */
     VariablesUpperBoxType bounding_box() const;
-    Void reduce() { for(auto& set : _list ) { set.reduce(); } }
+    Void reduce() {
+        for (auto& set: _list) {
+            set.reduce();
+        }
+    }
     Void clear() { this->_list.clear(); }
     HybridEnclosure& front() { return this->_list.front(); }
     const HybridEnclosure& front() const { return this->_list.front(); }
@@ -395,18 +406,23 @@ class ListSet<HybridEnclosure>
     Void draw(CanvasInterface& cnvs, const Set<DiscreteLocation>& locs, const Variables2d& vars) const;
 
     /** @brief Perform the specified evolution operation. */
-    friend ValidatedLowerKleenean inside(ListSet<HybridEnclosure> const& set, HybridExactBox const& bx) {
-        ValidatedLowerKleenean result=true; for(auto iter=set.begin(); iter!=set.end(); ++iter) { result = result && inside(*iter,bx); } return result; }
+    friend ValidatedLowerKleenean inside(const ListSet<HybridEnclosure>& set, const HybridExactBox& bx) {
+        ValidatedLowerKleenean result = true;
+        for (auto iter = set.begin(); iter != set.end(); ++iter) {
+            result = result && inside(*iter, bx);
+        }
+        return result;
+    }
     /** @brief Apply the requested operation. */
     friend OutputStream& operator<<(OutputStream& os, const ListSet<HybridEnclosure>& hls) {
-        return os << hls._list; };
+        return os << hls._list;
+    };
     /** @brief Perform the specified evolution operation. */
     friend HybridPaving outer_approximation(const ListSet<HybridEnclosure>& hls, const HybridGrid& g, Int dpth);
+
   private:
     List<HybridEnclosure> _list;
 };
-
-
 
 } // namespace Ariadne
 

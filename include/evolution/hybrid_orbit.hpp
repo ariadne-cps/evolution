@@ -29,28 +29,30 @@
 #ifndef ARIADNE_HYBRID_ORBIT_HPP
 #define ARIADNE_HYBRID_ORBIT_HPP
 
-#include <utility>
 #include <iostream>
-#include <vector>
 #include <map>
 #include <memory>
+#include <utility>
+#include <vector>
 
-#include "numeric/numeric.hpp"
-#include "labelled/graphics_interface.hpp"
-#include "set/function_set.hpp"
-#include "hybrid/hybrid_set.hpp"
 #include "evolution/hybrid_enclosure.hpp"
-
 #include "evolution/orbit.hpp"
+#include "hybrid/hybrid_set.hpp"
+#include "labelled/graphics_interface.hpp"
+#include "numeric/numeric.hpp"
+#include "set/function_set.hpp"
 
 namespace Ariadne {
 
 typedef FloatDP Time;
 
-template<class ES> class Orbit;
+template<class ES>
+class Orbit;
 
-template<class BS> class ListSet;
-template<class X> class Point;
+template<class BS>
+class ListSet;
+template<class X>
+class Point;
 
 /** @brief Grid represents discrete and continuous orbit collections for hybrid systems. */
 class Grid;
@@ -76,13 +78,13 @@ class DiscreteLocation;
 typedef HybridBasicSet<InterpolatedCurve> HybridInterpolatedCurve;
 
 /** @brief Apply the requested operation. */
-template<class ES> OutputStream& operator<<(OutputStream&, const Orbit<ES>&);
+template<class ES>
+OutputStream& operator<<(OutputStream&, const Orbit<ES>&);
 
 template<>
 /** @brief Orbit represents discrete and continuous orbit collections for hybrid systems. */
 class Orbit<HybridApproximatePoint>
-    : public HybridDrawableInterface
-{
+    : public HybridDrawableInterface {
   public:
     /** @brief Construct the object. */
     Orbit(const HybridApproximatePoint& hpt);
@@ -97,15 +99,15 @@ class Orbit<HybridApproximatePoint>
     const List<HybridInterpolatedCurve>& curves() const { return *this->_curves_ptr; }
     /** @brief Perform the specified evolution operation. */
     Void draw(CanvasInterface& c, const Set<DiscreteLocation>& l, const Variables2d& v) const;
+
   private:
-    SharedPointer<List<HybridInterpolatedCurve> > _curves_ptr;
+    SharedPointer<List<HybridInterpolatedCurve>> _curves_ptr;
 };
 
 template<>
 /** @brief Orbit represents discrete and continuous orbit collections for hybrid systems. */
 class Orbit<Vector<HybridApproximatePoint>>
-  : public HybridDrawableInterface
-{
+    : public HybridDrawableInterface {
   public:
     /** @brief Construct the object. */
     Orbit(const Vector<HybridApproximatePoint>& vhpt);
@@ -120,29 +122,29 @@ class Orbit<Vector<HybridApproximatePoint>>
     const List<HybridInterpolatedCurve>& curves(Nat setNumber) { return this->_curves_ptr->at(setNumber); }
     /** @brief Perform the specified evolution operation. */
     Void draw(CanvasInterface& c, const Set<DiscreteLocation>& l, const Variables2d& v) const;
+
   private:
     SharedPointer<Vector<List<HybridInterpolatedCurve>>> _curves_ptr;
 };
 
 /** @brief Perform the specified evolution operation. */
-Orbit<HybridApproximatePoint> extend_auxiliary(Orbit<HybridApproximatePoint> const& horb, HybridAutomatonInterface const& ha);
+Orbit<HybridApproximatePoint> extend_auxiliary(const Orbit<HybridApproximatePoint>& horb, const HybridAutomatonInterface& ha);
 
 template<>
 OutputStream&
-/** @brief Apply the requested operation. */
-operator<<(OutputStream& os, const Orbit< HybridApproximatePoint >& orb);
+    /** @brief Apply the requested operation. */
+    operator<<(OutputStream& os, const Orbit<HybridApproximatePoint>& orb);
 
 template<>
 /** @brief Orbit represents discrete and continuous orbit collections for hybrid systems. */
 class Orbit<HybridEnclosure>
-    : public HybridDrawableInterface
-{
+    : public HybridDrawableInterface {
   public:
     typedef HybridEnclosure EnclosureType;
     typedef ListSet<HybridEnclosure> EnclosureListType;
 
-    Orbit() { }
-    Orbit(const EnclosureType& set) : _initial(set) { }
+    Orbit() {}
+    Orbit(const EnclosureType& set) : _initial(set) {}
     Void adjoin_reach(const EnclosureType& set) { this->_reach.adjoin(set); }
     Void adjoin_intermediate(const EnclosureType& set) { this->_intermediate.adjoin(set); }
     Void adjoin_final(const EnclosureType& set) { this->_final.adjoin(set); }
@@ -151,13 +153,14 @@ class Orbit<HybridEnclosure>
     Void adjoin_intermediate(const EnclosureListType& set) { this->_intermediate.adjoin(set); }
     Void adjoin_final(const EnclosureListType& set) { this->_final.adjoin(set); }
 
-    EnclosureType const& initial() const { return this->_initial; }
-    EnclosureListType const& reach() const { return this->_reach; }
-    EnclosureListType const& intermediate() const { return this->_intermediate; }
-    EnclosureListType const& final() const { return this->_final; }
+    const EnclosureType& initial() const { return this->_initial; }
+    const EnclosureListType& reach() const { return this->_reach; }
+    const EnclosureListType& intermediate() const { return this->_intermediate; }
+    const EnclosureListType& final() const { return this->_final; }
 
     /** @brief Perform the specified evolution operation. */
     Void draw(CanvasInterface& c, const Set<DiscreteLocation>& l, const Variables2d& v) const;
+
   private:
     EnclosureType _initial;
     EnclosureListType _reach;
@@ -167,9 +170,8 @@ class Orbit<HybridEnclosure>
 
 template<>
 OutputStream&
-/** @brief Apply the requested operation. */
-operator<<(OutputStream& os, const Orbit< HybridEnclosure >& orb);
-
+    /** @brief Apply the requested operation. */
+    operator<<(OutputStream& os, const Orbit<HybridEnclosure>& orb);
 
 } // namespace Ariadne
 

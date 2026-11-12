@@ -1,3 +1,31 @@
+/***************************************************************************
+ *            first_order_pde.hpp
+ *
+ *  Copyright  2026  Luca Geretti
+ *
+ ****************************************************************************/
+
+/*
+ *  This file is part of Ariadne Evolution.
+ *
+ *  Ariadne Evolution is free software: you can redistribute it and/or modify
+ *  it under the terms of the GNU General Public License as published by
+ *  the Free Software Foundation, either version 3 of the License, or
+ *  (at your option) any later version.
+ *
+ *  Ariadne Evolution is distributed in the hope that it will be useful,
+ *  but WITHOUT ANY WARRANTY; without even the implied warranty of
+ *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ *  GNU General Public License for more details.
+ *
+ *  You should have received a copy of the GNU General Public License
+ *  along with Ariadne Evolution. If not, see <https://www.gnu.org/licenses/>.
+ */
+
+/** @file evolution/first_order_pde.hpp
+ *  @brief Numerical evolution of first-order partial differential equations.
+ */
+
 // Evolution algorithms and computed trajectories for FirstOrderPDE.
 #ifndef ARIADNE_EVOLUTION_FIRST_ORDER_PDE_HPP
 #define ARIADNE_EVOLUTION_FIRST_ORDER_PDE_HPP
@@ -25,6 +53,7 @@ template<class PR> struct FirstOrderPDESolution {
 //! \f$ A u_{,t} + \sum_{j=1}^{n} B_j u_{,x_j} = f(u); \  u(0,x) = \phi_0(x); \  u:\R^n \to \R^m . \f$
 //! \relates FirstOrderPDE
 template<class PR> FirstOrderPDESolution<PR>
+/** @brief Perform the specified evolution operation. */
 first_order_pde(FirstOrderPDE const& pde, EffectiveVectorMultivariateFunction const& phi0, PR pr);
 
 } // namespace Ariadne

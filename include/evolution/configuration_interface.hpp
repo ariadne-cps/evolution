@@ -1,29 +1,29 @@
 /***************************************************************************
- *            dynamics/configuration_interface.hpp
+ *            configuration_interface.hpp
  *
  *  Copyright  2011-20  Luca Geretti
  *
  ****************************************************************************/
 
 /*
- *  This file is part of Ariadne.
+ *  This file is part of Ariadne Evolution.
  *
- *  Ariadne is free software: you can redistribute it and/or modify
+ *  Ariadne Evolution is free software: you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
  *  the Free Software Foundation, either version 3 of the License, or
  *  (at your option) any later version.
  *
- *  Ariadne is distributed in the hope that it will be useful,
+ *  Ariadne Evolution is distributed in the hope that it will be useful,
  *  but WITHOUT ANY WARRANTY; without even the implied warranty of
- *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
  *  GNU General Public License for more details.
  *
  *  You should have received a copy of the GNU General Public License
- *  along with Ariadne.  If not, see <https://www.gnu.org/licenses/>.
+ *  along with Ariadne Evolution. If not, see <https://www.gnu.org/licenses/>.
  */
 
-/*! \file dynamics/configuration_interface.hpp
- *  \brief A simple interface for configuration classes, mainly provided to specify the involved semantics.
+/** @file evolution/configuration_interface.hpp
+ *  @brief Interface for configuration of evolution algorithms.
  */
 
 #ifndef ARIADNE_CONFIGURATION_INTERFACE_HPP
@@ -110,6 +110,7 @@ class ConfigurationInterface : public WritableInterface {
     const ConfigurationInterface& operator=(const ConfigurationInterface& other) = delete;
   public:
     virtual ~ConfigurationInterface() = default;
+    /** @brief Perform the specified evolution operation. */
     virtual OutputStream& _write(OutputStream& os) const = 0;
     friend OutputStream& operator<<(OutputStream& os, const ConfigurationInterface& config) { return config._write(os); }
 };

@@ -1,29 +1,29 @@
 /***************************************************************************
- *            dynamics/enclosure.hpp
+ *            enclosure.hpp
  *
  *  Copyright  2011-20  Pieter Collins
  *
  ****************************************************************************/
 
 /*
- *  This file is part of Ariadne.
+ *  This file is part of Ariadne Evolution.
  *
- *  Ariadne is free software: you can redistribute it and/or modify
+ *  Ariadne Evolution is free software: you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
  *  the Free Software Foundation, either version 3 of the License, or
  *  (at your option) any later version.
  *
- *  Ariadne is distributed in the hope that it will be useful,
+ *  Ariadne Evolution is distributed in the hope that it will be useful,
  *  but WITHOUT ANY WARRANTY; without even the implied warranty of
- *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
  *  GNU General Public License for more details.
  *
  *  You should have received a copy of the GNU General Public License
- *  along with Ariadne.  If not, see <https://www.gnu.org/licenses/>.
+ *  along with Ariadne Evolution. If not, see <https://www.gnu.org/licenses/>.
  */
 
-/*! \file dynamics/enclosure.hpp
- *  \brief Enclosure sets for continuous systems
+/** @file evolution/enclosure.hpp
+ *  @brief Validated enclosures for continuous dynamics.
  */
 
 #ifndef ARIADNE_ENCLOSURE_HPP
@@ -47,9 +47,12 @@
 
 namespace Ariadne {
 
+/** @brief ValidatedConstrainedImageSet: validated enclosures for continuous dynamics. */
 class ValidatedConstrainedImageSet;
 
+/** @brief ValidatedAffineConstrainedImageSet: validated enclosures for continuous dynamics. */
 class ValidatedAffineConstrainedImageSet;
+/** @brief BoundedConstraintSet: validated enclosures for continuous dynamics. */
 class BoundedConstraintSet;
 
 template<class BS> class ListSet;
@@ -61,18 +64,21 @@ using RealSpace = Space<Real>;
 template<class IVL> class VariablesBox;
 using RealVariablesBox = VariablesBox<RealInterval>;
 
+/** @brief Variables2d: validated enclosures for continuous dynamics. */
 struct Variables2d;
 
 typedef Constraint<ValidatedScalarMultivariateFunctionPatch,FloatDPBounds> ValidatedConstraintModel;
 
 typedef Dyadic StepSizeType;
 
+/** @brief EnclosureConfiguration: validated enclosures for continuous dynamics. */
 class EnclosureConfiguration {
   private:
     ValidatedFunctionPatchFactory _function_factory;
     Paver _paver;
     SizeType _reconditioning_num_blocks;
   public:
+    /** @brief Construct the object. */
     explicit EnclosureConfiguration(ValidatedFunctionPatchFactory function_factory, SizeType reconditioning_num_blocks = 3u);
     explicit EnclosureConfiguration(ValidatedFunctionPatchFactory::Interface const& function_factory, SizeType reconditioning_num_blocks = 3u)
         : EnclosureConfiguration(ValidatedFunctionPatchFactory(function_factory.clone()),reconditioning_num_blocks) { }
@@ -83,11 +89,15 @@ class EnclosureConfiguration {
     SizeType reconditioning_num_blocks() const { return _reconditioning_num_blocks; }
     EnclosureConfiguration& set_paver(Paver paver) { _paver=paver; return *this; }
     EnclosureConfiguration& set_reconditioning_num_blocks(SizeType num_blocks) { ARIADNE_PRECONDITION(num_blocks>0u); _reconditioning_num_blocks = num_blocks; return *this; }
+    /** @brief Apply the specified operation. */
     friend OutputStream& operator<<(OutputStream& os, EnclosureConfiguration const& ec);
 };
 
+/** @brief EnclosureVariableKind: validated enclosures for continuous dynamics. */
 enum class EnclosureVariableKind : std::uint8_t { INITIAL, TEMPORAL, PARAMETER, INPUT, NOISE, ERROR, UNKNOWN };
+/** @brief Apply the specified operation. */
 OutputStream& operator<<(OutputStream& os, const EnclosureVariableKind& vk);
+/** @brief Perform the specified evolution operation. */
 List<Identifier> canonical_variable_names(const List<EnclosureVariableKind>& vks);
 
 //! \ingroup DynamicsModule
@@ -141,6 +151,7 @@ class Enclosure
 
     //! \brief The parameter domain \f$D\f$.
     ExactBoxType domain() const;
+    /** @brief Perform the specified evolution operation. */
     ExactBoxType parameter_domain() const;
     //! \brief A subset of the parameter domain containing all feasible points.
     ExactBoxType reduced_domain() const;
@@ -322,8 +333,11 @@ class Enclosure
     Pair<Enclosure,Enclosure> split(SizeType k) const;
 
 
+    /** @brief Return the requested evolution property. */
     ValidatedConstrainedImageSet state_set() const;
+    /** @brief Return the requested evolution property. */
     ValidatedConstrainedImageSet state_auxiliary_set() const;
+    /** @brief Return the requested evolution property. */
     ValidatedConstrainedImageSet state_time_auxiliary_set() const;
 
     //! \brief Draw to a canvas.
@@ -336,8 +350,11 @@ class Enclosure
     //! Equivalent to constructing the set \f$S\times I\f$.
     Void _unchecked_new_variable(ExactIntervalType ivl, EnclosureVariableKind vk);
   private:
+    /** @brief Perform the specified evolution operation. */
     friend Enclosure product(const Enclosure&, const ExactIntervalType&);
+    /** @brief Perform the specified evolution operation. */
     friend Enclosure product(const Enclosure&, const ExactBoxType&);
+    /** @brief Perform the specified evolution operation. */
     friend Enclosure product(const Enclosure&, const Enclosure&);
 };
 
@@ -373,6 +390,7 @@ using LabelledExactBoxType = LabelledBox<ExactIntervalType>;
 using LabelledUpperBoxType = LabelledBox<UpperIntervalType>;
 using LabelledRealBox = LabelledSet<RealBox>;
 
+/** @brief LabelledEnclosure: validated enclosures for continuous dynamics. */
 class LabelledEnclosure
     : public LabelledDrawable2dInterface, public Enclosure
 {
@@ -383,49 +401,78 @@ class LabelledEnclosure
   public:
     LabelledEnclosure() : Enclosure() { }
     LabelledEnclosure(EnclosureConfiguration const& config) : Enclosure(config) { }
+    /** @brief Construct the object. */
     LabelledEnclosure(LabelledRealBox const& bx, EnclosureConfiguration const& config);
+    /** @brief Construct the object. */
     LabelledEnclosure(LabelledExactBoxType const& bx, EnclosureConfiguration const& config);
+    /** @brief Construct the object. */
     LabelledEnclosure(ExactBoxType const& bx, RealSpace const& state_space, EnclosureConfiguration const& config);
+    /** @brief Construct the object. */
     LabelledEnclosure(RealVariablesBox const& bx, RealSpace const& state_space, EnclosureConfiguration const& config);
+    /** @brief Construct the object. */
     LabelledEnclosure(RealBox const& bx, RealSpace const& state_space, EnclosureConfiguration const& config);
+    /** @brief Construct the object. */
     LabelledEnclosure(BoundedConstraintSet const& set, RealSpace const& state_space, EnclosureConfiguration const& config);
+    /** @brief Construct the object. */
     LabelledEnclosure(Enclosure const& set, RealSpace const& state_space);
+    /** @brief Construct the object. */
     LabelledEnclosure(Enclosure const& set, RealSpace const& state_space, RealSpace const& auxiliary_space);
 
+    /** @brief Perform the specified evolution operation. */
     BoundingBoxType bounding_box() const;
 
+    /** @brief Return the requested evolution property. */
     const RealSpace space() const;
     Enclosure const& euclidean_set() const { return *this; }
+    /** @brief Perform the specified evolution operation. */
     Pair<LabelledEnclosure,LabelledEnclosure> split() const;
+    /** @brief Perform the specified evolution operation. */
     Void apply_full_reach_step(ValidatedVectorMultivariateFunctionPatch phi);
 
+    /** @brief Perform the specified evolution operation. */
     Void apply_map(ValidatedVectorMultivariateFunction const& f);
+    /** @brief Perform the specified evolution operation. */
     Void apply_map(ValidatedVectorMultivariateFunction const& f, RealSpace const& new_state_space);
     Void apply_map(ValidatedVectorMultivariateFunction const& f, RealSpace const& new_state_space,
                    EffectiveVectorMultivariateFunction const& a, RealSpace const& new_auxiliary_space);
 
+    /** @brief Perform the specified evolution operation. */
     Void set_state_space(RealSpace const&);
+    /** @brief Return the requested evolution property. */
     const RealSpace state_space() const;
+    /** @brief Return the requested evolution property. */
     const RealVariable time_variable() const;
+    /** @brief Perform the specified evolution operation. */
     const RealSpace auxiliary_space() const;
+    /** @brief Return the requested evolution property. */
     const RealSpace state_auxiliary_space() const;
+    /** @brief Return the requested evolution property. */
     const RealSpace state_time_auxiliary_space() const;
+    /** @brief Return the requested evolution property. */
     ValidatedVectorMultivariateFunctionPatch const state_time_auxiliary_function() const;
 
+    /** @brief Perform the specified evolution operation. */
     Void set_auxiliary(const RealSpace& spc, const EffectiveVectorMultivariateFunction& aux);
 
+    /** @brief Perform the specified evolution operation. */
     friend LabelledEnclosure product(const LabelledEnclosure&, const ExactIntervalType&);
 
+    /** @brief Perform the specified evolution operation. */
     friend LabelledEnclosure product(const LabelledEnclosure&, const LabelledExactIntervalType&);
+    /** @brief Perform the specified evolution operation. */
     friend LabelledEnclosure product(const LabelledEnclosure&, const LabelledExactBoxType&);
+    /** @brief Perform the specified evolution operation. */
     friend LabelledEnclosure product(const LabelledEnclosure&, const LabelledEnclosure&);
 
+    /** @brief Perform the specified evolution operation. */
     virtual LabelledEnclosure* clone() const override;
     virtual LabelledEnclosure* labelled_clone() const override { return clone(); }
 
     using Enclosure::draw;
+    /** @brief Perform the specified evolution operation. */
     virtual Void draw(CanvasInterface&, const Variables2d&) const override;
 
+    /** @brief Perform the specified evolution operation. */
     OutputStream& _write(OutputStream&) const;
   private:
     List<Identifier> _state_variables;
@@ -452,11 +499,15 @@ template<> class ListSet<LabelledEnclosure> : public LabelledDrawable2dInterface
     Void adjoin(LabelledEnclosure const& other) { this->_data.append(other); }
     Void adjoin(ListSet<LabelledEnclosure> const& other) { this->_data.concatenate(other._data); }
 
+    /** @brief Perform the specified evolution operation. */
     LabelledUpperBoxType bounding_box() const;
+    /** @brief Perform the specified evolution operation. */
     const ListSet<LabelledSet<UpperBoxType>> bounding_boxes() const;
 
+    /** @brief Perform the specified evolution operation. */
     virtual ListSet<LabelledEnclosure>* clone() const;
     virtual ListSet<LabelledEnclosure>* labelled_clone() const override { return clone(); }
+    /** @brief Perform the specified evolution operation. */
     virtual Void draw(CanvasInterface&, const Variables2d&) const override;
 };
 

@@ -1,29 +1,29 @@
 /***************************************************************************
- *            dynamics/flowtube.hpp
+ *            flowtube.hpp
  *
  *  Copyright  2007-20  Pieter Collins
  *
  ****************************************************************************/
 
 /*
- *  This file is part of Ariadne.
+ *  This file is part of Ariadne Evolution.
  *
- *  Ariadne is free software: you can redistribute it and/or modify
+ *  Ariadne Evolution is free software: you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
  *  the Free Software Foundation, either version 3 of the License, or
  *  (at your option) any later version.
  *
- *  Ariadne is distributed in the hope that it will be useful,
+ *  Ariadne Evolution is distributed in the hope that it will be useful,
  *  but WITHOUT ANY WARRANTY; without even the implied warranty of
- *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
  *  GNU General Public License for more details.
  *
  *  You should have received a copy of the GNU General Public License
- *  along with Ariadne.  If not, see <https://www.gnu.org/licenses/>.
+ *  along with Ariadne Evolution. If not, see <https://www.gnu.org/licenses/>.
  */
 
-/*! \file dynamics/flowtube.hpp
- *  \brief Flow tubes for dynamic systems
+/** @file evolution/flowtube.hpp
+ *  @brief Flow tubes for dynamical systems.
  */
 
 #ifndef ARIADNE_FLOWTUBE_HPP
@@ -39,14 +39,17 @@ template<class ES> class Orbit;
 
 using ValidatedImageSet = ValidatedConstrainedImageSet;
 
+/** @brief FlowTube: flow tubes for dynamical systems. */
 class FlowTube {
     ValidatedVectorMultivariateFunctionModelDP _phi;
   public:
     //! Construct a flow map phi(x,t) over its spatial and temporal domain.
     explicit FlowTube(ValidatedVectorMultivariateFunctionModelDP const& phi) : _phi(phi) {
+        /** @brief Construct the object. */
         ARIADNE_PRECONDITION(phi.argument_size()==phi.result_size()+1u);
     }
     SizeType number_of_state_variables() const { return _phi.result_size(); }
+    /** @brief Perform the specified evolution operation. */
     template<class X, class T> requires Same<X,T> decltype(auto) operator()(Vector<X> const& x, Scalar<T> const& t) const {
         return _phi(join(x,t)); }
     decltype(auto) space_domain() const { SizeType n=this->number_of_state_variables(); return _phi.domain()[range(0,n)]; }
@@ -54,8 +57,10 @@ class FlowTube {
     auto initial_time() const { return time_range().lower_bound(); }
     auto final_time() const { return time_range().upper_bound(); }
     ValidatedVectorMultivariateFunctionModelDP reach_function() const { return _phi; }
+    /** @brief Return the requested evolution property. */
     ValidatedVectorMultivariateFunctionModelDP final_function() const {
         return partial_evaluate(_phi,number_of_state_variables(),ValidatedNumber(final_time())); }
+    /** @brief Return the requested evolution property. */
     ValidatedImageSet initial_set() const {
         auto initial=partial_evaluate(_phi,number_of_state_variables(),ValidatedNumber(initial_time()));
         return ValidatedImageSet(space_domain(),initial); }
@@ -75,6 +80,7 @@ template<> class Orbit<FlowTube> {
     OrbitStep<ES> _starting;
     List<OrbitStep<ES>*> _working;
   public:
+    /** @brief Construct the object. */
     Orbit(const ES& set);
 };
 

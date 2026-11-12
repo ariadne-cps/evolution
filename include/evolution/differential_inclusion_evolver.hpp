@@ -1,29 +1,29 @@
 /***************************************************************************
- *            dynamics/differential_inclusion_evolver.hpp
+ *            differential_inclusion_evolver.hpp
  *
  *  Copyright  2008-20  Luca Geretti, Pieter Collins, Sanja Zivanovic
  *
  ****************************************************************************/
 
 /*
- *  This file is part of Ariadne.
+ *  This file is part of Ariadne Evolution.
  *
- *  Ariadne is free software: you can redistribute it and/or modify
+ *  Ariadne Evolution is free software: you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
  *  the Free Software Foundation, either version 3 of the License, or
  *  (at your option) any later version.
  *
- *  Ariadne is distributed in the hope that it will be useful,
+ *  Ariadne Evolution is distributed in the hope that it will be useful,
  *  but WITHOUT ANY WARRANTY; without even the implied warranty of
- *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
  *  GNU General Public License for more details.
  *
  *  You should have received a copy of the GNU General Public License
- *  along with Ariadne.  If not, see <https://www.gnu.org/licenses/>.
+ *  along with Ariadne Evolution. If not, see <https://www.gnu.org/licenses/>.
  */
 
-/*! \file differential_inclusion_evolver.hpp
- *  \brief Evolver for differential inclusion dynamics.
+/** @file evolution/differential_inclusion_evolver.hpp
+ *  @brief Evolver implementations for differential inclusions.
  */
 
 #ifndef ARIADNE_DIFFERENTIAL_INCLUSION_EVOLVER_HPP
@@ -51,10 +51,14 @@
 namespace Ariadne {
 
 
+/** @brief Real: evolver implementations for differential inclusions. */
 class Real;
 
+/** @brief StepSize: evolver implementations for differential inclusions. */
 struct StepSize : public Attribute<StepSizeType> { };
+/** @brief NumberOfStepsBetweenSimplifications: evolver implementations for differential inclusions. */
 struct NumberOfStepsBetweenSimplifications : public Attribute<Nat> { };
+/** @brief NumberOfVariablesToKeep: evolver implementations for differential inclusions. */
 struct NumberOfVariablesToKeep : public Attribute<Nat> { };
 
 static const Generator<StepSize> step_size = Generator<StepSize>();
@@ -68,23 +72,33 @@ using SweeperDP = Sweeper<FloatDP>;
 
 using TimeStepType = Dyadic;
 
+/** @brief Perform the specified evolution operation. */
 FloatDP volume(Vector<ApproximateIntervalType> const& box);
 
+/** @brief InclusionEvolverState: evolver implementations for differential inclusions. */
 class InclusionEvolverState;
 template<class T> class Orbit;
 
+/** @brief ReconditionerInterface: evolver implementations for differential inclusions. */
 class ReconditionerInterface {
   public:
+    /** @brief Perform the specified evolution operation. */
     virtual Bool must_reduce_parameters(InclusionEvolverState const& state) const = 0;
+    /** @brief Perform the specified evolution operation. */
     virtual Bool must_incorporate_errors(InclusionEvolverState const& state) const = 0;
+    /** @brief Perform the specified evolution operation. */
     virtual Void reduce_parameters(ValidatedVectorMultivariateFunctionPatch& phi) const = 0;
+    /** @brief Perform the specified evolution operation. */
     virtual ValidatedVectorMultivariateFunctionPatch incorporate_errors(ValidatedVectorMultivariateFunctionPatch const& Phi) const = 0;
+    /** @brief Compute or update an evolution step. */
     virtual Void update_from(InclusionEvolverState const& state) = 0;
   public:
+    /** @brief Perform the specified evolution operation. */
     virtual ReconditionerInterface* clone() const = 0;
     virtual ~ReconditionerInterface() = default;
 };
 
+/** @brief LohnerReconditioner: evolver implementations for differential inclusions. */
 class LohnerReconditioner : public ReconditionerInterface {
     Nat _number_of_variables;
     Nat _number_of_inputs;
@@ -99,13 +113,19 @@ public:
           _number_of_parameters_to_keep(USHRT_MAX),
           _ratio_of_parameters_to_keep(cast_exact(ratio_of_parameters_to_keep)) { }
     virtual LohnerReconditioner* clone() const override { return new LohnerReconditioner(*this); }
+    /** @brief Perform the specified evolution operation. */
     virtual ValidatedVectorMultivariateFunctionPatch incorporate_errors(ValidatedVectorMultivariateFunctionPatch const& f) const override;
+    /** @brief Perform the specified evolution operation. */
     virtual Void reduce_parameters(ValidatedVectorMultivariateFunctionPatch& f) const override;
+    /** @brief Perform the specified evolution operation. */
     virtual Bool must_reduce_parameters(InclusionEvolverState const& state) const override;
+    /** @brief Perform the specified evolution operation. */
     virtual Bool must_incorporate_errors(InclusionEvolverState const& state) const override;
+    /** @brief Compute or update an evolution step. */
     virtual Void update_from(InclusionEvolverState const& state) override;
 };
 
+/** @brief Reconditioner: evolver implementations for differential inclusions. */
 class Reconditioner : public Handle<ReconditionerInterface> {
 public:
     using Handle<ReconditionerInterface>::Handle;
@@ -121,8 +141,10 @@ public:
     virtual ~Reconditioner() = default;
 };
 
+/** @brief DifferentialInclusionEvolverConfiguration: evolver implementations for differential inclusions. */
 class DifferentialInclusionEvolverConfiguration;
 
+/** @brief DifferentialInclusionEvolver: evolver implementations for differential inclusions. */
 class DifferentialInclusionEvolver {
   public:
     typedef DifferentialInclusionEvolverConfiguration ConfigurationType;
@@ -135,6 +157,7 @@ class DifferentialInclusionEvolver {
     Reconditioner _reconditioner;
     SharedPointer<ConfigurationType> _configuration;
   public:
+    /** @brief Construct the object. */
     DifferentialInclusionEvolver(SystemType const& system, IntegratorInterface const& integrator, Reconditioner const& reconditioner);
 
     //!@{
@@ -144,8 +167,10 @@ class DifferentialInclusionEvolver {
     const ConfigurationType& configuration() const { return *this->_configuration; }
 
   public:
+    /** @brief Compute or update an evolution step. */
     OrbitType orbit(RealVariablesBox const& initial, Real const& T);
   private:
+    /** @brief Perform the specified evolution operation. */
     Void _recondition_and_update(ValidatedVectorMultivariateFunctionPatch& function, InclusionEvolverState& state);
 };
 
@@ -194,6 +219,7 @@ class DifferentialInclusionEvolverConfiguration : public ConfigurationInterface
 
   public:
 
+    /** @brief Perform the specified evolution operation. */
     virtual OutputStream& _write(OutputStream& os) const;
 };
 

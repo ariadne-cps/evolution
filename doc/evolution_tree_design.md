@@ -1,243 +1,181 @@
 # Evolution tree design proposal
 
-Status: design draft. This document records the requested hybrid-evolution
-semantics and proposed use of the generic structure; it does not describe an
-implemented `EvolutionTree`.
+Status: design draft; no implementation or finalized public API is claimed.
 
-## Motivation and document ownership
+## Starting functions
 
-A wide initial enclosure can meet an urgent guard over many integration steps.
-The evolver then creates many post-transition enclosures from different portions
-of the source bundle. We need provenance that identifies related branches and
-supports controlled recombination of active enclosures.
+1. Each node represents one trajectory containing an ordered list of sets.
+2. Parent-child relations distinguish trajectories born from another trajectory.
+3. Each node records whether its own trajectory is complete or still needs
+   evolution.
 
-The hybrid-specific design lives here. The generic owner, stable node handles,
-derivations, structural parent relation and multi-input dependency history are
-specified in `ariadne-cps/tree/doc/derivationtree_design.md`. Evolution consumes
-Tree; Tree must not acquire dependencies on hybrid systems or enclosures.
+The tree describes genealogy; the list inside a node describes progression of
+that trajectory. These requirements replace the previous checkpoint-per-node
+proposal. A new set does not by itself create a new tree node.
 
-An important clarified requirement is that portions crossing the same urgent
-guard during different integration steps remain distinct trajectories, but may
-belong to a common recombinable family. Equality of trajectory IDs must therefore
-not be the only way to find recombination candidates.
+The generic structure belongs in
+`ariadne-cps/tree/doc/derivationtree_design.md`. Entry semantics, trajectory birth,
+completion criteria and scheduling belong to Evolution.
 
-## Node object, metadata and configuration
-
-An evolution node represents a checkpoint from which work may be continued.
-Its object contains the enclosure/work state and a shared immutable numerical
-configuration. Store the configuration once; the enclosure and its configuration
-must not have two competing authoritative copies.
-
-Conceptually:
+## Trajectory object and metadata
 
 ```text
-EvolutionObject
-    enclosure / work state
+Trajectory
+    ordered list of EvolutionEntry
+
+EvolutionEntry
+    set / enclosure
     shared reference to const NumericalConfiguration
+    information about the step producing the entry, when applicable
 
-EvolutionMetadata
-    TrajectoryId
-    SubsetId
-    AlternativeId
-    TrajectoryFamilyId
-    incoming branch description, when needed
+TrajectoryMetadata
+    completion: NEEDS_EVOLUTION or COMPLETE
+    origin entry in the parent trajectory, except at the root
+    reason for birth
+    event / branch information, when applicable
+    optional application-specific labels
 ```
 
-The generic owner supplies `NodeId`, parent, children, derivation references and
-lifecycle state. These are not duplicated in `EvolutionMetadata`. A derivation's
-metadata supplies the reason for its outputs and the events/decisions associated
-with the operation. The input and output records together describe a step;
-storing checkpoints does not replace storage of the continuous reach segments
-needed for the eventual orbit.
+The generic owner supplies stable node identity, parent and children; those
+links are not duplicated in Evolution metadata. A node ID can identify its
+trajectory initially. A separate trajectory-ID namespace is unnecessary merely
+to inspect genealogy; introduce one later only with an explicit relationship to
+node identity.
 
-Configuration examples include integration step limits, local error targets,
-function-domain parameter limits, and numerical discretization/reconditioning
-choices. Distinguish planned numerical operations from actual automaton events.
-An unchanged configuration is inherited by sharing its immutable object. A
-changed configuration produces a new object while existing checkpoints keep the
-old one. Global mutable evolver settings cannot silently override a node's
-recorded configuration.
+Entries follow the logical progression of the trajectory, not a sort by time-
+interval endpoints. A discrete step may preserve continuous time, and validated
+time intervals may overlap. Before implementation, settle whether an entry
+stores an evolved checkpoint, a reach segment, or a record containing both.
+This does not change the node-as-trajectory contract.
 
-## Meaning and stability of identifiers
+Keep configuration with the entry to which it applies. Unchanged configurations
+can be shared immutably. Later changes must not alter earlier entries. Examples
+include integration step limits, local error targets, parameter-count limits
+and numerical discretization/reconditioning choices.
 
-| Identifier | Meaning |
+## Continuing versus creating a trajectory
+
+| Situation | Effect |
 | --- | --- |
-| Node | One immutable historical checkpoint, unique within its tree |
-| Trajectory | A computational evolution strand that can continue across steps |
-| Subset | A label for subdivision of a strand's represented set |
-| Alternative | A label for a numerical configuration alternative |
-| Trajectory family | A compatibility/provenance group containing potentially recombinable strands |
+| Pure continuous step | Append the resulting entry to the current node |
+| Fully resolved transition with one continuation and unchanged trajectory identity | Append the transition result to that same node |
+| A distinct trajectory is generated | Create a child with its own ordered list |
+| A parent continues after a child's birth | Append to the parent; retain the child's original source reference |
+| Another distinct trajectory is generated later | Add another child referring to its own source entry |
 
-Allocate fresh identifiers independently of tree depth, sibling position and
-storage addresses. Never reuse them after backtracking. Strongly typed ID
-wrappers should prevent mixing the different namespaces.
+For one permissive/unresolved event, the no-jump continuation stays in the
+original node and a distinct jump trajectory is a child. Creating that child
+does not complete the parent. An internal tree node may still need evolution;
+active trajectories therefore cannot be identified just by taking tree leaves.
 
-When an operation creates several outputs, designate one as the identity-
-retaining continuation. It inherits the parent's applicable trajectory, subset
-and alternative IDs. Other outputs receive fresh values only in the dimensions
-changed by the operation. Every output still receives a fresh `NodeId`.
-Selection of the retaining continuation is explicit and stable; it is not
-inferred from whichever child happens to be visited first.
+A child starts with its own initial set, for example the reset image of the
+relevant source portion. It need not copy the parent's entire list. Earlier
+provenance is available through the parent and origin reference, and the child's
+first set need not equal its parent's source set.
 
-IDs are labels, not a complete mathematical description of ancestry or coverage.
-In particular, retaining a `SubsetId` through repeated splits does not mean that
-the later subset equals the earlier one. Derivation provenance records that
-relationship. Stable labels avoid renumbering after insertion; they do not
-eliminate invalidation when an edit changes the meaning of later computations.
+Record the particular parent entry responsible for birth, in addition to the
+reason/event. Parent identity alone is insufficient because its list can keep
+growing. An entry index is sufficient for an append-only initial history. Later
+insertion needs stable entry handles or an explicit reference-update policy.
+The precise representation is still open.
 
-## Operation semantics
+## Completion is local to a trajectory
 
-This table resolves the requested distinction between a single fully resolved
-successor and branching successors. Exact C++ enum names remain provisional.
+`NEEDS_EVOLUTION` means more work remains for the trajectory stored in that node.
+`COMPLETE` means that local evolution has finished under the current termination
+criteria: it will generate no more sets or child trajectories in normal forward
+processing. This can follow an evolution horizon, exhausted/empty continuation,
+or another explicit stopping condition.
 
-| Reason | Outputs | Trajectory IDs | Subset/alternative IDs |
-| --- | --- | --- | --- |
-| `CONTINUOUS_STEP` | One | Inherit | Inherit |
-| `URGENT_TRANSITION` / `DISCRETE_STEP`, fully resolved, one successor | One | Inherit | Inherit |
-| Fully resolved step with several possible discrete successors | Several | Retaining successor inherits; others fresh | Inherit unless independently refined |
-| `SPLIT` | Two or more | Inherit for every child | Retaining child inherits subset; others fresh; alternatives unchanged |
-| `UNBUNDLE` | One | Fresh | Preserve provenance; no time advance |
-| `RECOMBINE` | One from several active sources | Retain primary source's ID as proposed policy | Retain primary labels and record all absorbed coverage |
-| `PERMISSIVE_TRANSITION` / `UNRESOLVED_TRANSITION` | No-jump plus jump successor for one event | No-jump inherits; jump receives fresh ID | Inherit unless independently refined |
-| `ALTERNATIVE_CONFIGURATIONS` | Several | Inherit | Subset unchanged; retaining alternative inherits, others fresh |
+Completion does not mean that descendants are complete. A complete parent can
+have children that have not yet been evolved. Its list remains available as
+history. Explicit future backtracking may reopen work, but that requires a
+separate validity policy rather than silently appending to a completed history.
 
-`SPLIT`, `UNBUNDLE` and `ALTERNATIVE_CONFIGURATIONS` do not advance continuous
-or discrete time. A continuous step advances continuous time only. A resolved
-transition records its actual continuous-time progress and discrete event;
-`DISCRETE_STEP` can have zero continuous-time progress.
+Do not publish completion until all results and generated children from that
+trajectory's local work have been committed. Otherwise the child count observed
+at completion would be premature. Worker/scheduler state, such as whether a
+trajectory is currently running, is distinct from trajectory completion.
 
-Splitting can be recursive: a split child can itself be split until a requested
-criterion holds. Those are explicit derivations, not a flattened list that loses
-the splitting history. A split must soundly cover its source; children need not
-be geometrically disjoint when they are validated enclosures.
+## Finish a parent before descending
 
-For `UNBUNDLE`, the proposed history representation creates a unary successor
-with a new trajectory ID, rather than mutating the old checkpoint. This is an
-intentional exception to ordinary unary identity inheritance. Genealogical family
-membership may be retained, but must not automatically reverse a deliberate
-decision to treat a subset independently.
+The proposed initial scheduling policy favors completing an ancestor trajectory
+before evolving the trajectories generated from it:
 
-The two-output transition case describes one unresolved/permissive event. Several
-simultaneously possible events require one no-jump continuation where admissible
-and a jump output per admissible event, or explicit staged derivations preserving
-the same alternatives. Do not impose a global binary-child restriction.
+1. Select a node that needs evolution.
+2. Continue its trajectory, appending entries and recording generated children.
+3. When local work is finished, mark the node complete.
+4. Inspect all children it generated; their count and origins are now known.
+5. Decide whether to keep those child trajectories or propose recombination into
+   one or more successor trajectories.
+6. Descend to the resulting trajectories that still need evolution.
 
-## Families for repeated guard crossings
+This constrains parent-versus-descendant processing; it does not yet choose a
+global breadth-first or depth-first order among unrelated subtrees. The generic
+tree stores the necessary information without implementing this scheduler.
 
-Different integration slices of a wide source bundle can generate distinct jump
-trajectories. They must remain distinguishable while being discoverable as a
-family. Do not use a fresh source `NodeId` or integration-step number as the sole
-family key, since that would separate the very slices we want to collect.
+This completion boundary is useful because children can be collected before
+their own evolution is scheduled. It makes sibling-group recombination a first
+policy to investigate, without requiring an initial algorithm for merging
+already evolved arbitrary branches.
 
-A proposed family registry uses the source semantic family, the selected event
-and target location, and relevant discrete-decision context to locate a target
-family. Repeated slices of that same transition can refer to the same target
-family while receiving fresh trajectory IDs. Distinct event histories, including
-additional loop iterations, are not automatically identified. Configuration
-alternative compatibility is checked separately.
-
-A no-jump continuation keeps its pre-transition family. A resolved single
-successor can retain its trajectory ID while updating its family to reflect the
-new discrete context. A family is a candidate-search group, not a certificate
-that every pair of its members may be merged.
-
-The exact family-key representation and the default effect of `UNBUNDLE` on
-automatic candidate selection remain design decisions. The requirement to keep
-different slice trajectories distinct is fixed.
-
-## Recombination eligibility and soundness
-
-Search among active frontier nodes, including nodes in different structural
-subtrees. Do not restrict search to siblings or equal trajectory IDs. Start with
-family membership, then check the hybrid and numerical context.
-
-Before accepting a group, require:
-
-1. Compatible location, state space and discrete evolution context.
-2. Compatible continuous-time representation, pending event obligations and
-   termination/discrete-step budgets.
-3. An explicitly compatible numerical-alternative context.
-4. A sound result enclosure for the complete union of selected sources.
-5. No concurrently committed continuation of a consumed frontier source.
-
-Equal family IDs or intersecting bounding boxes are insufficient. Bounding-box
-overlap is only a cheap candidate filter; it may be caused by lost correlations.
-Geometric overlap is not itself necessary for a sound outer union, although it
-may be useful for deciding whether recombination improves cost or precision.
-
-If inputs are synchronized at a common time, the result must contain their union
-at that time. If they carry different time ranges, either evolve them to a valid
-common checkpoint or construct an enclosure of the joint time-state sets that
-preserves a sound time-state relationship. Do not erase the clock or associate
-every input state with an arbitrary new common time. An inclusion argument must
-cover every source and its still-relevant constraints.
-
-For upper reachability semantics the essential contract is
+## Example: repeated guard crossings
 
 ```text
-union(represented_time_state_set(source_i))
-    subset_of represented_time_state_set(result).
+A: [A0, A1, A2, A3, ...]     COMPLETE
+    +-- B: [B0]   origin A1, event e; NEEDS_EVOLUTION
+    +-- C: [C0]   origin A2, event e; NEEDS_EVOLUTION
+    +-- D: [D0]   origin A3, event e; NEEDS_EVOLUTION
 ```
 
-No lower-semantics guarantee follows from taking an outer hull. Recombination
-must declare which semantics its enclosure construction supports.
+A generated B, C and D while continuing its own list. Once A is complete, the
+scheduler knows all three children before descending. It can inspect candidate
+groups such as {B,C,D} or {B,C} and {D}, and decide whether a sound replacement
+by one or more trajectories is useful.
 
-The proposed result retains the primary source's trajectory label even when
-other sources have different trajectory IDs. All source IDs and coverage
-provenance remain recorded. The output represents their combined work; its
-retained label is not a claim that the other trajectories never existed.
+As clarified, different portions crossing a guard during different integration
+steps remain distinct trajectories, potentially in a common recombinable family.
+Common parent, reason/event and source entries provide initial provenance; they
+do not establish mathematical compatibility by themselves. A precise family
+key and recombination criterion remain later design work.
 
-## Subsets versus numerical alternatives
+## Recombination constraints and deferred operations
 
-Split children jointly represent coverage that must be retained until proved
-empty, terminated or subsumed by a sound replacement. Numerical alternatives
-are different computations of the same obligation: choosing one can supersede
-the others if that computation soundly covers the obligation.
+Parent completion establishes that the generated group is known; it does not
+prove that its children overlap or may be recombined. A future policy must check
+location, clocks, discrete context, numerical-alternative compatibility and
+sound coverage of all selected source sets. Bounding-box overlap or common
+ancestry is insufficient.
 
-Do not treat alternatives as additional physical behavior, or discard a split
-piece merely because another alternative was selected elsewhere. Nested split
-and alternative provenance is required to determine which coverage is replaced.
-Equal current labels alone do not establish this. The first implementation may
-restrict recombination to a single compatible alternative context.
+Recombination can produce one or more replacement nodes/trajectories. Preserve
+which original children contributed to each replacement, rather than deleting
+their origin information. Distinguish the collection originally generated by
+the complete parent from the active collection after recombination. Structural
+placement of replacements and absorbed-node handling are not finalized here.
 
-## Committing recombination and backtracking
+The earlier enumeration of `SPLIT`, `UNBUNDLE`, `RECOMBINE` and
+`ALTERNATIVE_CONFIGURATIONS` remains context, but its checkpoint-per-node
+interpretation is superseded. Before adding those operations, specify how
+subset and numerical-alternative branches relate to the trajectory list. Do
+not flatten parallel pieces into an apparently sequential history. Additional
+internal representation or explicit relations may be needed.
 
-Compute and validate a proposed result before changing the tree. Then use one
-multi-input derivation to create the result under a selected primary source,
-absorb the other source nodes, and update the active frontier atomically.
-Absorbed nodes remain inspectable but are no longer scheduled. Other unaffected
-pieces of the family remain active. Do not discard already computed reach
-segments merely because future checkpoint work has been combined.
+Stable IDs remain required: appending entries or adding children does not
+renumber existing nodes. Backtracking can still invalidate results derived from
+edited entries. Persistence, concurrent publication, general multi-input
+dependency graphs and reclamation are outside the initial scope.
 
-Backtracking and insertion keep existing IDs stable. They also invalidate every
-result that depends on changed work, including recombinations whose primary
-parent lies in another subtree. Recompute those results as fresh nodes unless
-their validity is established independently. Scheduler entries must recheck node
-state and revision before publishing work after an absorption or invalidation.
+## Initial operations and verification
 
-## Guard-width diagnostic and later policy
+The wrapper needs creation of an initial trajectory, ordered append, creation
+of a derived trajectory at an identified source entry, completion marking/query,
+and access to lists and genealogy. The generic owner does not decide when a
+trajectory is born or complete.
 
-The relevant comparison is crossing-time spread versus integration step, rather
-than spatial width versus a time step. For a transverse, monotone crossing with
-guard function `g` and a positive bound `m` on `abs(L_f g)` over the relevant
-flow, `width(g)/m` is a useful crossing-time-spread diagnostic. Treat it as a
-bound only when the required flow-domain and monotonicity hypotheses have been
-validated. Tangencies and zero-containing derivative bounds need another rule.
-
-Optional metadata may record the guard, crossing-time range, time progress,
-enclosure size and recombination quality/cost estimates. Thresholds, candidate
-indexing, synchronization, hull construction and scheduling policy belong to
-Evolution and are not part of generic Tree.
-
-## Verification and next decisions
-
-Domain tests should cover identity inheritance for every operation; recursive
-splits; repeated urgent-guard slices with distinct trajectory IDs and a shared
-family; preservation of the no-jump continuation; alternative selection without
-coverage loss; recombination across subtrees; time-state inclusion; incompatible
-locations/clocks/budgets; and backtracking through an absorbed dependency.
-
-Settle family equivalence, unbundling policy, the output-label convention and
-numerical-alternative compatibility before implementation. The generic tree can
-then be implemented independently of a particular enclosure or merge operator;
-the hybrid wrapper enforces this document's domain invariants.
+Test that continuous steps extend one list without increasing node count;
+configuration history is retained; children identify the right parent and
+source entry; a parent can continue after generating children; completion is
+local and published after all generated children; and a complete parent can
+have unevolved children. A scheduler test should confirm that descendants are
+deferred until their ancestor is complete and the child-group decision has
+been made. Recombination selection/construction is subsequent work.

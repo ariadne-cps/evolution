@@ -1,29 +1,29 @@
 /***************************************************************************
- *            hybrid/hybrid_evolver.hpp
+ *            hybrid_evolver.hpp
  *
  *  Copyright  2009-20  Pieter Collins
  *
  ****************************************************************************/
 
 /*
- *  This file is part of Ariadne.
+ *  This file is part of Ariadne Evolution.
  *
- *  Ariadne is free software: you can redistribute it and/or modify
+ *  Ariadne Evolution is free software: you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
  *  the Free Software Foundation, either version 3 of the License, or
  *  (at your option) any later version.
  *
- *  Ariadne is distributed in the hope that it will be useful,
+ *  Ariadne Evolution is distributed in the hope that it will be useful,
  *  but WITHOUT ANY WARRANTY; without even the implied warranty of
- *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
  *  GNU General Public License for more details.
  *
  *  You should have received a copy of the GNU General Public License
- *  along with Ariadne.  If not, see <https://www.gnu.org/licenses/>.
+ *  along with Ariadne Evolution. If not, see <https://www.gnu.org/licenses/>.
  */
 
-/*! \file hybrid/hybrid_evolver.hpp
- *  \brief Hybrid evolver classes.
+/** @file evolution/hybrid_evolver.hpp
+ *  @brief Hybrid evolution strategies, transitions and timing.
  */
 
 #ifndef ARIADNE_HYBRID_EVOLVER_HPP
@@ -59,9 +59,13 @@ typedef Dyadic StepSizeType;
 using Mutex = std::mutex;
 template<class T> using LockGuard = std::lock_guard<T>;
 
+/** @brief IntegratorInterface represents hybrid evolution strategies, transitions and timing. */
 class IntegratorInterface;
+/** @brief EquationSolverInterface represents hybrid evolution strategies, transitions and timing. */
 class EquationSolverInterface;
+/** @brief HybridEvolverBaseConfiguration represents hybrid evolution strategies, transitions and timing. */
 class HybridEvolverBaseConfiguration;
+/** @brief GeneralHybridEvolverConfiguration represents hybrid evolution strategies, transitions and timing. */
 class GeneralHybridEvolverConfiguration;
 
 //! \relates HybridEnclosure
@@ -81,8 +85,11 @@ class FlowFunctionModel
     ExactBoxType const codomain() const { return this->ValidatedVectorMultivariateFunctionPatch::codomain(); }
 };
 
+/** @brief TransitionData represents hybrid evolution strategies, transitions and timing. */
 struct TransitionData;
+/** @brief CrossingData represents hybrid evolution strategies, transitions and timing. */
 struct CrossingData;
+/** @brief TimingData represents hybrid evolution strategies, transitions and timing. */
 struct TimingData;
 
 //! \ingroup AnalysisModule
@@ -154,6 +161,7 @@ class HybridEvolverBase
 
     //! \brief A reference to the evolver's configuration parameters.
     ConfigurationType& configuration();
+    /** @brief Return the requested evolution property. */
     const ConfigurationType& configuration() const;
 
     //! \brief Change the configuration from a \a domain and \a lengths (NOT IMPLEMENTED).
@@ -176,8 +184,11 @@ class HybridEvolverBase
     //!@{
     //! \name Main evolution functions.
 
+    /** @brief Compute or update evolution information. */
     Orbit<EnclosureType> orbit(const HybridExactBoxType& initial_box, const TerminationType& termination, Semantics semantics) const;
+    /** @brief Compute or update evolution information. */
     Orbit<EnclosureType> orbit(const HybridBoxSet& initial_box, const TerminationType& termination, Semantics semantics) const;
+    /** @brief Compute or update evolution information. */
     Orbit<EnclosureType> orbit(const HybridBoundedConstraintSet& initial_set, const TerminationType& termination, Semantics semantics) const;
 
     //! \brief Compute an approximation to the orbit set using the given semantics, starting from an initial enclosure.
@@ -228,6 +239,7 @@ class HybridEvolverBase
     //! information in one place
     virtual
     Map<DiscreteEvent,TransitionData>
+    /** @brief Perform the specified evolution operation. */
     _extract_transitions(DiscreteLocation const& location) const;
 
     //! \brief Compute the flow of the \a vector_field, starting in the
@@ -312,6 +324,7 @@ class HybridEvolverBase
     //! of numerical error.
     virtual
     Void
+    /** @brief Perform the specified evolution operation. */
     _recondition(HybridEnclosure& set) const;
 
     virtual
@@ -452,9 +465,11 @@ class HybridEvolverBase
     //! \brief Output a one-line summary of the current evolution state to the logging stream.
     virtual
     Void
+    /** @brief Perform the specified evolution operation. */
     _log_summary(HybridEnclosure const& starting_set, SharedPointer<SynchronisedOrbit> result) const;
 
   protected:
+    /** @brief Perform the specified evolution operation. */
     Void _create(const SystemType& system, const FunctionFactoryType& factory);
     std::shared_ptr< IntegratorInterface > _integrator_ptr;
   private:
@@ -467,7 +482,9 @@ class HybridEvolverBase
 };
 
 
+/** @brief Return the requested evolution property. */
 Bool is_blocking(EventKind evk);
+/** @brief Return the requested evolution property. */
 Bool is_activating(EventKind evk);
 
 //! \ingroup HybridDynamicsSubModule
@@ -499,6 +516,7 @@ struct TransitionData
     //TransitionData(DiscreteLocation t, ValidatedScalarMultivariateFunction g, ValidatedVectorMultivariateFunction r)
     //    : target(t), guard_function(g), reset_function(r) { }
 };
+/** @brief Apply the requested operation. */
 OutputStream& operator<<(OutputStream& os, const TransitionData& transition);
 
 //! \ingroup HybridDynamicsSubModule
@@ -531,6 +549,7 @@ enum class CrossingKind : std::uint8_t {
     GRAZING //!< The time at which the guard function reaches a maximum along flow lines is a smooth function \f$\mu(x_0)\f$ of the initial state \f$x_0\f$.
         //! Implies by concavity along flow lines, which is equivalent to \f$L_{f}^{2} g < 0\f$ within the reached set.
 };
+/** @brief Apply the requested operation. */
 OutputStream& operator<<(OutputStream& os, const CrossingKind& crk);
 
 //! \ingroup HybridDynamicsSubModule
@@ -558,6 +577,7 @@ struct CrossingData
     //! \brief The range of values of the guard function at the critical time.
     UpperBoxType evolve_bounds_at_critical_time;
 };
+/** @brief Apply the requested operation. */
 OutputStream& operator<<(OutputStream& os, const CrossingData& crk);
 
 //! \ingroup HybridDynamicsSubModule
@@ -585,6 +605,7 @@ enum class StepKind : std::uint8_t {
     CONSTANT_FINISHING_TIME, //!< The step is taken up to the specified evolution time \f$t_{\max}\f$. The actual step length depends on the parameterisation.
       //! After the step, we have \f$\xi'(s) = \phi(\xi(s),t_{\max}-\tau(s))\f$ and \f$\tau'(s)=t_{\max}\f$.
 };
+/** @brief Apply the requested operation. */
 OutputStream& operator<<(OutputStream& os, const StepKind& crk);
 
 //! \ingroup HybridDynamicsSubModule
@@ -601,6 +622,7 @@ enum class FinishingKind : std::uint8_t {
     STRADDLE_FINAL_TIME, //!< At the end of the step, some points may have passed the final time, and some may not reached it.
         //!< Usable as a default value.
 };
+/** @brief Apply the requested operation. */
 OutputStream& operator<<(OutputStream& os, const FinishingKind& crk);
 
 //! \ingroup HybridDynamicsSubModule
@@ -626,6 +648,7 @@ struct TimingData
     ExactIntervalType evolution_time_domain; //!< The time domain of the flow function, equal to \f$[0,h]\f$.
     ValidatedScalarMultivariateFunctionPatch evolution_time_coordinate; //!< The time coordinate of the flow function, equal to the identity on \f$[0,h]\f$.
 };
+/** @brief Apply the requested operation. */
 OutputStream& operator<<(OutputStream& os, const TimingData& timing);
 
 //! \relates HybridEvolverBase
@@ -638,6 +661,7 @@ class HybridEvolverBaseConfiguration : public ConfigurationInterface
     typedef ApproximateDouble ApproximateRealType;
   protected:
 
+    /** @brief Construct the object. */
     HybridEvolverBaseConfiguration(HybridEvolverBase& evolver);
 
   private:
@@ -692,6 +716,7 @@ class HybridEvolverBaseConfiguration : public ConfigurationInterface
 
   public:
 
+    /** @brief Perform the specified evolution operation. */
     virtual OutputStream& _write(OutputStream& os) const;
 };
 
@@ -708,8 +733,11 @@ class GeneralHybridEvolver
 {
   public:
 
+    /** @brief Construct the object. */
     GeneralHybridEvolver(const SystemType& system);
+    /** @brief Construct the object. */
     GeneralHybridEvolver(GeneralHybridEvolver const& other);
+    /** @brief Apply the requested operation. */
     GeneralHybridEvolver& operator=(GeneralHybridEvolver const& other);
     GeneralHybridEvolver(const SystemType& system,
                          const FunctionFactoryType& factory);
@@ -726,6 +754,7 @@ class GeneralHybridEvolver
                      Map<DiscreteEvent,TransitionData> const& transitions,
                      HybridEnclosure const& initial_set) const;
   private:
+    /** @brief Perform the specified evolution operation. */
     Void _copy_configuration_from(GeneralHybridEvolver const& other);
 };
 
@@ -736,6 +765,7 @@ class GeneralHybridEvolverConfiguration : public HybridEvolverBaseConfiguration
 {
   public:
 
+    /** @brief Construct the object. */
     GeneralHybridEvolverConfiguration(GeneralHybridEvolver& evolver);
 
     virtual ~GeneralHybridEvolverConfiguration() = default;
@@ -753,8 +783,10 @@ class GeneralHybridEvolverFactory
 
   public:
 
+    /** @brief Construct the object. */
     GeneralHybridEvolverFactory();
 
+    /** @brief Construct the object. */
     GeneralHybridEvolverFactory(const ValidatedFunctionPatchFactory& factory);
 
     virtual GeneralHybridEvolverFactory* clone() const { return new GeneralHybridEvolverFactory(*this); }

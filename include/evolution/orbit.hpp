@@ -1,29 +1,29 @@
 /***************************************************************************
- *            dynamics/orbit.hpp
+ *            orbit.hpp
  *
  *  Copyright  2007-20  Pieter Collins
  *
  ****************************************************************************/
 
 /*
- *  This file is part of Ariadne.
+ *  This file is part of Ariadne Evolution.
  *
- *  Ariadne is free software: you can redistribute it and/or modify
+ *  Ariadne Evolution is free software: you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
  *  the Free Software Foundation, either version 3 of the License, or
  *  (at your option) any later version.
  *
- *  Ariadne is distributed in the hope that it will be useful,
+ *  Ariadne Evolution is distributed in the hope that it will be useful,
  *  but WITHOUT ANY WARRANTY; without even the implied warranty of
- *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
  *  GNU General Public License for more details.
  *
  *  You should have received a copy of the GNU General Public License
- *  along with Ariadne.  If not, see <https://www.gnu.org/licenses/>.
+ *  along with Ariadne Evolution. If not, see <https://www.gnu.org/licenses/>.
  */
 
-/*! \file dynamics/orbit.hpp
- *  \brief Orbits of dynamic systems
+/** @file evolution/orbit.hpp
+ *  @brief Orbit containers for continuous and discrete systems.
  */
 
 #ifndef ARIADNE_ORBIT_HPP
@@ -66,19 +66,24 @@ template<class E> class Orbit {
 #endif
 
 template<class ES> class Orbit;
+/** @brief Apply the requested operation. */
 template<class ES> OutputStream& operator<<(OutputStream&, const Orbit<ES>&);
 
 template<class BS> class ListSet;
 
 template<class X> class Point;
+/** @brief InterpolatedCurve represents orbit containers for continuous and discrete systems. */
 class InterpolatedCurve;
 
 
 template<class F>
+/** @brief Orbit represents orbit containers for continuous and discrete systems. */
 class Orbit<Point<F>>
 {
   public:
+    /** @brief Construct the object. */
     Orbit(const Point<F>& pt);
+    /** @brief Perform the specified evolution operation. */
     Void insert(F t, const Point<F>& pt);
     const InterpolatedCurve& curve() const { return *this->_curve; }
   private:
@@ -86,6 +91,7 @@ class Orbit<Point<F>>
 };
 
 template<class F>
+/** @brief Orbit represents orbit containers for continuous and discrete systems. */
 class Orbit<Point<Approximation<F>>>
 {
 public:
@@ -98,10 +104,13 @@ private:
 
 
 template<class F>
+/** @brief Orbit represents orbit containers for continuous and discrete systems. */
 class Orbit<List<Point<Approximation<F>>>>
 {
   public:
+    /** @brief Construct the object. */
     Orbit(const List<Point<Approximation<F>>>& ptLst);
+    /** @brief Perform the specified evolution operation. */
     Void insert(F t, const Point<Approximation<F>>& pt, SizeType curveNumber);
     const List<InterpolatedCurve>& curves() { return *_curves; }
     const InterpolatedCurve& curve(SizeType i) { return _curves->at(i); }
@@ -110,6 +119,7 @@ class Orbit<List<Point<Approximation<F>>>>
 };
 
 template<class F>
+/** @brief Orbit represents orbit containers for continuous and discrete systems. */
 class Orbit<LabelledPoint<Approximation<F>>>
     : public LabelledDrawable2dInterface
 {
@@ -125,14 +135,18 @@ class Orbit<LabelledPoint<Approximation<F>>>
 
 
 template<class F>
+/** @brief Orbit represents orbit containers for continuous and discrete systems. */
 class Orbit<List<LabelledPoint<Approximation<F>>>>
     : public LabelledDrawable2dInterface
 {
   public:
+    /** @brief Construct the object. */
     Orbit(const List<LabelledPoint<Approximation<F>>>& ptLst);
+    /** @brief Perform the specified evolution operation. */
     Void insert(F t, const LabelledPoint<Approximation<F>>& pt, SizeType curveNumber);
     const List<LabelledInterpolatedCurve>& curves() { return *_curves; }
     const LabelledInterpolatedCurve& curve(SizeType i) { return _curves->at(i); }
+    /** @brief Perform the specified evolution operation. */
     virtual Void draw(CanvasInterface& canvas, const Variables2d& axes) const override {
         for (SizeType i=0; i<_curves->size(); i++){ _curves->at(i).draw(canvas, axes); } }
     virtual LabelledDrawable2dInterface* labelled_clone() const override { return new Orbit<List<LabelledPoint<Approximation<F>>>>(*this); }
@@ -141,6 +155,7 @@ class Orbit<List<LabelledPoint<Approximation<F>>>>
 };
 
 template<>
+/** @brief Orbit represents orbit containers for continuous and discrete systems. */
 class Orbit<Enclosure>
 {
     typedef Enclosure ES;
@@ -170,6 +185,7 @@ class Orbit<Enclosure>
 };
 
 template<>
+/** @brief Orbit represents orbit containers for continuous and discrete systems. */
 class Orbit<LabelledEnclosure>
     : public LabelledDrawable2dInterface
 {
@@ -202,6 +218,7 @@ class Orbit<LabelledEnclosure>
     ESL _final;
 };
 
+/** @brief Apply the requested operation. */
 template<class ES> OutputStream& operator<<(OutputStream& os, const Orbit< ES >& orb);
 
 template<class ES>
@@ -216,12 +233,15 @@ operator<<(OutputStream& os, const Orbit< ES >& orb)
     return os;
 }
 
+/** @brief Perform the specified evolution operation. */
 template<class ES> Void draw(FigureInterface& figure, const Orbit<ES>& orbit) {
     for(auto const& enclosure : orbit.reach()) { draw(figure,enclosure); }
+    /** @brief Perform the specified evolution operation. */
     draw(figure,orbit.initial());
     for(auto const& enclosure : orbit.final()) { draw(figure,enclosure); }
 }
 
+/** @brief Apply the requested operation. */
 template<class ES> FigureInterface& operator<<(FigureInterface& figure, const Orbit<ES>& orbit) {
     draw(figure,orbit); return figure;
 }

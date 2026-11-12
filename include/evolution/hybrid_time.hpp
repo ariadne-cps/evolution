@@ -1,29 +1,29 @@
 /***************************************************************************
- *            hybrid/hybrid_time.hpp
+ *            hybrid_time.hpp
  *
  *  Copyright  2008-20  Pieter Collins
  *
  ****************************************************************************/
 
 /*
- *  This file is part of Ariadne.
+ *  This file is part of Ariadne Evolution.
  *
- *  Ariadne is free software: you can redistribute it and/or modify
+ *  Ariadne Evolution is free software: you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
  *  the Free Software Foundation, either version 3 of the License, or
  *  (at your option) any later version.
  *
- *  Ariadne is distributed in the hope that it will be useful,
+ *  Ariadne Evolution is distributed in the hope that it will be useful,
  *  but WITHOUT ANY WARRANTY; without even the implied warranty of
- *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
  *  GNU General Public License for more details.
  *
  *  You should have received a copy of the GNU General Public License
- *  along with Ariadne.  If not, see <https://www.gnu.org/licenses/>.
+ *  along with Ariadne Evolution. If not, see <https://www.gnu.org/licenses/>.
  */
 
-/*! \file hybrid/hybrid_time.hpp
- *  \brief Hybrid times
+/** @file evolution/hybrid_time.hpp
+ *  @brief Time representation and termination criteria for hybrid systems.
  */
 
 #ifndef ARIADNE_HYBRID_TIME_HPP
@@ -35,6 +35,7 @@
 
 namespace Ariadne {
 
+/** @brief DiscreteEvent represents time representation and termination criteria for hybrid systems. */
 class DiscreteEvent;
 
 //! \ingroup AnalysisModule
@@ -82,53 +83,67 @@ class HybridTime
     //! \brief The arguments for the HybridTime constructor must be ordered continuous-time, then discrete-time.
     HybridTime(Integer n, double t) = delete;
 
+    /** @brief Apply the requested operation. */
     friend HybridTime operator*(const Integer& c, const HybridTime& ht) {
         return HybridTime(c*ht._continuous_time,c*ht._discrete_time);
     }
 
+    /** @brief Apply the requested operation. */
     friend HybridTime operator-(const HybridTime& ht1, const HybridTime& ht2) {
         return HybridTime(ht1._continuous_time-ht2._continuous_time,max(ht1._discrete_time-ht2._discrete_time,Integer(0)));
     }
 
+    /** @brief Perform the specified evolution operation. */
     friend Bool same(const HybridTime& ht1, const HybridTime& ht2) {
         return same(ht1._continuous_time,ht2._continuous_time) &&
             ht1._discrete_time==ht2._discrete_time;
     }
 
+    /** @brief Apply the requested operation. */
     friend NegatedSierpinskian operator==(const HybridTime& ht1, const HybridTime& ht2) {
         return ht1._continuous_time==ht2._continuous_time &&
             ht1._discrete_time==ht2._discrete_time;
     }
 
+    /** @brief Apply the requested operation. */
     friend Sierpinskian operator!=(const HybridTime& ht1, const HybridTime& ht2) {
         return ht1._continuous_time!=ht2._continuous_time ||
             ht1._discrete_time!=ht2._discrete_time;
     }
 
+    /** @brief Apply the requested operation. */
     friend Kleenean operator<=(const HybridTime& ht1, const HybridTime& ht2) {
         return Kleenean(ht1._continuous_time<=ht2._continuous_time) &&
+            /** @brief Construct the object. */
             Boolean(ht1._discrete_time<=ht2._discrete_time);
     }
 
+    /** @brief Apply the requested operation. */
     friend Kleenean operator<(const HybridTime& ht1, const HybridTime& ht2) {
         return Kleenean(ht1._continuous_time< ht2._continuous_time) &&
+            /** @brief Construct the object. */
             Boolean(ht1._discrete_time<ht2._discrete_time);
     }
 
+    /** @brief Apply the requested operation. */
     friend Kleenean operator>(const HybridTime& ht1, const HybridTime& ht2) {
         return Kleenean(ht1._continuous_time> ht2._continuous_time) &&
+            /** @brief Construct the object. */
             Boolean(ht1._discrete_time>ht2._discrete_time);
     }
 
+    /** @brief Apply the requested operation. */
     friend Kleenean operator>(const HybridTime& ht1, const ContinuousTimeType& ct2) {
         return Kleenean(ht1._continuous_time> ct2);
     }
 
+    /** @brief Apply the requested operation. */
     friend OutputStream& operator<<(OutputStream& os, const HybridTime& ht) {
         return os << "(time="<<ht._continuous_time<<", steps="<<ht._discrete_time<<")";
     }
 };
 
+/** @brief HybridTerminationCriterion represents time representation and termination criteria for hybrid systems. */
 class HybridTerminationCriterion
 {
   public:
@@ -152,6 +167,7 @@ class HybridTerminationCriterion
     //! \brief The maximum number of discrete steps taken.
     const Set<DiscreteEvent>& terminating_events() const { return this->_terminating_events; }
 };
+/** @brief Apply the requested operation. */
 inline OutputStream& operator<<(OutputStream& os, const HybridTerminationCriterion& termination) {
     return os << "HybridTerminationCriterion( maximum_time=" << termination.maximum_time()
               << ", maximum_steps="<<termination.maximum_steps()

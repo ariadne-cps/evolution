@@ -1,29 +1,29 @@
 /***************************************************************************
- *            hybrid/hybrid_orbit.hpp
+ *            hybrid_orbit.hpp
  *
  *  Copyright  2007-20  Pieter Collins
  *
  ****************************************************************************/
 
 /*
- *  This file is part of Ariadne.
+ *  This file is part of Ariadne Evolution.
  *
- *  Ariadne is free software: you can redistribute it and/or modify
+ *  Ariadne Evolution is free software: you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
  *  the Free Software Foundation, either version 3 of the License, or
  *  (at your option) any later version.
  *
- *  Ariadne is distributed in the hope that it will be useful,
+ *  Ariadne Evolution is distributed in the hope that it will be useful,
  *  but WITHOUT ANY WARRANTY; without even the implied warranty of
- *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
  *  GNU General Public License for more details.
  *
  *  You should have received a copy of the GNU General Public License
- *  along with Ariadne.  If not, see <https://www.gnu.org/licenses/>.
+ *  along with Ariadne Evolution. If not, see <https://www.gnu.org/licenses/>.
  */
 
-/*! \file hybrid/hybrid_orbit.hpp
- *  \brief Orbits of hybrid dynamical systems
+/** @file evolution/hybrid_orbit.hpp
+ *  @brief Discrete and continuous orbit collections for hybrid systems.
  */
 
 #ifndef ARIADNE_HYBRID_ORBIT_HPP
@@ -52,62 +52,88 @@ template<class ES> class Orbit;
 template<class BS> class ListSet;
 template<class X> class Point;
 
+/** @brief Grid represents discrete and continuous orbit collections for hybrid systems. */
 class Grid;
+/** @brief GridCell represents discrete and continuous orbit collections for hybrid systems. */
 class GridCell;
+/** @brief BinaryTreePaving represents discrete and continuous orbit collections for hybrid systems. */
 class BinaryTreePaving;
+/** @brief HybridGrid represents discrete and continuous orbit collections for hybrid systems. */
 class HybridGrid;
+/** @brief HybridGridCell represents discrete and continuous orbit collections for hybrid systems. */
 class HybridGridCell;
+/** @brief HybridPaving represents discrete and continuous orbit collections for hybrid systems. */
 class HybridPaving;
+/** @brief HybridTime represents discrete and continuous orbit collections for hybrid systems. */
 class HybridTime;
 
+/** @brief HybridAutomatonInterface represents discrete and continuous orbit collections for hybrid systems. */
 class HybridAutomatonInterface;
 
+/** @brief DiscreteLocation represents discrete and continuous orbit collections for hybrid systems. */
 class DiscreteLocation;
 
 typedef HybridBasicSet<InterpolatedCurve> HybridInterpolatedCurve;
 
+/** @brief Apply the requested operation. */
 template<class ES> OutputStream& operator<<(OutputStream&, const Orbit<ES>&);
 
 template<>
+/** @brief Orbit represents discrete and continuous orbit collections for hybrid systems. */
 class Orbit<HybridApproximatePoint>
     : public HybridDrawableInterface
 {
   public:
+    /** @brief Construct the object. */
     Orbit(const HybridApproximatePoint& hpt);
+    /** @brief Construct the object. */
     Orbit(List<HybridInterpolatedCurve> crvs);
+    /** @brief Perform the specified evolution operation. */
     Void insert(HybridTime ht, const HybridApproximatePoint& hpt);
+    /** @brief Return the requested evolution property. */
     SizeType size() const;
+    /** @brief Perform the specified evolution operation. */
     const InterpolatedCurve& curve(Nat m) const;
     const List<HybridInterpolatedCurve>& curves() const { return *this->_curves_ptr; }
+    /** @brief Perform the specified evolution operation. */
     Void draw(CanvasInterface& c, const Set<DiscreteLocation>& l, const Variables2d& v) const;
   private:
     SharedPointer<List<HybridInterpolatedCurve> > _curves_ptr;
 };
 
 template<>
+/** @brief Orbit represents discrete and continuous orbit collections for hybrid systems. */
 class Orbit<Vector<HybridApproximatePoint>>
   : public HybridDrawableInterface
 {
   public:
+    /** @brief Construct the object. */
     Orbit(const Vector<HybridApproximatePoint>& vhpt);
+    /** @brief Perform the specified evolution operation. */
     Void insert(HybridTime ht, const HybridApproximatePoint& hpt, SizeType setNumber);
     //! The number of independent trajectories represented by this orbit.
     SizeType number_of_trajectories() const { return _curves_ptr->size(); }
+    /** @brief Return the requested evolution property. */
     SizeType size(SizeType setNumber);
+    /** @brief Perform the specified evolution operation. */
     const InterpolatedCurve& curve(Nat setNumber, Nat step);
     const List<HybridInterpolatedCurve>& curves(Nat setNumber) { return this->_curves_ptr->at(setNumber); }
+    /** @brief Perform the specified evolution operation. */
     Void draw(CanvasInterface& c, const Set<DiscreteLocation>& l, const Variables2d& v) const;
   private:
     SharedPointer<Vector<List<HybridInterpolatedCurve>>> _curves_ptr;
 };
 
+/** @brief Perform the specified evolution operation. */
 Orbit<HybridApproximatePoint> extend_auxiliary(Orbit<HybridApproximatePoint> const& horb, HybridAutomatonInterface const& ha);
 
 template<>
 OutputStream&
+/** @brief Apply the requested operation. */
 operator<<(OutputStream& os, const Orbit< HybridApproximatePoint >& orb);
 
 template<>
+/** @brief Orbit represents discrete and continuous orbit collections for hybrid systems. */
 class Orbit<HybridEnclosure>
     : public HybridDrawableInterface
 {
@@ -130,6 +156,7 @@ class Orbit<HybridEnclosure>
     EnclosureListType const& intermediate() const { return this->_intermediate; }
     EnclosureListType const& final() const { return this->_final; }
 
+    /** @brief Perform the specified evolution operation. */
     Void draw(CanvasInterface& c, const Set<DiscreteLocation>& l, const Variables2d& v) const;
   private:
     EnclosureType _initial;
@@ -140,6 +167,7 @@ class Orbit<HybridEnclosure>
 
 template<>
 OutputStream&
+/** @brief Apply the requested operation. */
 operator<<(OutputStream& os, const Orbit< HybridEnclosure >& orb);
 
 

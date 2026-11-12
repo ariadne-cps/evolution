@@ -1,29 +1,29 @@
 /***************************************************************************
- *            dynamics/iterated_map_evolver.hpp
+ *            iterated_map_evolver.hpp
  *
  *  Copyright  2007-20  Alberto Casagrande, Pieter Collins
  *
  ****************************************************************************/
 
 /*
- *  This file is part of Ariadne.
+ *  This file is part of Ariadne Evolution.
  *
- *  Ariadne is free software: you can redistribute it and/or modify
+ *  Ariadne Evolution is free software: you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
  *  the Free Software Foundation, either version 3 of the License, or
  *  (at your option) any later version.
  *
- *  Ariadne is distributed in the hope that it will be useful,
+ *  Ariadne Evolution is distributed in the hope that it will be useful,
  *  but WITHOUT ANY WARRANTY; without even the implied warranty of
- *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
  *  GNU General Public License for more details.
  *
  *  You should have received a copy of the GNU General Public License
- *  along with Ariadne.  If not, see <https://www.gnu.org/licenses/>.
+ *  along with Ariadne Evolution. If not, see <https://www.gnu.org/licenses/>.
  */
 
-/*! \file dynamics/iterated_map_evolver.hpp
- *  \brief Evolver for iterated map systems.
+/** @file evolution/iterated_map_evolver.hpp
+ *  @brief Evolution by iteration of discrete-time maps.
  */
 
 #ifndef ARIADNE_ITERATED_MAP_EVOLVER_HPP
@@ -46,10 +46,13 @@
 
 namespace Ariadne {
 
+/** @brief Enclosure represents evolution by iteration of discrete-time maps. */
 class Enclosure;
+/** @brief IteratedMap represents evolution by iteration of discrete-time maps. */
 class IteratedMap;
 template<class ES> class Orbit;
 
+/** @brief IteratedMapEvolverConfiguration represents evolution by iteration of discrete-time maps. */
 class IteratedMapEvolverConfiguration;
 
 /*! \brief A class for computing the evolution of an iterated map.
@@ -98,6 +101,7 @@ class IteratedMapEvolver
     //! \name Evolution using abstract sets.
     //! \brief Compute an approximation to the orbit set using upper semantics.
     Orbit<EnclosureType> orbit(const EnclosureType& initial_set, const TerminationType& termination, Semantics semantics) const;
+    /** @brief Compute or update evolution information. */
     Orbit<EnclosureType> orbit(const RealExpressionBoundedConstraintSet& initial_set, const TerminationType& termination, Semantics semantics) const;
 
   protected:
@@ -152,6 +156,7 @@ class IteratedMapEvolverConfiguration : public ConfigurationInterface
 
   public:
 
+    /** @brief Perform the specified evolution operation. */
     virtual OutputStream& _write(OutputStream& os) const;
 
 };

@@ -1,29 +1,29 @@
 /***************************************************************************
- *            hybrid/hybrid_enclosure.hpp
+ *            hybrid_enclosure.hpp
  *
  *  Copyright  2009-20  Pieter Collins
  *
  ****************************************************************************/
 
 /*
- *  This file is part of Ariadne.
+ *  This file is part of Ariadne Evolution.
  *
- *  Ariadne is free software: you can redistribute it and/or modify
+ *  Ariadne Evolution is free software: you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
  *  the Free Software Foundation, either version 3 of the License, or
  *  (at your option) any later version.
  *
- *  Ariadne is distributed in the hope that it will be useful,
+ *  Ariadne Evolution is distributed in the hope that it will be useful,
  *  but WITHOUT ANY WARRANTY; without even the implied warranty of
- *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
  *  GNU General Public License for more details.
  *
  *  You should have received a copy of the GNU General Public License
- *  along with Ariadne.  If not, see <https://www.gnu.org/licenses/>.
+ *  along with Ariadne Evolution. If not, see <https://www.gnu.org/licenses/>.
  */
 
-/*! \file hybrid/hybrid_enclosure.hpp
- *  \brief Enclosure sets for hybrid systems
+/** @file evolution/hybrid_enclosure.hpp
+ *  @brief Enclosures and representations for hybrid system states.
  */
 
 #ifndef ARIADNE_HYBRID_ENCLOSURE_HPP
@@ -55,12 +55,19 @@ namespace Ariadne {
 
 template<class X> class Vector;
 
+/** @brief Enclosure represents enclosures and representations for hybrid system states. */
 class Enclosure;
+/** @brief Grid represents enclosures and representations for hybrid system states. */
 class Grid;
+/** @brief BinaryTreePaving represents enclosures and representations for hybrid system states. */
 class BinaryTreePaving;
+/** @brief AffineSet represents enclosures and representations for hybrid system states. */
 class AffineSet;
+/** @brief DiscreteEvent represents enclosures and representations for hybrid system states. */
 class DiscreteEvent;
+/** @brief Figure represents enclosures and representations for hybrid system states. */
 class Figure;
+/** @brief CanvasInterface represents enclosures and representations for hybrid system states. */
 class CanvasInterface;
 
 template<class L, class R> class Assignment;
@@ -72,7 +79,9 @@ template<class ES> class ListSet;
 template<class ES> class HybridListSet;
 template<class EBS> class HybridBasicSet;
 
+/** @brief HybridEnclosure represents enclosures and representations for hybrid system states. */
 class HybridEnclosure;
+/** @brief HybridPaving represents enclosures and representations for hybrid system states. */
 class HybridPaving;
 template<> class ListSet<HybridEnclosure>;
 
@@ -332,6 +341,7 @@ class HybridEnclosure
 
 };
 
+/** @brief Perform the specified evolution operation. */
 ValidatedLowerKleenean inside(const HybridEnclosure& he, const HybridRealBox& hbx);
 inline ValidatedLowerKleenean inside(const HybridEnclosure& he, const HybridExactBox& hbx) { return he.inside(hbx); }
 inline ValidatedLowerKleenean separated(const HybridEnclosure& he, const HybridExactBox& hbx) { return he.separated(hbx); }
@@ -339,10 +349,13 @@ inline ValidatedLowerKleenean separated(const HybridEnclosure& he, const HybridE
 inline OutputStream& operator<<(OutputStream& os, const HybridEnclosure& s) { return s._write(os); }
 
 
+/** @brief HybridGrid represents enclosures and representations for hybrid system states. */
 class HybridGrid;
+/** @brief HybridPaving represents enclosures and representations for hybrid system states. */
 class HybridPaving;
 
 template<>
+/** @brief ListSet represents enclosures and representations for hybrid system states. */
 class ListSet<HybridEnclosure>
     : public HybridDrawableInterface
 {
@@ -356,6 +369,7 @@ class ListSet<HybridEnclosure>
     ListSet(const HybridEnclosure& hes) { this->adjoin(hes); }
     ListSet(const List<HybridEnclosure>& hel) : _list(hel) { }
     Void adjoin(const HybridEnclosure& hes) { this->_list.append(hes); }
+    /** @brief Compute or update evolution information. */
     Void adjoin(const ListSet<HybridEnclosure>& hels) {
         for(List<HybridEnclosure>::ConstIterator iter=hels.begin(); iter!=hels.end(); ++iter) {
             this->adjoin(*iter); } }
@@ -363,7 +377,9 @@ class ListSet<HybridEnclosure>
     SizeType size() const { return _list.size(); }
     const HybridEnclosure& operator[](SizeType i) const { return get(i); }
     const HybridEnclosure& get(SizeType i) const { return _list[i]; }
+    /** @brief Apply the requested operation. */
     ListSet<HybridEnclosure::ContinuousStateSetType> operator[](const DiscreteLocation& loc) const;
+    /** @brief Perform the specified evolution operation. */
     VariablesUpperBoxType bounding_box() const;
     Void reduce() { for(auto& set : _list ) { set.reduce(); } }
     Void clear() { this->_list.clear(); }
@@ -375,12 +391,16 @@ class ListSet<HybridEnclosure>
     Iterator end() { return _list.end(); }
     ConstIterator begin() const { return _list.begin(); }
     ConstIterator end() const { return _list.end(); }
+    /** @brief Perform the specified evolution operation. */
     Void draw(CanvasInterface& cnvs, const Set<DiscreteLocation>& locs, const Variables2d& vars) const;
 
+    /** @brief Perform the specified evolution operation. */
     friend ValidatedLowerKleenean inside(ListSet<HybridEnclosure> const& set, HybridExactBox const& bx) {
         ValidatedLowerKleenean result=true; for(auto iter=set.begin(); iter!=set.end(); ++iter) { result = result && inside(*iter,bx); } return result; }
+    /** @brief Apply the requested operation. */
     friend OutputStream& operator<<(OutputStream& os, const ListSet<HybridEnclosure>& hls) {
         return os << hls._list; };
+    /** @brief Perform the specified evolution operation. */
     friend HybridPaving outer_approximation(const ListSet<HybridEnclosure>& hls, const HybridGrid& g, Int dpth);
   private:
     List<HybridEnclosure> _list;

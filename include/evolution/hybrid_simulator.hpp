@@ -1,29 +1,29 @@
 /***************************************************************************
- *            hybrid/hybrid_simulator.hpp
+ *            hybrid_simulator.hpp
  *
  *  Copyright  2009-20  Luca Geretti, Mirko Albanese
  *
  ****************************************************************************/
 
 /*
- *  This file is part of Ariadne.
+ *  This file is part of Ariadne Evolution.
  *
- *  Ariadne is free software: you can redistribute it and/or modify
+ *  Ariadne Evolution is free software: you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
  *  the Free Software Foundation, either version 3 of the License, or
  *  (at your option) any later version.
  *
- *  Ariadne is distributed in the hope that it will be useful,
+ *  Ariadne Evolution is distributed in the hope that it will be useful,
  *  but WITHOUT ANY WARRANTY; without even the implied warranty of
- *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
  *  GNU General Public License for more details.
  *
  *  You should have received a copy of the GNU General Public License
- *  along with Ariadne.  If not, see <https://www.gnu.org/licenses/>.
+ *  along with Ariadne Evolution. If not, see <https://www.gnu.org/licenses/>.
  */
 
-/*! \file hybrid/hybrid_simulator.hpp
- *  \brief Simulator for hybrid systems.
+/** @file evolution/hybrid_simulator.hpp
+ *  @brief Simulation algorithms for hybrid dynamical systems.
  */
 
 #ifndef ARIADNE_HYBRID_SIMULATOR_HPP
@@ -39,12 +39,14 @@
 
 namespace Ariadne {
 
+/** @brief DiscretizationHybridType represents simulation algorithms for hybrid dynamical systems. */
 enum class DiscretizationHybridType
 {
   HMince,
   HRecombine
 };
 
+/** @brief Apply the requested operation. */
 inline OutputStream& operator<<(OutputStream& os, const DiscretizationHybridType& dtype) {
 
     if(dtype == DiscretizationHybridType::HMince){ os << "Mince"; }
@@ -53,11 +55,16 @@ inline OutputStream& operator<<(OutputStream& os, const DiscretizationHybridType
     return os;
 }
 
+/** @brief HybridTerminationCriterion represents simulation algorithms for hybrid dynamical systems. */
 class HybridTerminationCriterion;
+/** @brief HybridAutomatonInterface represents simulation algorithms for hybrid dynamical systems. */
 class HybridAutomatonInterface;
+/** @brief DiscreteEvent represents simulation algorithms for hybrid dynamical systems. */
 class DiscreteEvent;
+/** @brief DiscreteLocation represents simulation algorithms for hybrid dynamical systems. */
 class DiscreteLocation;
 
+/** @brief HybridSimulatorConfiguration represents simulation algorithms for hybrid dynamical systems. */
 class HybridSimulatorConfiguration;
 
 template<class T> class Orbit;
@@ -95,19 +102,24 @@ class HybridSimulator
     //! \name Evolution using abstract sets.
     //! \brief Compute an approximation to the orbit set using upper semantics.
     Orbit<HybridApproximatePointType> orbit(const HybridApproximatePointType& initial_point, const TerminationType& termination) const;
+    /** @brief Compute or update evolution information. */
     Orbit<HybridApproximatePointType> orbit(const HybridRealPoint& initial_point, const TerminationType& termination) const;
     //! \brief Currently simulates from the midpoint of the set in the first location only.
     //Orbit<HybridApproximatePointType> orbit(const HybridBoundedConstraintSet& initial_set, const TerminationType& termination) const;
 
     OrbitListType orbit(const HybridApproximateListPointType& initial_list, const TerminationType& termination) const;  //TO DO
     OrbitListType orbit(const HybridBoundedConstraintSet& initial_set, const TerminationType& termination) const;       //TO DO
+    /** @brief Compute or update evolution information. */
     OrbitListType orbit(const HybridUpperBox& initial_box, DiscreteLocation loc, HybridSpace spc, TerminationType const& termination) const;
 
   private:
+    /** @brief Perform the specified evolution operation. */
     Map<DiscreteEvent,EffectiveScalarMultivariateFunction> _guard_functions(const DiscreteLocation& location) const;
+    /** @brief Perform the specified evolution operation. */
     Bool _satisfies_invariants(const DiscreteLocation& location, const Point<FloatDPApproximation>& point) const;
 };
 
+/** @brief HybridSimulatorConfiguration represents simulation algorithms for hybrid dynamical systems. */
 class HybridSimulatorConfiguration : public ConfigurationInterface {
 public:
     //! \brief Default constructor gives reasonable values.
@@ -133,6 +145,7 @@ public:
     DiscretizationHybridType const& d_type() const { return _discretization_type; }
 
 
+    /** @brief Perform the specified evolution operation. */
     virtual OutputStream& _write(OutputStream& os) const;
 };
 

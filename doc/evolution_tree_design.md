@@ -79,7 +79,8 @@ growing. An entry index is sufficient for append-only progression. Backtracking
 prunes a future continuation and regrows from the retained checkpoint; it does
 not insert intermediate nodes or move existing subtrees. Truncating trajectory
 entries must also invalidate child trajectories derived from removed entries.
-The exact pruning boundary and origin-reference lifetime still need a contract.
+The generic `prune(id)` boundary retains that node and removes its descendants.
+Lifetime and truncation of source-entry references remain consumer concerns.
 
 ## Completion is local to a trajectory
 
@@ -165,8 +166,10 @@ internal representation or explicit relations may be needed.
 The structural model permits growth and pruning followed by regrowth. Existing
 nodes cannot be inserted between other nodes or reparented. Pruned IDs must
 become invalid and must not be reused; retained nodes keep their identities.
-Pruning is not implemented in the current generic container and is the next
-required structural capability. Persistence, concurrent publication and general
+The generic container implements `prune(id)` by retaining that checkpoint and
+removing all strict descendants, ready for regrowth through `add_child`.
+It preserves the retained payload and metadata; truncating the trajectory list
+and reopening a completion flag remain Evolution responsibilities. Persistence, concurrent publication and general
 multi-input dependency graphs remain outside the initial scope.
 
 ## Initial operations and verification

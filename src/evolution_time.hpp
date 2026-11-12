@@ -32,8 +32,9 @@
 
 namespace Ariadne::EvolutionDetail {
 
-// Limit a step to a positive remaining horizon while preserving the
-// integrator's requirement of exact binary64 representability.
+/** @brief Limit a configured step to the remaining positive time horizon,
+ *  preserving exact binary64 representability required by the integrator.
+ */
 Dyadic limit_step_to_remaining_time(Dyadic const& configured,Dyadic const& remaining);
 
 }

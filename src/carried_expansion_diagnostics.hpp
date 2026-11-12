@@ -32,9 +32,9 @@
 
 namespace Ariadne::EvolutionDetail {
 
-// Diagnostics consume the concrete Taylor representation produced by the
-// preconditioned integrator. An explicit stream also permits other clients
-// to retain the profile without redirecting process-wide stderr.
+/** @brief Print a snapshot of the carried Taylor expansion to the given stream.
+ *  An explicit output stream avoids redirecting process-wide diagnostics.
+ */
 Void print_carried_expansion_snapshot(
     OutputStream& output, String const& stage, SizeType step,
     ValidatedVectorMultivariateTaylorFunctionModelDP const& mapping,

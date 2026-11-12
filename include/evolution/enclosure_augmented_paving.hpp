@@ -38,16 +38,19 @@
 
 namespace Ariadne {
 
-// Add a validated outer approximation of an enclosure to an augmented
-// state paving. The enclosure's configured paver controls approximation.
+/** @brief Add a validated outer approximation of a continuous enclosure to an augmented paving.
+ *  The enclosure's configured paver controls the approximation.
+ */
 Void adjoin_outer_approximation_to(Enclosure const& enclosure, AugmentedPaving& paving, Nat fineness);
 
-// Construct an augmented paving with the enclosure's auxiliary mapping
-// and a validated outer approximation of its state set.
+/** @brief Construct an augmented paving carrying the enclosure's auxiliary mapping
+ *  and a validated outer approximation of its state set.
+ */
 AugmentedPaving outer_approximation(Enclosure const& enclosure, Grid const& grid, Nat fineness);
 
-// Reuse HybridEnclosure's location-aware outer approximation, without
-// requiring access to an automaton or other reasoning-layer objects.
+/** @brief Add the location-aware outer approximation of a hybrid enclosure
+ *  without coupling to an automaton or reasoning-layer objects.
+ */
 Void adjoin_outer_approximation_to(HybridEnclosure const& enclosure, HybridAugmentedPaving& paving, Nat fineness);
 
 } // namespace Ariadne

@@ -29,8 +29,9 @@
 #pragma once
 #include "logging/logging.hpp"
 
-// Execute diagnostic formatting without filling CTest output. Redirect once,
-// before the test creates workers; assertion output on stdout/stderr stays visible.
+/** @brief Redirect verbose diagnostic logging away from CTest output.
+ *  Call before worker creation to avoid redirecting assertion output.
+ */
 inline void redirect_test_logging_to_null() {
 #ifdef _WIN32
     Ariadne::Logger::instance().redirect_to_file("NUL");

@@ -1,3 +1,31 @@
+/***************************************************************************
+ *            test_enclosure_augmented_paving.cpp
+ *
+ *  Copyright  2026  Luca Geretti
+ *
+ ****************************************************************************/
+
+/*
+ *  This file is part of Ariadne Evolution.
+ *
+ *  Ariadne Evolution is free software: you can redistribute it and/or modify
+ *  it under the terms of the GNU General Public License as published by
+ *  the Free Software Foundation, either version 3 of the License, or
+ *  (at your option) any later version.
+ *
+ *  Ariadne Evolution is distributed in the hope that it will be useful,
+ *  but WITHOUT ANY WARRANTY; without even the implied warranty of
+ *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ *  GNU General Public License for more details.
+ *
+ *  You should have received a copy of the GNU General Public License
+ *  along with Ariadne Evolution. If not, see <https://www.gnu.org/licenses/>.
+ */
+
+/** @file tests/test_enclosure_augmented_paving.cpp
+ *  @brief Test enclosure augmented paving behavior and numerical invariants.
+ */
+
 // Verify the continuous and hybrid enclosure-to-augmented-paving adapters.
 #include "evolution/enclosure_augmented_paving.hpp"
 #include "function/taylor_function.hpp"

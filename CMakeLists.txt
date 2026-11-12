@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.15)
-project(Evolution VERSION 3.0)
+project(AriadneEvolution VERSION 3.0)
 option(WARNINGS_AS_ERRORS "Treat compiler warnings as errors" OFF)
 option(BUILD_PYTHON_BINDINGS "Build Python bindings" ON)
 

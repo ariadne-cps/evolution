@@ -1,0 +1,449 @@
+# Evolution tree design proposal
+
+Status: flat backend and step-result boundary implemented in the first refactoring stage.
+The trajectory tree, recombination and per-work numerical alternatives remain design proposals.
+
+## Starting functions
+
+1. Each node represents one trajectory containing an ordered list of sets.
+2. Parent-child relations distinguish trajectories born from another trajectory.
+3. Each node records whether its own trajectory is complete or still needs
+   evolution.
+
+The tree describes genealogy; the list inside a node describes progression of
+that trajectory. These requirements replace the previous checkpoint-per-node
+proposal. A new set does not by itself create a new tree node.
+
+The generic structure belongs in
+`ariadne-cps/tree/doc/derivation_tree_design.md`. Entry semantics, trajectory birth,
+completion criteria and scheduling belong to Evolution.
+
+## Trajectory object and metadata
+
+```text
+Trajectory
+    ordered list of EvolutionEntry
+
+EvolutionEntry
+    computational checkpoint, or explicitly grouped numerical pieces
+    Orbit contributions tagged reach / intermediate / final
+    shared reference to const NumericalConfiguration
+    information about the step producing the entry, when applicable
+
+TrajectoryMetadata
+    completion: NEEDS_EVOLUTION or COMPLETE
+    origin entry in the parent trajectory, except at the root
+    reason for birth
+    event / branch information, when applicable
+    optional application-specific labels
+```
+
+The generic owner supplies stable node identity, parent and children; those
+links are not duplicated in Evolution metadata. A node ID can identify its
+trajectory initially. A separate trajectory-ID namespace is unnecessary merely
+to inspect genealogy; introduce one later only with an explicit relationship to
+node identity.
+
+Entries follow the logical progression of the trajectory, not a sort by time-
+interval endpoints. A discrete step may preserve continuous time, and validated
+time intervals may overlap. An entry must distinguish the checkpoint used for
+further computation from the sets contributed to the Orbit; these are not
+necessarily the same enclosure. The backend proposal below records both.
+
+Keep configuration with the entry to which it applies. Unchanged configurations
+can be shared immutably. Later changes must not alter earlier entries. Examples
+include integration step limits, local error targets, parameter-count limits
+and numerical discretization/reconditioning choices.
+
+## Continuing versus creating a trajectory
+
+| Situation | Effect |
+| --- | --- |
+| Pure continuous step | Append the resulting entry to the current node |
+| Fully resolved transition with one continuation and unchanged trajectory identity | Append the transition result to that same node |
+| A distinct trajectory is generated | Create a child with its own ordered list |
+| A parent continues after a child's birth | Append to the parent; retain the child's original source reference |
+| Another distinct trajectory is generated later | Add another child referring to its own source entry |
+
+For one permissive/unresolved event, the no-jump continuation stays in the
+original node and a distinct jump trajectory is a child. Creating that child
+does not complete the parent. An internal tree node may still need evolution;
+active trajectories therefore cannot be identified just by taking tree leaves.
+
+A child starts with its own initial set, for example the reset image of the
+relevant source portion. It need not copy the parent's entire list. Earlier
+provenance is available through the parent and origin reference, and the child's
+first set need not equal its parent's source set.
+
+Record the particular parent entry responsible for birth, in addition to the
+reason/event. Parent identity alone is insufficient because its list can keep
+growing. An entry index is sufficient for an append-only initial history.
+Backtracking may truncate and regrow history, but may not insert entries between
+existing entries or move nodes. References to truncated history need explicit
+invalidation, for example through a history generation; an index alone must not
+silently resolve to a replacement entry at the same position.
+
+## Completion is local to a trajectory
+
+`NEEDS_EVOLUTION` means more work remains for the trajectory stored in that node.
+`COMPLETE` means that local evolution has finished under the current termination
+criteria: it will generate no more sets or child trajectories in normal forward
+processing. This can follow an evolution horizon, exhausted/empty continuation,
+or another explicit stopping condition.
+
+Completion does not mean that descendants are complete. A complete parent can
+have children that have not yet been evolved. Its list remains available as
+history. Explicit future backtracking may reopen work, but that requires a
+separate validity policy rather than silently appending to a completed history.
+
+Do not publish completion until all results and generated children from that
+trajectory's local work have been committed. Otherwise the child count observed
+at completion would be premature. Worker/scheduler state, such as whether a
+trajectory is currently running, is distinct from trajectory completion.
+
+## Finish a parent before descending
+
+The proposed initial scheduling policy favors completing an ancestor trajectory
+before evolving the trajectories generated from it:
+
+1. Select a node that needs evolution.
+2. Continue its trajectory, appending entries and recording generated children.
+3. When local work is finished, mark the node complete.
+4. Inspect all children it generated; their count and origins are now known.
+5. Decide whether to keep those child trajectories or propose recombination into
+   one or more successor trajectories.
+6. Descend to the resulting trajectories that still need evolution.
+
+This constrains parent-versus-descendant processing; it does not yet choose a
+global breadth-first or depth-first order among unrelated subtrees. The generic
+tree stores the necessary information without implementing this scheduler.
+
+This completion boundary is useful because children can be collected before
+their own evolution is scheduled. It makes sibling-group recombination a first
+policy to investigate, without requiring an initial algorithm for merging
+already evolved arbitrary branches.
+
+## Example: repeated guard crossings
+
+```text
+A: [A0, A1, A2, A3, ...]     COMPLETE
+    +-- B: [B0]   origin A1, event e; NEEDS_EVOLUTION
+    +-- C: [C0]   origin A2, event e; NEEDS_EVOLUTION
+    +-- D: [D0]   origin A3, event e; NEEDS_EVOLUTION
+```
+
+A generated B, C and D while continuing its own list. Once A is complete, the
+scheduler knows all three children before descending. It can inspect candidate
+groups such as {B,C,D} or {B,C} and {D}, and decide whether a sound replacement
+by one or more trajectories is useful.
+
+As clarified, different portions crossing a guard during different integration
+steps remain distinct trajectories, potentially in a common recombinable family.
+Common parent, reason/event and source entries provide initial provenance; they
+do not establish mathematical compatibility by themselves. A precise family
+key and recombination criterion remain later design work.
+
+## Recombination constraints and deferred operations
+
+Parent completion establishes that the generated group is known; it does not
+prove that its children overlap or may be recombined. A future policy must check
+location, clocks, discrete context, numerical-alternative compatibility and
+sound coverage of all selected source sets. Bounding-box overlap or common
+ancestry is insufficient.
+
+Recombination can produce one or more replacement nodes/trajectories. Preserve
+which original children contributed to each replacement, rather than deleting
+their origin information. Distinguish the collection originally generated by
+the complete parent from the active collection after recombination. Structural
+placement of replacements and absorbed-node handling are not finalized here.
+
+The earlier enumeration of `SPLIT`, `UNBUNDLE`, `RECOMBINE` and
+`ALTERNATIVE_CONFIGURATIONS` remains context, but its checkpoint-per-node
+interpretation is superseded. Before adding those operations, specify how
+subset and numerical-alternative branches relate to the trajectory list. Do
+not flatten parallel pieces into an apparently sequential history. Additional
+internal representation or explicit relations may be needed.
+
+Stable IDs remain required: appending entries or adding children does not
+renumber existing nodes. Backtracking can still invalidate results derived from
+edited entries. Persistence, concurrent publication, general multi-input
+dependency graphs and reclamation are outside the initial scope.
+
+## Initial operations and verification
+
+The wrapper needs creation of an initial trajectory, ordered append, creation
+of a derived trajectory at an identified source entry, completion marking/query,
+and access to lists and genealogy. The generic owner does not decide when a
+trajectory is born or complete.
+
+Test that continuous steps extend one list without increasing node count;
+configuration history is retained; children identify the right parent and
+source entry; a parent can continue after generating children; completion is
+local and published after all generated children; and a complete parent can
+have unevolved children. A scheduler test should confirm that descendants are
+deferred until their ancestor is complete and the child-group decision has
+been made. Recombination selection/construction is subsequent work.
+
+## Hybrid evolver backends
+
+### Implemented first stage
+
+`include/evolution/hybrid_evolution_backend.hpp` defines work phases, successor
+provenance, explicit Orbit contributions, local stop reasons and the backend and
+factory interfaces. `FlatHybridEvolutionBackendFactory` is the default.
+`HybridEvolverBase::set_evolution_backend_factory()` clones factory settings;
+each call to `orbit()` creates independent run state, invokes the same numerical
+callback, and obtains the conventional Orbit through `release_orbit()`.
+
+The numerical callback returns `HybridEvolutionStepResult`. The five previously
+coupled methods now write only to that local result; they neither dispatch work
+nor publish to a shared Orbit. The flat backend reuses `DynamicWorkload`, commits
+all contributions under one lock before scheduling successors, and rejects
+release before successful completion or a second release. Exceptions propagate
+through the executor after its outstanding work joins.
+
+Work items currently contain the enclosure (including its existing enclosure
+configuration) and processing phase. The evolver's integration/solver settings
+continue to use the existing uniform configuration for this first stage;
+per-work immutable numerical settings and alternatives are not implemented.
+Likewise, successor transition metadata records event, event kind and optional
+crossing kind without claiming that a unique transition has been fully resolved.
+Detailed piece-to-contribution associations for tree histories remain to be
+specified with the tree backend.
+
+`tests/test_hybrid_evolution_backend.cpp` verifies output/checkpoint separation,
+publication before successor dispatch in serial and concurrent modes, lifecycle
+and failure handling, and transition/subdivision provenance. An independent LIFO
+backend in that test is selected through the public factory setter and compares
+all three output collections with the default backend for urgent and permissive
+systems, including repeated calls after the original factory is destroyed.
+The existing hybrid evolution tests continue to exercise the numerical behavior.
+
+The remaining subsections describe the target architecture and its incremental
+migration; references to tree behavior are proposals, not implemented features.
+
+### Current coupling
+
+The reference implementation examined is Evolution commit
+`f34ff6e7e72abe2c2527bf7bc308cb4893010de9`.
+`HybridEvolverBase` currently owns both the execution mechanism and result
+publication:
+
+- `orbit()` constructs a `DynamicWorkload` and a `SynchronisedOrbit`.
+- A work item is `Pair<HybridEnclosure, Bool>`. The Boolean requests starting
+  event/termination processing; it is true for the original input as well as
+  after a reset, so it is not a trajectory identity or a completion flag.
+- `_process_working_set`, `_process_jumped_set`, `_process_starting_events`,
+  `_evolution_step` and `_apply_evolution_step` pass the workload and Orbit
+  accumulator through numerical processing.
+- Successors are submitted with `workload.append`, and results separately with
+  `adjoin_reach`, `adjoin_intermediate` and `adjoin_final`.
+
+Changing just the queue element to a tree node ID would leave the evolver
+responsible for scheduling and flattening. It would also lose information
+needed to distinguish continuation, transition and subdivision.
+
+### Proposed boundary
+
+Keep `HybridEvolverInterface::orbit(...) -> Orbit<HybridEnclosure>` unchanged.
+Introduce a run-owned `HybridEvolutionBackendInterface` with a flat backend and
+a tree backend. The evolver stores a factory/prototype selecting the backend;
+each `orbit()` call creates independent mutable execution state. Backend state
+must not be shared accidentally between calls on a const evolver.
+
+The numerical evolver computes one local outcome. The backend owns pending work,
+selection of the next work, history, completion publication, and production of
+the conventional Orbit. It may later use a recombination policy at a defined
+completion boundary. Numerical guards, resets, invariant restrictions,
+termination predicates and upper/lower semantics remain in the evolver.
+
+Conceptually, both implementations use the same calls:
+
+```cpp
+auto backend = backend_factory.create(initial);
+backend->run([&](const HybridEvolutionWorkItem& item) {
+    return _advance(item, termination, semantics);
+});
+return backend->release_orbit();
+```
+
+`run` owns dispatch, including any concurrent execution and joining before
+returning. `_advance` must neither enqueue work nor mutate a shared Orbit.
+It can accumulate a step-local result through an internal collector passed to
+the existing numerical helpers. Publishing the result is a backend operation
+after the callback has returned successfully.
+
+Move step-local results into backend storage where the enclosure/container APIs
+permit it. The abstraction does not require copying a parent's entire history
+when scheduling one work item or creating a child trajectory.
+
+Use a runtime interface at this boundary, rather than templating
+`HybridEvolverBase`, its derived evolvers and its public interface on the
+backend. Dispatch occurs per work item, not in scalar numerical operations.
+The generic `DerivationTree<Object, Metadata>` remains unchanged, with its two
+template parameters and no hybrid scheduling logic.
+
+### Work item and step result
+
+An initial common work item contains:
+
+```text
+HybridEvolutionWorkItem
+    enclosure to process
+    phase: PROCESS_STARTING_EVENTS or EVOLVE_CONTINUOUSLY
+    shared immutable numerical configuration
+```
+
+Scheduling tickets and tree node/entry IDs belong to the backend. The numerical
+callback does not need to know which concrete container owns its work item.
+An entry-processing phase is independent of the reason a trajectory was born.
+
+A step result must contain:
+
+```text
+HybridEvolutionStepResult
+    Orbit contributions, explicitly tagged REACH / INTERMEDIATE / FINAL
+    successors, each with enclosure, processing phase and configuration
+    successor provenance: continuation, transition, subdivision,
+        reconditioning, or numerical alternative
+    event/crossing/resolution information where applicable
+    local stop reason if no continuation remains
+```
+
+Keep associations between contributions and successor pieces where a guard
+creates several pieces. A local result is a record of one computation, not a
+claim that every collection in it is one sequential trajectory.
+
+Do not infer trajectory birth merely from the number of successors. A numerical
+subdivision and competing transitions have different meanings even when both
+produce two sets. A permissive transition retains the no-jump continuation and
+derives a jump trajectory. A resolved single transition can continue the same
+trajectory only when that classification is justified for the whole affected
+set. `CrossingKind::TRANSVERSE` alone is not that justification. Different source
+portions crossing in different steps remain distinct derived trajectories in a
+potentially common recombinable family.
+
+Orbit contributions and successors must remain separate. In the current
+`_apply_evolution_step`, `evolve_sets` can have urgent-guard/time constraints
+which are intentionally absent from `next_working_sets`. An intermediate set
+therefore cannot simply be reused as the next computational checkpoint.
+Similarly, a reach set is a swept set, not an endpoint. Starting events can
+publish a pre-reset reach set and a post-reset intermediate set together.
+
+### Completion and scheduling
+
+The flat backend initially reproduces the existing workload behavior and
+accumulates the tagged contributions directly into an ordinary Orbit. The tree
+backend records results in trajectory entries and can keep newly derived
+children blocked while their parent is still generating continuations.
+
+Returning from one `_advance` invocation completes one work item, not necessarily
+its trajectory. A trajectory becomes COMPLETE only after all its continuations,
+including numerical pieces belonging to it, have been exhausted, all in-flight
+work has returned, and all its generated children and contributions have been
+published. Only then may the backend inspect the complete child group, apply a
+future recombination decision, and release children for evolution.
+
+Track computational status (ready/running/blocked/retired) separately from
+trajectory completion. Numerical subdivision may require several pending pieces
+inside one trajectory; those pieces must not be appended as if they were
+successive time steps. If subdivisions/alternatives are enabled, trajectory
+entries must explicitly represent grouped pieces and their predecessor links.
+Detailed subset/alternative identity rules remain separate design work and are
+not solved by silently turning every work item into a trajectory node.
+
+The backend may reuse DynamicWorkload as its executor. It must submit only work
+which its own policy has made eligible: merely choosing a queue order cannot
+prevent a concurrent executor from starting a child too early. State publication
+and ready-work selection require synchronization. Numerical processing happens
+outside that synchronization, with worker-owned work snapshots; no mutable
+DerivationTree references or children spans are held by workers across commits.
+Begin the tree backend serially before enabling parallel commit/dispatch.
+
+An empty executor queue is not a complete run if the backend still has blocked
+or in-flight work. Completion of a run requires all applicable work to be
+finished and no deferred child-release/recombination decision to remain.
+Exceptions must join outstanding work and propagate rather than return a
+partially computed Orbit as a complete result.
+
+### Orbit compatibility
+
+Preserve all four existing roles: `initial()`, `reach()`, `intermediate()` and
+`final()`. The initial enclosure is the original input, not a recombined root or
+the collection of all trajectory seeds.
+
+Tree leaves are not final sets, and COMPLETE does not imply a final contribution.
+For example, an empty continuation completes local evolution without adding a
+final set. Conversely, the existing time-straddling logic may emit a final slice
+while retaining further work. Preserve explicit classifications made by the
+evolver; neither topology nor a generic terminal flag can reconstruct them.
+
+For the tree backend, materialize Orbit from valid tagged contributions at the
+end. Avoid an append-only global Orbit as a second authoritative representation:
+pruning/backtracking would otherwise leave obsolete contributions in it. Logical
+retirement of pending recombination sources prevents further evolution, but does
+not by itself invalidate previously validated history. Actual backtracking must
+invalidate contributions derived from the truncated history as well as work
+tickets; pruning generic nodes alone does neither.
+
+Without recombination or different numerical choices, flat/tree results should
+match the same classified enclosure contributions, disregarding scheduling order
+where concurrent ordering was already unspecified. With recombination enabled,
+the public result contract is preserved, but enclosure counts and partitions
+may legitimately differ. Soundness must be established for the requested
+semantics: an enclosing hull may be acceptable for an upper approximation but
+is not a generic sound recombination for lower semantics.
+
+`release_orbit()` moves the flat accumulator or gathers the tree's valid results.
+Keeping a queryable tree after `orbit()` returns would need a separate detailed
+result/session API; changing the existing return type is not required for this
+first refactoring.
+
+### Configuration and recombination ownership
+
+Keep numerical configuration with the work/entry it governs, sharing immutable
+snapshots when unchanged. Future alternatives must read the item's configuration,
+not mutate the evolver's shared global configuration. Integrator/solver state
+must follow the same rule; assigning a configuration pointer to a work item is
+insufficient if helpers still read mutable evolver state. Initially all work may
+use one per-run snapshot, preserving current numerical behavior.
+
+The backend identifies candidate groups through provenance and controls when a
+decision may run. A domain-specific policy must validate and construct any
+recombined enclosure; the generic Tree container does not make this numerical
+decision. Parent completion alone is not a recombination certificate.
+
+Replacements are newly added trajectories with explicit source provenance.
+Pending absorbed sources may be logically retired in Evolution metadata.
+There is no reparenting or insertion between existing generic nodes.
+`DerivationTree::prune(id)` removes every strict descendant, so it cannot erase
+an arbitrary selected subset of sibling sources; do not assume that operation
+exists. Preserve provenance before invalidating any referenced history.
+
+### Incremental migration and verification
+
+1. Replace the anonymous Boolean with a named processing phase and introduce
+   the step-local result. Route all current result/queue writes through this
+   record, initially retaining the existing executor and numerical choices.
+2. Move execution and accumulation into the flat backend. Adapt the five coupled
+   methods and make `_log_summary` read backend counters rather than an Orbit
+   accumulator. Keep `orbit()` overloads and default behavior unchanged.
+3. Add the serial tree backend with the same callback/result contract, append
+   history, explicit trajectory birth and completion, and parent-first dispatch.
+   Initially disable recombination so numerical behavior can be compared.
+4. Specify subset/alternative records before claiming support for those tree
+   cases; add completion accounting for all pieces. Introduce recombination at
+   the completed-parent boundary only after its semantic checks are specified.
+5. Add parallel tree dispatch and backtracking only with synchronized publication,
+   stale-ticket rejection, configuration isolation and invalidation of derived
+   contributions. These are not prerequisites for the initial backend boundary.
+
+Verify the flat backend against existing orbit tests, then both backends on the
+same systems with recombination disabled. Cover immediate/permissive/urgent
+events, competing jumps, repeated guard crossings across steps, empty exhausted
+continuations, invariant rejection, final-time slices, discrete termination,
+reconditioning and subdivision. Check classified coverage as well as counts;
+use deterministic serial runs where exact collection comparison is appropriate.
+Scheduler tests must show that a child is recorded before its parent completes
+but is not dispatched until the completed child group has been handled, and that
+one completed split piece cannot prematurely complete its trajectory.

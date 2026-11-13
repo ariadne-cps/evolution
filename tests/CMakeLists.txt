@@ -5,6 +5,7 @@ set(UNIT_TESTS
     test_hybrid_time
     test_hybrid_enclosure
     test_hybrid_evolver
+    test_hybrid_evolution_backend
     test_hybrid_step_contracts
     test_hybrid_simulator
     test_first_order_pde

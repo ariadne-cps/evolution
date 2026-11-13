@@ -361,26 +361,11 @@ Orbit<HybridEnclosure>
     ARIADNE_PRECONDITION(this->system().state_auxiliary_space().has_location(initial.location()))
     ARIADNE_PRECONDITION(this->system().state_auxiliary_space()[initial.location()] == initial.state_auxiliary_space())
 
-    auto result = std::make_shared<SynchronisedOrbit>(initial);
-    const double progress_start = initial.time_range().lower_bound().get_d();
-    const double progress_duration = termination.maximum_time().get_d() - progress_start;
-    WorkloadType workload([progress_start, progress_duration](const std::pair<HybridEnclosure, Bool>& enclosure_jumped, SharedPointer<ProgressIndicator> indicator) {
-        // Initial clocks may be negative or already past the horizon.
-        // ProgressIndicator requires a nonnegative numerator and a
-        // positive denominator when converting its ratio to unsigned.
-        if (progress_duration > 0.0) {
-            const double elapsed = enclosure_jumped.first.time_range().lower_bound().get_d() - progress_start;
-            indicator->update_current(std::clamp(elapsed, 0.0, progress_duration));
-            indicator->update_final(progress_duration);
-        } else {
-            indicator->update_current(1.0);
-            indicator->update_final(1.0);
-        }
-    },
-                          std::bind_front(&HybridEvolverBase::_process_working_set, this), termination, semantics, result);
-    workload.append({initial, true}).process();
-
-    return std::move(*result);
+    auto backend = _backend_factory_ptr->create(initial, termination.maximum_time());
+    backend->run([this, &termination, semantics](const HybridEvolutionWorkItem& item, const HybridEvolutionStatistics& statistics) {
+        return this->_process_working_set(item, termination, semantics, statistics);
+    });
+    return backend->release_orbit();
 }
 
 HybridEvolverBase::HybridEvolverBase(const SystemType& system) {
@@ -398,6 +383,7 @@ Void HybridEvolverBase::_create(
     this->_sys_ptr = std::shared_ptr<SystemType>(system.clone());
     this->_function_factory_ptr = factory.managed_pointer();
     this->_solver_ptr = std::shared_ptr<EquationSolverInterface>(new IntervalNewtonSolver(1e-8, 12));
+    this->_backend_factory_ptr = std::make_shared<FlatHybridEvolutionBackendFactory>();
     this->ALLOW_CREEP = true;
     this->ALLOW_UNWIND = false;
 }
@@ -434,6 +420,10 @@ Void HybridEvolverBase::set_solver(const EquationSolverInterface& solver) {
     this->_solver_ptr = std::shared_ptr<EquationSolverInterface>(solver.clone());
 }
 
+Void HybridEvolverBase::set_evolution_backend_factory(const HybridEvolutionBackendFactoryInterface& factory) {
+    _backend_factory_ptr = std::shared_ptr<const HybridEvolutionBackendFactoryInterface>(factory.clone());
+}
+
 HybridEvolverBase::EnclosureType
     HybridEvolverBase::enclosure(const HybridExactBox& initial_box) const {
     HybridEnclosure result(initial_box, EnclosureConfiguration(this->function_factory()));
@@ -456,15 +446,15 @@ struct EvolutionStepData {
 };
 
 Void HybridEvolverBase::
-    _log_summary(const HybridEnclosure& starting_set, SharedPointer<SynchronisedOrbit> result) const {
+    _log_summary(const HybridEnclosure& starting_set, const HybridEvolutionStatistics& statistics) const {
     UpperBoxType starting_bounding_box = starting_set.state_bounding_box();
     UpperIntervalType starting_time_range = starting_set.time_range();
     UpperIntervalType starting_dwell_time_range = starting_set.dwell_time_range();
     std::streamsize old_precision = std::clog.precision();
     LOGGING_PRINTLN(
-        "#r=" << std::setw(5) << std::left << result->reach_size()
-              << " #i=" << std::setw(5) << std::left << result->intermediate_size()
-              << " #f=" << std::setw(4) << std::left << result->final_size()
+        "#r=" << std::setw(5) << std::left << statistics.reach
+              << " #i=" << std::setw(5) << std::left << statistics.intermediate
+              << " #f=" << std::setw(4) << std::left << statistics.final
               << " #e=" << std::setw(3) << std::left << starting_set.previous_events().size()
               << " #p=" << std::setw(2) << std::left << starting_set.number_of_parameters()
               << " #c=" << std::setw(1) << std::left << starting_set.number_of_constraints()
@@ -543,10 +533,9 @@ Void HybridEvolverBase::
 }
 
 Void HybridEvolverBase::
-    _process_starting_events(WorkloadType::Access& workload,
-                             const HybridEnclosure& initial_set,
+    _process_starting_events(const HybridEnclosure& initial_set,
                              const Map<DiscreteEvent, TransitionData>& transitions,
-                             SharedPointer<SynchronisedOrbit> result) const {
+                             HybridEvolutionStepResult& result) const {
     LOGGING_SCOPE_CREATE;
     HybridEnclosure invariant_set = initial_set;
 
@@ -577,11 +566,11 @@ Void HybridEvolverBase::
                     if (!definitely(immediate_jump_set.is_empty())) {
                         // Put the immediate jump set in the reached sets, since it does not occur in the flowable set
                         LOGGING_PRINTLN_AT(1, event << ": " << transition.event_kind << ", immediate");
-                        result->adjoin_reach(immediate_jump_set);
+                        result.record_reach(immediate_jump_set);
                         immediate_jump_set.apply_reset(event, transition.target, transition.target_space, transition.reset_function, transition.target_auxiliary_space, transition.target_auxiliary_function);
                         LOGGING_PRINTLN_AT(2, "immediate_jump_set=" << immediate_jump_set);
-                        result->adjoin_intermediate(immediate_jump_set);
-                        workload.append({immediate_jump_set, true});
+                        result.record_intermediate(immediate_jump_set);
+                        result.transition_to(immediate_jump_set, event, transition.event_kind);
                     }
                 }
                 if (transition.event_kind != EventKind::PERMISSIVE) {
@@ -593,7 +582,7 @@ Void HybridEvolverBase::
 
     // Put the flowable set in the starting sets for ordinary evolution
     if (!definitely(flowable_set.is_empty())) {
-        workload.append({flowable_set, false});
+        result.continue_with(flowable_set);
     }
 }
 
@@ -1159,10 +1148,9 @@ Void HybridEvolverBase::
 }
 
 Void HybridEvolverBase::
-    _process_jumped_set(WorkloadType::Access& workload,
-                        const HybridEnclosure& jumped_set,
+    _process_jumped_set(const HybridEnclosure& jumped_set,
                         const TerminationType& termination,
-                        SharedPointer<SynchronisedOrbit> result) const {
+                        HybridEvolutionStepResult& result) const {
     const Real final_time = termination.maximum_time();
     const Integer maximum_steps = termination.maximum_steps();
     const Set<DiscreteEvent>& terminating_events = termination.terminating_events();
@@ -1173,6 +1161,7 @@ Void HybridEvolverBase::
     LOGGING_RUN_MUTED(auto time_range = initial_set.time_range());
     if (definitely(time_range.lower_bound() > final_time)) {
         ARIADNE_WARN("initial_set.time_range()=" << time_range << " which exceeds final time=" << final_time);
+        result.stop_reason = HybridEvolutionStopReason::PAST_HORIZON;
         return;
     }
 
@@ -1194,8 +1183,9 @@ Void HybridEvolverBase::
         // further continuous or discrete evolution.
         this->_apply_invariants(initial_set, transitions);
         initial_set.set_time(final_time);
+        result.stop_reason = HybridEvolutionStopReason::TIME_LIMIT;
         if (!definitely(initial_set.is_empty())) {
-            result->adjoin_final(initial_set);
+            result.record_final(initial_set);
         }
         return;
     }
@@ -1206,7 +1196,8 @@ Void HybridEvolverBase::
     if (initial_set.previous_events().size() >= maximum_steps) {
         LOGGING_PRINTLN_AT(2, "initial_set has undergone more than the maximum number of events (" << maximum_steps << ")");
         LOGGING_RUN_AT(1, this->_apply_invariants(initial_set, transitions));
-        result->adjoin_final(initial_set);
+        result.record_final(initial_set);
+        result.stop_reason = HybridEvolutionStopReason::DISCRETE_LIMIT;
         return;
     }
 
@@ -1214,38 +1205,46 @@ Void HybridEvolverBase::
     if (initial_set.previous_events().size() >= 1 && terminating_events.contains(initial_set.previous_events().back())) {
         LOGGING_PRINTLN_AT(2, "initial_set has undergone event " << initial_set.previous_events().back());
         LOGGING_RUN_AT(1, this->_apply_invariants(initial_set, transitions));
-        result->adjoin_final(initial_set);
+        result.record_final(initial_set);
+        result.stop_reason = HybridEvolutionStopReason::TERMINATING_EVENT;
         return;
     }
 
     // Process the initially active events; cut out active points to leave initial flowable set.
     LOGGING_PRINTLN_AT(2, "initial_set has not reached the discrete termination condition");
 
-    this->_process_starting_events(workload, initial_set, transitions, result);
+    this->_process_starting_events(initial_set, transitions, result);
 }
 
-Void HybridEvolverBase::
-    _process_working_set(WorkloadType::Access& workload,
-                         const Pair<HybridEnclosure, Bool>& working_set,
+HybridEvolutionStepResult HybridEvolverBase::
+    _process_working_set(const HybridEvolutionWorkItem& working_set,
                          const HybridTerminationCriterion& termination,
                          const Semantics& semantics,
-                         SharedPointer<SynchronisedOrbit> result) const {
+                         const HybridEvolutionStatistics& statistics) const {
     LOGGING_SCOPE_CREATE;
-
-    if (working_set.second) {
-        this->_process_jumped_set(workload, working_set.first, termination, result);
-        return;
+    HybridEvolutionStepResult result;
+    switch (working_set.phase) {
+        case HybridEvolutionPhase::PROCESS_STARTING_EVENTS:
+            this->_process_jumped_set(working_set.enclosure, termination, result);
+            break;
+        case HybridEvolutionPhase::EVOLVE_CONTINUOUSLY:
+            this->_log_summary(working_set.enclosure, statistics);
+            this->_evolution_step(working_set.enclosure, termination.maximum_time(), semantics, result);
+            break;
+        default:
+            ARIADNE_FAIL_MSG("Unknown hybrid evolution processing phase");
     }
-
-    this->_evolution_step(workload, working_set.first, termination.maximum_time(), semantics, result);
+    if (result.successors.empty() && result.stop_reason == HybridEvolutionStopReason::NONE) {
+        result.stop_reason = HybridEvolutionStopReason::NO_CONTINUATION;
+    }
+    return result;
 }
 
 Void HybridEvolverBase::
-    _evolution_step(WorkloadType::Access& workload,
-                    const HybridEnclosure& set,
+    _evolution_step(const HybridEnclosure& set,
                     const Real& final_time,
                     const Semantics& semantics,
-                    SharedPointer<SynchronisedOrbit> result) const {
+                    HybridEvolutionStepResult& result) const {
     HybridEnclosure starting_set = set;
 
     const DiscreteLocation& location = starting_set.location();
@@ -1254,17 +1253,17 @@ Void HybridEvolverBase::
 
     LOGGING_PRINTLN_AT(2, "dynamic=" << dynamic);
 
-    _log_summary(starting_set, result);
-
     LOGGING_PRINTLN_AT(2, "starting_set=" << starting_set);
     LOGGING_PRINTLN_AT(2, "starting_time=" << starting_set.time_function());
     if (definitely(starting_set.is_empty())) {
         LOGGING_PRINTLN_AT(1, "Empty starting_set " << starting_set);
+        result.stop_reason = HybridEvolutionStopReason::EMPTY;
         return;
     }
 
     if (definitely(starting_set.time_range().lower_bound() >= final_time)) {
         ARIADNE_WARN("starting_set.time_range()=" << starting_set.time_range() << " which exceeds final time=" << final_time);
+        result.stop_reason = HybridEvolutionStopReason::PAST_HORIZON;
         return;
     }
 
@@ -1278,7 +1277,7 @@ Void HybridEvolverBase::
         LOGGING_PRINTLN_AT(1, "reconditioning: errors " << starting_set.state_function().errors());
         HybridEnclosure reconditioned_set = starting_set;
         this->_recondition(reconditioned_set);
-        workload.append({reconditioned_set, false});
+        result.continue_with(reconditioned_set, HybridEvolutionSuccessorKind::RECONDITIONING);
         return;
     }
 
@@ -1286,13 +1285,14 @@ Void HybridEvolverBase::
     if (possibly(starting_bounding_box.radius() > this->_configuration_ptr->maximum_enclosure_radius())) {
         if (semantics == Semantics::LOWER) {
             LOGGING_PRINTLN_AT(1, "Set too large, discarding");
+            result.stop_reason = HybridEvolutionStopReason::LOWER_SIZE_LIMIT;
             return;
         } else if (this->_configuration_ptr->enable_subdivisions()) {
             LOGGING_PRINTLN_AT(1, "Set too large, splitting");
             List<HybridEnclosure> split_sets = starting_set.split();
             for (SizeType i = 0; i != split_sets.size(); ++i) {
                 if (!definitely(split_sets[i].is_empty())) {
-                    workload.append({split_sets[i], false});
+                    result.continue_with(split_sets[i], HybridEvolutionSuccessorKind::SUBDIVISION);
                 }
             }
             return;
@@ -1335,19 +1335,18 @@ Void HybridEvolverBase::
 
     // Apply the time step
     HybridEnclosure reach_set, evolve_set;
-    this->_apply_evolution_step(workload, starting_set, flow_model, timing_data, crossings, dynamic, transitions, semantics, result);
+    this->_apply_evolution_step(starting_set, flow_model, timing_data, crossings, dynamic, transitions, semantics, result);
 }
 
 Void HybridEvolverBase::
-    _apply_evolution_step(WorkloadType::Access& workload,
-                          const HybridEnclosure& starting_set,
+    _apply_evolution_step(const HybridEnclosure& starting_set,
                           const ValidatedVectorMultivariateFunctionPatch& flow,
                           const TimingData& timing_data,
                           const Map<DiscreteEvent, CrossingData>& crossings,
                           const EffectiveVectorMultivariateFunction& dynamic,
                           const Map<DiscreteEvent, TransitionData>& transitions,
                           const Semantics& semantics,
-                          SharedPointer<SynchronisedOrbit> result) const {
+                          HybridEvolutionStepResult& result) const {
     LOGGING_SCOPE_CREATE;
 
     // The sole caller, _evolution_step, has already rejected an empty set.
@@ -1426,14 +1425,14 @@ Void HybridEvolverBase::
             const HybridEnclosure& evolve_set = *evolve_set_iter;
             if (!definitely(evolve_set.is_empty())) {
                 LOGGING_PRINTLN("final_set=" << evolve_set);
-                result->adjoin_final(evolve_set);
+                result.record_final(evolve_set);
                 _step_data.finishing = true;
             }
         }
         for (List<HybridEnclosure>::ConstIterator reach_set_iter = reach_sets.begin();
              reach_set_iter != reach_sets.end(); ++reach_set_iter) {
             const HybridEnclosure& reach_set = *reach_set_iter;
-            result->adjoin_reach(reach_set);
+            result.record_reach(reach_set);
         }
     } else { // (timing_data.finishing_kind!=AT_FINAL_TIME)
         List<HybridEnclosure>::Iterator next_working_set_iter = next_working_sets.begin();
@@ -1449,8 +1448,8 @@ Void HybridEvolverBase::
                 if (!definitely(evolve_set.is_empty())) {
                     LOGGING_PRINTLN("evolve_set=" << evolve_set);
                     LOGGING_PRINTLN("next_working_set=" << next_working_set);
-                    workload.append({next_working_set, false});
-                    result->adjoin_intermediate(evolve_set);
+                    result.continue_with(next_working_set);
+                    result.record_intermediate(evolve_set);
                     _step_data.progress = true;
                 }
             } else {
@@ -1464,8 +1463,8 @@ Void HybridEvolverBase::
                 if (!definitely(evolve_set.is_empty())) {
                     LOGGING_PRINTLN("evolve_set=" << evolve_set);
                     LOGGING_PRINTLN("next_working_set=" << next_working_set);
-                    workload.append({next_working_set, false});
-                    result->adjoin_intermediate(evolve_set);
+                    result.continue_with(next_working_set);
+                    result.record_intermediate(evolve_set);
                     _step_data.progress = true;
                 }
             }
@@ -1481,12 +1480,12 @@ Void HybridEvolverBase::
                 if (timing_data.finishing_kind != FinishingKind::BEFORE_FINAL_TIME && !definitely(final_set.is_empty())) {
                     // if(!definitely(final_set.is_empty())) {
                     LOGGING_PRINTLN("final_set=" << final_set);
-                    result->adjoin_final(final_set);
+                    result.record_final(final_set);
                     _step_data.finishing = true;
                 }
             }
             reach_set.bound_time(timing_data.final_time);
-            result->adjoin_reach(reach_set);
+            result.record_reach(reach_set);
         }
     }
 
@@ -1546,13 +1545,16 @@ Void HybridEvolverBase::
                 LOGGING_PRINTLN_AT(2, "target=" << target << ", auxiliary_space=" << this->system().continuous_auxiliary_space(target) << ", auxiliary_function=" << this->system().auxiliary_function(target));
                 const TransitionData& transition = transitions[event];
                 _jump_set.apply_reset(event, target, transition.target_space, transition.reset_function, transition.target_auxiliary_space, transition.target_auxiliary_function);
-                workload.append({_jump_set, true});
+                result.transition_to(_jump_set, event, transition.event_kind, crossings[event].crossing_kind);
                 _step_data.events.insert(event);
                 LOGGING_PRINTLN_AT(2, "jump_set=" << _jump_set);
             }
         }
     }
 
+    if (result.successors.empty() && _step_data.finishing) {
+        result.stop_reason = HybridEvolutionStopReason::TIME_LIMIT;
+    }
     if (_step_data.finishing || !_step_data.progress || !_step_data.events.empty()) {
         LOGGING_PRINTLN_AT(2, timing_data.finishing_kind << " " << _step_data.events << (_step_data.progress ? " progress" : " no progress"));
     }

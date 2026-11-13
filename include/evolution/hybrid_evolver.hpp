@@ -36,13 +36,13 @@
 
 #include "evolution/configuration_interface.hpp"
 #include "evolution/hybrid_enclosure.hpp"
+#include "evolution/hybrid_evolution_backend.hpp"
 #include "evolution/hybrid_evolver_interface.hpp"
 #include "evolution/hybrid_orbit.hpp"
 #include "evolution/hybrid_time.hpp"
 #include "hybrid/hybrid_set.hpp"
 #include "logging/logging.hpp"
 #include "system/hybrid_automaton_interface.hpp"
-#include "threading/workload.hpp"
 #include "utility/tuple.hpp"
 
 namespace Ariadne {
@@ -118,41 +118,6 @@ class HybridEvolverBase
     typedef Orbit<EnclosureType> OrbitType;
     typedef ListSet<HybridEnclosure> EnclosureListType;
 
-  private:
-    //! \brief Synchronised wrapping of orbit to allow concurrent adjoining
-    struct SynchronisedOrbit : public OrbitType {
-        SynchronisedOrbit(const EnclosureType& initial) : OrbitType(initial) {}
-        Void adjoin_reach(const EnclosureType& set) {
-            LockGuard<Mutex> lock(_mux);
-            OrbitType::adjoin_reach(set);
-        }
-        Void adjoin_intermediate(const EnclosureType& set) {
-            LockGuard<Mutex> lock(_mux);
-            OrbitType::adjoin_intermediate(set);
-        }
-        Void adjoin_final(const EnclosureType& set) {
-            LockGuard<Mutex> lock(_mux);
-            OrbitType::adjoin_final(set);
-        }
-        SizeType reach_size() const {
-            LockGuard<Mutex> lock(_mux);
-            return OrbitType::reach().size();
-        }
-        SizeType intermediate_size() const {
-            LockGuard<Mutex> lock(_mux);
-            return OrbitType::intermediate().size();
-        }
-        SizeType final_size() const {
-            LockGuard<Mutex> lock(_mux);
-            return OrbitType::final().size();
-        }
-
-      private:
-        mutable Mutex _mux;
-    };
-    typedef Pair<EnclosureType, Bool> WorkloadElementType;
-    typedef DynamicWorkload<WorkloadElementType, const TerminationType&, const Semantics&, SharedPointer<SynchronisedOrbit>> WorkloadType;
-
   public:
     //! \brief Default constructor.
     HybridEvolverBase(const SystemType& system);
@@ -189,6 +154,11 @@ class HybridEvolverBase
     //! \brief Set the class which integrates the continuous dynamics.
     Void set_solver(const EquationSolverInterface& solver);
 
+    /** @brief Select a backend factory by cloning its settings; each orbit call creates a fresh run.
+     *  @note Set configuration before invoking orbit; concurrent reconfiguration is unsupported.
+     */
+    Void set_evolution_backend_factory(const HybridEvolutionBackendFactoryInterface& factory);
+
     Bool ALLOW_CREEP;  //!< If true, a less-than-full evolution step may be taken to avoid splitting due to partially crossing a guard.
     Bool ALLOW_UNWIND; //!< If true, a less-than-full evolution step may be taken to try to restore all time values over the parameter domain to the same value.
     //!@}
@@ -219,28 +189,22 @@ class HybridEvolverBase
     //!@}
 
   protected:
-    //! \brief Processes a single working set.
-    //!
-    //! Takes a set from evolution_data.starting_sets and possibly processes the active
-    //! events.
-    //! The resulting set is then evolved using until
-    //! either the maximum continuous time is reached, or no further continuous
-    //! evolution is possible.
-    virtual Void
-        _process_working_set(WorkloadType::Access& workload,
-                             const Pair<HybridEnclosure, Bool>& working_set,
+    //! \brief Compute one local outcome without scheduling or publishing shared results.
+    //! \details The processing phase selects starting-event handling or a continuous
+    //! step. The backend owns the returned contributions and successors.
+    virtual HybridEvolutionStepResult
+        _process_working_set(const HybridEvolutionWorkItem& working_set,
                              const TerminationType& termination,
                              const Semantics& semantics,
-                             SharedPointer<SynchronisedOrbit> result) const;
+                             const HybridEvolutionStatistics& statistics) const;
 
     //! \brief Performs an evolution step on an \a enclosure, where initially active
     //! events have already been processed and only the continuous \a final_time is necessary.
     virtual Void
-        _evolution_step(WorkloadType::Access& workload,
-                        const HybridEnclosure& enclosure,
+        _evolution_step(const HybridEnclosure& enclosure,
                         const Real& final_time,
                         const Semantics& semantics,
-                        SharedPointer<SynchronisedOrbit> result) const;
+                        HybridEvolutionStepResult& result) const;
 
     //! \brief Extracts the transitions valid in \a location of \a system.
     //! \details For some systems, extracting the information about the
@@ -330,10 +294,9 @@ class HybridEvolverBase
         _recondition(HybridEnclosure& set) const;
 
     virtual Void
-        _process_jumped_set(WorkloadType::Access& workload,
-                            const HybridEnclosure& jumped_set,
+        _process_jumped_set(const HybridEnclosure& jumped_set,
                             const TerminationType& termination,
-                            SharedPointer<SynchronisedOrbit> result) const;
+                            HybridEvolutionStepResult& result) const;
 
     //! \brief Process the \a starting_set to find any
     //!  <em>immediately active</em> events, and compute the relevant \em jump sets
@@ -350,10 +313,9 @@ class HybridEvolverBase
     //! to give the flowable set
     //! \f$P=\{ x\in I \mid \forall e\in E_{\mathrm{tcp}},\ p_e(x)\leq0\}\f$.
     virtual Void
-        _process_starting_events(WorkloadType::Access& workload,
-                                 const HybridEnclosure& starting_set,
+        _process_starting_events(const HybridEnclosure& starting_set,
                                  const Map<DiscreteEvent, TransitionData>& transitions,
-                                 SharedPointer<SynchronisedOrbit> result) const;
+                                 HybridEvolutionStepResult& result) const;
 
     //! \brief Apply the \a flow to the \a set up to the time specified by \a timing_data
     //! to obtain the single-step unconstrained reachable set.
@@ -446,20 +408,19 @@ class HybridEvolverBase
     //!
     //! TODO: This method might be better split into even simpler events.
     virtual Void
-        _apply_evolution_step(WorkloadType::Access& workload,
-                              const HybridEnclosure& starting_set,
+        _apply_evolution_step(const HybridEnclosure& starting_set,
                               const ValidatedVectorMultivariateFunctionPatch& flow,
                               const TimingData& timing_data,
                               const Map<DiscreteEvent, CrossingData>& crossing_data,
                               const EffectiveVectorMultivariateFunction& dynamic,
                               const Map<DiscreteEvent, TransitionData>& transitions,
                               const Semantics& semantics,
-                              SharedPointer<SynchronisedOrbit> result) const;
+                              HybridEvolutionStepResult& result) const;
 
     //! \brief Output a one-line summary of the current evolution state to the logging stream.
     virtual Void
         /** @brief Perform the specified evolution operation. */
-        _log_summary(const HybridEnclosure& starting_set, SharedPointer<SynchronisedOrbit> result) const;
+        _log_summary(const HybridEnclosure& starting_set, const HybridEvolutionStatistics& statistics) const;
 
   protected:
     /** @brief Perform the specified evolution operation. */
@@ -468,6 +429,7 @@ class HybridEvolverBase
 
   private:
     std::shared_ptr<FunctionFactoryType::Interface> _function_factory_ptr;
+    std::shared_ptr<const HybridEvolutionBackendFactoryInterface> _backend_factory_ptr;
 
   protected:
     std::shared_ptr<EquationSolverInterface> _solver_ptr;

@@ -66,10 +66,6 @@ class TestEnclosureOperations : public Ariadne::Testing::ContextFixture {
     void test_constructors_and_configuration() {
         EnclosureConfiguration copied(static_cast<const ValidatedFunctionPatchFactory::Interface&>(factory()), 2u);
         ARIADNE_TESTING_EXPECT_EQUAL(copied.reconditioning_num_blocks(), 2u);
-        copied.set_paver(Paver(new SubdivisionPaver()));
-        std::ostringstream description;
-        description << copied.paver();
-        ARIADNE_TESTING_PROVE(description.str().find("SubdivisionPaver") != std::string::npos);
         Enclosure plain(domain, identity, config);
         Enclosure constrained(domain, identity, List<ValidatedConstraint>{ValidatedConstraint(-1, coordinate, 1)}, config);
         ARIADNE_TESTING_EXPECT_EQUAL(constrained.number_of_constraints(), 1u);
@@ -250,9 +246,8 @@ class TestEnclosureOperations : public Ariadne::Testing::ContextFixture {
         ARIADNE_TESTING_PROVE(reduced.state_function()[0].range().upper_bound().raw().get_d() >= 6.0);
         ARIADNE_TESTING_EXPECT_EXCEPTION(config.set_reconditioning_num_blocks(0u));
         ARIADNE_TESTING_EXPECT_EXCEPTION(EnclosureConfiguration(config.function_factory(), 0u));
-        ARIADNE_TESTING_EXPECT_EXCEPTION(EnclosureConfiguration(config.function_factory(), config.paver(), 0u));
-        EnclosureConfiguration explicit_paver(config.function_factory(), config.paver(), 1u);
-        ARIADNE_TESTING_EXPECT_EQUAL(explicit_paver.reconditioning_num_blocks(), 1u);
+        EnclosureConfiguration explicit_blocks(config.function_factory(), 1u);
+        ARIADNE_TESTING_EXPECT_EQUAL(explicit_blocks.reconditioning_num_blocks(), 1u);
     }
 
     void test_clock_error_reconditioning() {

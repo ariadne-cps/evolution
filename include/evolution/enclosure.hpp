@@ -40,7 +40,6 @@
 #include "geometry/set_interface.hpp"
 #include "labelled/graphics_interface.hpp"
 #include "numeric/numeric.hpp"
-#include "paving/paver.hpp"
 #include "symbolic/identifier.hpp"
 #include "utility/container.hpp"
 
@@ -76,7 +75,6 @@ typedef Dyadic StepSizeType;
 class EnclosureConfiguration {
   private:
     ValidatedFunctionPatchFactory _function_factory;
-    Paver _paver;
     SizeType _reconditioning_num_blocks;
 
   public:
@@ -84,15 +82,8 @@ class EnclosureConfiguration {
     explicit EnclosureConfiguration(ValidatedFunctionPatchFactory function_factory, SizeType reconditioning_num_blocks = 3u);
     explicit EnclosureConfiguration(const ValidatedFunctionPatchFactory::Interface& function_factory, SizeType reconditioning_num_blocks = 3u)
         : EnclosureConfiguration(ValidatedFunctionPatchFactory(function_factory.clone()), reconditioning_num_blocks) {}
-    EnclosureConfiguration(ValidatedFunctionPatchFactory function_factory, Paver paver, SizeType reconditioning_num_blocks = 3u)
-        : _function_factory(function_factory), _paver(paver), _reconditioning_num_blocks(reconditioning_num_blocks) { ARIADNE_PRECONDITION(reconditioning_num_blocks > 0u); }
     const ValidatedFunctionPatchFactory& function_factory() const { return _function_factory; }
-    const Paver& paver() const { return _paver; }
     SizeType reconditioning_num_blocks() const { return _reconditioning_num_blocks; }
-    EnclosureConfiguration& set_paver(Paver paver) {
-        _paver = paver;
-        return *this;
-    }
     EnclosureConfiguration& set_reconditioning_num_blocks(SizeType num_blocks) {
         ARIADNE_PRECONDITION(num_blocks > 0u);
         _reconditioning_num_blocks = num_blocks;

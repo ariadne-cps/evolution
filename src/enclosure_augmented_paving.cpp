@@ -41,7 +41,7 @@
 
 namespace Ariadne {
 
-Void adjoin_outer_approximation_to(const Enclosure& enclosure, AugmentedPaving& paving, Nat fineness) {
+Void adjoin_outer_approximation_to(const Enclosure& enclosure, AugmentedPaving& paving, Nat fineness, const Paver& paver) {
     if (enclosure.auxiliary_mapping().result_size() != 0 &&
         enclosure.auxiliary_mapping().managed_pointer() == paving.auxiliary_mapping().managed_pointer()) {
         ARIADNE_WARN("enclosure=" << enclosure << ", "
@@ -50,17 +50,17 @@ Void adjoin_outer_approximation_to(const Enclosure& enclosure, AugmentedPaving& 
                                                                       "paving.auxiliary_mapping()="
                                   << paving.auxiliary_mapping());
     }
-    enclosure.configuration().paver().adjoin_outer_approximation(paving.state_paving(), enclosure.state_set(), fineness);
+    paver.adjoin_outer_approximation(paving.state_paving(), enclosure.state_set(), fineness);
 }
 
-AugmentedPaving outer_approximation(const Enclosure& enclosure, const Grid& grid, Nat fineness) {
+AugmentedPaving outer_approximation(const Enclosure& enclosure, const Grid& grid, Nat fineness, const Paver& paver) {
     AugmentedPaving result(grid, enclosure.auxiliary_mapping());
-    adjoin_outer_approximation_to(enclosure, result, fineness);
+    adjoin_outer_approximation_to(enclosure, result, fineness, paver);
     return result;
 }
 
-Void adjoin_outer_approximation_to(const HybridEnclosure& enclosure, HybridAugmentedPaving& paving, Nat fineness) {
-    enclosure.adjoin_outer_approximation_to(paving.state_paving(), fineness);
+Void adjoin_outer_approximation_to(const HybridEnclosure& enclosure, HybridAugmentedPaving& paving, Nat fineness, const Paver& paver) {
+    enclosure.adjoin_outer_approximation_to(paving.state_paving(), fineness, paver);
 }
 
 } // namespace Ariadne

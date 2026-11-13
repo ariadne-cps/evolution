@@ -29,6 +29,7 @@
 // Verify the continuous and hybrid enclosure-to-augmented-paving adapters.
 #include "evolution/enclosure_augmented_paving.hpp"
 #include "function/taylor_function.hpp"
+#include "paving/paver.hpp"
 
 #include "ariadne-testing.hpp"
 
@@ -48,21 +49,22 @@ class TestEnclosureAugmentedPaving : public Ariadne::Testing::ContextFixture {
         enclosure.set_auxiliary_mapping(EffectiveVectorMultivariateFunction::identity(2u));
 
         Grid grid(2u);
-        AugmentedPaving generated = outer_approximation(enclosure, grid, 2u);
+        Paver paver(new AffinePaver());
+        AugmentedPaving generated = outer_approximation(enclosure, grid, 2u, paver);
         ARIADNE_TESTING_PROVE(generated.size() > 0u);
         ARIADNE_TESTING_EXPECT_EQUAL(generated.dimension(), 2u);
         ARIADNE_TESTING_EXPECT_EQUAL(generated.state_auxiliary_paving().dimension(), 4u);
 
         AugmentedPaving explicit_paving(grid, enclosure.auxiliary_mapping());
-        adjoin_outer_approximation_to(enclosure, explicit_paving, 2u);
+        adjoin_outer_approximation_to(enclosure, explicit_paving, 2u, paver);
         ARIADNE_TESTING_PROVE(explicit_paving.size() > 0u);
         ARIADNE_TESTING_PROVE(subset(generated.state_paving(), explicit_paving.state_paving()));
         ARIADNE_TESTING_PROVE(subset(explicit_paving.state_paving(), generated.state_paving()));
         AugmentedPaving independent(grid, EffectiveVectorMultivariateFunction::identity(2u));
-        adjoin_outer_approximation_to(enclosure, independent, 2u);
+        adjoin_outer_approximation_to(enclosure, independent, 2u, paver);
         ARIADNE_TESTING_PROVE(subset(independent.state_paving(), generated.state_paving()));
         Enclosure without_auxiliary(domain, config);
-        auto state_only = outer_approximation(without_auxiliary, grid, 2u);
+        auto state_only = outer_approximation(without_auxiliary, grid, 2u, paver);
         ARIADNE_TESTING_PROVE(subset(state_only.state_paving(), generated.state_paving()));
     }
 
@@ -88,7 +90,8 @@ class TestEnclosureAugmentedPaving : public Ariadne::Testing::ContextFixture {
         HybridAuxiliaryMapping mapping(HybridSpace(extended),
                                        [labelled](const DiscreteLocation&) { return labelled; });
         HybridAugmentedPaving paving(HybridGrid(state), mapping);
-        adjoin_outer_approximation_to(enclosure, paving, 2u);
+        Paver paver(new AffinePaver());
+        adjoin_outer_approximation_to(enclosure, paving, 2u, paver);
         ARIADNE_TESTING_PROVE(paving.size() > 0u);
         ARIADNE_TESTING_EXPECT_EQUAL(paving.auxiliary_mapping(location).argument_space(), state_space);
         ARIADNE_TESTING_EXPECT_EQUAL(paving.state_auxiliary_paving().space(location), join(state_space, auxiliary_space));
@@ -97,7 +100,7 @@ class TestEnclosureAugmentedPaving : public Ariadne::Testing::ContextFixture {
         MonolithicHybridSpace wrong_state;
         wrong_state.new_location(location, auxiliary_space);
         HybridAugmentedPaving wrong(HybridGrid(wrong_state), mapping);
-        ARIADNE_TESTING_EXPECT_EXCEPTION(adjoin_outer_approximation_to(enclosure, wrong, 2u));
+        ARIADNE_TESTING_EXPECT_EXCEPTION(adjoin_outer_approximation_to(enclosure, wrong, 2u, paver));
     }
 };
 

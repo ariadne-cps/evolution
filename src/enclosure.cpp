@@ -157,11 +157,10 @@ inline Pair<ValidatedVectorMultivariateFunctionPatch, ValidatedVectorMultivariat
 }
 
 EnclosureConfiguration::EnclosureConfiguration(ValidatedFunctionPatchFactory function_factory, SizeType reconditioning_num_blocks)
-    : _function_factory(function_factory), _paver(new AffinePaver()), _reconditioning_num_blocks(reconditioning_num_blocks) { ARIADNE_PRECONDITION(reconditioning_num_blocks > 0u); }
+    : _function_factory(function_factory), _reconditioning_num_blocks(reconditioning_num_blocks) { ARIADNE_PRECONDITION(reconditioning_num_blocks > 0u); }
 
 OutputStream& operator<<(OutputStream& os, const EnclosureConfiguration& ec) {
     return os << "EnclosureConfiguration( function_factory=" << ec._function_factory
-              << ", paver=" << ec._paver
               << ", reconditioning_num_blocks=" << ec._reconditioning_num_blocks << ")";
 }
 
@@ -226,7 +225,7 @@ Void Enclosure::_solve_zero_constraints() {
 */
 
 Enclosure::Enclosure()
-    : _domain(), _auxiliary_mapping(), _state_function(), _time_function(), _dwell_time_function(), _reduced_domain(), _variable_kinds(), _configuration(ValidatedFunctionPatchFactory(nullptr), Paver(nullptr)) {
+    : _domain(), _auxiliary_mapping(), _state_function(), _time_function(), _dwell_time_function(), _reduced_domain(), _variable_kinds(), _configuration(ValidatedFunctionPatchFactory(nullptr)) {
 }
 
 Enclosure::Enclosure(const EnclosureConfiguration& config)

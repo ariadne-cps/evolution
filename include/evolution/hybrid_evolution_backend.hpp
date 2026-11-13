@@ -1,12 +1,26 @@
 /***************************************************************************
- *            hybrid_evolution_backend.hpp
+ *            evolution/hybrid_evolution_backend.hpp
  *
  *  Copyright  2026  Luca Geretti
  *
  ****************************************************************************/
 
-/* This file is part of Ariadne Evolution, distributed under the GNU General
- * Public License, version 3 or later. See <https://www.gnu.org/licenses/>. */
+/*
+ *  This file is part of Ariadne Evolution.
+ *
+ *  Ariadne Evolution is free software: you can redistribute it and/or modify
+ *  it under the terms of the GNU General Public License as published by
+ *  the Free Software Foundation, either version 3 of the License, or
+ *  (at your option) any later version.
+ *
+ *  Ariadne Evolution is distributed in the hope that it will be useful,
+ *  but WITHOUT ANY WARRANTY; without even the implied warranty of
+ *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ *  GNU General Public License for more details.
+ *
+ *  You should have received a copy of the GNU General Public License
+ *  along with Ariadne Evolution. If not, see <https://www.gnu.org/licenses/>.
+ */
 
 /** @file evolution/hybrid_evolution_backend.hpp
  *  @brief Step results and replaceable execution backends for hybrid evolution.
@@ -49,13 +63,22 @@ enum class HybridEvolutionSuccessorKind : std::uint8_t {
     RECONDITIONING //!< A new numerical representation without time progress.
 };
 
+/** @brief Numerical evidence about the source covered by an urgent transition.
+ *  @note A transverse crossing or a sole successor is not by itself a coverage proof.
+ */
+enum class HybridEvolutionTransitionResolution : std::uint8_t {
+    UNRESOLVED, //!< Coverage of the whole source is not established, or the transition is permissive.
+    FULL_SOURCE //!< The urgent transition is certified to apply to the whole invariant-valid source.
+};
+
 /** @brief A successor and the information needed to preserve its origin. */
 struct HybridEvolutionSuccessor {
-    HybridEvolutionWorkItem work;              //!< Checkpoint to schedule.
-    HybridEvolutionSuccessorKind kind;         //!< Reason for producing the checkpoint.
-    std::optional<DiscreteEvent> event;        //!< Transition event, when applicable.
-    std::optional<EventKind> event_kind;       //!< Urgency/permissiveness, when applicable.
-    std::optional<CrossingKind> crossing_kind; //!< Crossing classification; absent for starting events.
+    HybridEvolutionWorkItem work;                                                                     //!< Checkpoint to schedule.
+    HybridEvolutionSuccessorKind kind;                                                                //!< Reason for producing the checkpoint.
+    std::optional<DiscreteEvent> event;                                                               //!< Transition event, when applicable.
+    std::optional<EventKind> event_kind;                                                              //!< Urgency/permissiveness, when applicable.
+    std::optional<CrossingKind> crossing_kind;                                                        //!< Crossing classification; absent for starting events.
+    HybridEvolutionTransitionResolution resolution = HybridEvolutionTransitionResolution::UNRESOLVED; //!< Source coverage evidence.
 };
 
 /** @brief Conventional Orbit collection to which an enclosure contributes. */
@@ -102,7 +125,8 @@ struct HybridEvolutionStepResult {
     Void continue_with(const HybridEnclosure& set, HybridEvolutionSuccessorKind kind = HybridEvolutionSuccessorKind::CONTINUATION);
     /** @brief Record a post-reset checkpoint with explicit event provenance. */
     Void transition_to(const HybridEnclosure& set, DiscreteEvent event, EventKind event_kind,
-                       std::optional<CrossingKind> crossing_kind = std::nullopt);
+                       std::optional<CrossingKind> crossing_kind = std::nullopt,
+                       HybridEvolutionTransitionResolution resolution = HybridEvolutionTransitionResolution::UNRESOLVED);
 };
 
 /** @brief Consistent result counters for logging; not a numerical stopping criterion. */

@@ -5,8 +5,22 @@
  *
  ****************************************************************************/
 
-/* This file is part of Ariadne Evolution, distributed under the GNU General
- * Public License, version 3 or later. See <https://www.gnu.org/licenses/>. */
+/*
+ *  This file is part of Ariadne Evolution.
+ *
+ *  Ariadne Evolution is free software: you can redistribute it and/or modify
+ *  it under the terms of the GNU General Public License as published by
+ *  the Free Software Foundation, either version 3 of the License, or
+ *  (at your option) any later version.
+ *
+ *  Ariadne Evolution is distributed in the hope that it will be useful,
+ *  but WITHOUT ANY WARRANTY; without even the implied warranty of
+ *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ *  GNU General Public License for more details.
+ *
+ *  You should have received a copy of the GNU General Public License
+ *  along with Ariadne Evolution. If not, see <https://www.gnu.org/licenses/>.
+ */
 
 /** @file src/hybrid_evolution_backend.cpp
  *  @brief Flat hybrid execution backend and step-local result recording.
@@ -46,13 +60,15 @@ Void HybridEvolutionStepResult::continue_with(const HybridEnclosure& set, Hybrid
 }
 
 Void HybridEvolutionStepResult::transition_to(const HybridEnclosure& set, DiscreteEvent event, EventKind event_kind,
-                                              std::optional<CrossingKind> crossing_kind) {
+                                              std::optional<CrossingKind> crossing_kind,
+                                              HybridEvolutionTransitionResolution resolution) {
     successors.push_back({
         {set, HybridEvolutionPhase::PROCESS_STARTING_EVENTS},
         HybridEvolutionSuccessorKind::TRANSITION,
         event,
         event_kind,
-        crossing_kind
+        crossing_kind,
+        resolution
     });
 }
 

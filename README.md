@@ -18,14 +18,15 @@ Public headers: `include/evolution`; C++ implementations: `src`; C++ tests: `tes
 Hybrid evolution separates numerical step results from execution and Orbit
 accumulation. The default `FlatHybridEvolutionBackendFactory` retains the current
 workload scheduling; `HybridEvolverBase::set_evolution_backend_factory()` selects
-another factory without changing the `orbit()` overloads or return type. Each
-call creates independent run state. See the [backend and trajectory-tree
-design](doc/evolution_tree_design.md) for the implemented boundary and the
-planned tree backend.
+another factory without changing the `orbit()` overloads or return type.
+`TreeHybridEvolutionBackendFactory` selects serial parent-first processing with
+trajectory histories and genealogy backed by `DerivationTree`. Each call creates
+independent run state. See the [backend and trajectory-tree
+design](doc/evolution_tree_design.md) for the current API and deferred operations.
 
 ## Dependencies
 
-Evolution uses the Git submodules [System](https://github.com/ariadne-cps/system), [Integration](https://github.com/ariadne-cps/integration), [Equation Solving](https://github.com/ariadne-cps/equation-solving), and [Build](https://github.com/ariadne-cps/build). The C++ test suites additionally use [Ariadne Testing](https://github.com/ariadne-cps/testing), pinned as the test-only submodule `ss/tst`. Each registered test runs with a fresh fixture, retaining the original mathematical checks and diagnostic variants.
+Evolution uses the Git submodules [System](https://github.com/ariadne-cps/system), [Integration](https://github.com/ariadne-cps/integration), [Equation Solving](https://github.com/ariadne-cps/equation-solving), [Tree](https://github.com/ariadne-cps/tree), and [Build](https://github.com/ariadne-cps/build). The C++ test suites additionally use [Ariadne Testing](https://github.com/ariadne-cps/testing), pinned as the test-only submodule `ss/tst`. Each registered test runs with a fresh fixture, retaining the original mathematical checks and diagnostic variants.
 
 ## Build and test
 

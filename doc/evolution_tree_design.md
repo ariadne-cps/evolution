@@ -1,7 +1,7 @@
 # Evolution tree design proposal
 
-Status: flat backend and step-result boundary implemented in the first refactoring stage.
-The trajectory tree, recombination and per-work numerical alternatives remain design proposals.
+Status: the flat and serial trajectory-tree backends are implemented.
+Recombination, backtracking and per-work numerical alternatives remain design proposals.
 
 ## Starting functions
 
@@ -206,10 +206,8 @@ Work items currently contain the enclosure (including its existing enclosure
 configuration) and processing phase. The evolver's integration/solver settings
 continue to use the existing uniform configuration for this first stage;
 per-work immutable numerical settings and alternatives are not implemented.
-Likewise, successor transition metadata records event, event kind and optional
-crossing kind without claiming that a unique transition has been fully resolved.
-Detailed piece-to-contribution associations for tree histories remain to be
-specified with the tree backend.
+Successors record event, event kind, optional crossing kind and source-coverage
+evidence. Whole-source resolution is never inferred from the successor count.
 
 `tests/test_hybrid_evolution_backend.cpp` verifies output/checkpoint separation,
 publication before successor dispatch in serial and concurrent modes, lifecycle
@@ -219,14 +217,90 @@ all three output collections with the default backend for urgent and permissive
 systems, including repeated calls after the original factory is destroyed.
 The existing hybrid evolution tests continue to exercise the numerical behavior.
 
-The remaining subsections describe the target architecture and its incremental
-migration; references to tree behavior are proposals, not implemented features.
+### Implemented serial trajectory-tree backend
 
-### Current coupling
+`TreeHybridEvolutionBackendFactory` selects the tree backend through the same
+factory setter and callback/result contract. The ordinary `orbit()` return type
+is unchanged. A concrete `TreeHybridEvolutionBackend` can also be run directly;
+`tree()` provides const inspection before/after execution and after Orbit
+release. The standard `orbit()` call owns its backend only for the duration of
+the run; returning the detailed history from that API remains separate work.
+
+Evolution directly pins Tree at `e1372f9c7d5f1a6f1db11dc74b58053e1d8ad9e7`.
+Its CMake target is established before transitive Tree consumers, so all compiled
+consumers and the installed header bundle use that public API. Compared with
+the older transitive Tree revision, BinaryTreeNode changes are documentation
+only. Foundation, Threading and Build pins agree with the existing dependencies.
+
+The representation is:
+
+```text
+DerivationTree<HybridEvolutionTrajectory, HybridEvolutionTrajectoryMetadata>
+    trajectory.entries: ordered vector of HybridEvolutionEntry
+        work: input checkpoint and processing phase
+        origin: optional same-trajectory (entry index, successor ordinal)
+        result: optional complete HybridEvolutionStepResult
+    metadata.complete: local trajectory completion
+    metadata.origin: optional parent (entry index, successor ordinal)
+```
+
+The source result retains successor reason/event information, so an origin can
+resolve it without duplicating parent links or event fields. New entries are
+appended. A missing entry result denotes an unprocessed/failed computation.
+Subdivision pieces have a common predecessor and distinct successor ordinals;
+they remain parallel pieces, not successive time steps just because their
+records are adjacent. Their continuations and reconditioned representations
+retain the same-node predecessor link. This does not yet assign independent
+subset/alternative ID namespaces.
+
+The scheduler drains every local piece of the current trajectory before marking
+that node complete and releasing its children. Unrelated ready trajectories are
+processed breadth first. Children generated at different source entries remain
+distinct trajectories, including when they share parent/event provenance. No
+recombination is performed. The completed-parent boundary is the insertion
+point for a later domain-specific recombination policy.
+
+A reset normally derives a child. It continues the same node only when it is
+the sole successor, is urgent/impact, carries a FULL_SOURCE certificate, and
+the trajectory has not been divided by subdivision or prior urgent branches.
+Once portions have separated, even the last fully crossing piece becomes a
+child: it must remain distinct from pieces crossing at earlier steps, and all
+these children must be known before their evolution begins.
+The numerical kernel currently certifies strictly active immediate urgent
+transitions by proving the invariant-valid source lies wholly inside the guard.
+Other cases remain UNRESOLVED, including permissive events and flow crossings
+without an explicit coverage proof. Transversality or an empty other branch
+alone is insufficient. The flat backend ignores this genealogy classification
+and preserves the same numerical output contributions.
+
+No global Orbit accumulator duplicates the tree history. Statistics count
+published contributions; `release_orbit()` gathers their explicit reach,
+intermediate and final roles after the complete run. It never turns a leaf or
+an empty completed trajectory into an implicit final set. Output collections
+may have a different traversal order from flat execution, but preserve the
+same enclosures without recombination. History remains inspectable after the
+one permitted Orbit release.
+
+A callback exception leaves incomplete metadata and unprocessed entries; it
+propagates and prohibits Orbit release or another run. The backend is serial,
+including when ThreadManager is configured for parallel work. Editing history,
+pruning/reopening a run, numerical alternatives and parallel tree publication
+are not exposed by this initial implementation.
+
+`tests/test_hybrid_evolution_tree.cpp` covers parent-first dispatch, distinct
+children from repeated event births, explicit origins, whole-source versus
+unresolved/permissive identity, parallel split/reconditioned pieces, exhausted
+empty trajectories, failure histories and exact flat/tree output comparisons
+for upper and lower semantics.
+
+The remaining subsections retain the architectural rationale and deferred
+operations; the implemented stages above define the current API.
+
+### Coupling before the refactoring
 
 The reference implementation examined is Evolution commit
 `f34ff6e7e72abe2c2527bf7bc308cb4893010de9`.
-`HybridEvolverBase` currently owns both the execution mechanism and result
+`HybridEvolverBase` at that revision owns both the execution mechanism and result
 publication:
 
 - `orbit()` constructs a `DynamicWorkload` and a `SynchronisedOrbit`.

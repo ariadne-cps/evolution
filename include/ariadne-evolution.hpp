@@ -38,6 +38,7 @@
 #include "evolution/flowtube.hpp"
 #include "evolution/hybrid_enclosure.hpp"
 #include "evolution/hybrid_evolution_backend.hpp"
+#include "evolution/hybrid_evolution_tree.hpp"
 #include "evolution/hybrid_evolver.hpp"
 #include "evolution/hybrid_evolver_interface.hpp"
 #include "evolution/hybrid_orbit.hpp"

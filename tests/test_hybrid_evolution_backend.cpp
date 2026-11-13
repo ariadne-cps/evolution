@@ -5,8 +5,22 @@
  *
  ****************************************************************************/
 
-/* This file is part of Ariadne Evolution, distributed under the GNU General
- * Public License, version 3 or later. See <https://www.gnu.org/licenses/>. */
+/*
+ *  This file is part of Ariadne Evolution.
+ *
+ *  Ariadne Evolution is free software: you can redistribute it and/or modify
+ *  it under the terms of the GNU General Public License as published by
+ *  the Free Software Foundation, either version 3 of the License, or
+ *  (at your option) any later version.
+ *
+ *  Ariadne Evolution is distributed in the hope that it will be useful,
+ *  but WITHOUT ANY WARRANTY; without even the implied warranty of
+ *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ *  GNU General Public License for more details.
+ *
+ *  You should have received a copy of the GNU General Public License
+ *  along with Ariadne Evolution. If not, see <https://www.gnu.org/licenses/>.
+ */
 
 /** @file tests/test_hybrid_evolution_backend.cpp
  *  @brief Test backend independence, publication boundaries and Orbit roles.
@@ -237,6 +251,7 @@ class TestHybridEvolutionBackend : public Testing::ContextFixture {
         ARIADNE_TESTING_PROVE(successor.event == event);
         ARIADNE_TESTING_PROVE(successor.event_kind == EventKind::URGENT);
         ARIADNE_TESTING_PROVE(!successor.crossing_kind.has_value());
+        ARIADNE_TESTING_PROVE(successor.resolution == HybridEvolutionTransitionResolution::FULL_SOURCE);
         ARIADNE_TESTING_EXPECT_EQUAL(jumped.contributions.size(), 2u);
         ARIADNE_TESTING_PROVE(jumped.contributions.at(0).kind == HybridEvolutionSetKind::REACH);
         ARIADNE_TESTING_PROVE(jumped.contributions.at(0).enclosure.location() == source);
@@ -256,6 +271,11 @@ class TestHybridEvolutionBackend : public Testing::ContextFixture {
             ARIADNE_TESTING_PROVE(piece.kind == HybridEvolutionSuccessorKind::SUBDIVISION);
             ARIADNE_TESTING_PROVE(piece.work.phase == HybridEvolutionPhase::EVOLVE_CONTINUOUSLY);
             ARIADNE_TESTING_PROVE(!piece.event.has_value());
+        }
+        auto partial_jump = probe._process_working_set({wide, HybridEvolutionPhase::PROCESS_STARTING_EVENTS}, horizon, Semantics::UPPER, {});
+        ARIADNE_TESTING_PROVE(partial_jump.successors.size() > 1u);
+        for (const auto& piece: partial_jump.successors) {
+            ARIADNE_TESTING_PROVE(piece.resolution == HybridEvolutionTransitionResolution::UNRESOLVED);
         }
         auto discarded = probe._process_working_set({wide, HybridEvolutionPhase::EVOLVE_CONTINUOUSLY}, horizon, Semantics::LOWER, {});
         ARIADNE_TESTING_PROVE(discarded.successors.empty());

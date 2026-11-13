@@ -570,7 +570,13 @@ Void HybridEvolverBase::
                         immediate_jump_set.apply_reset(event, transition.target, transition.target_space, transition.reset_function, transition.target_auxiliary_space, transition.target_auxiliary_function);
                         LOGGING_PRINTLN_AT(2, "immediate_jump_set=" << immediate_jump_set);
                         result.record_intermediate(immediate_jump_set);
-                        result.transition_to(immediate_jump_set, event, transition.event_kind);
+                        // Only a strict whole-source activation certifies an immediate
+                        // urgent reset. Do not infer coverage from successor count.
+                        const auto resolution = transition.event_kind != EventKind::PERMISSIVE &&
+                                                        definitely(invariant_set.continuous_set().satisfies(transition.guard_function))
+                                                  ? HybridEvolutionTransitionResolution::FULL_SOURCE
+                                                  : HybridEvolutionTransitionResolution::UNRESOLVED;
+                        result.transition_to(immediate_jump_set, event, transition.event_kind, std::nullopt, resolution);
                     }
                 }
                 if (transition.event_kind != EventKind::PERMISSIVE) {

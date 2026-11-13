@@ -19,12 +19,13 @@ endif()
 
 
 require_same_dependency_commit(Build CHAINS
-    "build" "integration|build" "system|build" "equation-solving|build")
+    "build" "tree|build" "integration|build" "system|build" "equation-solving|build")
 require_same_dependency_commit(Function CHAINS
     "integration|function"
     "system|hybrid|labelled|expression-set|symbolic|function"
     "equation-solving|function")
 require_same_dependency_commit(Logging CHAINS
+    "tree|threading|logging"
     "integration|logging"
     "system|neural-set|ann|threading|logging"
     "equation-solving|logging"

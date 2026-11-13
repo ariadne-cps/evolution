@@ -1,3 +1,6 @@
+if(NOT TARGET tree)
+    ariadne_add_submodule(tree)
+endif()
 if(NOT TARGET integration)
     ariadne_add_submodule(integration)
 endif()

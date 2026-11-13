@@ -36,7 +36,6 @@
 #include "labelled/figure.hpp"
 #include "recording_canvas.hpp"
 #include "rendering/figure.hpp"
-#include "test_logging.hpp"
 
 #include "ariadne-testing.hpp"
 using namespace Ariadne;
@@ -218,7 +217,6 @@ class TestOrbitCollections : public Ariadne::Testing::ContextFixture {
 };
 
 int main(int argc, char* argv[]) {
-    redirect_test_logging_to_null();
     ARIADNE_TESTING_SUITE("test_orbit_collections");
     ARIADNE_TESTING_ADD_TEST(TestOrbitCollections, test_point_collections);
     ARIADNE_TESTING_ADD_TEST(TestOrbitCollections, test_labelled_collections);

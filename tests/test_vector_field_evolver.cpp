@@ -47,7 +47,6 @@
 #include "log_verbosity_scope.hpp"
 #include "numeric/rational.hpp"
 #include "set/list_set.hpp"
-#include "test_logging.hpp"
 #include "utility/tuple.hpp"
 
 #include "ariadne-testing.hpp"
@@ -340,7 +339,6 @@ class TestVectorFieldEvolver : public Ariadne::Testing::ContextFixture {
 };
 
 int main(int argc, const char* argv[]) {
-    redirect_test_logging_to_null();
     ARIADNE_TESTING_SUITE("test_vector_field_evolver");
     ARIADNE_TESTING_ADD_TEST(TestVectorFieldEvolver, test_single_trajectory);
     ARIADNE_TESTING_ADD_TEST(TestVectorFieldEvolver, test_failure);

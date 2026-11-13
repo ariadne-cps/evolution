@@ -30,7 +30,6 @@
 #include "integration/integrator.hpp"
 #include "log_verbosity_scope.hpp"
 #include "system/hybrid_automata.hpp"
-#include "test_logging.hpp"
 
 #include "ariadne-testing.hpp"
 
@@ -267,7 +266,6 @@ class TestHybridStepContracts : public Testing::ContextFixture {
 };
 
 int main(int argc, char** argv) {
-    redirect_test_logging_to_null();
     ARIADNE_TESTING_SUITE("test_hybrid_step_contracts");
     ARIADNE_TESTING_ADD_TEST(TestHybridStepContracts, test_constant_and_decreasing_guard_steps);
     ARIADNE_TESTING_ADD_TEST(TestHybridStepContracts, test_invariant_rejects_initial_jump_and_empty_split_halves);

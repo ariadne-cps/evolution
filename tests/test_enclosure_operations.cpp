@@ -35,7 +35,6 @@
 #include "labelled/figure.hpp"
 #include "paving/paver.hpp"
 #include "set/list_set.hpp"
-#include "test_logging.hpp"
 
 #include "ariadne-testing.hpp"
 using namespace Ariadne;
@@ -358,7 +357,6 @@ class TestEnclosureOperations : public Ariadne::Testing::ContextFixture {
 };
 
 int main(int argc, char* argv[]) {
-    redirect_test_logging_to_null();
     ARIADNE_TESTING_SUITE("test_enclosure_operations");
     ARIADNE_TESTING_ADD_TEST(TestEnclosureOperations, test_constructors_and_configuration);
     ARIADNE_TESTING_ADD_TEST(TestEnclosureOperations, test_evolve_and_reach_steps);

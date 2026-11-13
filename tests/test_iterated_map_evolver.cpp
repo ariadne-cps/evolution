@@ -48,7 +48,6 @@
 #include "numeric/rational.hpp"
 #include "set/list_set.hpp"
 #include "system/iterated_map.hpp"
-#include "test_logging.hpp"
 #include "utility/tuple.hpp"
 
 #include "ariadne-testing.hpp"
@@ -196,7 +195,6 @@ class TestIteratedMapEvolver : public Ariadne::Testing::ContextFixture {
 };
 
 int main(int argc, const char* argv[]) {
-    redirect_test_logging_to_null();
     ARIADNE_TESTING_SUITE("test_iterated_map_evolver");
     ARIADNE_TESTING_ADD_TEST(TestIteratedMapEvolver, test_stopping_policies);
     ARIADNE_TESTING_ADD_TEST(TestIteratedMapEvolver, test_evolve);

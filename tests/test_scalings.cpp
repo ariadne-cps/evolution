@@ -31,7 +31,6 @@
 #include <string>
 
 #include "evolution/scalings.hpp"
-#include "test_logging.hpp"
 
 #include "ariadne-testing.hpp"
 using namespace Ariadne;
@@ -87,7 +86,6 @@ class TestScalings : public Ariadne::Testing::ContextFixture {
 };
 
 int main(int argc, char* argv[]) {
-    redirect_test_logging_to_null();
     ARIADNE_TESTING_SUITE("test_scalings");
     ARIADNE_TESTING_ADD_TEST(TestScalings, test_named_and_default_grid);
     ARIADNE_TESTING_ADD_TEST(TestScalings, test_positive_scaling_contracts);

@@ -34,7 +34,6 @@
 #include "evolution/hybrid_evolution_backend.hpp"
 #include "evolution/hybrid_evolver.hpp"
 #include "system/hybrid_automata.hpp"
-#include "test_logging.hpp"
 #include "threading/thread_manager.hpp"
 
 #include "ariadne-testing.hpp"
@@ -285,7 +284,6 @@ class TestHybridEvolutionBackend : public Testing::ContextFixture {
 };
 
 int main(int argc, char** argv) {
-    redirect_test_logging_to_null();
     ARIADNE_TESTING_SUITE("test_hybrid_evolution_backend");
     ARIADNE_TESTING_ADD_TEST(TestHybridEvolutionBackend, test_output_and_work_are_distinct);
     ARIADNE_TESTING_ADD_TEST(TestHybridEvolutionBackend, test_failed_step_cannot_release_an_orbit);

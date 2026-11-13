@@ -42,7 +42,6 @@
 #include "hybrid/hybrid_space.hpp"
 #include "labelled/figure.hpp"
 #include "recording_canvas.hpp"
-#include "test_logging.hpp"
 
 #include "ariadne-testing.hpp"
 
@@ -387,7 +386,6 @@ class TestHybridEnclosure : public Ariadne::Testing::ContextFixture {
 };
 
 int main(int argc, char* argv[]) {
-    redirect_test_logging_to_null();
     ARIADNE_TESTING_SUITE("test_hybrid_enclosure");
     ARIADNE_TESTING_ADD_TEST(TestHybridEnclosure, test_time_maps_and_steps);
     ARIADNE_TESTING_ADD_TEST(TestHybridEnclosure, test_constraints_and_collections);

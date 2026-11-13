@@ -45,7 +45,6 @@
 #include "log_verbosity_scope.hpp"
 #include "numeric/rational.hpp"
 #include "set/list_set.hpp"
-#include "test_logging.hpp"
 #include "utility/tuple.hpp"
 
 #include "ariadne-testing.hpp"
@@ -273,7 +272,6 @@ class TestVectorFieldSimulator : public Ariadne::Testing::ContextFixture {
 };
 
 int main(int argc, const char* argv[]) {
-    redirect_test_logging_to_null();
     ARIADNE_TESTING_SUITE("test_vector_field_simulator");
     ARIADNE_TESTING_ADD_TEST(TestVectorFieldSimulator, test_linear_flow_and_input_labels);
     ARIADNE_TESTING_ADD_TEST(TestVectorFieldSimulator, test_configuration_and_sampling);

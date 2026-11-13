@@ -35,7 +35,6 @@
 #include "numeric/float_bounds.hpp"
 #include "numeric/numeric.hpp"
 #include "system/first_order_pde.hpp"
-#include "test_logging.hpp"
 
 #include "ariadne-evolution.hpp"
 #include "ariadne-testing.hpp"
@@ -218,7 +217,6 @@ class TestFirstOrderPDE : public Ariadne::Testing::ContextFixture {
 };
 
 int main(int argc, char** argv) {
-    redirect_test_logging_to_null();
     ARIADNE_TESTING_SUITE("test_first_order_pde");
     ARIADNE_TESTING_ADD_TEST(TestFirstOrderPDE, test_double_precision_contracts);
     ARIADNE_TESTING_ADD_TEST(TestFirstOrderPDE, test_double_precision_evolution);

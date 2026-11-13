@@ -30,7 +30,6 @@
 #include <string>
 
 #include "evolution/hybrid_time.hpp"
-#include "test_logging.hpp"
 
 #include "ariadne-testing.hpp"
 using namespace Ariadne;
@@ -118,7 +117,6 @@ class TestHybridTime : public Ariadne::Testing::ContextFixture {
 };
 
 int main(int argc, char* argv[]) {
-    redirect_test_logging_to_null();
     ARIADNE_TESTING_SUITE("test_hybrid_time");
     ARIADNE_TESTING_ADD_TEST(TestHybridTime, test_construction_and_arithmetic);
     ARIADNE_TESTING_ADD_TEST(TestHybridTime, test_comparison_semantics);

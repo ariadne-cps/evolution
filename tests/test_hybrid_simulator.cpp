@@ -34,7 +34,6 @@
 #include "evolution/hybrid_time.hpp"
 #include "log_verbosity_scope.hpp"
 #include "system/hybrid_automata.hpp"
-#include "test_logging.hpp"
 
 #include "ariadne-testing.hpp"
 using namespace Ariadne;
@@ -189,7 +188,6 @@ class TestHybridSimulator : public Ariadne::Testing::ContextFixture {
 };
 
 int main(int argc, char* argv[]) {
-    redirect_test_logging_to_null();
     ARIADNE_TESTING_SUITE("test_hybrid_simulator");
     ARIADNE_TESTING_ADD_TEST(TestHybridSimulator, test_labelled_flow);
     ARIADNE_TESTING_ADD_TEST(TestHybridSimulator, test_transitions_and_termination);

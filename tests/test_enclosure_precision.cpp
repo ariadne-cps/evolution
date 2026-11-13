@@ -31,7 +31,6 @@
 #include "function/constraint.hpp"
 #include "function/taylor_function.hpp"
 #include "geometry/box.hpp"
-#include "test_logging.hpp"
 
 #include "ariadne-testing.hpp"
 
@@ -61,7 +60,6 @@ class TestEnclosurePrecision : public Ariadne::Testing::ContextFixture {
 };
 
 int main(int argc, char** argv) {
-    redirect_test_logging_to_null();
     ARIADNE_TESTING_SUITE("test_enclosure_precision");
     ARIADNE_TESTING_ADD_TEST(TestEnclosurePrecision, test_contracts);
     return ARIADNE_TESTING_RUN_TESTS_WITH_ARGS(argc, argv);

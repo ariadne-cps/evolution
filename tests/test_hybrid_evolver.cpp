@@ -40,7 +40,6 @@
 #include "integration/integrator.hpp"
 #include "log_verbosity_scope.hpp"
 #include "system/hybrid_automata.hpp"
-#include "test_logging.hpp"
 
 #include "ariadne-testing.hpp"
 #include "equation-solving/interval_newton_method.hpp"
@@ -1446,7 +1445,6 @@ Void TestHybridEvolver::test_transverse_linear_crossing() {
 }
 
 int main(int argc, char* argv[]) {
-    redirect_test_logging_to_null();
     ARIADNE_TESTING_SUITE("test_hybrid_evolver");
     ARIADNE_TESTING_ADD_TEST(TestHybridEvolver, test_components_and_copy_ownership);
     ARIADNE_TESTING_ADD_TEST(TestHybridEvolver, test_default_timing_and_policies);

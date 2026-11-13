@@ -33,7 +33,6 @@
 #include "evolution/hybrid_evolution_tree.hpp"
 #include "evolution/hybrid_evolver.hpp"
 #include "system/hybrid_automata.hpp"
-#include "test_logging.hpp"
 #include "threading/thread_manager.hpp"
 
 #include "ariadne-testing.hpp"
@@ -346,7 +345,6 @@ class TestHybridEvolutionTree : public Testing::ContextFixture {
 };
 
 int main(int argc, char** argv) {
-    redirect_test_logging_to_null();
     ARIADNE_TESTING_SUITE("test_hybrid_evolution_tree");
     ARIADNE_TESTING_ADD_TEST(TestHybridEvolutionTree, test_parent_finishes_before_distinct_derived_trajectories);
     ARIADNE_TESTING_ADD_TEST(TestHybridEvolutionTree, test_only_certified_single_urgent_transition_continues_the_node);

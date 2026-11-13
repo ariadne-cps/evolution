@@ -45,7 +45,6 @@
 #include "numeric/rational.hpp"
 #include "set/function_set.hpp"
 #include "set/list_set.hpp"
-#include "test_logging.hpp"
 #include "utility/tuple.hpp"
 
 #include "ariadne-testing.hpp"
@@ -305,7 +304,6 @@ class TestEnclosure : public Ariadne::Testing::ContextFixture {
 };
 
 int main(int argc, char* argv[]) {
-    redirect_test_logging_to_null();
     ARIADNE_TESTING_SUITE("test_enclosure");
     ARIADNE_TESTING_ADD_TEST(TestEnclosure, test_construct_without_domain);
     ARIADNE_TESTING_ADD_TEST(TestEnclosure, test_construct_with_domain);

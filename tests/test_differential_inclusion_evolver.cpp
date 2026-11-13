@@ -42,7 +42,6 @@
 #include "labelled/figure.hpp"
 #include "log_verbosity_scope.hpp"
 #include "set/function_set.hpp"
-#include "test_logging.hpp"
 
 #include "ariadne-testing.hpp"
 #include "expression-set/expression_set.hpp"
@@ -188,7 +187,6 @@ class TestDifferentialInclusionEvolver : public Ariadne::Testing::ContextFixture
 };
 
 int main(int argc, const char* argv[]) {
-    redirect_test_logging_to_null();
     ARIADNE_TESTING_SUITE("test_differential_inclusion_evolver");
     ARIADNE_TESTING_ADD_TEST(TestDifferentialInclusionEvolver, test_scheduler_preserves_rigorous_reach_when_affine_wins);
     ARIADNE_TESTING_ADD_TEST(TestDifferentialInclusionEvolver, test_scheduler_integer_boundaries);

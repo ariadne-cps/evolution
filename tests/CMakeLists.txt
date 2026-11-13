@@ -17,6 +17,7 @@ set(UNIT_TESTS
     test_enclosure
     test_enclosure_augmented_paving
     test_enclosure_operations
+    test_enclosure_recombination
     test_enclosure_precision
     test_iterated_map_evolver
     test_vector_field_evolver

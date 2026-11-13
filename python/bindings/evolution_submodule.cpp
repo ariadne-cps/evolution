@@ -26,6 +26,8 @@
  *  @brief Register evolution interfaces with the Python extension.
  */
 
+#include <vector>
+
 #include "evolution/hybrid_enclosure.hpp"
 #include "evolution/hybrid_simulator.hpp"
 #include "evolution/hybrid_time.hpp"
@@ -59,6 +61,7 @@ Void export_enclosure(pybind11::module& module) {
     enclosure_class.def("state_auxiliary_set", &Enclosure::state_auxiliary_set);
     enclosure_class.def("state_time_auxiliary_set", &Enclosure::state_time_auxiliary_set);
     enclosure_class.def("__str__", &__cstr__<Enclosure>);
+    module.def("recombine", [](const std::vector<Enclosure>& enclosures) { return recombine(List<Enclosure>(enclosures)); }, pybind11::arg("enclosures"), "Construct an outer enclosure of a nonempty source list.");
     pybind11::class_<LabelledEnclosure, pybind11::bases<LabelledDrawable2dInterface, Enclosure>> labelled_enclosure_class(module, "LabelledEnclosure");
     labelled_enclosure_class.def("bounding_box", &LabelledEnclosure::bounding_box);
     labelled_enclosure_class.def("__str__", &__cstr__<LabelledEnclosure>);

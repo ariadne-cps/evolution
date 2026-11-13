@@ -1,5 +1,6 @@
 add_library(EVOLUTION_SRC OBJECT
     enclosure.cpp
+    enclosure_recombination.cpp
     enclosure_augmented_paving.cpp
     orbit.cpp
     differential_inclusion_evolver.cpp

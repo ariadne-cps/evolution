@@ -362,6 +362,7 @@ class Enclosure
     friend Enclosure product(const Enclosure&, const ExactBoxType&);
     /** @brief Perform the specified evolution operation. */
     friend Enclosure product(const Enclosure&, const Enclosure&);
+    friend Enclosure recombine(const List<Enclosure>&);
 };
 
 //! \related Enclosure \brief Stream output operator.
@@ -374,6 +375,26 @@ Enclosure product(const Enclosure& set, const ExactBoxType& bx);
 //! \related Enclosure \brief The Cartesian product of two constrained image sets.
 //! \pre The time function of each set is constant with the same value.
 Enclosure product(const Enclosure& set1, const Enclosure& set2);
+
+/** @related Enclosure
+ *  @brief Construct an outer enclosure of the union of a nonempty list of enclosures.
+ *  @details Contracts copies of the sources, normalises their parameter domains,
+ *  and retains the first nonempty source's nonlinear state and clock maps with
+ *  validated residual parameters covering the other sources. Reference parameter
+ *  constraints are relaxed to contain all source alternatives and contracted
+ *  again. This is an upper approximation, not an exact disjunctive union.
+ *  Absolute time and dwell time are recombined jointly with state; auxiliary
+ *  variables are derived from the common auxiliary mapping. The first nonempty
+ *  source supplies the numerical configuration. Sources are not modified.
+ *  @pre The list is nonempty; all sources have initialised function models
+ *       and the same state dimension.
+ *  @pre Nonempty sources have bounded reduced domains and structurally identical
+ *       symbolic auxiliary mappings.
+ *  @return An enclosure containing every source, including when the sources are
+ *          disjoint. An all-empty list returns an empty source copy; a single
+ *          surviving source is returned without reparameterisation.
+ */
+Enclosure recombine(const List<Enclosure>& enclosures);
 
 //! \related Enclosure \brief The image of the \a set under the \a function.
 Enclosure apply(const ValidatedVectorMultivariateFunction& function, const Enclosure& set);

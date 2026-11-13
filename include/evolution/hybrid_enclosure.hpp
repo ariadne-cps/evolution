@@ -59,6 +59,8 @@ class Enclosure;
 class Grid;
 /** @brief BinaryTreePaving represents enclosures and representations for hybrid system states. */
 class BinaryTreePaving;
+/** @brief Paver selects the outer-approximation algorithm supplied by the caller. */
+class Paver;
 /** @brief AffineSet represents enclosures and representations for hybrid system states. */
 class AffineSet;
 /** @brief DiscreteEvent represents enclosures and representations for hybrid system states. */

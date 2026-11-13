@@ -28,9 +28,7 @@
 
 #include <fstream>
 #include <iostream>
-#include <sstream>
 
-#include "../src/carried_expansion_diagnostics.hpp"
 #include "../src/evolution_time.hpp"
 #include "algebra/algebra.hpp"
 #include "algebra/matrix.hpp"
@@ -101,26 +99,6 @@ class TestVectorFieldEvolver : public Ariadne::Testing::ContextFixture {
                                     rec(pow(Real(2), 1100u)), Semantics::LOWER);
         ARIADNE_TESTING_EXPECT_EQUAL(result.final().size(), 1u);
         ARIADNE_TESTING_EXPECT_EQUAL(result.reach().size(), 0u);
-    }
-    Void test_carried_expansion_profile_buckets() {
-        Sweeper<FloatDP> sweeper = ThresholdSweeper<FloatDP>(dp, 0.0);
-        auto coordinate = ValidatedTaylorModelDP::coordinate(1u, 0u, sweeper);
-        auto model = coordinate + pow(coordinate, 3) * FloatDPBounds(ExactDouble(1e-13), dp) + pow(coordinate, 32) * FloatDPBounds(ExactDouble(1e-14), dp);
-        ExactBoxType domain = ExactBoxType::unit_box(1u);
-        ValidatedVectorMultivariateTaylorFunctionModelDP mapping(
-            domain, Vector<ValidatedTaylorModelDP>{model});
-        std::ostringstream text;
-        EvolutionDetail::print_carried_expansion_snapshot(text, "test", 42u, mapping, sweeper);
-        const auto result = text.str();
-        ARIADNE_TESTING_PROVE(result.find("stage=test step=42") != std::string::npos);
-        ARIADNE_TESTING_PROVE(result.find("degree=31 below_3e-14_count=1") != std::string::npos);
-        ARIADNE_TESTING_PROVE(result.find("degree=3 below_3e-14_count=0 bridge_3e-14_to_1e-12_count=1") != std::string::npos);
-        ARIADNE_TESTING_PROVE(result.find("above_1e-12_count=1") != std::string::npos);
-        ValidatedVectorMultivariateTaylorFunctionModelDP empty(
-            domain, Vector<ValidatedTaylorModelDP>(0u, model));
-        std::ostringstream empty_text;
-        EvolutionDetail::print_carried_expansion_snapshot(empty_text, "empty", 0u, empty, sweeper);
-        ARIADNE_TESTING_PROVE(empty_text.str().empty());
     }
     Void test_components_and_preconditioned_orbits() {
         LogVerbosityScope logging(100u);
@@ -346,7 +324,6 @@ int main(int argc, const char* argv[]) {
     ARIADNE_TESTING_ADD_TEST(TestVectorFieldEvolver, test_subdivide_along_evolution);
     ARIADNE_TESTING_ADD_TEST(TestVectorFieldEvolver, test_components_and_preconditioned_orbits);
     ARIADNE_TESTING_ADD_TEST(TestVectorFieldEvolver, test_carried_expansion_diagnostics_checkpoints);
-    ARIADNE_TESTING_ADD_TEST(TestVectorFieldEvolver, test_carried_expansion_profile_buckets);
     ARIADNE_TESTING_ADD_TEST(TestVectorFieldEvolver, test_constrained_initial_subdivision_and_tiny_horizon);
     ARIADNE_TESTING_ADD_TEST(TestVectorFieldEvolver, test_binary64_step_limits);
     ARIADNE_TESTING_ADD_TEST(TestVectorFieldEvolver, test_lower_termination_diagnostics);

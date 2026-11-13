@@ -31,7 +31,6 @@
 #include <array>
 
 #include "algebra/vector.hpp"
-#include "carried_expansion_diagnostics.hpp"
 #include "evolution/enclosure.hpp"
 #include "evolution/orbit.hpp"
 #include "evolution_time.hpp"
@@ -105,20 +104,6 @@ CarriedExpansionSnapshot
     return profile;
 }
 
-} // namespace
-
-namespace EvolutionDetail {
-
-Dyadic limit_step_to_remaining_time(const Dyadic& configured, const Dyadic& remaining) {
-    const FloatDP representable(remaining, FloatDP::ROUND_DOWNWARD, DoublePrecision());
-    const Dyadic binary64_step(representable);
-    if (binary64_step == Dyadic(0u)) {
-        throw std::runtime_error(
-            "VectorFieldEvolver: remaining time is too small for a positive binary64 step");
-    }
-    return min(configured, binary64_step);
-}
-
 Void print_carried_expansion_snapshot(
     OutputStream& output, const String& stage,
     SizeType step,
@@ -145,6 +130,20 @@ Void print_carried_expansion_snapshot(
                << " above_1e-12_abs_mass=" << profile.above_loose_abs_mass[bucket_degree]
                << std::endl;
     }
+}
+
+} // namespace
+
+namespace EvolutionDetail {
+
+Dyadic limit_step_to_remaining_time(const Dyadic& configured, const Dyadic& remaining) {
+    const FloatDP representable(remaining, FloatDP::ROUND_DOWNWARD, DoublePrecision());
+    const Dyadic binary64_step(representable);
+    if (binary64_step == Dyadic(0u)) {
+        throw std::runtime_error(
+            "VectorFieldEvolver: remaining time is too small for a positive binary64 step");
+    }
+    return min(configured, binary64_step);
 }
 
 } // namespace EvolutionDetail
@@ -359,7 +358,7 @@ Void VectorFieldEvolver::
         const bool carried_snapshot_step =
             diagnostic_step == 500u || diagnostic_step == 1000u || diagnostic_step == 1500u || diagnostic_step == 2000u;
         if (preconditioned_integrator->carried_expansion_diagnostics() && carried_snapshot_step) {
-            EvolutionDetail::print_carried_expansion_snapshot(
+            print_carried_expansion_snapshot(
                 std::cerr, "input", diagnostic_step,
                 dynamic_cast<const ValidatedVectorMultivariateTaylorFunctionModelDP&>(
                     local_state.normalised_mapping().reference()),
@@ -371,7 +370,7 @@ Void VectorFieldEvolver::
                 dynamic, local_state, suggest(maximum_step_size));
 
         if (preconditioned_integrator->carried_expansion_diagnostics() && carried_snapshot_step) {
-            EvolutionDetail::print_carried_expansion_snapshot(
+            print_carried_expansion_snapshot(
                 std::cerr, "output", diagnostic_step,
                 dynamic_cast<const ValidatedVectorMultivariateTaylorFunctionModelDP&>(
                     local_step.final_state().normalised_mapping().reference()),

@@ -442,6 +442,22 @@ partially computed Orbit as a complete result.
 
 ### Orbit compatibility
 
+Recombination is not a prerequisite for returning an Orbit from the tree backend.
+Every trajectory can be evolved independently and its tagged contributions
+projected into the conventional collections. With recombination absent, the flat
+and tree backends must produce exactly equal cardinalities separately for reach,
+intermediate and final, preserving multiplicity as well as the original initial
+enclosure. Tree-node count, completion and genealogy do not replace these output
+roles. The scheduling order may differ; the classified multiset of enclosure
+contributions must agree.
+
+The regression in `tests/test_hybrid_evolution_tree.cpp` checks these three
+cardinalities explicitly, compares each full collection without removing
+duplicates, and checks both initial enclosures against the original input. It
+covers urgent/permissive events, upper/lower semantics, continuous and discrete
+limits, initially active jumps, terminating events, subdivision and invariant
+restrictions including excluded inputs.
+
 Preserve all four existing roles: `initial()`, `reach()`, `intermediate()` and
 `final()`. The initial enclosure is the original input, not a recombined root or
 the collection of all trajectory seeds.

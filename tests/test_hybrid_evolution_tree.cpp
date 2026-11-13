@@ -90,6 +90,30 @@ class TestHybridEvolutionTree : public Testing::ContextFixture {
   public:
     using ContextFixture::ContextFixture;
 
+  private:
+    void compare_backend_orbits(GeneralHybridEvolver& evolver, const HybridEnclosure& initial,
+                                const HybridTerminationCriterion& termination, Semantics semantics) {
+        std::ostringstream original;
+        original << initial;
+        evolver.set_evolution_backend_factory(FlatHybridEvolutionBackendFactory());
+        const auto expected = evolver.orbit(initial, termination, semantics);
+        evolver.set_evolution_backend_factory(TreeHybridEvolutionBackendFactory());
+        const auto actual = evolver.orbit(initial, termination, semantics);
+
+        ARIADNE_TESTING_EXPECT_EQUAL(actual.reach().size(), expected.reach().size());
+        ARIADNE_TESTING_EXPECT_EQUAL(actual.intermediate().size(), expected.intermediate().size());
+        ARIADNE_TESTING_EXPECT_EQUAL(actual.final().size(), expected.final().size());
+        ARIADNE_TESTING_PROVE(descriptions(actual.reach()) == descriptions(expected.reach()));
+        ARIADNE_TESTING_PROVE(descriptions(actual.intermediate()) == descriptions(expected.intermediate()));
+        ARIADNE_TESTING_PROVE(descriptions(actual.final()) == descriptions(expected.final()));
+        std::ostringstream expected_initial, actual_initial;
+        expected_initial << expected.initial();
+        actual_initial << actual.initial();
+        ARIADNE_TESTING_EXPECT_EQUAL(expected_initial.str(), original.str());
+        ARIADNE_TESTING_EXPECT_EQUAL(actual_initial.str(), original.str());
+    }
+
+  public:
     void test_parent_finishes_before_distinct_derived_trajectories() {
         auto initial = seed();
         TreeHybridEvolutionBackend backend(initial);
@@ -250,14 +274,73 @@ class TestHybridEvolutionTree : public Testing::ContextFixture {
             }),
                                                             ExactBoxType({{-1, -0.75_x}, {0, 0}})));
             for (auto semantics: {Semantics::UPPER, Semantics::LOWER}) {
-                evolver.set_evolution_backend_factory(FlatHybridEvolutionBackendFactory());
-                auto expected = evolver.orbit(initial, HybridTime(2, 1), semantics);
-                evolver.set_evolution_backend_factory(TreeHybridEvolutionBackendFactory());
-                auto actual = evolver.orbit(initial, HybridTime(2, 1), semantics);
-                ARIADNE_TESTING_PROVE(descriptions(actual.reach()) == descriptions(expected.reach()));
-                ARIADNE_TESTING_PROVE(descriptions(actual.intermediate()) == descriptions(expected.intermediate()));
-                ARIADNE_TESTING_PROVE(descriptions(actual.final()) == descriptions(expected.final()));
+                compare_backend_orbits(evolver, initial, HybridTime(2, 1), semantics);
             }
+        }
+    }
+
+    void test_flat_and_tree_orbit_counts_match_at_time_and_discrete_limits() {
+        ConcurrencyScope concurrency;
+        DiscreteLocation q(1);
+        RealVariable x("x"), y("y");
+        HybridAutomaton system;
+        system.new_mode(q, {dot(x) = 1, dot(y) = 0});
+        GeneralHybridEvolver evolver(system);
+        evolver.configuration().set_maximum_step_size(0.25_x);
+        const auto initial = evolver.enclosure(HybridExactBox(q, RealSpace({
+                                                                     x, y
+        }),
+                                                              ExactBoxType({{-1, -0.75_x}, {0, 0}})));
+        for (auto semantics: {Semantics::UPPER, Semantics::LOWER}) {
+            compare_backend_orbits(evolver, initial, HybridTime(0, 1), semantics);
+            compare_backend_orbits(evolver, initial, HybridTime(2, 0), semantics);
+            compare_backend_orbits(evolver, initial, HybridTime(2, 1), semantics);
+        }
+    }
+
+    void test_flat_and_tree_orbit_counts_match_with_initial_jumps_and_splitting() {
+        ConcurrencyScope concurrency;
+        DiscreteLocation q(1), target(2);
+        DiscreteEvent jump("jump"), invariant("invariant");
+        RealVariable x("x"), y("y");
+        HybridAutomaton system;
+        system.new_mode(q, {dot(x) = 1, dot(y) = 0});
+        system.new_mode(target, {dot(x) = 0, dot(y) = 0});
+        system.new_transition(q, jump, target, {next(x) = x, next(y) = y}, x >= 0, EventKind::URGENT);
+        GeneralHybridEvolver evolver(system);
+        evolver.configuration().set_enable_subdivisions(true);
+        evolver.configuration().set_maximum_enclosure_radius(0.25_x);
+        const auto active = evolver.enclosure(HybridExactBox(q, RealSpace({
+                                                                    x, y
+        }),
+                                                             ExactBoxType({{1, 1}, {0, 0}})));
+        for (auto semantics: {Semantics::UPPER, Semantics::LOWER}) {
+            compare_backend_orbits(evolver, active, HybridTime(1, 1), semantics);
+            compare_backend_orbits(evolver, active, HybridTerminationCriterion(Real(1), Integer(5), Set<DiscreteEvent>{jump}), semantics);
+        }
+        const auto wide = evolver.enclosure(HybridExactBox(q, RealSpace({
+                                                                  x, y
+        }),
+                                                           ExactBoxType({{-1, 1}, {0, 0}})));
+        for (auto semantics: {Semantics::UPPER, Semantics::LOWER}) {
+            compare_backend_orbits(evolver, wide, HybridTime(0.03125_x, 1), semantics);
+        }
+
+        system.new_invariant(q, x <= -0.5_dec, invariant);
+        GeneralHybridEvolver constrained(system);
+        constrained.configuration().set_enable_subdivisions(true);
+        constrained.configuration().set_maximum_enclosure_radius(0.25_x);
+        for (auto semantics: {Semantics::UPPER, Semantics::LOWER}) {
+            const auto restricted = constrained.enclosure(HybridExactBox(q, RealSpace({
+                                                                                x, y
+            }),
+                                                                         ExactBoxType({{-1, 1}, {0, 0}})));
+            compare_backend_orbits(constrained, restricted, HybridTime(0.03125_x, 1), semantics);
+            const auto excluded = constrained.enclosure(HybridExactBox(q, RealSpace({
+                                                                              x, y
+            }),
+                                                                       ExactBoxType({{1, 2}, {0, 0}})));
+            compare_backend_orbits(constrained, excluded, HybridTime(0.03125_x, 1), semantics);
         }
     }
 };
@@ -270,5 +353,7 @@ int main(int argc, char** argv) {
     ARIADNE_TESTING_ADD_TEST(TestHybridEvolutionTree, test_split_pieces_are_parallel_and_completion_waits_for_all_of_them);
     ARIADNE_TESTING_ADD_TEST(TestHybridEvolutionTree, test_failure_preserves_incomplete_history_without_dispatching_children);
     ARIADNE_TESTING_ADD_TEST(TestHybridEvolutionTree, test_flat_and_tree_orbits_match_for_urgent_and_permissive_systems);
+    ARIADNE_TESTING_ADD_TEST(TestHybridEvolutionTree, test_flat_and_tree_orbit_counts_match_at_time_and_discrete_limits);
+    ARIADNE_TESTING_ADD_TEST(TestHybridEvolutionTree, test_flat_and_tree_orbit_counts_match_with_initial_jumps_and_splitting);
     return ARIADNE_TESTING_RUN_TESTS_WITH_ARGS(argc, argv);
 }

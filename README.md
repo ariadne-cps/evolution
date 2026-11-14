@@ -279,3 +279,32 @@ Projection containment and guard-width metrics in the benchmark are
 unsound recombination, nor do positive projection checks independently
 establish whole constrained-set inclusion. The proof instead relies on
 validated model arithmetic and feasible-point-preserving contractors.
+
+### Concise C++ test logging in CI
+
+Evolution C++ tests use Ariadne Testing's standard `--full` /
+`--concise` switch. Locally, `ctest` runs the normal verbose mode by
+default. The macOS, Ubuntu, Windows, coverage and sanitizer workflows
+configure `-DEVOLUTION_CTEST_CONCISE=ON`, which makes CTest pass
+`--concise` to the Evolution test executables.
+
+In concise mode the Testing reporter prints only its concise summaries,
+and the Ariadne Logger redirects its output to `/dev/null` on POSIX
+or `NUL` on Windows. The logger's verbosity is raised to 100, so
+logging expressions continue to execute for coverage; **no logger mute
+or compile-time removal** is used. Direct invocation without flags, or
+with `--full`, leaves logger configuration untouched. The three
+header-only compile tests continue to ignore their command-line arguments.
+
+To reproduce the CI behavior locally, reconfigure your build:
+
+```bash
+cmake -S . -B build-release -DEVOLUTION_CTEST_CONCISE=ON
+cmake --build build-release --target tests
+ctest --test-dir build-release --output-on-failure
+```
+
+To restore the default verbose local behavior, reconfigure with
+`-DEVOLUTION_CTEST_CONCISE=OFF`. These modes change logging and
+reporting only; they do not remove tests, change numerical inputs or
+skip diagnostic test variants.

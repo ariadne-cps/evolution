@@ -790,3 +790,22 @@ use deterministic serial runs where exact collection comparison is appropriate.
 Scheduler tests must show that a child is recorded before its parent completes
 but is not dispatched until the completed child group has been handled, and that
 one completed split piece cannot prematurely complete its trajectory.
+
+### Experimental source selection and quality flags (2026-11)
+
+For a fixed integration step and fixed absolute birth-time window, use
+time-distributed selection of **existing** enclosures at cardinalities
+2, 4 and 8, including both extreme eligible checkpoints. This retains
+the original source set constraints but represents a strict subset
+of the full window unless all eligible enclosures are selected.
+Report generated, eligible and selected counts separately.
+
+The benchmark's output-projection containment checks are sufficient
+statements about computed validated **outer intervals**, not about
+constrained-set inclusion. Inconclusive outcomes are expected even
+when sound recombination succeeds. A guard quality flag checks whether
+the entire output outer approximation respects the original urgent
+equality or permissive inequality; its violation-bound diagnostic
+captures possible excess due to wrapping. These provide verifiable
+quality indicators without replacing a future rigorous inclusion
+procedure on constrained models.

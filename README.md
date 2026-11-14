@@ -213,3 +213,48 @@ The selection phase uses a separate feasibility copy to discard only
 provably empty restrictions. The C++ correctness suite also tests a
 whole-domain algebraic witness for two guard-constrained curves,
 preserving state, absolute time and dwell time jointly.
+
+### Distributed fixed-cardinality subsets and verified quality diagnostics
+
+The C++ recombination benchmark can select a fixed number of existing
+post-reset enclosures spread across the **whole** fixed time window,
+including the first and last eligible enclosures. The input enclosures
+retain their original joint state/time constraints; no interpolation
+or synthetic enclosures are introduced.
+
+```bash
+./build-release/benchmarks/benchmark_recombination \
+  --sweep 1 --steps 0.015625 \
+  --time-window 0.625,0.75 \
+  --distributed-counts 2,4,8 \
+  --samples 5 --warmups 1 \
+  --csv build-release/recombination-distributed.csv
+```
+
+The CSV distinguishes `window-distributed` (a subset) from
+`time-window` (the entire collection of eligible enclosures) and
+records `generated`, `eligible` and `selected` separately. If a
+requested cardinality exceeds the eligible count, that configuration
+fails explicitly instead of duplicating sources. With a fixed step and
+window, this experiment separates selected cardinality from the
+physical time span, **but does not measure coverage of the complete
+window** when it omits eligible sources.
+
+In addition to interval-width ratios, the CSV now records four
+sufficient **outer-projection containment** checks (joint coordinate
+and clock intervals, plus the nonlinear target-flow invariant, before
+and after continuation). A value `1` certifies containment of the
+corresponding computed validated outer intervals; `0` is
+**inconclusive**, not a counterexample to actual constrained-set
+inclusion. The separate `guard_universally_verified` flag certifies
+that the *entire output outer approximation* satisfies the urgent
+guard equality `x+y=0` or permissive guard inequality `x+y>=0`.
+`guard_violation_upper` bounds the potential excursion of that
+outer approximation from the guard (absolute magnitude for the urgent
+case, negative-side excess for permissive). Both guard metrics may be
+conservative because they do not solve all constraints.
+
+None of these checks, individually or collectively, constitutes a
+general proof that the recombined **constrained set** contains the
+union of the source constrained sets. Such a proof requires verified
+joint feasibility/inclusion reasoning, not interval-hull comparisons.

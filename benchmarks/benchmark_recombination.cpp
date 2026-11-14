@@ -183,12 +183,68 @@ void accumulate(std::optional<Projection>& total, const Enclosure& enclosure) {
     }
 }
 
+// Closed-form target flow independent of the numerical integrator:
+// y(T)=q+(T-tau), x(T)=p+(1+q^2)(T-tau)+q(T-tau)^2+(T-tau)^3/3.
+// Arithmetic is validated over each input's complete reduced parameter box;
+// no source parameters are sampled or replaced by a manually constructed box.
+Projection analytic_target_projection(const Enclosure& source, double final_time) {
+    const auto domain = source.reduced_domain();
+    const auto p = source.state_function().get(0);
+    const auto q = source.state_function().get(1);
+    const auto delta = FloatDPBounds(Real(ExactDouble(final_time)), dp) - source.time_function();
+    const auto delta2 = sqr(delta);
+    const auto one_third = FloatDPBounds(Real(1 / 3_q), dp);
+    const auto x = p + (1 + sqr(q)) * delta + q * delta2 + one_third * delta2 * delta;
+    const auto y = q + delta;
+    const auto t = source.time_function() + delta;
+    const auto dwell = source.dwell_time_function() + delta;
+    const auto invariant = x - y - one_third * y * sqr(y);
+    return {UpperBoxType({apply(x, domain), apply(y, domain)}),
+            apply(t, domain), apply(dwell, domain), apply(invariant, domain)};
+}
+
+// Recover the source initial coordinates from the post-reset model using
+// the *independent* analytic source flow. Interval intersection tests can
+// refute gross inconsistencies; they do not certify that all represented
+// points obey the source initial-set constraints.
+void check_analytic_source_consistency(const Enclosure& source, bool urgent) {
+    const auto domain = source.reduced_domain();
+    const auto x = source.state_function().get(0);
+    const auto y = source.state_function().get(1);
+    const auto tau = source.time_function();
+    const auto a = x - tau;
+    const auto b = y - FloatDPBounds(Real(1 / 3_q), dp) * (x * sqr(x) - a * sqr(a));
+    const auto initial_a = urgent ? UpperIntervalType(-2, -1) : UpperIntervalType(1, 2);
+    const UpperIntervalType initial_b(-0.5_x, 0.5_x);
+    if (definitely(intersection(apply(a, domain), initial_a).is_empty()) ||
+        definitely(intersection(apply(b, domain), initial_b).is_empty()))
+        throw std::runtime_error("analytical source-flow reconstruction contradicts initial set");
+    const auto guard = apply(x + y, domain);
+    if (urgent && definitely(intersection(guard, UpperIntervalType(0, 0)).is_empty()))
+        throw std::runtime_error("urgent post-reset checkpoint contradicts guard equality");
+    if (!urgent && guard.upper_bound().raw().get_d() < 0.0)
+        throw std::runtime_error("permissive post-reset checkpoint contradicts guard");
+}
+
+void check_reference_overlap(const Projection& reference, const Projection& evolved,
+                             const char* path) {
+    // A definite disjointness of analytic and numerical *outer* ranges is a
+    // necessary-condition failure. Mere overlap is NOT inclusion certification.
+    for (SizeType k = 0; k != reference.state.size(); ++k)
+        if (definitely(intersection(reference.state[k], evolved.state[k]).is_empty()))
+            throw std::runtime_error(std::string(path) + ": analytic and numerical state projections are disjoint");
+    if (definitely(intersection(reference.time, evolved.time).is_empty()) ||
+        definitely(intersection(reference.dwell, evolved.dwell).is_empty()))
+        throw std::runtime_error(std::string(path) + ": analytic and numerical clock projections are disjoint");
+}
+
 struct Measurement {
     double contraction_ns = 0, recombination_ns = 0;
     double independent_ns = 0, merged_ns = 0;
     SizeType independent_final = 0, merged_final = 0;
     EnclosureRecombinationResult result;
     std::optional<Projection> source, merged, continued_independent, continued_merged;
+    std::optional<Projection> analytical_final;
     double independent_total_ns() const { return contraction_ns + independent_ns; }
     double merged_total_ns() const { return contraction_ns + recombination_ns + merged_ns; }
 };
@@ -196,7 +252,8 @@ struct Measurement {
 Measurement measure(const List<Enclosure>& original,
                     const GeneralHybridEvolver& continuation,
                     const HybridTerminationCriterion& stop,
-                    DiscreteLocation target, RealSpace space) {
+                    DiscreteLocation target, RealSpace space,
+                    double final_time, bool urgent) {
     Measurement m;
     List<Enclosure> contracted = original;
     const auto contraction_start = Bench::Clock::now();
@@ -240,8 +297,21 @@ Measurement measure(const List<Enclosure>& original,
     const auto merged_end = Bench::Clock::now();
     m.merged_ns = Bench::elapsed_ns(merged_start, merged_end);
 
-    for (const auto& source: contracted)
+    for (const auto& source: contracted) {
+        check_analytic_source_consistency(source, urgent);
         accumulate(m.source, source);
+        // Independently evaluate the full exact target polynomial flow,
+        // retaining parameter correlations instead of evolving interval boxes.
+        const auto projection = analytic_target_projection(source, final_time);
+        if (!m.analytical_final)
+            m.analytical_final = projection;
+        else {
+            m.analytical_final->state = hull(m.analytical_final->state, projection.state);
+            m.analytical_final->time = hull(m.analytical_final->time, projection.time);
+            m.analytical_final->dwell = hull(m.analytical_final->dwell, projection.dwell);
+            m.analytical_final->invariant = hull(m.analytical_final->invariant, projection.invariant);
+        }
+    }
     accumulate(m.merged, m.result.outputs.front().enclosure);
     for (const auto& orbit: independent_orbits) {
         m.independent_final += orbit.final().size();
@@ -251,8 +321,11 @@ Measurement measure(const List<Enclosure>& original,
     m.merged_final = merged_orbit.final().size();
     for (const auto& enclosure: merged_orbit.final())
         accumulate(m.continued_merged, enclosure.continuous_set());
-    if (!m.source || !m.merged || !m.continued_independent || !m.continued_merged)
+    if (!m.source || !m.merged || !m.continued_independent ||
+        !m.continued_merged || !m.analytical_final)
         throw std::runtime_error("missing source or final projection");
+    check_reference_overlap(*m.analytical_final, *m.continued_independent, "independent");
+    check_reference_overlap(*m.analytical_final, *m.continued_merged, "recombined");
     return m;
 }
 
@@ -310,6 +383,12 @@ void describe_quality(const Measurement& m) {
               << " radius-limit-satisfied=" << m.result.radius_limit_satisfied << "\n";
     compare_quality("at recombination", *m.source, *m.merged);
     compare_quality("after continuation", *m.continued_independent, *m.continued_merged);
+    compare_quality("analytic target flow vs independent continuation",
+                    *m.analytical_final, *m.continued_independent);
+    compare_quality("analytic target flow vs recombined continuation",
+                    *m.analytical_final, *m.continued_merged);
+    std::cout << "  Analytic overlap/reconstruction checks passed; "
+                 "these are necessary conditions, NOT set-inclusion certificates.\n";
 }
 
 void run_scenario(const Scenario& scenario, const Options& options, const Bench::CommandLine& cli) {
@@ -335,7 +414,8 @@ void run_scenario(const Scenario& scenario, const Options& options, const Bench:
     std::optional<Measurement> last;
     unsigned round = 0u;
     const auto completed = runner.run(scenario.name, options.samples, [] {}, [&] {
-        last = measure(original, continuation, stop, target, RealSpace({x, y}));
+        last = measure(original, continuation, stop, target, RealSpace({x, y}),
+                       scenario.continuation_horizon, scenario.kind == EventKind::URGENT);
     }, [&] {
         if (!last)
             throw std::runtime_error("missing measurement");

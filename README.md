@@ -106,8 +106,16 @@ outside timing. Keep concurrency and verbosity fixed.
 
 Both the initial and the continued enclosure collections are compared by
 outward-rounded coordinate projection widths for state, absolute time and dwell
-time. The report includes independent/recombined final counts, source
-provenance, constraint/parameter counts, phase timings and end-to-end totals.
+time. The benchmark also uses **independent closed-form source and target flow
+equations** to reconstruct initial coordinates from every generated post-reset
+checkpoint and propagate its entire reduced parameter box to the final horizon.
+This yields analytic interval projections for comparison with both evolutions.
+An analytically impossible source/guard intersection or disjoint analytic and
+computed outer projections fails the run. These are **necessary consistency
+checks, not certified coverage of the source union by the recombined set**.
+All checks and analytic projections run outside timing. The report includes
+independent/recombined final counts, source provenance, constraint/parameter
+counts, phase timings and end-to-end totals.
 Widths close to roundoff at a fixed absolute time or dwell are reported
 with an undefined (n/a) ratio. Each interval also reports both endpoints and
 their outward-hull shortfalls so that near-boundary differences are visible;

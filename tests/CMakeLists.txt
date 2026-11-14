@@ -1,5 +1,4 @@
 include(CTest)
-option(EVOLUTION_CTEST_CONCISE "Use --concise for Evolution CTest executables (CI only)" OFF)
 set(UNIT_TESTS
     test_orbit_collections
     test_scalings
@@ -29,11 +28,7 @@ set(UNIT_TESTS
 foreach(TEST IN LISTS UNIT_TESTS)
     add_executable(${TEST} ${TEST}.cpp)
     target_link_libraries(${TEST} PRIVATE ariadne-evolution evolution ariadne-testing)
-    if(EVOLUTION_CTEST_CONCISE)
-        add_test(NAME ${TEST} COMMAND $<TARGET_FILE:${TEST}> --concise)
-    else()
-        add_test(NAME ${TEST} COMMAND $<TARGET_FILE:${TEST}>)
-    endif()
+    add_test(NAME ${TEST} COMMAND $<TARGET_FILE:${TEST}> --concise)
     set_property(TEST ${TEST} PROPERTY LABELS "evolution")
 endforeach()
 add_custom_target(tests)

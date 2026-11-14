@@ -60,7 +60,7 @@ jobs:
       env:
         CXXFLAGS: ${{ matrix.build_type == 'Debug' && matrix.config.libstdcxx_debug && '-D_GLIBCXX_DEBUG' || '' }}
       working-directory: ${{ runner.workspace }}/build
-      run: cmake $GITHUB_WORKSPACE -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} -DCMAKE_CXX_COMPILER=${{ matrix.config.cxx }} -DCMAKE_CXX_COMPILER_LAUNCHER="$SCCACHE_LAUNCHER" -G Ninja -DEVOLUTION_CTEST_CONCISE=ON -DWARNINGS_AS_ERRORS=ON -DBUILD_PYTHON_BINDINGS=ON -DPYTHON_ENFORCE_TESTS=ON
+      run: cmake $GITHUB_WORKSPACE -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} -DCMAKE_CXX_COMPILER=${{ matrix.config.cxx }} -DCMAKE_CXX_COMPILER_LAUNCHER="$SCCACHE_LAUNCHER" -G Ninja -DWARNINGS_AS_ERRORS=ON -DBUILD_PYTHON_BINDINGS=ON -DPYTHON_ENFORCE_TESTS=ON
 
     - name: Build Evolution
       working-directory: ${{ runner.workspace }}/build

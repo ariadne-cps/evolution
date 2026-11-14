@@ -59,7 +59,7 @@ jobs:
             -DCMAKE_CXX_COMPILER_LAUNCHER="$env:SCCACHE_LAUNCHER" `
             -DCMAKE_CXX_FLAGS_DEBUG="/Z7 /Ob0 /Od /RTC1" `
             -DBUILD_PYTHON_BINDINGS=ON -DPYTHON_ENFORCE_TESTS=ON `
-            -DEVOLUTION_CTEST_CONCISE=ON -DWARNINGS_AS_ERRORS=ON
+            -DWARNINGS_AS_ERRORS=ON
 
       - name: Build Ariadne
         run: cmake --build build --parallel --target ariadne-evolution pyariadne

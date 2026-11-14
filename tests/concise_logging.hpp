@@ -23,39 +23,27 @@
  */
 
 /** @file tests/concise_logging.hpp
- *  @brief Preserve logging execution and coverage while discarding console output in CI.
+ *  @brief Discard Ariadne Logger output without modifying verbosity or test reporting.
  */
 
 #pragma once
 
-#include <string_view>
-
 #include "ariadne-testing.hpp"
 #include "logging/logging.hpp"
 
-/** @brief Run an Evolution test suite with ordinary Testing CLI semantics.
- *  @details The --concise flag controls the Testing reporter and redirects
- *  Ariadne Logger output to the platform's null device. Unlike muting or
- *  setting verbosity to zero, this keeps high-level log expressions active
- *  for code coverage. Without --concise, no Logger setting is changed.
- *  CTest enables --concise only when EVOLUTION_CTEST_CONCISE is ON.
+/** @brief Redirect Ariadne Logger diagnostics independently of the test reporter.
+ *  @details Logger output goes to the platform's null device on every test
+ *  execution, just as in constraint-solving. Do not change logger verbosity:
+ *  the same logging expressions are evaluated, including dedicated verbose
+ *  fixture variants, so coverage is preserved. --concise and --full still
+ *  control only Ariadne Testing's console reporter.
  */
 template<class Argv>
 int run_evolution_test_suite(const Ariadne::Testing::Suite& suite, int argc, Argv argv) {
-    bool concise = false;
-    for (int i = 1; i < argc; ++i) {
-        if (argv[i] != nullptr && std::string_view(argv[i]) == "--concise")
-            concise = true;
-    }
-    if (concise) {
 #ifdef _WIN32
-        Ariadne::Logger::instance().redirect_to_file("NUL");
+    Ariadne::Logger::instance().redirect_to_file("NUL");
 #else
-        Ariadne::Logger::instance().redirect_to_file("/dev/null");
+    Ariadne::Logger::instance().redirect_to_file("/dev/null");
 #endif
-        // Continue evaluating all ordinary logging expressions, including
-        // levels otherwise suppressed by the default logger verbosity.
-        Ariadne::Logger::instance().configuration().set_verbosity(100u);
-    }
     return Ariadne::Testing::run_suite(suite, argc, argv);
 }

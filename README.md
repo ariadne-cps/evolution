@@ -280,31 +280,27 @@ unsound recombination, nor do positive projection checks independently
 establish whole constrained-set inclusion. The proof instead relies on
 validated model arithmetic and feasible-point-preserving contractors.
 
-### Concise C++ test logging in CI
+### Test reporter versus Ariadne Logger
 
-Evolution C++ tests use Ariadne Testing's standard `--full` /
-`--concise` switch. Locally, `ctest` runs the normal verbose mode by
-default. The macOS, Ubuntu, Windows, coverage and sanitizer workflows
-configure `-DEVOLUTION_CTEST_CONCISE=ON`, which makes CTest pass
-`--concise` to the Evolution test executables.
+The two output channels are independent. CTest passes `--concise` to all
+Evolution C++ test executables, as in `threading`, `integration`, `system`
+and `constraint-solving`. The flag controls **only** the Ariadne Testing
+reporter; running a test executable directly without it uses the full
+reporter. No CI-specific CMake switch is needed.
 
-In concise mode the Testing reporter prints only its concise summaries,
-and the Ariadne Logger redirects its output to `/dev/null` on POSIX
-or `NUL` on Windows. The logger's verbosity is raised to 100, so
-logging expressions continue to execute for coverage; **no logger mute
-or compile-time removal** is used. Direct invocation without flags, or
-with `--full`, leaves logger configuration untouched. The three
-header-only compile tests continue to ignore their command-line arguments.
-
-To reproduce the CI behavior locally, reconfigure your build:
+The Ariadne Logger output is separately redirected to `/dev/null` on POSIX
+or `NUL` on Windows for every test run, including `--full`. This matches
+the logging redirect in the `constraint-solving` test suite. **Verbosity is
+never changed by the test runner.** Logging expressions at enabled levels
+still execute (including explicit high-verbosity fixture variants); only the
+terminal output is discarded, preserving logging-code coverage.
 
 ```bash
-cmake -S . -B build-release -DEVOLUTION_CTEST_CONCISE=ON
-cmake --build build-release --target tests
-ctest --test-dir build-release --output-on-failure
+cmake --build build-release --target test_hybrid_evolver
+ctest --test-dir build-release -R '^test_hybrid_evolver$' --output-on-failure
+./build-release/tests/test_hybrid_evolver --concise
+./build-release/tests/test_hybrid_evolver --full
 ```
 
-To restore the default verbose local behavior, reconfigure with
-`-DEVOLUTION_CTEST_CONCISE=OFF`. These modes change logging and
-reporting only; they do not remove tests, change numerical inputs or
-skip diagnostic test variants.
+The three header-only compilation tests do not use the testing framework and
+continue to ignore their arguments.

@@ -66,6 +66,7 @@ struct Options {
     std::vector<unsigned> groups = {2u, 4u, 8u};
     std::string csv = "recombination-sweep.csv";
     std::optional<std::pair<double, double>> time_window;
+    std::vector<double> window_widths;
 };
 
 // Parse a bounded-size CLI axis without relying on textual benchmark output.
@@ -143,6 +144,14 @@ List<ArgumentParser> argument_parsers(Options& options) {
                                                [&options](const String& value) -> VoidFunction {
                                                    const auto bounds = parse_time_window(value);
                                                    return [&options, bounds] { options.time_window = bounds; };
+                                               }));
+    parsers.append(make_valued_argument_parser("", "window-widths",
+                                               "Sweep comma-separated widths centred on --time-window midpoint",
+                                               [&options](const String& value) -> VoidFunction {
+                                                   auto widths = parse_steps(value);
+                                                   return [&options, widths = std::move(widths)] {
+                                                       options.window_widths = widths;
+                                                   };
                                                }));
     parsers.append(make_valued_argument_parser("", "sweep",
                                                "Run the built-in C++ step/group sweep: 1 enables (default: 0)",
@@ -247,8 +256,9 @@ List<Enclosure> generate(const Scenario& scenario, const Options& options,
             auto source = checkpoint.continuous_set();
             source.new_state_time_constraint(ValidatedConstraint(
                 ExactDouble(window_start), absolute_time, ExactDouble(window_end)));
-            source.reduce();
-            if (!definitely(source.is_empty()))
+            // Contract only a probe: keep actual contraction in timed measurement.
+            auto probe = source;
+            if (!definitely(probe.is_empty()))
                 selection.append(std::move(source));
         }
     } else {
@@ -367,6 +377,7 @@ struct Measurement {
     EnclosureRecombinationResult result;
     std::optional<Projection> source, merged, continued_independent, continued_merged;
     std::optional<Projection> analytical_final;
+    std::vector<Projection> analytical_per_source;
     double independent_total_ns() const { return contraction_ns + independent_ns; }
     double merged_total_ns() const { return contraction_ns + recombination_ns + merged_ns; }
 };
@@ -425,6 +436,7 @@ Measurement measure(const List<Enclosure>& original,
         // Independently evaluate the full exact target polynomial flow,
         // retaining parameter correlations instead of evolving interval boxes.
         const auto projection = analytic_target_projection(source, final_time);
+        m.analytical_per_source.push_back(projection);
         if (!m.analytical_final)
             m.analytical_final = projection;
         else {
@@ -446,8 +458,16 @@ Measurement measure(const List<Enclosure>& original,
     if (!m.source || !m.merged || !m.continued_independent ||
         !m.continued_merged || !m.analytical_final)
         throw std::runtime_error("missing source or final projection");
-    check_reference_overlap(*m.analytical_final, *m.continued_independent, "independent");
-    check_reference_overlap(*m.analytical_final, *m.continued_merged, "recombined");
+    check_reference_overlap(*m.analytical_final, *m.continued_independent, "independent union");
+    check_reference_overlap(*m.analytical_final, *m.continued_merged, "recombined union");
+    // Whole-union overlap can mask a source that is disjoint from the output.
+    for (SizeType i = 0; i != m.analytical_per_source.size(); ++i) {
+        const auto label = std::string("source ") + std::to_string(i);
+        check_reference_overlap(m.analytical_per_source[i], *m.continued_independent,
+                                (label + " independent").c_str());
+        check_reference_overlap(m.analytical_per_source[i], *m.continued_merged,
+                                (label + " recombined").c_str());
+    }
     return m;
 }
 
@@ -516,6 +536,9 @@ void describe_quality(const Measurement& m) {
 struct ScenarioSummary {
     SizeType generated = 0, selected = 0;
     SizeType independent_final = 0, recombined_final = 0;
+    double contraction_mean_ns = 0.0, recombination_mean_ns = 0.0;
+    double contract_recombine_mean_ns = 0.0;
+    double continue_independent_mean_ns = 0.0, continue_recombined_mean_ns = 0.0;
     double independent_mean_ns = 0.0, recombined_mean_ns = 0.0;
     double x_final_ratio = 0.0, y_final_ratio = 0.0;
     double invariant_initial_ratio = 0.0, invariant_final_ratio = 0.0;
@@ -590,6 +613,11 @@ ScenarioSummary run_scenario(const Scenario& scenario, const Options& options,
     if (!last)
         throw std::runtime_error("missing final sample");
 
+    summary.contraction_mean_ns = Bench::summarize(contractions).mean;
+    summary.recombination_mean_ns = Bench::summarize(recombinations).mean;
+    summary.contract_recombine_mean_ns = Bench::summarize(totals).mean;
+    summary.continue_independent_mean_ns = Bench::summarize(independents).mean;
+    summary.continue_recombined_mean_ns = Bench::summarize(merged).mean;
     summary.independent_mean_ns = Bench::summarize(independent_totals).mean;
     summary.recombined_mean_ns = Bench::summarize(merged_totals).mean;
     summary.independent_final = last->independent_final;
@@ -660,9 +688,10 @@ void csv_configuration(std::ostream& stream, const Options& options) {
     stream << options.step << ',' << options.accuracy << ',';
     if (options.time_window)
         stream << "time-window,," << options.time_window->first << ','
-               << options.time_window->second << ',';
+               << options.time_window->second << ','
+               << options.time_window->second - options.time_window->first << ',';
     else
-        stream << "adjacent," << options.group_size << ",,,";
+        stream << "adjacent," << options.group_size << ",,,,";
 }
 
 void csv_success(std::ostream& stream, const Options& options,
@@ -671,6 +700,16 @@ void csv_success(std::ostream& stream, const Options& options,
     stream << scenario.name << ",ok," << result.generated << ',' << result.selected
            << ',' << options.samples << ',' << result.independent_final << ','
            << result.recombined_final << ',';
+    csv_number(stream, result.contraction_mean_ns);
+    stream << ',';
+    csv_number(stream, result.recombination_mean_ns);
+    stream << ',';
+    csv_number(stream, result.contract_recombine_mean_ns);
+    stream << ',';
+    csv_number(stream, result.continue_independent_mean_ns);
+    stream << ',';
+    csv_number(stream, result.continue_recombined_mean_ns);
+    stream << ',';
     csv_number(stream, result.independent_mean_ns);
     stream << ',';
     csv_number(stream, result.recombined_mean_ns);
@@ -697,14 +736,34 @@ void csv_failure(std::ostream& stream, const Options& options,
                  const Scenario& scenario, const std::string& message) {
     csv_configuration(stream, options);
     stream << scenario.name << ",failed,";
-    // Exactly 15 empty metric fields between status and the error message.
-    for (unsigned index = 0u; index != 15u; ++index)
+    // Five count fields, five phase means, two total means, one speedup
+    // and seven quality ratios.
+    for (unsigned index = 0u; index != 20u; ++index)
         stream << ',';
     stream << csv_escape(message) << '\n';
 }
 
 int run_sweep(const Scenario (&scenarios)[2], const Options& options,
               const Bench::CommandLine& cli) {
+    if (!options.window_widths.empty() && !options.time_window)
+        throw std::invalid_argument("--window-widths requires --time-window");
+    std::vector<std::optional<std::pair<double, double>>> windows;
+    if (!options.time_window) {
+        windows.push_back(std::nullopt);
+    } else if (options.window_widths.empty()) {
+        windows.push_back(options.time_window);
+    } else {
+        const double center = options.time_window->first / 2.0 +
+                              options.time_window->second / 2.0;
+        for (const auto width: options.window_widths) {
+            const auto lo = center - width / 2.0;
+            const auto hi = center + width / 2.0;
+            if (lo < 0.0 || hi >= 1.0)
+                throw std::invalid_argument("width exceeds common generation horizon");
+            windows.push_back(std::make_pair(lo, hi));
+        }
+    }
+
     const std::filesystem::path path(options.csv);
     if (path.has_parent_path())
         std::filesystem::create_directories(path.parent_path());
@@ -712,48 +771,50 @@ int run_sweep(const Scenario (&scenarios)[2], const Options& options,
     if (!csv)
         throw std::runtime_error("cannot open CSV file: " + options.csv);
     csv << std::setprecision(17);
-    csv << "step,accuracy,selection_mode,group_size,window_start,window_end,"
-           "scenario,status,generated,selected,samples,"
-           "independent_final,recombined_final,independent_mean_ns,recombined_mean_ns,"
-           "net_speedup,x_final_ratio,y_final_ratio,invariant_initial_ratio,"
-           "invariant_final_ratio,analytic_x_ratio,analytic_y_ratio,"
-           "analytic_invariant_ratio,error\n";
+    csv << "step,accuracy,selection_mode,group_size,window_start,window_end,window_width,"
+           "scenario,status,generated,selected,samples,independent_final,recombined_final,"
+           "contraction_mean_ns,recombination_mean_ns,contract_recombine_mean_ns,"
+           "continue_independent_mean_ns,continue_recombined_mean_ns,"
+           "independent_mean_ns,recombined_mean_ns,net_speedup,"
+           "x_final_ratio,y_final_ratio,invariant_initial_ratio,invariant_final_ratio,"
+           "analytic_x_ratio,analytic_y_ratio,analytic_invariant_ratio,error\n";
     bool failed = false;
-    // Fixed-window mode has no group-size axis: changing the step changes
-    // the count of genuine checkpoints partitioning the same birth-time span.
-    for (double step: options.steps) {
-        const auto groups = options.time_window ? std::vector<unsigned>{options.group_size}
-                                                : options.groups;
-        for (unsigned group_size: groups) {
-            Options configuration = options;
-            configuration.step = step;
-            configuration.group_size = group_size;
-            for (const auto& scenario: scenarios) {
-                std::cout << "RUN " << scenario.name << " step=" << step;
-                if (configuration.time_window)
-                    std::cout << " window=[" << configuration.time_window->first
-                              << "," << configuration.time_window->second << "]";
-                else
-                    std::cout << " group-size=" << group_size;
-                std::cout << " accuracy=" << options.accuracy << std::endl;
-                try {
-                    const auto result = run_scenario(scenario, configuration, cli, false);
-                    csv_success(csv, configuration, scenario, result);
-                    std::cout << "  ok generated=" << result.generated
-                              << " selected=" << result.selected
-                              << " independent-final=" << result.independent_final
-                              << " recombined-final=" << result.recombined_final
-                              << " speedup=" << result.independent_mean_ns / result.recombined_mean_ns
-                              << " invariant-inflation=" << result.invariant_final_ratio << '\n';
-                } catch (const std::exception& error) {
-                    failed = true;
-                    csv_failure(csv, configuration, scenario, error.what());
-                    std::cerr << "  FAILED " << scenario.name << " step=" << step
-                              << ": " << error.what() << '\n';
+    for (const auto step: options.steps) {
+        for (const auto& window: windows) {
+            const auto groups = window ? std::vector<unsigned>{options.group_size} : options.groups;
+            for (const auto size: groups) {
+                auto configuration = options;
+                configuration.step = step;
+                configuration.group_size = size;
+                configuration.time_window = window;
+                for (const auto& scenario: scenarios) {
+                    std::cout << "RUN " << scenario.name << " step=" << step;
+                    if (window)
+                        std::cout << " window=[" << window->first << "," << window->second << "]";
+                    else
+                        std::cout << " group-size=" << size;
+                    std::cout << " accuracy=" << options.accuracy << std::endl;
+                    try {
+                        const auto result = run_scenario(scenario, configuration, cli, false);
+                        csv_success(csv, configuration, scenario, result);
+                        std::cout << "  ok generated=" << result.generated
+                                  << " selected=" << result.selected
+                                  << " contract-ms=" << result.contraction_mean_ns / 1.0e6
+                                  << " recombine-ms=" << result.recombination_mean_ns / 1.0e6
+                                  << " independent-ms=" << result.continue_independent_mean_ns / 1.0e6
+                                  << " merged-ms=" << result.continue_recombined_mean_ns / 1.0e6
+                                  << " speedup=" << result.independent_mean_ns / result.recombined_mean_ns
+                                  << " invariant-ratio=" << result.invariant_final_ratio << '\n';
+                    } catch (const std::exception& error) {
+                        failed = true;
+                        csv_failure(csv, configuration, scenario, error.what());
+                        std::cerr << "  FAILED " << scenario.name << " step=" << step
+                                  << ": " << error.what() << '\n';
+                    }
+                    csv.flush();
+                    if (!csv)
+                        throw std::runtime_error("cannot write CSV file: " + options.csv);
                 }
-                csv.flush();
-                if (!csv)
-                    throw std::runtime_error("cannot write CSV file: " + options.csv);
             }
         }
     }
@@ -778,6 +839,8 @@ int main(int argc, const char* argv[]) {
         };
         if (options.sweep)
             return run_sweep(scenarios, options, cli);
+        if (!options.window_widths.empty())
+            throw std::invalid_argument("--window-widths requires --sweep 1");
         for (const auto& scenario: scenarios)
             run_scenario(scenario, options, cli, true);
         return 0;

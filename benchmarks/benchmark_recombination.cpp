@@ -30,6 +30,7 @@
 #include <cmath>
 #include <iomanip>
 #include <iostream>
+#include <limits>
 #include <optional>
 #include <stdexcept>
 #include <string>
@@ -156,20 +157,29 @@ List<HybridEnclosure> generate(const Scenario& scenario, const Options& options,
 // Outward-rounded projections: wrapping diagnostics, not set-inclusion proofs.
 struct Projection {
     UpperBoxType state;
-    UpperIntervalType time, dwell;
+    UpperIntervalType time, dwell, invariant;
 };
 
 void accumulate(std::optional<Projection>& total, const Enclosure& enclosure) {
     const auto domain = enclosure.reduced_domain();
+    const auto x = enclosure.state_function().get(0);
+    const auto y = enclosure.state_function().get(1);
+    // For the target flow x'=1+y^2, y'=1, the quantity
+    // I=x-y-y^3/3 is constant along exact trajectories.
+    // Evaluation on a function patch (rather than on a state box) retains
+    // some nonlinear correlations; it remains an outer bound, not a proof.
+    const auto invariant = x - y - FloatDPBounds(Real(1 / 3_q), dp) * y * sqr(y);
     Projection current{apply(enclosure.state_function(), domain),
                        apply(enclosure.time_function(), domain),
-                       apply(enclosure.dwell_time_function(), domain)};
+                       apply(enclosure.dwell_time_function(), domain),
+                       apply(invariant, domain)};
     if (!total) {
         total = std::move(current);
     } else {
         total->state = hull(total->state, current.state);
         total->time = hull(total->time, current.time);
         total->dwell = hull(total->dwell, current.dwell);
+        total->invariant = hull(total->invariant, current.invariant);
     }
 }
 
@@ -250,28 +260,44 @@ double width(const UpperIntervalType& value) {
     return value.upper_bound().raw().get_d() - value.lower_bound().raw().get_d();
 }
 
+// Report outward-rounded widths together with endpoint discrepancies. A
+// negative hull-containment verdict cannot decide constrained-set coverage.
+// Tiny time/dwell widths near a fixed horizon are roundoff, not real spread.
+void compare_interval(const std::string& name, const UpperIntervalType& baseline,
+                      const UpperIntervalType& candidate) {
+    const double lo = baseline.lower_bound().raw().get_d();
+    const double hi = baseline.upper_bound().raw().get_d();
+    const double mlo = candidate.lower_bound().raw().get_d();
+    const double mhi = candidate.upper_bound().raw().get_d();
+    const double before = width(baseline), after = width(candidate);
+    const double scale = std::max({1.0, std::abs(lo), std::abs(hi)});
+    const double negligible = 32.0 * std::numeric_limits<double>::epsilon() * scale;
+
+    std::cout << "    " << name << " independent-width=" << std::setprecision(9) << before
+              << " merged-width=" << after << " ratio=";
+    if (before > negligible)
+        std::cout << after / before;
+    else
+        std::cout << "n/a (degenerate baseline)";
+    // Endpoint shortfalls are comparisons of validated interval *bounds*
+    // represented as doubles. They are not errors or counterexamples to set
+    // inclusion, because the input interval hull may contain infeasible points.
+    std::cout << "\n      independent=[" << std::setprecision(17) << lo << "," << hi
+              << "] merged=[" << mlo << "," << mhi
+              << "] hull-endpoint-shortfall lower=" << std::max(0.0, mlo - lo)
+              << " upper=" << std::max(0.0, hi - mhi) << "\n";
+}
+
 void compare_quality(const char* phase, const Projection& independent,
                      const Projection& merged) {
-    std::cout << "  " << phase << " (validated projection hulls):\n";
-    for (SizeType k = 0; k != independent.state.size(); ++k) {
-        const double before = width(independent.state[k]), after = width(merged.state[k]);
-        std::cout << "    state[" << k << "] independent-width=" << before
-                  << " merged-width=" << after << " ratio="
-                  << (before > 0 ? after / before : 0) << "\n";
-    }
-    const double bt = width(independent.time), at = width(merged.time);
-    const double bd = width(independent.dwell), ad = width(merged.dwell);
-    std::cout << "    time independent-width=" << bt << " merged-width=" << at
-              << " ratio=" << (bt > 0 ? at / bt : 0) << "\n";
-    std::cout << "    dwell independent-width=" << bd << " merged-width=" << ad
-              << " ratio=" << (bd > 0 ? ad / bd : 0) << "\n";
-    // Hull containment is necessary for exact hulls, but neither necessary
-    // nor sufficient for constrained-source inclusion with outer ranges.
-    std::cout << "    hull-containment (diagnostic only): state="
-              << definitely(subset(independent.state, merged.state))
-              << " time=" << definitely(subset(independent.time, merged.time))
-              << " dwell=" << definitely(subset(independent.dwell, merged.dwell))
-              << "\n";
+    std::cout << "  " << phase << " (validated coordinate/invariant outer bounds):\n";
+    for (SizeType k = 0; k != independent.state.size(); ++k)
+        compare_interval("state[" + std::to_string(k) + "]",
+                         independent.state[k], merged.state[k]);
+    compare_interval("time", independent.time, merged.time);
+    compare_interval("dwell", independent.dwell, merged.dwell);
+    compare_interval("invariant(x-y-y^3/3)", independent.invariant, merged.invariant);
+    std::cout << "    These bounds do not certify or refute constrained-set inclusion.\n";
 }
 
 void describe_quality(const Measurement& m) {

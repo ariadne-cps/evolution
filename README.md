@@ -108,11 +108,16 @@ Both the initial and the continued enclosure collections are compared by
 outward-rounded coordinate projection widths for state, absolute time and dwell
 time. The report includes independent/recombined final counts, source
 provenance, constraint/parameter counts, phase timings and end-to-end totals.
-Width ratios with a zero-width denominator are printed as zero (not a valid
-ratio). The printed coordinate-hull-containment check is a **diagnostic, not
-a certificate of constrained-set inclusion**: a source hull may be wider than
-the true constrained set. Certified numerical coverage and clock semantics
-remain the responsibility of the C++ recombination correctness tests.
+Widths close to roundoff at a fixed absolute time or dwell are reported
+with an undefined (n/a) ratio. Each interval also reports both endpoints and
+their outward-hull shortfalls so that near-boundary differences are visible;
+these are **not** evidence that a source set escapes the output, since the
+source hull may include infeasible points. In addition to coordinate projections,
+the benchmark bounds the nonlinear target-flow invariant
+`I = x - y - y^3/3`, both at recombination and after continuation. This
+provides a correlation-sensitive numerical diagnostic, **not** a proof of
+constrained-set inclusion. Certified numerical coverage and clock semantics
+remain the responsibility of C++ correctness tests.
 
 For scaling, run with --step 0.0625, 0.015625, 0.00390625 and --group-size
 2, 4, 8 (if enough checkpoints are produced); vary --accuracy independently.

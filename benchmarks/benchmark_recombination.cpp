@@ -119,7 +119,7 @@ List<HybridEnclosure> generate(const Scenario& scenario, const Options& options,
     const HybridBoxSet initial = scenario.kind == EventKind::URGENT
         ? HybridBoxSet(source, {Real(-2) <= x <= Real(-1), Real(-1 / 2_q) <= y <= Real(1 / 2_q)})
         : HybridBoxSet(source, {Real(1) <= x <= Real(2), Real(-1 / 2_q) <= y <= Real(1 / 2_q)});
-    const HybridTerminationCriterion stop(Real(scenario.generation_horizon), Integer(8),
+    const HybridTerminationCriterion stop(Real(ExactDouble(scenario.generation_horizon)), Integer(8),
                                            Set<DiscreteEvent>{jump});
     const auto orbit = evolver.orbit(initial, stop, Semantics::UPPER);
     List<HybridEnclosure> candidates;
@@ -245,7 +245,7 @@ void run_scenario(const Scenario& scenario, const Options& options, const Bench:
     target_system.new_mode(target, {dot(x) = 1 + sqr(y), dot(y) = 1});
     GeneralHybridEvolver continuation(target_system);
     configure(continuation, options);
-    const HybridTerminationCriterion stop(Real(scenario.continuation_horizon), Integer(8));
+    const HybridTerminationCriterion stop(Real(ExactDouble(scenario.continuation_horizon)), Integer(8));
 
     Bench::Runner runner(cli);
     Bench::Samples contractions, recombinations, totals, independents, merged;

@@ -131,3 +131,21 @@ For scaling, run with --step 0.0625, 0.015625, 0.00390625 and --group-size
 2, 4, 8 (if enough checkpoints are produced); vary --accuracy independently.
 The generation orbit's reach/intermediate/final counts are printed, but they
 are not an integrator accepted-step count. The benchmark is not in CTest.
+
+### Reproducible benchmark sweep
+
+After building the Release benchmark, run:
+
+```bash
+python3 benchmarks/sweep_recombination.py --samples 3 --warmups 1
+```
+
+This runs the 3 x 3 matrix (maximum step 1/16, 1/64, 1/256;
+group size 2, 4, 8) for both scenarios. It writes a CSV summary,
+`metadata.json` (environment and options), and a complete log per
+configuration under `build-release/recombination-sweep/`. The script
+returns nonzero if any run fails, times out, or lacks the expected
+statistics. Use `--output`, `--steps`, `--groups`, `--samples`,
+`--warmups`, `--accuracy`, and `--timeout` to customise the sweep.
+If the finer steps are expensive, run one configuration before
+committing to the entire matrix. Results are machine-dependent.

@@ -711,7 +711,9 @@ other steps. These checks support the implementation contracts but do
 not replace their mathematical assumptions.
 
 The C++ suite checks whole nonlinear curves through symbolic identities and
-residual-domain inclusion, disjoint constrained sources, contraction without
+residual-domain inclusion, non-dyadic affine normalisation with differently
+sized (including degenerate) source parameter domains and clock maps,
+disjoint constrained sources, contraction without
 coordinate-box shrinkage, differing predicate ordering and parameter dimensions,
 clock dependence and subsequent nonlinear evolution, rounding and uniform errors,
 point and empty sources, singleton/duplicate behaviour and auxiliary compatibility.

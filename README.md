@@ -258,3 +258,24 @@ None of these checks, individually or collectively, constitutes a
 general proof that the recombined **constrained set** contains the
 union of the source constrained sets. Such a proof requires verified
 joint feasibility/inclusion reasoning, not interval-hull comparisons.
+
+### Why reference recombination is conservative
+
+The reference upper-enclosure recombiner has a **constructive inclusion
+argument**, not just empirical overlap checks. Every feasible source
+parameter is lifted into a common unit parameter box. Its joint
+state/absolute-time/dwell-time map is the reference map plus a residual
+that belongs to a validated outer box; widened reference predicates
+admit the same lifted witness. Final constraint contraction must retain
+all feasible parameters. See the
+[constructive upper-coverage proof](doc/evolution_tree_design.md#constructive-upper-coverage-proof-and-numerical-obligations)
+for the exact assumptions, treatment of degenerate and non-dyadic
+parameter domains, and the distinction between upper and lower
+semantics. The unit suite includes a specific regression for affine
+normalisation with non-dyadic endpoints and padded parameter dimensions.
+
+Projection containment and guard-width metrics in the benchmark are
+**quality diagnostics**. Their inconclusive values are not evidence of
+unsound recombination, nor do positive projection checks independently
+establish whole constrained-set inclusion. The proof instead relies on
+validated model arithmetic and feasible-point-preserving contractors.

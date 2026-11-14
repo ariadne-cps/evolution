@@ -61,7 +61,7 @@ jobs:
 
     - name: Configure CMake
       working-directory: ${{ runner.workspace }}/build
-      run: cmake $GITHUB_WORKSPACE -DCMAKE_BUILD_TYPE=Debug -DCMAKE_CXX_COMPILER=${{ matrix.config.cxx }} -G Ninja -DCOVERAGE=ON -DWARNINGS_AS_ERRORS=ON -DBUILD_PYTHON_BINDINGS=ON -DPYTHON_ENFORCE_TESTS=ON -DCMAKE_CXX_COMPILER_LAUNCHER="$SCCACHE_LAUNCHER"
+      run: cmake $GITHUB_WORKSPACE -DCMAKE_BUILD_TYPE=Debug -DCMAKE_CXX_COMPILER=${{ matrix.config.cxx }} -G Ninja -DCOVERAGE=ON -DEVOLUTION_CTEST_CONCISE=ON -DWARNINGS_AS_ERRORS=ON -DBUILD_PYTHON_BINDINGS=ON -DPYTHON_ENFORCE_TESTS=ON -DCMAKE_CXX_COMPILER_LAUNCHER="$SCCACHE_LAUNCHER"
 
     - name: Build Python bindings
       working-directory: ${{ runner.workspace }}/build

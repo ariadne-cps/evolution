@@ -67,6 +67,8 @@ struct Options {
     std::string csv = "recombination-sweep.csv";
     std::optional<std::pair<double, double>> time_window;
     std::vector<double> window_widths;
+    std::optional<unsigned> distributed_count;
+    std::vector<unsigned> distributed_counts;
 };
 
 // Parse a bounded-size CLI axis without relying on textual benchmark output.
@@ -145,6 +147,22 @@ List<ArgumentParser> argument_parsers(Options& options) {
                                                    const auto bounds = parse_time_window(value);
                                                    return [&options, bounds] { options.time_window = bounds; };
                                                }));
+    parsers.append(make_valued_argument_parser("", "distributed-count",
+                                               "Fixed number of time-distributed source enclosures (requires --time-window)",
+                                               [&options](const String& value) -> VoidFunction {
+                                                   const auto count = Bench::parse_unsigned<unsigned>(value);
+                                                   if (count < 2u)
+                                                       throw std::invalid_argument("distributed-count must be >= 2");
+                                                   return [&options, count] { options.distributed_count = count; };
+                                               }));
+    parsers.append(make_valued_argument_parser("", "distributed-counts",
+                                               "Sweep source counts within the same window, comma-separated",
+                                               [&options](const String& value) -> VoidFunction {
+                                                   auto counts = Bench::parse_unique_unsigned_list(value, 2u);
+                                                   return [&options, counts = std::move(counts)] {
+                                                       options.distributed_counts = counts;
+                                                   };
+                                               }));
     parsers.append(make_valued_argument_parser("", "window-widths",
                                                "Sweep comma-separated widths centred on --time-window midpoint",
                                                [&options](const String& value) -> VoidFunction {
@@ -212,7 +230,7 @@ void configure(GeneralHybridEvolver& evolver, const Options& options) {
 List<Enclosure> generate(const Scenario& scenario, const Options& options,
                                DiscreteLocation source, DiscreteLocation target,
                                DiscreteEvent jump, RealVariable x, RealVariable y,
-                               bool verbose, SizeType& generated) {
+                               bool verbose, SizeType& generated, SizeType& eligible) {
     GeneralHybridEvolver evolver(make_system(scenario, source, target, jump, x, y));
     configure(evolver, options);
     const HybridBoxSet initial = scenario.kind == EventKind::URGENT
@@ -239,48 +257,63 @@ List<Enclosure> generate(const Scenario& scenario, const Options& options,
     if (candidates.size() < 2u)
         throw std::runtime_error("not enough post-reset checkpoints; adjust integration step");
     List<Enclosure> selection;
+    eligible = 0u;
     if (options.time_window) {
         const auto [window_start, window_end] = *options.time_window;
         if (window_end >= scenario.generation_horizon)
             throw std::invalid_argument("time-window END must be before generation horizon");
-        // The coordinate is absolute time in the joint (state,time) space.
-        // Restrict each actual evolver-generated source with its own constraint,
-        // rather than intersecting projected boxes or synthesizing new sources.
         const auto absolute_time = EffectiveScalarMultivariateFunction::coordinate(3u, 2u);
+        List<Enclosure> window_sources;
         for (const auto& checkpoint: candidates) {
             const auto bounds = checkpoint.time_range();
-            // Outward prefilter: strictly disjoint ranges cannot contribute.
             if (bounds.upper_bound().raw().get_d() < window_start ||
                 bounds.lower_bound().raw().get_d() > window_end)
                 continue;
             auto source = checkpoint.continuous_set();
             source.new_state_time_constraint(ValidatedConstraint(
                 ExactDouble(window_start), absolute_time, ExactDouble(window_end)));
-            // Contract only a probe: keep actual contraction in timed measurement.
             auto probe = source;
             if (!definitely(probe.is_empty()))
-                selection.append(std::move(source));
+                window_sources.append(std::move(source));
+        }
+        eligible = window_sources.size();
+        if (!options.distributed_count) {
+            selection = std::move(window_sources);
+        } else {
+            const SizeType count = *options.distributed_count;
+            if (count > eligible)
+                throw std::runtime_error("distributed-count exceeds available window sources");
+            // Evenly distributed deterministic indices, including the first
+            // and last source. Only a subset is tested, not the complete union.
+            for (SizeType i = 0; i != count; ++i) {
+                const SizeType index = i * (eligible - 1u) / (count - 1u);
+                selection.append(window_sources[index]);
+            }
         }
     } else {
-        // Legacy cardinality sweep: adjacent sources about the median entry
-        // time. Its total temporal span varies as the maximum step changes.
         const SizeType take = std::min<SizeType>(candidates.size(), options.group_size);
         if (take < 2u)
             throw std::runtime_error("group-size must be at least two");
         const SizeType offset = (candidates.size() - take) / 2u;
         for (SizeType i = offset; i != offset + take; ++i)
             selection.append(candidates[i].continuous_set());
+        eligible = candidates.size();
     }
     if (selection.size() < 2u)
         throw std::runtime_error("fewer than two nonempty post-reset checkpoints in selection");
     if (verbose) {
         std::cout << scenario.name << ": generated=" << candidates.size()
-                  << " post-reset checkpoints, selected=" << selection.size();
-        if (options.time_window)
+                  << " post-reset checkpoints, eligible=" << eligible
+                  << " selected=" << selection.size();
+        if (options.time_window) {
             std::cout << " with constrained time-window=[" << options.time_window->first
                       << "," << options.time_window->second << "]";
-        else
+            std::cout << (options.distributed_count
+                ? " (distributed subset; not full-window coverage)"
+                : " (all eligible sources)");
+        } else {
             std::cout << " (middle adjacent time window)";
+        }
         std::cout << "\n";
     }
     return selection;
@@ -534,7 +567,7 @@ void describe_quality(const Measurement& m) {
 }
 
 struct ScenarioSummary {
-    SizeType generated = 0, selected = 0;
+    SizeType generated = 0, eligible = 0, selected = 0;
     SizeType independent_final = 0, recombined_final = 0;
     double contraction_mean_ns = 0.0, recombination_mean_ns = 0.0;
     double contract_recombine_mean_ns = 0.0;
@@ -561,16 +594,19 @@ ScenarioSummary run_scenario(const Scenario& scenario, const Options& options,
     if (verbose) {
         std::cout << "\nscenario=" << scenario.name << " step=" << options.step
                   << " accuracy=" << options.accuracy;
-        if (options.time_window)
+        if (options.time_window) {
             std::cout << " time-window=[" << options.time_window->first
                       << "," << options.time_window->second << "]";
-        else
+            if (options.distributed_count)
+                std::cout << " distributed-count=" << *options.distributed_count;
+        } else {
             std::cout << " group-size=" << options.group_size;
+        }
         std::cout << "\n";
     }
     ScenarioSummary summary;
     const auto original = generate(scenario, options, source, target, jump, x, y,
-                                   verbose, summary.generated);
+                                   verbose, summary.generated, summary.eligible);
     summary.selected = original.size();
 
     HybridAutomaton target_system("recombination-continuation");
@@ -686,19 +722,23 @@ void csv_number(std::ostream& stream, double value) {
 // In time-window mode group_size is deliberately blank, not spuriously zero.
 void csv_configuration(std::ostream& stream, const Options& options) {
     stream << options.step << ',' << options.accuracy << ',';
-    if (options.time_window)
-        stream << "time-window,," << options.time_window->first << ','
+    if (options.time_window) {
+        stream << (options.distributed_count ? "window-distributed" : "time-window") << ',';
+        if (options.distributed_count)
+            stream << *options.distributed_count;
+        stream << ',' << options.time_window->first << ','
                << options.time_window->second << ','
                << options.time_window->second - options.time_window->first << ',';
-    else
+    } else {
         stream << "adjacent," << options.group_size << ",,,,";
+    }
 }
 
 void csv_success(std::ostream& stream, const Options& options,
                  const Scenario& scenario, const ScenarioSummary& result) {
     csv_configuration(stream, options);
-    stream << scenario.name << ",ok," << result.generated << ',' << result.selected
-           << ',' << options.samples << ',' << result.independent_final << ','
+    stream << scenario.name << ",ok," << result.generated << ','
+           << result.eligible << ',' << result.selected << ',' << options.samples << ',' << result.independent_final << ','
            << result.recombined_final << ',';
     csv_number(stream, result.contraction_mean_ns);
     stream << ',';
@@ -736,9 +776,9 @@ void csv_failure(std::ostream& stream, const Options& options,
                  const Scenario& scenario, const std::string& message) {
     csv_configuration(stream, options);
     stream << scenario.name << ",failed,";
-    // Five count fields, five phase means, two total means, one speedup
+    // Six count fields, five phase means, two totals, one speedup
     // and seven quality ratios.
-    for (unsigned index = 0u; index != 20u; ++index)
+    for (unsigned index = 0u; index != 21u; ++index)
         stream << ',';
     stream << csv_escape(message) << '\n';
 }
@@ -747,6 +787,10 @@ int run_sweep(const Scenario (&scenarios)[2], const Options& options,
               const Bench::CommandLine& cli) {
     if (!options.window_widths.empty() && !options.time_window)
         throw std::invalid_argument("--window-widths requires --time-window");
+    if ((!options.distributed_counts.empty() || options.distributed_count) && !options.time_window)
+        throw std::invalid_argument("--distributed-count(s) requires --time-window");
+    if (!options.distributed_counts.empty() && options.distributed_count)
+        throw std::invalid_argument("choose --distributed-count or --distributed-counts");
     std::vector<std::optional<std::pair<double, double>>> windows;
     if (!options.time_window) {
         windows.push_back(std::nullopt);
@@ -772,7 +816,7 @@ int run_sweep(const Scenario (&scenarios)[2], const Options& options,
         throw std::runtime_error("cannot open CSV file: " + options.csv);
     csv << std::setprecision(17);
     csv << "step,accuracy,selection_mode,group_size,window_start,window_end,window_width,"
-           "scenario,status,generated,selected,samples,independent_final,recombined_final,"
+           "scenario,status,generated,eligible,selected,samples,independent_final,recombined_final,"
            "contraction_mean_ns,recombination_mean_ns,contract_recombine_mean_ns,"
            "continue_independent_mean_ns,continue_recombined_mean_ns,"
            "independent_mean_ns,recombined_mean_ns,net_speedup,"
@@ -781,23 +825,33 @@ int run_sweep(const Scenario (&scenarios)[2], const Options& options,
     bool failed = false;
     for (const auto step: options.steps) {
         for (const auto& window: windows) {
-            const auto groups = window ? std::vector<unsigned>{options.group_size} : options.groups;
+            const auto groups = !window ? options.groups
+                : !options.distributed_counts.empty() ? options.distributed_counts
+                : std::vector<unsigned>{options.distributed_count.value_or(options.group_size)};
             for (const auto size: groups) {
                 auto configuration = options;
                 configuration.step = step;
                 configuration.group_size = size;
                 configuration.time_window = window;
+                if (window && !options.distributed_counts.empty())
+                    configuration.distributed_count = size;
                 for (const auto& scenario: scenarios) {
                     std::cout << "RUN " << scenario.name << " step=" << step;
-                    if (window)
+                    if (window) {
                         std::cout << " window=[" << window->first << "," << window->second << "]";
-                    else
+                        if (configuration.distributed_count)
+                            std::cout << " distributed-count=" << *configuration.distributed_count;
+                        else
+                            std::cout << " all-sources";
+                    } else {
                         std::cout << " group-size=" << size;
+                    }
                     std::cout << " accuracy=" << options.accuracy << std::endl;
                     try {
                         const auto result = run_scenario(scenario, configuration, cli, false);
                         csv_success(csv, configuration, scenario, result);
                         std::cout << "  ok generated=" << result.generated
+                                  << " eligible=" << result.eligible
                                   << " selected=" << result.selected
                                   << " contract-ms=" << result.contraction_mean_ns / 1.0e6
                                   << " recombine-ms=" << result.recombination_mean_ns / 1.0e6
@@ -839,8 +893,10 @@ int main(int argc, const char* argv[]) {
         };
         if (options.sweep)
             return run_sweep(scenarios, options, cli);
-        if (!options.window_widths.empty())
-            throw std::invalid_argument("--window-widths requires --sweep 1");
+        if (!options.window_widths.empty() || !options.distributed_counts.empty())
+            throw std::invalid_argument("--window-widths / --distributed-counts require --sweep 1");
+        if (options.distributed_count && !options.time_window)
+            throw std::invalid_argument("--distributed-count requires --time-window");
         for (const auto& scenario: scenarios)
             run_scenario(scenario, options, cli, true);
         return 0;

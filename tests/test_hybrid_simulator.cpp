@@ -27,6 +27,7 @@
  */
 
 #include <cmath>
+#include "concise_logging.hpp"
 #include <sstream>
 
 #include "evolution/hybrid_orbit.hpp"
@@ -193,5 +194,5 @@ int main(int argc, char* argv[]) {
     ARIADNE_TESTING_ADD_TEST(TestHybridSimulator, test_transitions_and_termination);
     ARIADNE_TESTING_ADD_TEST(TestHybridSimulator, test_invariant_and_progress_stopping);
     ARIADNE_TESTING_ADD_TEST(TestHybridSimulator, test_box_sampling);
-    return ARIADNE_TESTING_RUN_TESTS_WITH_ARGS(argc, argv);
+    return run_evolution_test_suite(ariadne_test_suite, argc, argv);
 }

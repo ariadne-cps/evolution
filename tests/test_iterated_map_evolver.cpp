@@ -27,6 +27,7 @@
  */
 
 #include <fstream>
+#include "concise_logging.hpp"
 #include <iostream>
 #include <memory>
 
@@ -199,5 +200,5 @@ int main(int argc, const char* argv[]) {
     ARIADNE_TESTING_ADD_TEST(TestIteratedMapEvolver, test_stopping_policies);
     ARIADNE_TESTING_ADD_TEST(TestIteratedMapEvolver, test_evolve);
     ARIADNE_TESTING_ADD_TEST(TestIteratedMapEvolver, test_subdivide);
-    return ARIADNE_TESTING_RUN_TESTS_WITH_ARGS(argc, argv);
+    return run_evolution_test_suite(ariadne_test_suite, argc, argv);
 }

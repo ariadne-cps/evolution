@@ -27,6 +27,7 @@
  */
 
 #include <algorithm>
+#include "concise_logging.hpp"
 #include <atomic>
 #include <sstream>
 #include <stdexcept>
@@ -289,5 +290,5 @@ int main(int argc, char** argv) {
     ARIADNE_TESTING_ADD_TEST(TestHybridEvolutionBackend, test_failed_step_cannot_release_an_orbit);
     ARIADNE_TESTING_ADD_TEST(TestHybridEvolutionBackend, test_evolver_accepts_an_independent_scheduler);
     ARIADNE_TESTING_ADD_TEST(TestHybridEvolutionBackend, test_step_preserves_transition_and_subdivision_provenance);
-    return ARIADNE_TESTING_RUN_TESTS_WITH_ARGS(argc, argv);
+    return run_evolution_test_suite(ariadne_test_suite, argc, argv);
 }

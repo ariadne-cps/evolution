@@ -27,6 +27,7 @@
  */
 
 #include <cmath>
+#include "concise_logging.hpp"
 #include <memory>
 #include <sstream>
 #include <type_traits>
@@ -1511,5 +1512,5 @@ int main(int argc, char* argv[]) {
     ARIADNE_TESTING_ADD_VARIANT_TEST(diagnostics, test_initially_active_event);
     ARIADNE_TESTING_ADD_VARIANT_TEST(diagnostics, test_simultaneous_events);
     ARIADNE_TESTING_ADD_VARIANT_TEST(diagnostics, test_transverse_linear_crossing);
-    return ARIADNE_TESTING_RUN_TESTS_WITH_ARGS(argc, argv);
+    return run_evolution_test_suite(ariadne_test_suite, argc, argv);
 }

@@ -27,6 +27,7 @@
  */
 
 #include <sstream>
+#include "concise_logging.hpp"
 #include <string>
 
 #include "evolution/hybrid_time.hpp"
@@ -121,5 +122,5 @@ int main(int argc, char* argv[]) {
     ARIADNE_TESTING_ADD_TEST(TestHybridTime, test_construction_and_arithmetic);
     ARIADNE_TESTING_ADD_TEST(TestHybridTime, test_comparison_semantics);
     ARIADNE_TESTING_ADD_TEST(TestHybridTime, test_termination);
-    return ARIADNE_TESTING_RUN_TESTS_WITH_ARGS(argc, argv);
+    return run_evolution_test_suite(ariadne_test_suite, argc, argv);
 }

@@ -27,6 +27,7 @@
  */
 
 #include <cmath>
+#include "concise_logging.hpp"
 #include <fstream>
 #include <iostream>
 #include <sstream>
@@ -279,5 +280,5 @@ int main(int argc, const char* argv[]) {
     ARIADNE_TESTING_ADD_TEST(TestVectorFieldSimulator, test_multiple_real_box_vdp_cycle);
     ARIADNE_TESTING_ADD_TEST(TestVectorFieldSimulator, test_multiple_trajectories_x);
     ARIADNE_TESTING_ADD_TEST(TestVectorFieldSimulator, test_multiple_trajectories_xy);
-    return ARIADNE_TESTING_RUN_TESTS_WITH_ARGS(argc, argv);
+    return run_evolution_test_suite(ariadne_test_suite, argc, argv);
 }

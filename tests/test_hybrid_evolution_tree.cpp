@@ -27,6 +27,7 @@
  */
 
 #include <algorithm>
+#include "concise_logging.hpp"
 #include <sstream>
 #include <stdexcept>
 
@@ -353,5 +354,5 @@ int main(int argc, char** argv) {
     ARIADNE_TESTING_ADD_TEST(TestHybridEvolutionTree, test_flat_and_tree_orbits_match_for_urgent_and_permissive_systems);
     ARIADNE_TESTING_ADD_TEST(TestHybridEvolutionTree, test_flat_and_tree_orbit_counts_match_at_time_and_discrete_limits);
     ARIADNE_TESTING_ADD_TEST(TestHybridEvolutionTree, test_flat_and_tree_orbit_counts_match_with_initial_jumps_and_splitting);
-    return ARIADNE_TESTING_RUN_TESTS_WITH_ARGS(argc, argv);
+    return run_evolution_test_suite(ariadne_test_suite, argc, argv);
 }

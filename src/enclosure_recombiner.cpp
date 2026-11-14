@@ -1,5 +1,5 @@
 /***************************************************************************
- *            enclosure_recombination.cpp
+ *            enclosure_recombiner.cpp
  *
  *  Copyright  2026  Luca Geretti
  *
@@ -22,13 +22,16 @@
  *  along with Ariadne Evolution. If not, see <https://www.gnu.org/licenses/>.
  */
 
-/** @file enclosure_recombination.cpp
- *  @brief Outer recombination of constrained continuous enclosures.
+/** @file enclosure_recombiner.cpp
+ *  @brief Reference strategy and handle for continuous enclosure recombination.
  */
 
-#include <algorithm>
+#include "evolution/enclosure_recombiner.hpp"
 
-#include "evolution/enclosure.hpp"
+#include <algorithm>
+#include <cmath>
+#include <utility>
+
 #include "function/formula.hpp"
 #include "function/formula.tpl.hpp"
 #include "function/function.hpp"
@@ -88,8 +91,33 @@ UpperBoxType constrained_image_bounds(const Enclosure& source,
 
 } // namespace
 
-Enclosure recombine(const List<Enclosure>& enclosures) {
-    ARIADNE_PRECONDITION_MSG(!enclosures.empty(), "Recombination requires a source enclosure.");
+EnclosureRecombinationContext::EnclosureRecombinationContext(ExactDouble maximum_enclosure_radius)
+    : _maximum_enclosure_radius(maximum_enclosure_radius) {
+    ARIADNE_PRECONDITION_MSG(std::isfinite(maximum_enclosure_radius.get_d()) && maximum_enclosure_radius >= 0.0_x,
+                             "The requested maximum enclosure radius must be finite and nonnegative.");
+}
+
+EnclosureRecombiner::EnclosureRecombiner(const EnclosureRecombinerInterface& recombiner)
+    : Handle<const EnclosureRecombinerInterface>(recombiner.clone()) {}
+
+EnclosureRecombinationResult EnclosureRecombiner::recombine(const List<Enclosure>& enclosures,
+                                                            const EnclosureRecombinationContext& context) const {
+    return this->_ptr->recombine(enclosures, context);
+}
+
+ReferenceEnclosureRecombiner* ReferenceEnclosureRecombiner::clone() const {
+    return new ReferenceEnclosureRecombiner(*this);
+}
+
+OutputStream& ReferenceEnclosureRecombiner::_write(OutputStream& os) const {
+    return os << "ReferenceEnclosureRecombiner()";
+}
+
+EnclosureRecombinationResult ReferenceEnclosureRecombiner::recombine(const List<Enclosure>& enclosures,
+                                                                     const EnclosureRecombinationContext& context) const {
+    EnclosureRecombinationResult batch;
+    if (enclosures.empty())
+        return batch;
     ARIADNE_PRECONDITION_MSG(std::all_of(enclosures.begin(), enclosures.end(), [](const Enclosure& source) {
                                  return source._state_function.raw_pointer() != nullptr;
                              }),
@@ -97,23 +125,42 @@ Enclosure recombine(const List<Enclosure>& enclosures) {
     const auto state_dimension = enclosures.front().state_dimension();
     List<Enclosure> sources;
     sources.reserve(enclosures.size());
+    List<SizeType> source_indices;
+    source_indices.reserve(enclosures.size());
     SizeType parameter_count = 0u;
-    for (auto source: enclosures) {
+    for (SizeType index = 0; index != enclosures.size(); ++index) {
+        auto source = enclosures[index];
         ARIADNE_PRECONDITION_MSG(source.state_dimension() == state_dimension,
                                  "Recombination requires matching state dimensions.");
         // is_empty contracts the copy's parameter domain and only discards
         // sources whose infeasibility has actually been established.
-        if (definitely(source.is_empty()))
+        if (definitely(source.is_empty())) {
+            batch.discarded_sources.append(index);
             continue;
+        }
         ARIADNE_PRECONDITION_MSG(source.reduced_domain().is_bounded(),
                                  "Recombination requires bounded parameter domains.");
         parameter_count = std::max(parameter_count, source.number_of_parameters());
         sources.append(source);
+        source_indices.append(index);
     }
     if (sources.empty())
-        return enclosures.front();
+        return batch;
+    const auto discard_survivors = [&] {
+        batch.discarded_sources.insert(batch.discarded_sources.end(), source_indices.begin(), source_indices.end());
+        std::sort(batch.discarded_sources.begin(), batch.discarded_sources.end());
+        return std::move(batch);
+    };
+    const auto finish = [&](Enclosure enclosure) {
+        if (definitely(enclosure.reduced_domain().is_empty()))
+            return discard_survivors();
+        if (context.maximum_enclosure_radius())
+            batch.radius_limit_satisfied = definitely(enclosure.radius() <= *context.maximum_enclosure_radius());
+        batch.outputs.push_back({std::move(enclosure), std::move(source_indices)});
+        return std::move(batch);
+    };
     if (sources.size() == 1u)
-        return sources.front();
+        return finish(std::move(sources.front()));
 
     const auto& reference = sources.front();
     const auto auxiliary_formula = make_formula(reference.auxiliary_mapping());
@@ -175,8 +222,7 @@ Enclosure recombine(const List<Enclosure>& enclosures) {
         first = false;
     }
     if (first) {
-        result.new_zero_parameter_constraint(factory.create_constant(common_domain, Real(1)));
-        return result;
+        return discard_survivors();
     }
 
     // Retain reference predicates with bounds covering every feasible source
@@ -214,7 +260,19 @@ Enclosure recombine(const List<Enclosure>& enclosures) {
     }
     result._variable_kinds.concatenate(List<EnclosureVariableKind>(residual_components.size(), EnclosureVariableKind::ERROR));
     result.reduce();
-    return result;
+    return finish(std::move(result));
+}
+
+Enclosure recombine(const List<Enclosure>& enclosures) {
+    ARIADNE_PRECONDITION_MSG(!enclosures.empty(), "Recombination requires a source enclosure.");
+    auto result = ReferenceEnclosureRecombiner().recombine(enclosures);
+    if (result.outputs.empty()) {
+        auto empty = enclosures.front();
+        if (!definitely(empty.is_empty()))
+            empty.new_zero_parameter_constraint(EffectiveScalarMultivariateFunction::constant(empty.number_of_parameters(), Real(1)));
+        return empty;
+    }
+    return std::move(result.outputs.front().enclosure);
 }
 
 } // namespace Ariadne

@@ -362,7 +362,7 @@ class Enclosure
     friend Enclosure product(const Enclosure&, const ExactBoxType&);
     /** @brief Perform the specified evolution operation. */
     friend Enclosure product(const Enclosure&, const Enclosure&);
-    friend Enclosure recombine(const List<Enclosure>&);
+    friend class ReferenceEnclosureRecombiner;
 };
 
 //! \related Enclosure \brief Stream output operator.
@@ -386,6 +386,7 @@ Enclosure product(const Enclosure& set1, const Enclosure& set2);
  *  Absolute time and dwell time are recombined jointly with state; auxiliary
  *  variables are derived from the common auxiliary mapping. The first nonempty
  *  source supplies the numerical configuration. Sources are not modified.
+ *  This single-output convenience operation delegates to ReferenceEnclosureRecombiner.
  *  @pre The list is nonempty; all sources have initialised function models
  *       and the same state dimension.
  *  @pre Nonempty sources have bounded reduced domains and structurally identical

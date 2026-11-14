@@ -26,15 +26,44 @@
  *  @brief Verify continuous union coverage, constraints and clock recombination.
  */
 
+#include <limits>
 #include <sstream>
+#include <utility>
 
 #include "algebra/sweeper.hpp"
-#include "evolution/enclosure.hpp"
+#include "evolution/enclosure_recombiner.hpp"
 #include "function/taylor_function.hpp"
 
 #include "ariadne-testing.hpp"
 
 using namespace Ariadne;
+
+namespace {
+
+// A separate implementation proves that the handle dispatches collection
+// strategies, rather than always invoking the single-output free operation.
+class SeparateEnclosureRecombiner : public EnclosureRecombinerInterface {
+  public:
+    SeparateEnclosureRecombiner* clone() const override { return new SeparateEnclosureRecombiner(*this); }
+    EnclosureRecombinationResult recombine(const List<Enclosure>& enclosures,
+                                           const EnclosureRecombinationContext& context) const override {
+        EnclosureRecombinationResult result;
+        for (SizeType index = 0; index != enclosures.size(); ++index) {
+            auto source = enclosures[index];
+            if (definitely(source.is_empty())) {
+                result.discarded_sources.append(index);
+                continue;
+            }
+            if (context.maximum_enclosure_radius())
+                result.radius_limit_satisfied = result.radius_limit_satisfied && definitely(source.radius() <= *context.maximum_enclosure_radius());
+            result.outputs.push_back({std::move(source), {index}});
+        }
+        return result;
+    }
+    OutputStream& _write(OutputStream& os) const override { return os << "SeparateEnclosureRecombiner()"; }
+};
+
+} // namespace
 
 class TestEnclosureRecombination : public Testing::ContextFixture {
   public:
@@ -67,6 +96,76 @@ class TestEnclosureRecombination : public Testing::ContextFixture {
     }
 
   public:
+    void test_handle_dispatch_clone_lifetime_and_context() {
+        auto handle = [] {
+            SeparateEnclosureRecombiner implementation;
+            const EnclosureRecombinerInterface& interface = implementation;
+            return EnclosureRecombiner(interface);
+        }();
+        const auto copied = handle;
+        Enclosure first(domain, EffectiveVectorMultivariateFunction{s, sqr(s)}, config);
+        Enclosure second(domain, EffectiveVectorMultivariateFunction{s, sqr(s) + Real(1 / 4_q)}, config);
+        const auto separate = copied.recombine({first, second}, EnclosureRecombinationContext(0.25_x));
+        ARIADNE_TESTING_EXPECT_EQUAL(separate.outputs.size(), 2u);
+        ARIADNE_TESTING_EXPECT_EQUAL(separate.outputs[0].source_indices, List<SizeType>({0u}));
+        ARIADNE_TESTING_EXPECT_EQUAL(separate.outputs[1].source_indices, List<SizeType>({1u}));
+        ARIADNE_TESTING_PROVE(!separate.radius_limit_satisfied);
+        ARIADNE_TESTING_EXPECT_EQUAL(description(separate.outputs[0].enclosure), description(first));
+        std::ostringstream stream;
+        stream << handle;
+        ARIADNE_TESTING_EXPECT_EQUAL(stream.str(), String("SeparateEnclosureRecombiner()"));
+    }
+
+    void test_reference_batch_provenance_and_empty_inputs() {
+        Enclosure first(domain, EffectiveVectorMultivariateFunction{s, sqr(s)}, config);
+        Enclosure second(domain, EffectiveVectorMultivariateFunction{s, sqr(s) + Real(1 / 4_q)}, config);
+        auto empty = first;
+        empty.new_zero_parameter_constraint(EffectiveScalarMultivariateFunction::constant(1u, Real(1)));
+        ReferenceEnclosureRecombiner implementation;
+        const EnclosureRecombiner handle(implementation);
+        const auto result = handle.recombine({empty, first, second});
+        ARIADNE_TESTING_EXPECT_EQUAL(result.outputs.size(), 1u);
+        ARIADNE_TESTING_EXPECT_EQUAL(result.outputs.front().source_indices, List<SizeType>({1u, 2u}));
+        ARIADNE_TESTING_EXPECT_EQUAL(result.discarded_sources, List<SizeType>({0u}));
+        ARIADNE_TESTING_PROVE(result.radius_limit_satisfied);
+        ARIADNE_TESTING_EXPECT_EQUAL(description(result.outputs.front().enclosure), description(Ariadne::recombine({first, second})));
+        const auto none = handle.recombine({});
+        ARIADNE_TESTING_EXPECT_EQUAL(none.outputs.size(), 0u);
+        ARIADNE_TESTING_EXPECT_EQUAL(none.discarded_sources.size(), 0u);
+        const auto exhausted = handle.recombine({empty, empty});
+        ARIADNE_TESTING_EXPECT_EQUAL(exhausted.outputs.size(), 0u);
+        ARIADNE_TESTING_EXPECT_EQUAL(exhausted.discarded_sources, List<SizeType>({0u, 1u}));
+        ARIADNE_TESTING_PROVE(exhausted.radius_limit_satisfied);
+        const auto singleton = handle.recombine({empty, first});
+        ARIADNE_TESTING_EXPECT_EQUAL(singleton.outputs.front().source_indices, List<SizeType>({1u}));
+        ARIADNE_TESTING_EXPECT_EQUAL(description(singleton.outputs.front().enclosure), description(first));
+    }
+
+    void test_radius_request_is_reported_without_losing_coverage() {
+        Enclosure first(domain, EffectiveVectorMultivariateFunction{s, sqr(s)}, config);
+        Enclosure second(domain, EffectiveVectorMultivariateFunction{s, sqr(s) + Real(1 / 4_q)}, config);
+        const EnclosureRecombiner handle(ReferenceEnclosureRecombiner{});
+        const EnclosureRecombinationContext unrestricted;
+        ARIADNE_TESTING_PROVE(!unrestricted.maximum_enclosure_radius().has_value());
+        const auto small = handle.recombine({first, second}, EnclosureRecombinationContext(0.25_x));
+        ARIADNE_TESTING_PROVE(!small.radius_limit_satisfied);
+        ARIADNE_TESTING_EXPECT_EQUAL(small.outputs.size(), 1u);
+        ARIADNE_TESTING_EXPECT_EQUAL(small.outputs.front().source_indices, List<SizeType>({0u, 1u}));
+        expect_bounds(apply(small.outputs.front().enclosure.state_function().get(1) - sqr(small.outputs.front().enclosure.state_function().get(0)), small.outputs.front().enclosure.domain()), 0, 0.25);
+        const auto large = handle.recombine({first, second}, EnclosureRecombinationContext(4.0_x));
+        ARIADNE_TESTING_PROVE(large.radius_limit_satisfied);
+        ARIADNE_TESTING_EXPECT_EQUAL(description(small.outputs.front().enclosure), description(large.outputs.front().enclosure));
+        Enclosure point(ExactBoxType({
+                            {1, 1}
+        }),
+                        config);
+        const auto exact = handle.recombine({point}, EnclosureRecombinationContext(0.0_x));
+        ARIADNE_TESTING_PROVE(exact.radius_limit_satisfied);
+        ARIADNE_TESTING_EXPECT_EXCEPTION(EnclosureRecombinationContext(-1.0_x));
+        ARIADNE_TESTING_EXPECT_EXCEPTION(EnclosureRecombinationContext(ExactDouble(std::numeric_limits<double>::infinity())));
+        ARIADNE_TESTING_EXPECT_EXCEPTION(EnclosureRecombinationContext(ExactDouble(std::numeric_limits<double>::quiet_NaN())));
+    }
+
     void test_nonlinear_reference_and_full_source_coverage() {
         Enclosure first(domain, EffectiveVectorMultivariateFunction{s, sqr(s)}, config);
         Enclosure second(domain, EffectiveVectorMultivariateFunction{s, sqr(s) + Real(1 / 4_q)}, config);
@@ -304,6 +403,9 @@ class TestEnclosureRecombination : public Testing::ContextFixture {
 
 int main(int argc, char* argv[]) {
     ARIADNE_TESTING_SUITE("test_enclosure_recombination");
+    ARIADNE_TESTING_ADD_TEST(TestEnclosureRecombination, test_handle_dispatch_clone_lifetime_and_context);
+    ARIADNE_TESTING_ADD_TEST(TestEnclosureRecombination, test_reference_batch_provenance_and_empty_inputs);
+    ARIADNE_TESTING_ADD_TEST(TestEnclosureRecombination, test_radius_request_is_reported_without_losing_coverage);
     ARIADNE_TESTING_ADD_TEST(TestEnclosureRecombination, test_nonlinear_reference_and_full_source_coverage);
     ARIADNE_TESTING_ADD_TEST(TestEnclosureRecombination, test_disjoint_constraints_are_united_and_domains_contracted);
     ARIADNE_TESTING_ADD_TEST(TestEnclosureRecombination, test_oblique_common_constraint_and_different_constraint_lists);

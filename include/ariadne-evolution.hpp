@@ -33,6 +33,8 @@
 #include "evolution/differential_inclusion_evolver.hpp"
 #include "evolution/enclosure.hpp"
 #include "evolution/enclosure_augmented_paving.hpp"
+#include "evolution/enclosure_recombiner.hpp"
+#include "evolution/enclosure_recombiner_interface.hpp"
 #include "evolution/evolver_interface.hpp"
 #include "evolution/first_order_pde.hpp"
 #include "evolution/flowtube.hpp"

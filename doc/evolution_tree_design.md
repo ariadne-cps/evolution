@@ -513,14 +513,43 @@ exists. Preserve provenance before invalidating any referenced history.
 
 ### Continuous enclosure recombination
 
-`recombine(const List<Enclosure>&)` constructs an upper enclosure of a nonempty
-source list without changing its sources. It does not select nearby groups,
-change trajectory identity, or modify a backend. Hybrid recombination is a later
-extension, and the benchmark is deferred until hybrid traces can be generated.
+`EnclosureRecombiner` is a `Handle<const EnclosureRecombinerInterface>`, owning a
+polymorphic clone when constructed from an interface reference. Handle copies
+share an immutable strategy; numerical work belongs to each invocation. The
+interface transforms a collection into an upper covering collection without
+changing its sources. `ReferenceEnclosureRecombiner` implements the existing
+nonlinear-reference algorithm and produces at most one output. Grouping and
+partitioning strategies can supply other concrete implementations later.
+
+Each call receives an `EnclosureRecombinationContext`. Its optional maximum
+enclosure radius is a finite, nonnegative value from the current evolution
+configuration, rather than a second mutable radius stored in the strategy.
+An omitted value means unrestricted recombination. The result contains:
+
+- `outputs`: records containing an enclosure and its original `source_indices`;
+- `discarded_sources`: indices removed only after proving emptiness;
+- `radius_limit_satisfied`: whether every output is certified within the request,
+  measured by the existing `Enclosure::radius()`, or no limit was requested.
+
+Indices refer to the original input list, before contraction or empty-source
+removal. A future partitioning strategy may reference the same source from more
+than one output. Provenance is recorded during construction; it is not inferred
+later from bounding-box overlap. The result's joint upper-coverage contract is
+independent of whether a radius request succeeds. The reference implementation
+reports an unmet limit while retaining the covering output; it does not split
+or discard nonempty sources to force compliance.
+
+Empty batch input produces an empty result. All-proven-empty input produces no
+outputs and reports all input indices as discarded. The existing free operation
+`recombine(const List<Enclosure>&)` remains a single-output convenience wrapper
+around the reference implementation, retaining its nonempty-list precondition
+and returning a typed empty enclosure when no output survives. These operations
+do not change trajectory identity or modify a backend. Hybrid recombination is
+a later extension, and the benchmark is deferred until hybrid traces can be generated.
 
 Contract source copies with their own constraints and discard only proven-empty
-ones. A singleton surviving source is returned without reparameterisation; an
-all-empty list returns an empty source copy. Require matching state dimensions,
+ones. A singleton surviving source is returned without reparameterisation.
+Require initialised models, matching state dimensions,
 bounded reduced domains and structurally identical symbolic auxiliary mappings.
 The first surviving source supplies the numerical configuration and reference.
 
@@ -561,8 +590,12 @@ residual-domain inclusion, disjoint constrained sources, contraction without
 coordinate-box shrinkage, differing predicate ordering and parameter dimensions,
 clock dependence and subsequent nonlinear evolution, rounding and uniform errors,
 point and empty sources, singleton/duplicate behaviour and auxiliary compatibility.
-Python exposes the same operation and exercises actual source-list conversion
-and rejection of an empty list.
+It also verifies interface dispatch with a separate implementation, polymorphic
+clone lifetime and handle copying, original source indices after empty removal,
+and radius reporting without coverage loss. Python exposes the interface, handle,
+reference implementation, context and result records as well as the free operation.
+Its checks cover source-list conversion, clone ownership, provenance, radius
+requests and the distinct empty-list contracts of the batch and free operations.
 
 ### Representative recombination tests and benchmarks
 

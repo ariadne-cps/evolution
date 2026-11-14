@@ -28,6 +28,7 @@
 
 #include <vector>
 
+#include "evolution/enclosure_recombiner.hpp"
 #include "evolution/hybrid_enclosure.hpp"
 #include "evolution/hybrid_simulator.hpp"
 #include "evolution/hybrid_time.hpp"
@@ -65,6 +66,44 @@ Void export_enclosure(pybind11::module& module) {
     pybind11::class_<LabelledEnclosure, pybind11::bases<LabelledDrawable2dInterface, Enclosure>> labelled_enclosure_class(module, "LabelledEnclosure");
     labelled_enclosure_class.def("bounding_box", &LabelledEnclosure::bounding_box);
     labelled_enclosure_class.def("__str__", &__cstr__<LabelledEnclosure>);
+}
+
+Void export_enclosure_recombiners(pybind11::module& module) {
+    pybind11::class_<EnclosureRecombinationContext>(module, "EnclosureRecombinationContext")
+        .def(pybind11::init<>())
+        .def(pybind11::init([](double maximum_enclosure_radius) {
+                 return EnclosureRecombinationContext(ExactDouble(maximum_enclosure_radius));
+             }),
+             pybind11::arg("maximum_enclosure_radius"))
+        .def_property_readonly("maximum_enclosure_radius", [](const EnclosureRecombinationContext& context) -> std::optional<double> {
+            if (context.maximum_enclosure_radius())
+                return context.maximum_enclosure_radius()->get_d();
+            return std::nullopt;
+        });
+    pybind11::class_<EnclosureRecombinationOutput>(module, "EnclosureRecombinationOutput")
+        .def_readonly("enclosure", &EnclosureRecombinationOutput::enclosure)
+        .def_property_readonly("source_indices", [](const EnclosureRecombinationOutput& output) {
+            return std::vector<SizeType>(output.source_indices);
+        });
+    pybind11::class_<EnclosureRecombinationResult>(module, "EnclosureRecombinationResult")
+        .def_property_readonly("outputs", [](const EnclosureRecombinationResult& result) {
+            return std::vector<EnclosureRecombinationOutput>(result.outputs);
+        })
+        .def_property_readonly("discarded_sources", [](const EnclosureRecombinationResult& result) {
+            return std::vector<SizeType>(result.discarded_sources);
+        })
+        .def_readonly("radius_limit_satisfied", &EnclosureRecombinationResult::radius_limit_satisfied);
+    pybind11::class_<EnclosureRecombinerInterface>(module, "EnclosureRecombinerInterface")
+        .def("clone", &EnclosureRecombinerInterface::clone, pybind11::return_value_policy::take_ownership)
+        .def("recombine", [](const EnclosureRecombinerInterface& recombiner, const std::vector<Enclosure>& enclosures, const EnclosureRecombinationContext& context) { return recombiner.recombine(List<Enclosure>(enclosures), context); }, pybind11::arg("enclosures"), pybind11::arg("context") = EnclosureRecombinationContext())
+        .def("__str__", &__cstr__<EnclosureRecombinerInterface>);
+    pybind11::class_<ReferenceEnclosureRecombiner, EnclosureRecombinerInterface>(module, "ReferenceEnclosureRecombiner")
+        .def(pybind11::init<>());
+    pybind11::class_<EnclosureRecombiner>(module, "EnclosureRecombiner")
+        .def(pybind11::init<const EnclosureRecombinerInterface&>())
+        .def(pybind11::init<const EnclosureRecombiner&>())
+        .def("recombine", [](const EnclosureRecombiner& recombiner, const std::vector<Enclosure>& enclosures, const EnclosureRecombinationContext& context) { return recombiner.recombine(List<Enclosure>(enclosures), context); }, pybind11::arg("enclosures"), pybind11::arg("context") = EnclosureRecombinationContext())
+        .def("__str__", &__cstr__<EnclosureRecombiner>);
 }
 
 template<class T>
@@ -169,6 +208,7 @@ Void evolution_submodule(pybind11::module& module) {
     export_semantics(module);
 
     export_enclosure(module);
+    export_enclosure_recombiners(module);
 
     export_list_set<LabelledEnclosure>(module, "LabelledEnclosureListSet");
 

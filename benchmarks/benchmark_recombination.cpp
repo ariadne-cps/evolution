@@ -34,6 +34,7 @@
 #include <stdexcept>
 #include <string>
 #include <utility>
+#include <vector>
 
 #include "evolution/enclosure_recombiner.hpp"
 #include "evolution/hybrid_evolver.hpp"
@@ -122,6 +123,10 @@ List<HybridEnclosure> generate(const Scenario& scenario, const Options& options,
     const HybridTerminationCriterion stop(Real(ExactDouble(scenario.generation_horizon)), Integer(8),
                                            Set<DiscreteEvent>{jump});
     const auto orbit = evolver.orbit(initial, stop, Semantics::UPPER);
+    std::cout << "  generation reach=" << orbit.reach().size()
+              << " intermediate=" << orbit.intermediate().size()
+              << " final=" << orbit.final().size()
+              << " (not accepted steps)\n";
     List<HybridEnclosure> candidates;
     for (const auto& enclosure: orbit.final()) {
         if (enclosure.location() == target && enclosure.previous_events().size() == 1u &&
@@ -148,49 +153,96 @@ List<HybridEnclosure> generate(const Scenario& scenario, const Options& options,
     return selection;
 }
 
+// Outward-rounded projections: wrapping diagnostics, not set-inclusion proofs.
+struct Projection {
+    UpperBoxType state;
+    UpperIntervalType time, dwell;
+};
+
+void accumulate(std::optional<Projection>& total, const Enclosure& enclosure) {
+    const auto domain = enclosure.reduced_domain();
+    Projection current{apply(enclosure.state_function(), domain),
+                       apply(enclosure.time_function(), domain),
+                       apply(enclosure.dwell_time_function(), domain)};
+    if (!total) {
+        total = std::move(current);
+    } else {
+        total->state = hull(total->state, current.state);
+        total->time = hull(total->time, current.time);
+        total->dwell = hull(total->dwell, current.dwell);
+    }
+}
+
 struct Measurement {
     double contraction_ns = 0, recombination_ns = 0;
     double independent_ns = 0, merged_ns = 0;
     SizeType independent_final = 0, merged_final = 0;
     EnclosureRecombinationResult result;
+    std::optional<Projection> source, merged, continued_independent, continued_merged;
+    double independent_total_ns() const { return contraction_ns + independent_ns; }
+    double merged_total_ns() const { return contraction_ns + recombination_ns + merged_ns; }
 };
 
 Measurement measure(const List<Enclosure>& original,
-                    const List<HybridEnclosure>& checkpoints,
                     const GeneralHybridEvolver& continuation,
                     const HybridTerminationCriterion& stop,
                     DiscreteLocation target, RealSpace space) {
     Measurement m;
-    // Copying the immutable baseline is preparation, not measured contraction.
     List<Enclosure> contracted = original;
     const auto contraction_start = Bench::Clock::now();
     for (const auto& enclosure: contracted)
         enclosure.reduce();
     const auto contraction_end = Bench::Clock::now();
+    m.contraction_ns = Bench::elapsed_ns(contraction_start, contraction_end);
+
     const auto recombination_start = Bench::Clock::now();
     m.result = ReferenceEnclosureRecombiner().recombine(contracted);
     const auto recombination_end = Bench::Clock::now();
-    m.contraction_ns = Bench::elapsed_ns(contraction_start, contraction_end);
     m.recombination_ns = Bench::elapsed_ns(recombination_start, recombination_end);
-    if (m.result.outputs.size() != 1u)
-        throw std::runtime_error("expected one nonempty reference recombination output");
+    if (m.result.outputs.size() != 1u || !m.result.discarded_sources.empty() ||
+        m.result.outputs.front().source_indices.size() != contracted.size())
+        throw std::runtime_error("unexpected recombination output or provenance");
+    for (SizeType i = 0; i != contracted.size(); ++i)
+        if (m.result.outputs.front().source_indices[i] != i)
+            throw std::runtime_error("incorrect recombination source index");
 
-    // The continuation system contains only the target dynamics: neither
-    // collection can jump again, and no termination event history is erased.
-    // Recombination creates a new trajectory; its provenance remains in result.
-    const HybridEnclosure recombined(target, space, m.result.outputs.front().enclosure);
-    const auto independent_start = Bench::Clock::now();
-    for (const auto& checkpoint: checkpoints) {
-        const auto orbit = continuation.orbit(checkpoint, stop, Semantics::UPPER);
-        m.independent_final += orbit.final().size();
+    // Use the SAME reduced continuous input in both branches. Both wrappers
+    // start in the target-only automaton with empty event histories.
+    std::vector<HybridEnclosure> independent_inputs;
+    independent_inputs.reserve(contracted.size());
+    for (const auto& source: contracted)
+        independent_inputs.emplace_back(target, space, source);
+    const HybridEnclosure merged_input(target, space, m.result.outputs.front().enclosure);
+
+    // Keep orbits alive until BOTH timers end: no projection/validation in
+    // a timed region. Independent timings sum only the orbit() call costs.
+    std::vector<Orbit<HybridEnclosure>> independent_orbits;
+    independent_orbits.reserve(independent_inputs.size());
+    for (const auto& source: independent_inputs) {
+        const auto start = Bench::Clock::now();
+        auto orbit = continuation.orbit(source, stop, Semantics::UPPER);
+        const auto finish = Bench::Clock::now();
+        m.independent_ns += Bench::elapsed_ns(start, finish);
+        independent_orbits.push_back(std::move(orbit));
     }
-    const auto independent_end = Bench::Clock::now();
     const auto merged_start = Bench::Clock::now();
-    const auto merged_orbit = continuation.orbit(recombined, stop, Semantics::UPPER);
+    const auto merged_orbit = continuation.orbit(merged_input, stop, Semantics::UPPER);
     const auto merged_end = Bench::Clock::now();
-    m.independent_ns = Bench::elapsed_ns(independent_start, independent_end);
     m.merged_ns = Bench::elapsed_ns(merged_start, merged_end);
+
+    for (const auto& source: contracted)
+        accumulate(m.source, source);
+    accumulate(m.merged, m.result.outputs.front().enclosure);
+    for (const auto& orbit: independent_orbits) {
+        m.independent_final += orbit.final().size();
+        for (const auto& enclosure: orbit.final())
+            accumulate(m.continued_independent, enclosure.continuous_set());
+    }
     m.merged_final = merged_orbit.final().size();
+    for (const auto& enclosure: merged_orbit.final())
+        accumulate(m.continued_merged, enclosure.continuous_set());
+    if (!m.source || !m.merged || !m.continued_independent || !m.continued_merged)
+        throw std::runtime_error("missing source or final projection");
     return m;
 }
 
@@ -198,44 +250,48 @@ double width(const UpperIntervalType& value) {
     return value.upper_bound().raw().get_d() - value.lower_bound().raw().get_d();
 }
 
-void describe_quality(const List<Enclosure>& original, const EnclosureRecombinationResult& result) {
-    const auto& output = result.outputs.front();
-    UpperBoxType input_state = apply(original.front().state_function(), original.front().reduced_domain());
-    UpperIntervalType input_time = apply(original.front().time_function(), original.front().reduced_domain());
-    UpperIntervalType input_dwell = apply(original.front().dwell_time_function(), original.front().reduced_domain());
-    for (SizeType i = 1; i != original.size(); ++i) {
-        const auto domain = original[i].reduced_domain();
-        input_state = hull(input_state, apply(original[i].state_function(), domain));
-        input_time = hull(input_time, apply(original[i].time_function(), domain));
-        input_dwell = hull(input_dwell, apply(original[i].dwell_time_function(), domain));
+void compare_quality(const char* phase, const Projection& independent,
+                     const Projection& merged) {
+    std::cout << "  " << phase << " (validated projection hulls):\n";
+    for (SizeType k = 0; k != independent.state.size(); ++k) {
+        const double before = width(independent.state[k]), after = width(merged.state[k]);
+        std::cout << "    state[" << k << "] independent-width=" << before
+                  << " merged-width=" << after << " ratio="
+                  << (before > 0 ? after / before : 0) << "\n";
     }
-    const auto& merged = output.enclosure;
-    const auto domain = merged.reduced_domain();
-    const auto output_state = apply(merged.state_function(), domain);
-    const auto output_time = apply(merged.time_function(), domain);
-    const auto output_dwell = apply(merged.dwell_time_function(), domain);
+    const double bt = width(independent.time), at = width(merged.time);
+    const double bd = width(independent.dwell), ad = width(merged.dwell);
+    std::cout << "    time independent-width=" << bt << " merged-width=" << at
+              << " ratio=" << (bt > 0 ? at / bt : 0) << "\n";
+    std::cout << "    dwell independent-width=" << bd << " merged-width=" << ad
+              << " ratio=" << (bd > 0 ? ad / bd : 0) << "\n";
+    // Hull containment is necessary for exact hulls, but neither necessary
+    // nor sufficient for constrained-source inclusion with outer ranges.
+    std::cout << "    hull-containment (diagnostic only): state="
+              << definitely(subset(independent.state, merged.state))
+              << " time=" << definitely(subset(independent.time, merged.time))
+              << " dwell=" << definitely(subset(independent.dwell, merged.dwell))
+              << "\n";
+}
+
+void describe_quality(const Measurement& m) {
+    const auto& output = m.result.outputs.front();
     std::cout << std::setprecision(6)
               << "  provenance=" << output.source_indices.size()
-              << " discarded=" << result.discarded_sources.size()
-              << " parameters=" << merged.number_of_parameters()
-              << " constraints=" << merged.number_of_constraints()
-              << " radius-limit-satisfied=" << result.radius_limit_satisfied << "\n";
-    for (SizeType k = 0; k != input_state.size(); ++k) {
-        std::cout << "  state[" << k << "] hull-width=" << width(input_state[k])
-                  << " result-width=" << width(output_state[k]) << "\n";
-    }
-    std::cout << "  time hull-width=" << width(input_time)
-              << " result-width=" << width(output_time)
-              << " dwell hull-width=" << width(input_dwell)
-              << " result-width=" << width(output_dwell) << "\n";
-    // These interval widths measure wrapping/inflation, not certified set
-    // inclusion. Soundness is the recombiner's contract, tested separately.
+              << " discarded=" << m.result.discarded_sources.size()
+              << " parameters=" << output.enclosure.number_of_parameters()
+              << " constraints=" << output.enclosure.number_of_constraints()
+              << " radius-limit-satisfied=" << m.result.radius_limit_satisfied << "\n";
+    compare_quality("at recombination", *m.source, *m.merged);
+    compare_quality("after continuation", *m.continued_independent, *m.continued_merged);
 }
 
 void run_scenario(const Scenario& scenario, const Options& options, const Bench::CommandLine& cli) {
     const DiscreteLocation source(1), target(2);
     const DiscreteEvent jump("jump");
     const RealVariable x("x"), y("y");
+    std::cout << "\nscenario=" << scenario.name << " step=" << options.step
+              << " accuracy=" << options.accuracy << " group-size=" << options.group_size << "\n";
     const auto checkpoints = generate(scenario, options, source, target, jump, x, y);
     List<Enclosure> original;
     for (const auto& checkpoint: checkpoints)
@@ -249,10 +305,11 @@ void run_scenario(const Scenario& scenario, const Options& options, const Bench:
 
     Bench::Runner runner(cli);
     Bench::Samples contractions, recombinations, totals, independents, merged;
+    Bench::Samples independent_totals, merged_totals;
     std::optional<Measurement> last;
     unsigned round = 0u;
     const auto completed = runner.run(scenario.name, options.samples, [] {}, [&] {
-        last = measure(original, checkpoints, continuation, stop, target, RealSpace({x, y}));
+        last = measure(original, continuation, stop, target, RealSpace({x, y}));
     }, [&] {
         if (!last)
             throw std::runtime_error("missing measurement");
@@ -262,21 +319,25 @@ void run_scenario(const Scenario& scenario, const Options& options, const Bench:
             totals.add(last->contraction_ns + last->recombination_ns);
             independents.add(last->independent_ns);
             merged.add(last->merged_ns);
+            independent_totals.add(last->independent_total_ns());
+            merged_totals.add(last->merged_total_ns());
             std::cout << "  sample=" << round - cli.warmups() + 1
                       << " independent-final=" << last->independent_final
-                      << " recombined-final=" << last->merged_final << "\n";
+                      << " recombined-final=" << last->merged_final
+                      << " net-speedup=" << last->independent_total_ns() / last->merged_total_ns() << "\n";
         }
         ++round;
     });
     if (completed.size() != options.samples || totals.size() != options.samples)
         throw std::runtime_error("incorrect measured sample count");
-    describe_quality(original, last->result);
+    describe_quality(*last);
 
     Bench::Report report(std::string("Recombination timings: ") + scenario.name + " (nanoseconds)",
                          cli.summary_fields());
     report.set_parameter_header("One sample = fresh constraint reduction, reference recombination, "
                                 "independent and merged target-only continuation. "
-                                "Dataset generation, copying, verification and reporting are untimed.");
+                                "Dataset generation, copying, quality evaluation and reporting are untimed. "
+                                 "Totals: contraction+independent vs contraction+recombination+merged.");
     report.set_dimension_columns({{"Scenario"}, {"Phase"}, {"Inputs", 0u, Bench::TableAlignment::Right}});
     report.set_table_options(Bench::TableOptions::ruled());
     const std::string count = std::to_string(original.size());
@@ -288,6 +349,8 @@ void run_scenario(const Scenario& scenario, const Options& options, const Bench:
     row("contract+recombine", totals);
     row("continue-independent", independents);
     row("continue-recombined", merged);
+    row("total-independent", independent_totals);
+    row("total-recombined", merged_totals);
     report.print();
 }
 

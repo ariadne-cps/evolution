@@ -96,18 +96,25 @@ cmake --build build-release --parallel --target benchmark_recombination
 Run again with `--step 0.015625` and `--step 0.00390625` for the other two
 baseline integration-step settings. `--accuracy` varies the integrator's
 step error limit. The benchmark generates each dataset once, **outside timing**,
-then measures fresh-copy constraint reduction, reference recombination, their
-sum, independent continuation of each selected post-reset enclosure, and
-continuation of the single recombined enclosure. Both continuations use the
-same target-only dynamics, stopping at absolute time 4 (urgent) or 2
-(permissive). Run with fixed concurrency and verbosity for comparisons.
+then measures reduction of fresh source copies **once per sample**. Both
+continuations start from the same contracted continuous sets, wrapped as new
+initial enclosures with empty event histories in the target-only automaton.
+Both stop at absolute time 4 (urgent) or 2 (permissive). The end-to-end totals
+are contraction + independent continuation, versus contraction + recombination
++ recombined continuation. Copying, projection evaluation and reporting are
+outside timing. Keep concurrency and verbosity fixed.
 
-The report includes source and output counts, provenance, final-continuation
-counts, parameter/constraint counts, and outward-rounded interval widths of
-state, absolute time and dwell time, before and after recombination. The widths
-are **diagnostics of wrapping and numerical quality**, not a proof that the
-recombined set covers the union. Certified coverage and clock/constraint
-semantics belong to the existing C++ recombination tests. The reference
-algorithm produces at most one enclosure and may inflate distant inputs;
-this baseline deliberately selects nearby sources rather than merging a full
-heterogeneous trajectory set. Benchmark runs are not registered in CTest.
+Both the initial and the continued enclosure collections are compared by
+outward-rounded coordinate projection widths for state, absolute time and dwell
+time. The report includes independent/recombined final counts, source
+provenance, constraint/parameter counts, phase timings and end-to-end totals.
+Width ratios with a zero-width denominator are printed as zero (not a valid
+ratio). The printed coordinate-hull-containment check is a **diagnostic, not
+a certificate of constrained-set inclusion**: a source hull may be wider than
+the true constrained set. Certified numerical coverage and clock semantics
+remain the responsibility of the C++ recombination correctness tests.
+
+For scaling, run with --step 0.0625, 0.015625, 0.00390625 and --group-size
+2, 4, 8 (if enough checkpoints are produced); vary --accuracy independently.
+The generation orbit's reach/intermediate/final counts are printed, but they
+are not an integrator accepted-step count. The benchmark is not in CTest.

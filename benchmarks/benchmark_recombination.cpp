@@ -420,6 +420,27 @@ bool certified_invariant_projection_containment(const Projection& source,
     return definitely(subset(source.invariant, output.invariant));
 }
 
+// Check the *entire outer approximation* against the birth guard. "true"
+// is a validated sufficient statement; "false" is only inconclusive,
+// since the enclosure may have infeasible parameters excluded by constraints.
+// The violation bound is an upper estimate on its possible guard excursion,
+// useful for ranking numerical wrapping (not a set-coverage certificate).
+struct GuardQuality {
+    bool universally_verified = false;
+    double violation_upper = 0.0;
+};
+
+GuardQuality guard_quality(const Enclosure& source, bool urgent) {
+    const auto g = source.state_function().get(0) + source.state_function().get(1);
+    const auto bounds = apply(g, source.reduced_domain());
+    const double lower = bounds.lower_bound().raw().get_d();
+    const double upper = bounds.upper_bound().raw().get_d();
+    if (urgent)
+        return {definitely(subset(bounds, UpperIntervalType(0, 0))),
+                std::max(std::abs(lower), std::abs(upper))};
+    return {lower >= 0.0, std::max(0.0, -lower)};
+}
+
 struct Measurement {
     double contraction_ns = 0, recombination_ns = 0;
     double independent_ns = 0, merged_ns = 0;
@@ -432,6 +453,7 @@ struct Measurement {
     bool final_coordinate_projection_certified = false;
     bool initial_invariant_projection_certified = false;
     bool final_invariant_projection_certified = false;
+    GuardQuality output_guard;
     double independent_total_ns() const { return contraction_ns + independent_ns; }
     double merged_total_ns() const { return contraction_ns + recombination_ns + merged_ns; }
 };
@@ -501,6 +523,7 @@ Measurement measure(const List<Enclosure>& original,
         }
     }
     accumulate(m.merged, m.result.outputs.front().enclosure);
+    m.output_guard = guard_quality(m.result.outputs.front().enclosure, urgent);
     for (const auto& orbit: independent_orbits) {
         m.independent_final += orbit.final().size();
         for (const auto& enclosure: orbit.final())
@@ -596,6 +619,10 @@ void describe_quality(const Measurement& m) {
               << " final-state-clocks=" << m.final_coordinate_projection_certified
               << " initial-invariant=" << m.initial_invariant_projection_certified
               << " final-invariant=" << m.final_invariant_projection_certified << "\n";
+    std::cout << "  Guard on entire output outer box: verified="
+              << m.output_guard.universally_verified
+              << " possible-violation-upper=" << m.output_guard.violation_upper
+              << " (unverified does not mean unsound)\n";
     std::cout << "  Analytic overlap/reconstruction checks passed; "
                  "these are necessary conditions, NOT set-inclusion certificates.\n";
 }
@@ -607,6 +634,8 @@ struct ScenarioSummary {
     bool final_coordinate_projection_certified = false;
     bool initial_invariant_projection_certified = false;
     bool final_invariant_projection_certified = false;
+    bool guard_universally_verified = false;
+    double guard_violation_upper = 0.0;
     double contraction_mean_ns = 0.0, recombination_mean_ns = 0.0;
     double contract_recombine_mean_ns = 0.0;
     double continue_independent_mean_ns = 0.0, continue_recombined_mean_ns = 0.0;
@@ -700,6 +729,8 @@ ScenarioSummary run_scenario(const Scenario& scenario, const Options& options,
     summary.final_coordinate_projection_certified = last->final_coordinate_projection_certified;
     summary.initial_invariant_projection_certified = last->initial_invariant_projection_certified;
     summary.final_invariant_projection_certified = last->final_invariant_projection_certified;
+    summary.guard_universally_verified = last->output_guard.universally_verified;
+    summary.guard_violation_upper = last->output_guard.violation_upper;
     summary.x_final_ratio = width_ratio(last->continued_independent->state[0],
                                         last->continued_merged->state[0]);
     summary.y_final_ratio = width_ratio(last->continued_independent->state[1],
@@ -814,7 +845,9 @@ void csv_success(std::ostream& stream, const Options& options,
     stream << ',' << result.initial_coordinate_projection_certified
            << ',' << result.final_coordinate_projection_certified
            << ',' << result.initial_invariant_projection_certified
-           << ',' << result.final_invariant_projection_certified;
+           << ',' << result.final_invariant_projection_certified
+           << ',' << result.guard_universally_verified << ',';
+    csv_number(stream, result.guard_violation_upper);
     stream << ",\"\"\n";
 }
 
@@ -823,8 +856,8 @@ void csv_failure(std::ostream& stream, const Options& options,
     csv_configuration(stream, options);
     stream << scenario.name << ",failed,";
     // Six count fields, five phase means, two totals, one speedup,
-    // seven quality ratios and four projection certification flags.
-    for (unsigned index = 0u; index != 25u; ++index)
+    // seven quality ratios, four projection flags and two guard metrics.
+    for (unsigned index = 0u; index != 27u; ++index)
         stream << ',';
     stream << csv_escape(message) << '\n';
 }
@@ -869,7 +902,8 @@ int run_sweep(const Scenario (&scenarios)[2], const Options& options,
            "x_final_ratio,y_final_ratio,invariant_initial_ratio,invariant_final_ratio,"
            "analytic_x_ratio,analytic_y_ratio,analytic_invariant_ratio,"
            "initial_coordinate_projection_certified,final_coordinate_projection_certified,"
-           "initial_invariant_projection_certified,final_invariant_projection_certified,error\n";
+           "initial_invariant_projection_certified,final_invariant_projection_certified,"
+           "guard_universally_verified,guard_violation_upper,error\n";
     bool failed = false;
     for (const auto step: options.steps) {
         for (const auto& window: windows) {
@@ -909,6 +943,7 @@ int run_sweep(const Scenario (&scenarios)[2], const Options& options,
                                   << " invariant-ratio=" << result.invariant_final_ratio
                                   << " initial-projection-certified=" << result.initial_coordinate_projection_certified
                                   << " final-projection-certified=" << result.final_coordinate_projection_certified
+                                  << " guard-verified=" << result.guard_universally_verified
                                   << '\n';
                     } catch (const std::exception& error) {
                         failed = true;

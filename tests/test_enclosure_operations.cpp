@@ -27,6 +27,7 @@
  */
 
 #include <sstream>
+#include "concise_logging.hpp"
 
 #include "algebra/sweeper.hpp"
 #include "evolution/enclosure.hpp"
@@ -365,5 +366,5 @@ int main(int argc, char* argv[]) {
     ARIADNE_TESTING_ADD_TEST(TestEnclosureOperations, test_constrained_reconditioning_and_products);
     ARIADNE_TESTING_ADD_TEST(TestEnclosureOperations, test_clock_error_reconditioning);
     ARIADNE_TESTING_ADD_TEST(TestEnclosureOperations, test_degenerate_sets_and_remaining_contracts);
-    return ARIADNE_TESTING_RUN_TESTS_WITH_ARGS(argc, argv);
+    return run_evolution_test_suite(ariadne_test_suite, argc, argv);
 }

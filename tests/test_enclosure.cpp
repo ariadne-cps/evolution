@@ -27,6 +27,7 @@
  */
 
 #include <fstream>
+#include "concise_logging.hpp"
 #include <iostream>
 
 #include "algebra/algebra.hpp"
@@ -318,5 +319,5 @@ int main(int argc, char* argv[]) {
     ARIADNE_TESTING_ADD_TEST(TestEnclosure, test_labelled_product);
     ARIADNE_TESTING_ADD_TEST(TestEnclosure, test_labelled_drawers);
     ARIADNE_TESTING_ADD_TEST(TestEnclosure, test_labelled_with_auxiliary_draw);
-    return ARIADNE_TESTING_RUN_TESTS_WITH_ARGS(argc, argv);
+    return run_evolution_test_suite(ariadne_test_suite, argc, argv);
 }

@@ -27,6 +27,7 @@
  */
 
 #include <cmath>
+#include "concise_logging.hpp"
 #include <iostream>
 #include <memory>
 #include <sstream>
@@ -394,5 +395,5 @@ int main(int argc, char* argv[]) {
     ARIADNE_TESTING_ADD_TEST(TestHybridEnclosure, test_construct);
     ARIADNE_TESTING_ADD_TEST(TestHybridEnclosure, test_space_having_time);
     ARIADNE_TESTING_ADD_TEST(TestHybridEnclosure, test_auxiliary);
-    return ARIADNE_TESTING_RUN_TESTS_WITH_ARGS(argc, argv);
+    return run_evolution_test_suite(ariadne_test_suite, argc, argv);
 }

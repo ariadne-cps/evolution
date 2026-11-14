@@ -27,6 +27,7 @@
  */
 
 #include <type_traits>
+#include "concise_logging.hpp"
 #include <utility>
 
 #include "evolution/flowtube.hpp"
@@ -84,5 +85,5 @@ class TestFlowtubeHeader : public Ariadne::Testing::ContextFixture {
 int main(int argc, char **argv) {
     ARIADNE_TESTING_SUITE("test_flowtube_header");
     ARIADNE_TESTING_ADD_TEST(TestFlowtubeHeader, test_contracts);
-    return ARIADNE_TESTING_RUN_TESTS_WITH_ARGS(argc, argv);
+    return run_evolution_test_suite(ariadne_test_suite, argc, argv);
 }

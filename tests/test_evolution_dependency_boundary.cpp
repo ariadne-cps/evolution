@@ -29,6 +29,7 @@
 // Check that the Evolution module does not depend on the higher-level
 // reasoning and dynamics modules. This is a regular Ariadne Testing suite.
 #include <cstddef>
+#include "concise_logging.hpp"
 #include <filesystem>
 #include <fstream>
 #include <iterator>
@@ -131,5 +132,5 @@ int main(int argc, char** argv) {
     ARIADNE_TESTING_ADD_TEST(TestEvolutionDependencyBoundary, test_no_upstream_reasoning_includes);
     ARIADNE_TESTING_ADD_TEST(TestEvolutionDependencyBoundary, test_enclosure_api_does_not_expose_storage);
     ARIADNE_TESTING_ADD_TEST(TestEvolutionDependencyBoundary, test_no_reasoning_target_dependency);
-    return ARIADNE_TESTING_RUN_TESTS_WITH_ARGS(argc, argv);
+    return run_evolution_test_suite(ariadne_test_suite, argc, argv);
 }

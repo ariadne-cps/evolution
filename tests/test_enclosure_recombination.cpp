@@ -27,6 +27,7 @@
  */
 
 #include <limits>
+#include "concise_logging.hpp"
 #include <sstream>
 #include <utility>
 
@@ -528,5 +529,5 @@ int main(int argc, char* argv[]) {
     ARIADNE_TESTING_ADD_TEST(TestEnclosureRecombination, test_non_dyadic_normalisation_with_padded_parameters_and_clock);
     ARIADNE_TESTING_ADD_TEST(TestEnclosureRecombination, test_empty_singleton_and_duplicate_sources);
     ARIADNE_TESTING_ADD_TEST(TestEnclosureRecombination, test_input_contracts_and_auxiliary_mapping);
-    return ARIADNE_TESTING_RUN_TESTS_WITH_ARGS(argc, argv);
+    return run_evolution_test_suite(ariadne_test_suite, argc, argv);
 }

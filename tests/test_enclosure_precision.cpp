@@ -27,6 +27,7 @@
  */
 
 #include "algebra/vector.hpp"
+#include "concise_logging.hpp"
 #include "evolution/enclosure.hpp"
 #include "function/constraint.hpp"
 #include "function/taylor_function.hpp"
@@ -62,5 +63,5 @@ class TestEnclosurePrecision : public Ariadne::Testing::ContextFixture {
 int main(int argc, char** argv) {
     ARIADNE_TESTING_SUITE("test_enclosure_precision");
     ARIADNE_TESTING_ADD_TEST(TestEnclosurePrecision, test_contracts);
-    return ARIADNE_TESTING_RUN_TESTS_WITH_ARGS(argc, argv);
+    return run_evolution_test_suite(ariadne_test_suite, argc, argv);
 }

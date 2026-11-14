@@ -182,9 +182,15 @@ EnclosureRecombinationResult ReferenceEnclosureRecombiner::recombine(const List<
         Enclosure transformed(reference.configuration());
         transformed._domain = common_domain;
         transformed._reduced_domain = common_domain;
-        // Each exact affine parameter map covers its own reduced source box.
-        // Unchecked composition avoids rejecting outward-rounding spill at
-        // the boundary of that box; no model is extrapolated mathematically.
+        // Every exact source parameter in reduced maps from some u in [0,1]^m
+        // by p_k = lower_k*(1-u_k) + upper_k*u_k. The rounded patch is an
+        // enclosure of this exact affine map, not the map defining feasibility.
+        // Thus the exact map remains in the source patch's valid domain even
+        // if the *enclosing interval evaluation* extends slightly beyond it.
+        // unchecked_compose bypasses the latter over-strict domain test; the
+        // validated Taylor-model composition must still enclose evaluation
+        // along the exact admissible affine map. See the constructive coverage
+        // proof in doc/evolution_tree_design.md.
         transformed._state_function = unchecked_compose(source.state_function(), parameters);
         transformed._time_function = unchecked_compose(source.time_function(), parameters);
         transformed._dwell_time_function = unchecked_compose(source.dwell_time_function(), parameters);
@@ -225,9 +231,16 @@ EnclosureRecombinationResult ReferenceEnclosureRecombiner::recombine(const List<
         return discard_survivors();
     }
 
-    // Retain reference predicates with bounds covering every feasible source
-    // alternative. The contractor uses each source's full constraint system;
-    // it does not require matching constraint counts or ordering.
+    // Constructive witness for each feasible normalised source parameter u:
+    // let r = source_map(u) - reference_map(u). Every component of r lies
+    // in combined[0:component_count], and each reference predicate at u
+    // lies in the corresponding combined constraint interval. Therefore
+    // the result contains (state,time,dwell) = reference_map(u) + r.
+    // Contractor reductions below must preserve this witness. Source-only
+    // constraints restrict the bounds calculation, never the other alternatives.
+    // See the constructive coverage proof in doc/evolution_tree_design.md.
+    // The contractor uses each source's full constraint system and permits
+    // different source constraint lists and ordering.
     for (SizeType k = 0; k != constraint_count; ++k) {
         const auto bounds = cast_exact_box(UpperBoxType({combined[component_count + k]}))[0];
         result._constraints[k] = ValidatedConstraintModel(bounds.lower_bound(), result.constraint(k).function(), bounds.upper_bound());

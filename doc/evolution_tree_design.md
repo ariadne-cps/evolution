@@ -544,8 +544,10 @@ outputs and reports all input indices as discarded. The existing free operation
 `recombine(const List<Enclosure>&)` remains a single-output convenience wrapper
 around the reference implementation, retaining its nonempty-list precondition
 and returning a typed empty enclosure when no output survives. These operations
-do not change trajectory identity or modify a backend. Hybrid recombination is
-a later extension, and the benchmark is deferred until hybrid traces can be generated.
+do not change trajectory identity or modify a backend. Hybrid trajectory-level
+recombination remains a later extension. The current C++ benchmark generates
+actual hybrid post-reset checkpoint enclosures and recombines them externally;
+it does not automatically recombine within the evolver.
 
 Contract source copies with their own constraints and discard only proven-empty
 ones. A singleton surviving source is returned without reparameterisation.
@@ -585,6 +587,129 @@ Results can depend on reference order and cannot be used as lower enclosures.
 An oriented residual representation or additional transported predicates may
 later improve tightness; they are not part of this implementation.
 
+#### Constructive upper-coverage proof and numerical obligations
+
+The following is a **semantic inclusion argument**, not a statement about
+the inclusion of independently computed interval projections. It applies to
+the *joint* state/absolute-time/dwell-time set represented by each input
+`Enclosure` under upper semantics. Write a source as
+
+\[
+ S_i = \{ F_i(p) : p\in D_i,\ c_{ij}(p)\in C_{ij}\ (j=1,\ldots,q_i)\},
+\]
+
+where \(F_i=(x_i,t_i,d_i)\) includes all state coordinates and both clocks.
+Each source's functions and predicates are validated function patches and
+may include their own uniform error terms. The feasible parameter set is
+interpreted in that validated enclosure semantics, not as the bare
+parameter box \(D_i\).
+
+**1. Exact affine parameter witnesses.** The implementation first contracts
+each source copy and excludes it only if emptiness is *proved*. Let
+\(D_i=\prod_k[\ell_{ik},h_{ik}]\) be its remaining bounded parameter box
+and \(m=\max_i\dim D_i\). On \(U=[0,1]^m\), define
+
+\[
+ \phi_i(u)_k=\ell_{ik}(1-u_k)+h_{ik}u_k
+ \quad (k<\dim D_i).
+\]
+
+Every original feasible parameter \(p\in D_i\) has at least one
+\(u\in U\) with \(\phi_i(u)=p\), including degenerate intervals and
+zero-dimensional boxes; the remaining coordinates are unused. This
+is a *mathematical* affine map. Its implementation uses
+`FloatDPBounds` coefficients to enclose the exact value.
+The over-rounded model of \(\phi_i\) may report a range extending beyond
+\(D_i\) at a boundary; that does not place the exact \(\phi_i(u)\)
+outside \(D_i\). Consequently `unchecked_compose` is used
+to avoid a false domain-error precondition, **with the obligation** that
+validated model composition still encloses evaluations along the exact
+admissible map. The unchecked operation itself does not prove that
+obligation. Let \(\bar F_i(u)=F_i(\phi_i(u))\), and similarly
+\(\bar c_{ij}(u)\).
+
+**2. Sound residual and reference-predicate images.** Set
+\(P(u)=\bar F_0(u)\), where index zero denotes the first surviving source.
+For each source \(i\), use its *own* feasible normalised parameters
+\(E_i=\{u\in U:\bar c_{ij}(u)\in C_{ij}\}\). The validated
+`constrained_image_bounds` bounds the joint image of
+
+\[
+ H_i(u)=\big(\bar F_i(u)-P(u),\
+                 \bar c_{01}(u),\ldots,\bar c_{0q_0}(u)\big),
+ \qquad u\in E_i .
+\]
+
+For the reference, the first difference is identically zero. Direct
+validated function-image bounds are intersected with implications
+from each *source* constraint
+\(\bar c_{ij}(u)\in C_{ij}\), using the identity
+\(h(u)=\bar c_{ij}(u)+(h(u)-\bar c_{ij}(u))\).
+A graph contractor then propagates the source constraints and
+\(z=H_i(u)\); it may only remove points proved infeasible. The returned
+box \(B_i\) therefore includes every value \(H_i(u)\) for feasible
+\(u\in E_i\). Conversion via `cast_exact_box` copies the
+outward-computed endpoints exactly; it does not narrow them.
+
+**3. Explicit witness in the output.** Hull the validated boxes:
+\(B=\operatorname{hull}_i B_i\). Let \(R\) be the first
+\(\dim(F_i)\) coordinates of \(B\), and \(K_j\) its coordinates
+for the reference predicates. The output is parametrised by
+
+\[
+ G(u,r)=P(u)+r,\quad
+ u\in U,\quad r\in R,\quad
+ \bar c_{0j}(u)\in K_j\quad (j=1,\ldots,q_0).
+\]
+
+Zero residual components are omitted only when their entire validated
+range is exactly \([0,0]\); the remaining residual coordinates are
+independent. For **any** \(v\in S_i\), choose one feasible source
+parameter \(p\) representing it, a corresponding \(u\) with
+\(\phi_i(u)=p\), and the residual
+\(r=\bar F_i(u)-P(u)\) associated with that representation
+(choosing compatible values of the validated patch models).
+Since \(H_i(u)\in B_i\subseteq B\), this choice is admitted by
+every output residual bound and every widened reference predicate.
+It satisfies \(G(u,r)=v\) in *all* state and clock components at once.
+The output's final validated `reduce()` contraction can
+only remove infeasible output parameters, so it cannot remove this
+feasible witness. Hence, conditional on the numerical obligations above,
+
+\[
+ \boxed{\ \bigcup_i S_i\ \subseteq\ S_{\mathrm{recombined}}\ } .
+\]
+
+The same state inclusion preserves any auxiliary values derived from
+the **identical** symbolic auxiliary mapping required for all sources.
+The radius request is advisory: a failed radius test does not truncate
+the output.
+
+**4. Scope and verification responsibilities.** The proof depends on
+(a) validated source models and composition including the exact affine
+maps, (b) outward image arithmetic and sound hull/intersection,
+(c) sound graph/parameter-domain contractors and proved-empty
+classification, and (d) exact copying of outward bounds. It does **not**
+depend on projection-hull nesting, numerical speedup, guard equality
+being satisfied by every *newly added* point, or source parameter maps
+representing the same physical parameters. A different recombination
+strategy requires its own argument; this proof covers the reference
+upper-enclosure algorithm, not hybrid trajectory scheduling or lower
+semantics.
+
+The implementation uses `ConstraintSolver::reduce` for both
+graph and final parameter contraction; its contract is validated
+feasible-point preservation. `cast_exact_box` preserves
+raw outward endpoints in `geometry/box.hpp`. Scaled patch
+`unchecked_compose` delegates to validated Taylor-model
+composition in `function/scaled_function_patch.tpl.hpp`;
+its explicit domain compatibility check is skipped, and this is the
+most important contract to guard with regression tests on rounded
+non-dyadic parameter endpoints. The existing tests for different
+constraints, source dimensions, clocks and guard equality exercise the
+other steps. These checks support the implementation contracts but do
+not replace their mathematical assumptions.
+
 The C++ suite checks whole nonlinear curves through symbolic identities and
 residual-domain inclusion, disjoint constrained sources, contraction without
 coordinate-box shrinkage, differing predicate ordering and parameter dimensions,
@@ -599,9 +724,10 @@ requests and the distinct empty-list contracts of the batch and free operations.
 
 ### Representative recombination tests and benchmarks
 
-Hybrid recombination and its benchmarks remain to be implemented. Use
-enclosures generated by actual hybrid evolution, including its guard, time and
-progress constraints, rather than synthesising a list of translated boxes.
+Hybrid trajectory-level recombination is not integrated into the evolver.
+The external C++ benchmark already recombines post-reset enclosures generated
+by actual hybrid evolution, including guard, time and progress constraints,
+instead of synthesising a list of translated boxes.
 Correctness tests and performance measurements must use the same scenario
 definitions. Recombination is initially an upper-semantics operation.
 

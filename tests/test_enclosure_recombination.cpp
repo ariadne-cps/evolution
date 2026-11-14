@@ -435,6 +435,46 @@ class TestEnclosureRecombination : public Testing::ContextFixture {
         ARIADNE_TESTING_PROVE(bounds.upper_bound().raw().get_d() >= 0.4 * 0.4);
     }
 
+    // Exercise exactly the domain-compatibility condition intentionally
+    // bypassed by unchecked_compose: the *exact* affine parameter map lies
+    // in its original non-dyadic box, although an outward model of that map
+    // may spill slightly beyond the endpoint. The second source also has an
+    // extra degenerate parameter; it must not change joint state/time coverage.
+    void test_non_dyadic_normalisation_with_padded_parameters_and_clock() {
+        const ExactBoxType first_domain{{ExactDouble(0.1), ExactDouble(0.3)}};
+        const ExactBoxType second_domain{
+            {ExactDouble(0.2), ExactDouble(0.4)},
+            {ExactDouble(0.0), ExactDouble(0.0)}
+        };
+        const auto p = EffectiveVectorMultivariateFunction::identity(2u);
+        Enclosure first(first_domain, EffectiveVectorMultivariateFunction{s, sqr(s)},
+                        s, {}, config);
+        Enclosure second(second_domain,
+                         EffectiveVectorMultivariateFunction{p[0], sqr(p[0])},
+                         p[0] + Real(1 / 4_q), {}, config);
+        const auto first_before = description(first);
+        const auto second_before = description(second);
+
+        const auto result = recombine({first, second});
+        ARIADNE_TESTING_PROVE(!definitely(result.is_empty()));
+        ARIADNE_TESTING_PROVE(result.number_of_parameters() >= 2u);
+        // These are necessary outward bounds on entire *source* curves,
+        // not just numerically sampled points. The real inclusion witness
+        // is the affine map plus residuals, proved in the design document.
+        const auto joint_x = apply(result.state_function().get(0), result.domain());
+        const auto joint_y = apply(result.state_function().get(1), result.domain());
+        const auto joint_t = apply(result.time_function(), result.domain());
+        ARIADNE_TESTING_PROVE(joint_x.lower_bound().raw().get_d() <= 0.1);
+        ARIADNE_TESTING_PROVE(joint_x.upper_bound().raw().get_d() >= 0.4);
+        ARIADNE_TESTING_PROVE(joint_y.lower_bound().raw().get_d() <= 0.01);
+        ARIADNE_TESTING_PROVE(joint_y.upper_bound().raw().get_d() >= 0.16);
+        ARIADNE_TESTING_PROVE(joint_t.lower_bound().raw().get_d() <= 0.1);
+        ARIADNE_TESTING_PROVE(joint_t.upper_bound().raw().get_d() >= 0.65);
+        expect_bounds(apply(result.dwell_time_function(), result.domain()), 0, 0);
+        ARIADNE_TESTING_EXPECT_EQUAL(description(first), first_before);
+        ARIADNE_TESTING_EXPECT_EQUAL(description(second), second_before);
+    }
+
     void test_empty_singleton_and_duplicate_sources() {
         Enclosure first(domain, EffectiveVectorMultivariateFunction{s, sqr(s)}, config);
         Enclosure empty = first;
@@ -485,6 +525,7 @@ int main(int argc, char* argv[]) {
     ARIADNE_TESTING_ADD_TEST(TestEnclosureRecombination, test_unequal_parameter_dimensions);
     ARIADNE_TESTING_ADD_TEST(TestEnclosureRecombination, test_points_and_zero_dimensional_parameters);
     ARIADNE_TESTING_ADD_TEST(TestEnclosureRecombination, test_uniform_errors_and_rounded_parameter_maps);
+    ARIADNE_TESTING_ADD_TEST(TestEnclosureRecombination, test_non_dyadic_normalisation_with_padded_parameters_and_clock);
     ARIADNE_TESTING_ADD_TEST(TestEnclosureRecombination, test_empty_singleton_and_duplicate_sources);
     ARIADNE_TESTING_ADD_TEST(TestEnclosureRecombination, test_input_contracts_and_auxiliary_mapping);
     return ARIADNE_TESTING_RUN_TESTS_WITH_ARGS(argc, argv);

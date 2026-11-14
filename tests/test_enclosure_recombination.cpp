@@ -333,6 +333,41 @@ class TestEnclosureRecombination : public Testing::ContextFixture {
         expect_bounds(UpperIntervalType(result.domain()[3]), 0, 0.25);
     }
 
+    // An algebraic whole-domain coverage witness for two urgent-guard curves.
+    // The two source maps satisfy x+y=0 identically while their absolute
+    // birth times differ. One shared reference parameter and independent
+    // residuals preserve both entire curves and their clock correlations.
+    void test_guard_constrained_joint_coverage_witness() {
+        const ExactBoxType unit{{0, 1}};
+        Enclosure first(unit, EffectiveVectorMultivariateFunction{-s, s}, s, {}, config);
+        Enclosure second(unit, EffectiveVectorMultivariateFunction{
+                             -s - Real(1 / 4_q), s + Real(1 / 4_q)},
+                         s + Real(1 / 4_q), {}, config);
+        const auto coordinates = EffectiveVectorMultivariateFunction::identity(2u);
+        first.new_zero_state_constraint(coordinates[0] + coordinates[1]);
+        second.new_zero_state_constraint(coordinates[0] + coordinates[1]);
+
+        const auto result = recombine({first, second});
+        ARIADNE_TESTING_EXPECT_EQUAL(result.number_of_parameters(), 4u);
+        ARIADNE_TESTING_EXPECT_EQUAL(result.number_of_constraints(), 1u);
+        const auto u = factory().create_coordinate(result.domain(), 0u);
+        const auto ex = factory().create_coordinate(result.domain(), 1u);
+        const auto ey = factory().create_coordinate(result.domain(), 2u);
+        const auto et = factory().create_coordinate(result.domain(), 3u);
+        expect_bounds(apply(result.state_function().get(0) + u - ex, result.domain()), 0, 0);
+        expect_bounds(apply(result.state_function().get(1) - u - ey, result.domain()), 0, 0);
+        expect_bounds(apply(result.time_function() - u - et, result.domain()), 0, 0);
+        expect_bounds(apply(result.dwell_time_function(), result.domain()), 0, 0);
+
+        // For every source parameter u in [0,1] choose the constant triple
+        // (ex,ey,et)=(0,0,0) or (-1/4,1/4,1/4) respectively.
+        // Both choices satisfy the output's guard equality and its bounds.
+        expect_bounds(UpperIntervalType(result.domain()[1]), -0.25, 0);
+        expect_bounds(UpperIntervalType(result.domain()[2]), 0, 0.25);
+        expect_bounds(UpperIntervalType(result.domain()[3]), 0, 0.25);
+        expect_bounds(UpperIntervalType(result.constraint(0).bounds()), 0, 0);
+    }
+
     void test_unequal_parameter_dimensions() {
         Enclosure first(domain, EffectiveVectorMultivariateFunction{s, sqr(s)}, config);
         auto coordinates = EffectiveVectorMultivariateFunction::identity(2u);
@@ -446,6 +481,7 @@ int main(int argc, char* argv[]) {
     ARIADNE_TESTING_ADD_TEST(TestEnclosureRecombination, test_constraints_reduce_residuals_without_reducing_the_box);
     ARIADNE_TESTING_ADD_TEST(TestEnclosureRecombination, test_clock_maps_and_continued_evolution);
     ARIADNE_TESTING_ADD_TEST(TestEnclosureRecombination, test_exact_joint_clock_and_state_coverage_witness);
+    ARIADNE_TESTING_ADD_TEST(TestEnclosureRecombination, test_guard_constrained_joint_coverage_witness);
     ARIADNE_TESTING_ADD_TEST(TestEnclosureRecombination, test_unequal_parameter_dimensions);
     ARIADNE_TESTING_ADD_TEST(TestEnclosureRecombination, test_points_and_zero_dimensional_parameters);
     ARIADNE_TESTING_ADD_TEST(TestEnclosureRecombination, test_uniform_errors_and_rounded_parameter_maps);

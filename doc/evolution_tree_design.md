@@ -734,6 +734,14 @@ could appear faster by moving work into dataset preparation. Verification and
 diagnostic reporting remain outside the measured phases. Do not hardwire logging
 redirection into the benchmark or tests.
 
+For window-width comparisons, fix the maximum step and window midpoint
+and vary the physical birth-time interval width. Record the selected
+checkpoint count and the costs of contraction, recombination and both
+continuations separately. Algebraic whole-domain witnesses on
+guard-constrained sources exercise joint state/time coverage, while
+per-source validated analytic overlap checks on generated sources
+remain necessary rather than sufficient for general inclusion.
+
 For step-resolution comparisons, fix an absolute post-reset birth-time window,
 impose it as a constraint on each generated enclosure, and include every
 feasible checkpoint intersecting that window. The source count may then

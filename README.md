@@ -180,3 +180,36 @@ CSV records the explicit selection mode and window endpoints (blank group
 size). The older group-size sweep is unchanged and answers a different
 question. A reported `ok` still means only the implemented
 numerical consistency checks passed; it is not a general set-coverage proof.
+
+### Phase breakdown and fixed-centre window-width sweep
+
+The C++ sweep now writes mean contraction, recombination,
+contraction-plus-recombination, independent continuation and recombined
+continuation times separately, alongside both end-to-end means. Dataset
+generation remains outside the timers. The CSV includes `window_width`
+and reports phase times in nanoseconds.
+
+To vary only the temporal window width at a fixed step and midpoint, run:
+
+```bash
+./build-release/benchmarks/benchmark_recombination \
+  --sweep 1 --steps 0.015625 \
+  --time-window 0.625,0.75 \
+  --window-widths 0.0625,0.125,0.25 \
+  --samples 5 --warmups 1 \
+  --csv build-release/recombination-window-widths.csv
+```
+
+The centre is 0.6875 for every window. The selected checkpoint count is
+an experimental result, not fixed across window widths. A separate sweep
+with a fixed width and multiple steps isolates resolution. An `ok` result
+means the numerical consistency checks passed, **not** a general
+constrained-set inclusion certificate. The benchmark tests necessary
+analytic overlap for every individual generated source as well as for
+the union; both remain weaker than a mathematical inclusion proof.
+
+In fixed-window mode, contraction for the selected input sets is timed.
+The selection phase uses a separate feasibility copy to discard only
+provably empty restrictions. The C++ correctness suite also tests a
+whole-domain algebraic witness for two guard-constrained curves,
+preserving state, absolute time and dwell time jointly.

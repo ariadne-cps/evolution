@@ -299,6 +299,40 @@ class TestEnclosureRecombination : public Testing::ContextFixture {
         expect_bounds(apply(result.state_function().get(1) - sqr(original_x) - (sqr(final_x) * final_x - sqr(original_x) * original_x) * FloatDPBounds(Real(1 / 3_q), dp), result.domain()), 0, 0);
     }
 
+    // Full-domain algebraic witness for joint state/time/dwell coverage.
+    // Sources share u in [0,1] and differ by exact constant offsets. The
+    // recombined enclosure has independent residual coordinates containing
+    // BOTH offset triples, so each whole source curve embeds in its graph.
+    // No sampled points, tolerance-based point matching or source boxing.
+    void test_exact_joint_clock_and_state_coverage_witness() {
+        const ExactBoxType unit{{0, 1}};
+        Enclosure first(unit, EffectiveVectorMultivariateFunction{s, sqr(s)}, s, {}, config);
+        Enclosure second(unit, EffectiveVectorMultivariateFunction{s, sqr(s) + Real(1 / 4_q)},
+                         s + Real(1 / 2_q), {}, config);
+        const auto coords = EffectiveVectorMultivariateFunction::identity(3u);
+        const EffectiveVectorMultivariateFunction stationary{coords[0], coords[1]};
+        first.apply_parameter_evolve_step(stationary, s);
+        second.apply_parameter_evolve_step(stationary, s + Real(1 / 4_q));
+        // Joint source maps:
+        // first (u,u^2,2u,u), second (u,u^2+1/4,2u+3/4,u+1/4).
+        const auto result = recombine({first, second});
+        ARIADNE_TESTING_EXPECT_EQUAL(result.number_of_parameters(), 4u);
+        ARIADNE_TESTING_EXPECT_EQUAL(result.number_of_constraints(), 0u);
+        const auto u = factory().create_coordinate(result.domain(), 0u);
+        const auto ey = factory().create_coordinate(result.domain(), 1u);
+        const auto et = factory().create_coordinate(result.domain(), 2u);
+        const auto ed = factory().create_coordinate(result.domain(), 3u);
+        expect_bounds(apply(result.state_function().get(0) - u, result.domain()), 0, 0);
+        expect_bounds(apply(result.state_function().get(1) - (sqr(u) + ey), result.domain()), 0, 0);
+        expect_bounds(apply(result.time_function() - (2*u + et), result.domain()), 0, 0);
+        expect_bounds(apply(result.dwell_time_function() - (u + ed), result.domain()), 0, 0);
+        // For every u, either constant residual triple (0,0,0) or
+        // (1/4,3/4,1/4) is in this independent residual box.
+        expect_bounds(UpperIntervalType(result.domain()[1]), 0, 0.25);
+        expect_bounds(UpperIntervalType(result.domain()[2]), 0, 0.75);
+        expect_bounds(UpperIntervalType(result.domain()[3]), 0, 0.25);
+    }
+
     void test_unequal_parameter_dimensions() {
         Enclosure first(domain, EffectiveVectorMultivariateFunction{s, sqr(s)}, config);
         auto coordinates = EffectiveVectorMultivariateFunction::identity(2u);
@@ -411,6 +445,7 @@ int main(int argc, char* argv[]) {
     ARIADNE_TESTING_ADD_TEST(TestEnclosureRecombination, test_oblique_common_constraint_and_different_constraint_lists);
     ARIADNE_TESTING_ADD_TEST(TestEnclosureRecombination, test_constraints_reduce_residuals_without_reducing_the_box);
     ARIADNE_TESTING_ADD_TEST(TestEnclosureRecombination, test_clock_maps_and_continued_evolution);
+    ARIADNE_TESTING_ADD_TEST(TestEnclosureRecombination, test_exact_joint_clock_and_state_coverage_witness);
     ARIADNE_TESTING_ADD_TEST(TestEnclosureRecombination, test_unequal_parameter_dimensions);
     ARIADNE_TESTING_ADD_TEST(TestEnclosureRecombination, test_points_and_zero_dimensional_parameters);
     ARIADNE_TESTING_ADD_TEST(TestEnclosureRecombination, test_uniform_errors_and_rounded_parameter_maps);

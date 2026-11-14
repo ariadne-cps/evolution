@@ -158,3 +158,25 @@ speedup, final-state width ratios, invariant inflation and analytic-reference
 ratios. All ratios are diagnostics of outward bounds, not inclusion proofs.
 Failed rows contain an error message; incomplete runs are never reported as
 successful timing measurements. No benchmark run is registered in CTest.
+
+### Fixed birth-time window (independent resolution study)
+
+For the separate resolution experiment, keep the physical jump-time window
+fixed while varying the integration step, e.g.:
+
+```bash
+./build-release/benchmarks/benchmark_recombination \
+  --sweep 1 --steps 0.0625,0.015625,0.00390625 \
+  --time-window 0.625,0.75 --samples 5 --warmups 1 \
+  --csv build-release/recombination-fixed-window.csv
+```
+
+This selects all actual post-reset checkpoints whose validated time ranges
+intersect the window, then imposes the window **on each source's joint
+state/time function** and contracts its constraints. It does not synthesize
+a boxed input. Source counts may differ between steps. In this mode
+`--groups` and `--group-size` do not control selection, and the
+CSV records the explicit selection mode and window endpoints (blank group
+size). The older group-size sweep is unchanged and answers a different
+question. A reported `ok` still means only the implemented
+numerical consistency checks passed; it is not a general set-coverage proof.

@@ -734,6 +734,12 @@ could appear faster by moving work into dataset preparation. Verification and
 diagnostic reporting remain outside the measured phases. Do not hardwire logging
 redirection into the benchmark or tests.
 
+For step-resolution comparisons, fix an absolute post-reset birth-time window,
+impose it as a constraint on each generated enclosure, and include every
+feasible checkpoint intersecting that window. The source count may then
+change with the step; do not also fix group cardinality in this experiment.
+Use the separate adjacent-cardinality sweep to measure the grouping effect.
+
 Start with maximum integration steps `1/16`, `1/64` and `1/256`; record the actual
 accepted steps and generated checkpoint count rather than assuming fixed steps.
 Vary initial-set extent and local error tolerance independently. Avoid incidental

@@ -65,6 +65,7 @@ struct Options {
     std::vector<double> steps = {1.0 / 16.0, 1.0 / 64.0, 1.0 / 256.0};
     std::vector<unsigned> groups = {2u, 4u, 8u};
     std::string csv = "recombination-sweep.csv";
+    std::optional<std::pair<double, double>> time_window;
 };
 
 // Parse a bounded-size CLI axis without relying on textual benchmark output.
@@ -91,6 +92,27 @@ std::vector<double> parse_steps(const String& value) {
 }
 
 
+// A fixed absolute birth-time window separates group cardinality from the
+// integration-step resolution. Reject malformed endpoints before any evolution.
+std::pair<double, double> parse_time_window(const String& value) {
+    const std::string text(value);
+    const auto comma = text.find(',');
+    if (comma == std::string::npos || text.find(',', comma + 1u) != std::string::npos)
+        throw std::invalid_argument("expected --time-window START,END");
+    const auto parse = [](const std::string& token) {
+        std::size_t used = 0u;
+        const double number = std::stod(token, &used);
+        if (used != token.size() || !std::isfinite(number))
+            throw std::invalid_argument("invalid time-window bound");
+        return number;
+    };
+    const double start = parse(text.substr(0u, comma));
+    const double end = parse(text.substr(comma + 1u));
+    if (start < 0.0 || end <= start)
+        throw std::invalid_argument("time-window requires 0 <= START < END");
+    return {start, end};
+}
+
 List<ArgumentParser> argument_parsers(Options& options) {
     List<ArgumentParser> parsers;
     auto positive = [&](const String& short_id, const String& name, const String& description, double& value) {
@@ -116,6 +138,12 @@ List<ArgumentParser> argument_parsers(Options& options) {
     positive("a", "accuracy", "Integrator step maximum error (default: 1e-5)", options.accuracy);
     count("g", "group-size", "Nearby jump enclosures to recombine (default: 4)", options.group_size);
     count("n", "samples", "Measured runs per scenario (default: 3)", options.samples);
+    parsers.append(make_valued_argument_parser("", "time-window",
+                                               "Use all jump enclosures intersecting absolute birth-time window START,END (ignores group-size)",
+                                               [&options](const String& value) -> VoidFunction {
+                                                   const auto bounds = parse_time_window(value);
+                                                   return [&options, bounds] { options.time_window = bounds; };
+                                               }));
     parsers.append(make_valued_argument_parser("", "sweep",
                                                "Run the built-in C++ step/group sweep: 1 enables (default: 0)",
                                                [&options](const String& value) -> VoidFunction {
@@ -172,7 +200,7 @@ void configure(GeneralHybridEvolver& evolver, const Options& options) {
     evolver.configuration().set_maximum_enclosure_radius(ApproximateDouble(100.0));
 }
 
-List<HybridEnclosure> generate(const Scenario& scenario, const Options& options,
+List<Enclosure> generate(const Scenario& scenario, const Options& options,
                                DiscreteLocation source, DiscreteLocation target,
                                DiscreteEvent jump, RealVariable x, RealVariable y,
                                bool verbose, SizeType& generated) {
@@ -201,19 +229,50 @@ List<HybridEnclosure> generate(const Scenario& scenario, const Options& options,
     generated = candidates.size();
     if (candidates.size() < 2u)
         throw std::runtime_error("not enough post-reset checkpoints; adjust integration step");
-    // Select adjacent crossing/jump times rather than recombining a distant
-    // collection whose geometric inflation would be predetermined.
-    const SizeType take = std::min<SizeType>(candidates.size(), options.group_size);
-    if (take < 2u)
-        throw std::runtime_error("group-size must be at least two");
-    const SizeType offset = (candidates.size() - take) / 2u;
-    List<HybridEnclosure> selection;
-    for (SizeType i = offset; i != offset + take; ++i)
-        selection.append(candidates[i]);
-    if (verbose)
+    List<Enclosure> selection;
+    if (options.time_window) {
+        const auto [window_start, window_end] = *options.time_window;
+        if (window_end >= scenario.generation_horizon)
+            throw std::invalid_argument("time-window END must be before generation horizon");
+        // The coordinate is absolute time in the joint (state,time) space.
+        // Restrict each actual evolver-generated source with its own constraint,
+        // rather than intersecting projected boxes or synthesizing new sources.
+        const auto absolute_time = EffectiveScalarMultivariateFunction::coordinate(3u, 2u);
+        for (const auto& checkpoint: candidates) {
+            const auto bounds = checkpoint.time_range();
+            // Outward prefilter: strictly disjoint ranges cannot contribute.
+            if (bounds.upper_bound().raw().get_d() < window_start ||
+                bounds.lower_bound().raw().get_d() > window_end)
+                continue;
+            auto source = checkpoint.continuous_set();
+            source.new_state_time_constraint(ValidatedConstraint(
+                ExactDouble(window_start), absolute_time, ExactDouble(window_end)));
+            source.reduce();
+            if (!definitely(source.is_empty()))
+                selection.append(std::move(source));
+        }
+    } else {
+        // Legacy cardinality sweep: adjacent sources about the median entry
+        // time. Its total temporal span varies as the maximum step changes.
+        const SizeType take = std::min<SizeType>(candidates.size(), options.group_size);
+        if (take < 2u)
+            throw std::runtime_error("group-size must be at least two");
+        const SizeType offset = (candidates.size() - take) / 2u;
+        for (SizeType i = offset; i != offset + take; ++i)
+            selection.append(candidates[i].continuous_set());
+    }
+    if (selection.size() < 2u)
+        throw std::runtime_error("fewer than two nonempty post-reset checkpoints in selection");
+    if (verbose) {
         std::cout << scenario.name << ": generated=" << candidates.size()
-                  << " post-reset checkpoints, selected=" << selection.size()
-                  << " (middle adjacent time window)\n";
+                  << " post-reset checkpoints, selected=" << selection.size();
+        if (options.time_window)
+            std::cout << " with constrained time-window=[" << options.time_window->first
+                      << "," << options.time_window->second << "]";
+        else
+            std::cout << " (middle adjacent time window)";
+        std::cout << "\n";
+    }
     return selection;
 }
 
@@ -476,16 +535,20 @@ ScenarioSummary run_scenario(const Scenario& scenario, const Options& options,
     const DiscreteLocation source(1), target(2);
     const DiscreteEvent jump("jump");
     const RealVariable x("x"), y("y");
-    if (verbose)
+    if (verbose) {
         std::cout << "\nscenario=" << scenario.name << " step=" << options.step
-                  << " accuracy=" << options.accuracy << " group-size=" << options.group_size << "\n";
+                  << " accuracy=" << options.accuracy;
+        if (options.time_window)
+            std::cout << " time-window=[" << options.time_window->first
+                      << "," << options.time_window->second << "]";
+        else
+            std::cout << " group-size=" << options.group_size;
+        std::cout << "\n";
+    }
     ScenarioSummary summary;
-    const auto checkpoints = generate(scenario, options, source, target, jump, x, y,
-                                      verbose, summary.generated);
-    summary.selected = checkpoints.size();
-    List<Enclosure> original;
-    for (const auto& checkpoint: checkpoints)
-        original.append(checkpoint.continuous_set());
+    const auto original = generate(scenario, options, source, target, jump, x, y,
+                                   verbose, summary.generated);
+    summary.selected = original.size();
 
     HybridAutomaton target_system("recombination-continuation");
     target_system.new_mode(target, {dot(x) = 1 + sqr(y), dot(y) = 1});
@@ -591,10 +654,21 @@ void csv_number(std::ostream& stream, double value) {
         stream << value;
 }
 
+// Both success and failure rows use the same typed configuration prefix.
+// In time-window mode group_size is deliberately blank, not spuriously zero.
+void csv_configuration(std::ostream& stream, const Options& options) {
+    stream << options.step << ',' << options.accuracy << ',';
+    if (options.time_window)
+        stream << "time-window,," << options.time_window->first << ','
+               << options.time_window->second << ',';
+    else
+        stream << "adjacent," << options.group_size << ",,,";
+}
+
 void csv_success(std::ostream& stream, const Options& options,
                  const Scenario& scenario, const ScenarioSummary& result) {
-    stream << options.step << ',' << options.accuracy << ',' << options.group_size << ','
-           << scenario.name << ",ok," << result.generated << ',' << result.selected
+    csv_configuration(stream, options);
+    stream << scenario.name << ",ok," << result.generated << ',' << result.selected
            << ',' << options.samples << ',' << result.independent_final << ','
            << result.recombined_final << ',';
     csv_number(stream, result.independent_mean_ns);
@@ -621,8 +695,8 @@ void csv_success(std::ostream& stream, const Options& options,
 
 void csv_failure(std::ostream& stream, const Options& options,
                  const Scenario& scenario, const std::string& message) {
-    stream << options.step << ',' << options.accuracy << ',' << options.group_size
-           << ',' << scenario.name << ",failed,";
+    csv_configuration(stream, options);
+    stream << scenario.name << ",failed,";
     // Exactly 15 empty metric fields between status and the error message.
     for (unsigned index = 0u; index != 15u; ++index)
         stream << ',';
@@ -638,21 +712,30 @@ int run_sweep(const Scenario (&scenarios)[2], const Options& options,
     if (!csv)
         throw std::runtime_error("cannot open CSV file: " + options.csv);
     csv << std::setprecision(17);
-    csv << "step,accuracy,group_size,scenario,status,generated,selected,samples,"
+    csv << "step,accuracy,selection_mode,group_size,window_start,window_end,"
+           "scenario,status,generated,selected,samples,"
            "independent_final,recombined_final,independent_mean_ns,recombined_mean_ns,"
            "net_speedup,x_final_ratio,y_final_ratio,invariant_initial_ratio,"
            "invariant_final_ratio,analytic_x_ratio,analytic_y_ratio,"
            "analytic_invariant_ratio,error\n";
     bool failed = false;
+    // Fixed-window mode has no group-size axis: changing the step changes
+    // the count of genuine checkpoints partitioning the same birth-time span.
     for (double step: options.steps) {
-        for (unsigned group_size: options.groups) {
+        const auto groups = options.time_window ? std::vector<unsigned>{options.group_size}
+                                                : options.groups;
+        for (unsigned group_size: groups) {
             Options configuration = options;
             configuration.step = step;
             configuration.group_size = group_size;
             for (const auto& scenario: scenarios) {
-                std::cout << "RUN " << scenario.name << " step=" << step
-                          << " group-size=" << group_size << " accuracy=" << options.accuracy
-                          << std::endl;
+                std::cout << "RUN " << scenario.name << " step=" << step;
+                if (configuration.time_window)
+                    std::cout << " window=[" << configuration.time_window->first
+                              << "," << configuration.time_window->second << "]";
+                else
+                    std::cout << " group-size=" << group_size;
+                std::cout << " accuracy=" << options.accuracy << std::endl;
                 try {
                     const auto result = run_scenario(scenario, configuration, cli, false);
                     csv_success(csv, configuration, scenario, result);
@@ -666,7 +749,7 @@ int run_sweep(const Scenario (&scenarios)[2], const Options& options,
                     failed = true;
                     csv_failure(csv, configuration, scenario, error.what());
                     std::cerr << "  FAILED " << scenario.name << " step=" << step
-                              << " group-size=" << group_size << ": " << error.what() << '\n';
+                              << ": " << error.what() << '\n';
                 }
                 csv.flush();
                 if (!csv)

@@ -403,6 +403,23 @@ void check_reference_overlap(const Projection& reference, const Projection& evol
         throw std::runtime_error(std::string(path) + ": analytic and numerical clock projections are disjoint");
 }
 
+// This is a sufficient, verified *outer-projection* containment check:
+// all source interval outer bounds fit in the recombined interval outer
+// bounds. Source bounds may be arbitrarily loose relative to their actual
+// constrained sets, so a negative result is inconclusive. A positive result
+// certifies ONLY coordinate/clock projections, never full set inclusion.
+bool certified_coordinate_projection_containment(const Projection& source,
+                                                const Projection& output) {
+    return definitely(subset(source.state, output.state)) &&
+           definitely(subset(source.time, output.time)) &&
+           definitely(subset(source.dwell, output.dwell));
+}
+
+bool certified_invariant_projection_containment(const Projection& source,
+                                               const Projection& output) {
+    return definitely(subset(source.invariant, output.invariant));
+}
+
 struct Measurement {
     double contraction_ns = 0, recombination_ns = 0;
     double independent_ns = 0, merged_ns = 0;
@@ -411,6 +428,10 @@ struct Measurement {
     std::optional<Projection> source, merged, continued_independent, continued_merged;
     std::optional<Projection> analytical_final;
     std::vector<Projection> analytical_per_source;
+    bool initial_coordinate_projection_certified = false;
+    bool final_coordinate_projection_certified = false;
+    bool initial_invariant_projection_certified = false;
+    bool final_invariant_projection_certified = false;
     double independent_total_ns() const { return contraction_ns + independent_ns; }
     double merged_total_ns() const { return contraction_ns + recombination_ns + merged_ns; }
 };
@@ -491,6 +512,14 @@ Measurement measure(const List<Enclosure>& original,
     if (!m.source || !m.merged || !m.continued_independent ||
         !m.continued_merged || !m.analytical_final)
         throw std::runtime_error("missing source or final projection");
+    m.initial_coordinate_projection_certified =
+        certified_coordinate_projection_containment(*m.source, *m.merged);
+    m.initial_invariant_projection_certified =
+        certified_invariant_projection_containment(*m.source, *m.merged);
+    m.final_coordinate_projection_certified =
+        certified_coordinate_projection_containment(*m.continued_independent, *m.continued_merged);
+    m.final_invariant_projection_certified =
+        certified_invariant_projection_containment(*m.continued_independent, *m.continued_merged);
     check_reference_overlap(*m.analytical_final, *m.continued_independent, "independent union");
     check_reference_overlap(*m.analytical_final, *m.continued_merged, "recombined union");
     // Whole-union overlap can mask a source that is disjoint from the output.
@@ -562,6 +591,11 @@ void describe_quality(const Measurement& m) {
                     *m.analytical_final, *m.continued_independent);
     compare_quality("analytic target flow vs recombined continuation",
                     *m.analytical_final, *m.continued_merged);
+    std::cout << "  Certified outer-projection containment (false=inconclusive, not refutation):"
+              << " initial-state-clocks=" << m.initial_coordinate_projection_certified
+              << " final-state-clocks=" << m.final_coordinate_projection_certified
+              << " initial-invariant=" << m.initial_invariant_projection_certified
+              << " final-invariant=" << m.final_invariant_projection_certified << "\n";
     std::cout << "  Analytic overlap/reconstruction checks passed; "
                  "these are necessary conditions, NOT set-inclusion certificates.\n";
 }
@@ -569,6 +603,10 @@ void describe_quality(const Measurement& m) {
 struct ScenarioSummary {
     SizeType generated = 0, eligible = 0, selected = 0;
     SizeType independent_final = 0, recombined_final = 0;
+    bool initial_coordinate_projection_certified = false;
+    bool final_coordinate_projection_certified = false;
+    bool initial_invariant_projection_certified = false;
+    bool final_invariant_projection_certified = false;
     double contraction_mean_ns = 0.0, recombination_mean_ns = 0.0;
     double contract_recombine_mean_ns = 0.0;
     double continue_independent_mean_ns = 0.0, continue_recombined_mean_ns = 0.0;
@@ -658,6 +696,10 @@ ScenarioSummary run_scenario(const Scenario& scenario, const Options& options,
     summary.recombined_mean_ns = Bench::summarize(merged_totals).mean;
     summary.independent_final = last->independent_final;
     summary.recombined_final = last->merged_final;
+    summary.initial_coordinate_projection_certified = last->initial_coordinate_projection_certified;
+    summary.final_coordinate_projection_certified = last->final_coordinate_projection_certified;
+    summary.initial_invariant_projection_certified = last->initial_invariant_projection_certified;
+    summary.final_invariant_projection_certified = last->final_invariant_projection_certified;
     summary.x_final_ratio = width_ratio(last->continued_independent->state[0],
                                         last->continued_merged->state[0]);
     summary.y_final_ratio = width_ratio(last->continued_independent->state[1],
@@ -769,6 +811,10 @@ void csv_success(std::ostream& stream, const Options& options,
     csv_number(stream, result.analytic_y_ratio);
     stream << ',';
     csv_number(stream, result.analytic_invariant_ratio);
+    stream << ',' << result.initial_coordinate_projection_certified
+           << ',' << result.final_coordinate_projection_certified
+           << ',' << result.initial_invariant_projection_certified
+           << ',' << result.final_invariant_projection_certified;
     stream << ",\"\"\n";
 }
 
@@ -776,9 +822,9 @@ void csv_failure(std::ostream& stream, const Options& options,
                  const Scenario& scenario, const std::string& message) {
     csv_configuration(stream, options);
     stream << scenario.name << ",failed,";
-    // Six count fields, five phase means, two totals, one speedup
-    // and seven quality ratios.
-    for (unsigned index = 0u; index != 21u; ++index)
+    // Six count fields, five phase means, two totals, one speedup,
+    // seven quality ratios and four projection certification flags.
+    for (unsigned index = 0u; index != 25u; ++index)
         stream << ',';
     stream << csv_escape(message) << '\n';
 }
@@ -821,7 +867,9 @@ int run_sweep(const Scenario (&scenarios)[2], const Options& options,
            "continue_independent_mean_ns,continue_recombined_mean_ns,"
            "independent_mean_ns,recombined_mean_ns,net_speedup,"
            "x_final_ratio,y_final_ratio,invariant_initial_ratio,invariant_final_ratio,"
-           "analytic_x_ratio,analytic_y_ratio,analytic_invariant_ratio,error\n";
+           "analytic_x_ratio,analytic_y_ratio,analytic_invariant_ratio,"
+           "initial_coordinate_projection_certified,final_coordinate_projection_certified,"
+           "initial_invariant_projection_certified,final_invariant_projection_certified,error\n";
     bool failed = false;
     for (const auto step: options.steps) {
         for (const auto& window: windows) {
@@ -858,7 +906,10 @@ int run_sweep(const Scenario (&scenarios)[2], const Options& options,
                                   << " independent-ms=" << result.continue_independent_mean_ns / 1.0e6
                                   << " merged-ms=" << result.continue_recombined_mean_ns / 1.0e6
                                   << " speedup=" << result.independent_mean_ns / result.recombined_mean_ns
-                                  << " invariant-ratio=" << result.invariant_final_ratio << '\n';
+                                  << " invariant-ratio=" << result.invariant_final_ratio
+                                  << " initial-projection-certified=" << result.initial_coordinate_projection_certified
+                                  << " final-projection-certified=" << result.final_coordinate_projection_certified
+                                  << '\n';
                     } catch (const std::exception& error) {
                         failed = true;
                         csv_failure(csv, configuration, scenario, error.what());

@@ -28,10 +28,13 @@
 
 #include <algorithm>
 #include <cmath>
+#include <filesystem>
+#include <fstream>
 #include <iomanip>
 #include <iostream>
 #include <limits>
 #include <optional>
+#include <sstream>
 #include <stdexcept>
 #include <string>
 #include <utility>
@@ -58,7 +61,35 @@ struct Options {
     double accuracy = 1e-5;
     unsigned group_size = 4u;
     unsigned samples = 3u;
+    bool sweep = false;
+    std::vector<double> steps = {1.0 / 16.0, 1.0 / 64.0, 1.0 / 256.0};
+    std::vector<unsigned> groups = {2u, 4u, 8u};
+    std::string csv = "recombination-sweep.csv";
 };
+
+// Parse a bounded-size CLI axis without relying on textual benchmark output.
+std::vector<double> parse_steps(const String& value) {
+    const std::string input(value);
+    if (input.empty() || input.front() == ',' || input.back() == ',')
+        throw std::invalid_argument("expected comma-separated positive steps");
+    std::vector<double> steps;
+    std::size_t start = 0u;
+    while (start < input.size()) {
+        const auto end = input.find(',', start);
+        const std::string token = input.substr(start, end == std::string::npos ? end : end - start);
+        std::size_t used = 0u;
+        const double step = std::stod(token, &used);
+        if (used != token.size() || !std::isfinite(step) || step <= 0.0 ||
+            std::find(steps.begin(), steps.end(), step) != steps.end())
+            throw std::invalid_argument("invalid or repeated positive step");
+        steps.push_back(step);
+        if (end == std::string::npos)
+            break;
+        start = end + 1u;
+    }
+    return steps;
+}
+
 
 List<ArgumentParser> argument_parsers(Options& options) {
     List<ArgumentParser> parsers;
@@ -85,6 +116,34 @@ List<ArgumentParser> argument_parsers(Options& options) {
     positive("a", "accuracy", "Integrator step maximum error (default: 1e-5)", options.accuracy);
     count("g", "group-size", "Nearby jump enclosures to recombine (default: 4)", options.group_size);
     count("n", "samples", "Measured runs per scenario (default: 3)", options.samples);
+    parsers.append(make_valued_argument_parser("", "sweep",
+                                               "Run the built-in C++ step/group sweep: 1 enables (default: 0)",
+                                               [&options](const String& value) -> VoidFunction {
+                                                   const auto enabled = Bench::parse_unsigned<unsigned>(value);
+                                                   if (enabled > 1u)
+                                                       throw std::invalid_argument("sweep must be 0 or 1");
+                                                   return [&options, enabled] { options.sweep = enabled == 1u; };
+                                               }));
+    parsers.append(make_valued_argument_parser("", "steps",
+                                               "Sweep maximum steps, comma-separated (default: 1/16,1/64,1/256)",
+                                               [&options](const String& value) -> VoidFunction {
+                                                   auto steps = parse_steps(value);
+                                                   return [&options, steps = std::move(steps)] { options.steps = steps; };
+                                               }));
+    parsers.append(make_valued_argument_parser("", "groups",
+                                               "Sweep group sizes, comma-separated (default: 2,4,8)",
+                                               [&options](const String& value) -> VoidFunction {
+                                                   auto groups = Bench::parse_unique_unsigned_list(value, 2u);
+                                                   return [&options, groups = std::move(groups)] { options.groups = groups; };
+                                               }));
+    parsers.append(make_valued_argument_parser("", "csv",
+                                               "CSV filename for the C++ sweep (default: recombination-sweep.csv)",
+                                               [&options](const String& value) -> VoidFunction {
+                                                   const std::string filename(value);
+                                                   if (filename.empty())
+                                                       throw std::invalid_argument("CSV filename cannot be empty");
+                                                   return [&options, filename] { options.csv = filename; };
+                                               }));
     return parsers;
 }
 
@@ -115,7 +174,8 @@ void configure(GeneralHybridEvolver& evolver, const Options& options) {
 
 List<HybridEnclosure> generate(const Scenario& scenario, const Options& options,
                                DiscreteLocation source, DiscreteLocation target,
-                               DiscreteEvent jump, RealVariable x, RealVariable y) {
+                               DiscreteEvent jump, RealVariable x, RealVariable y,
+                               bool verbose, SizeType& generated) {
     GeneralHybridEvolver evolver(make_system(scenario, source, target, jump, x, y));
     configure(evolver, options);
     const HybridBoxSet initial = scenario.kind == EventKind::URGENT
@@ -124,10 +184,11 @@ List<HybridEnclosure> generate(const Scenario& scenario, const Options& options,
     const HybridTerminationCriterion stop(Real(ExactDouble(scenario.generation_horizon)), Integer(8),
                                            Set<DiscreteEvent>{jump});
     const auto orbit = evolver.orbit(initial, stop, Semantics::UPPER);
-    std::cout << "  generation reach=" << orbit.reach().size()
-              << " intermediate=" << orbit.intermediate().size()
-              << " final=" << orbit.final().size()
-              << " (not accepted steps)\n";
+    if (verbose)
+        std::cout << "  generation reach=" << orbit.reach().size()
+                  << " intermediate=" << orbit.intermediate().size()
+                  << " final=" << orbit.final().size()
+                  << " (not accepted steps)\n";
     List<HybridEnclosure> candidates;
     for (const auto& enclosure: orbit.final()) {
         if (enclosure.location() == target && enclosure.previous_events().size() == 1u &&
@@ -137,6 +198,7 @@ List<HybridEnclosure> generate(const Scenario& scenario, const Options& options,
     std::sort(candidates.begin(), candidates.end(), [](const HybridEnclosure& a, const HybridEnclosure& b) {
         return a.time_range().lower_bound().raw().get_d() < b.time_range().lower_bound().raw().get_d();
     });
+    generated = candidates.size();
     if (candidates.size() < 2u)
         throw std::runtime_error("not enough post-reset checkpoints; adjust integration step");
     // Select adjacent crossing/jump times rather than recombining a distant
@@ -148,9 +210,10 @@ List<HybridEnclosure> generate(const Scenario& scenario, const Options& options,
     List<HybridEnclosure> selection;
     for (SizeType i = offset; i != offset + take; ++i)
         selection.append(candidates[i]);
-    std::cout << scenario.name << ": generated=" << candidates.size()
-              << " post-reset checkpoints, selected=" << selection.size()
-              << " (middle adjacent time window)\n";
+    if (verbose)
+        std::cout << scenario.name << ": generated=" << candidates.size()
+                  << " post-reset checkpoints, selected=" << selection.size()
+                  << " (middle adjacent time window)\n";
     return selection;
 }
 
@@ -391,13 +454,35 @@ void describe_quality(const Measurement& m) {
                  "these are necessary conditions, NOT set-inclusion certificates.\n";
 }
 
-void run_scenario(const Scenario& scenario, const Options& options, const Bench::CommandLine& cli) {
+struct ScenarioSummary {
+    SizeType generated = 0, selected = 0;
+    SizeType independent_final = 0, recombined_final = 0;
+    double independent_mean_ns = 0.0, recombined_mean_ns = 0.0;
+    double x_final_ratio = 0.0, y_final_ratio = 0.0;
+    double invariant_initial_ratio = 0.0, invariant_final_ratio = 0.0;
+    double analytic_x_ratio = 0.0, analytic_y_ratio = 0.0, analytic_invariant_ratio = 0.0;
+};
+
+double width_ratio(const UpperIntervalType& baseline, const UpperIntervalType& candidate) {
+    const double denominator = width(baseline);
+    return denominator > 0.0 ? width(candidate) / denominator
+                             : std::numeric_limits<double>::quiet_NaN();
+}
+
+// This is the single numerical execution path for interactive and sweep runs.
+// Sweeps receive typed data directly; no log scraping, subprocess or scripting.
+ScenarioSummary run_scenario(const Scenario& scenario, const Options& options,
+                             const Bench::CommandLine& cli, bool verbose) {
     const DiscreteLocation source(1), target(2);
     const DiscreteEvent jump("jump");
     const RealVariable x("x"), y("y");
-    std::cout << "\nscenario=" << scenario.name << " step=" << options.step
-              << " accuracy=" << options.accuracy << " group-size=" << options.group_size << "\n";
-    const auto checkpoints = generate(scenario, options, source, target, jump, x, y);
+    if (verbose)
+        std::cout << "\nscenario=" << scenario.name << " step=" << options.step
+                  << " accuracy=" << options.accuracy << " group-size=" << options.group_size << "\n";
+    ScenarioSummary summary;
+    const auto checkpoints = generate(scenario, options, source, target, jump, x, y,
+                                      verbose, summary.generated);
+    summary.selected = checkpoints.size();
     List<Enclosure> original;
     for (const auto& checkpoint: checkpoints)
         original.append(checkpoint.continuous_set());
@@ -427,23 +512,49 @@ void run_scenario(const Scenario& scenario, const Options& options, const Bench:
             merged.add(last->merged_ns);
             independent_totals.add(last->independent_total_ns());
             merged_totals.add(last->merged_total_ns());
-            std::cout << "  sample=" << round - cli.warmups() + 1
-                      << " independent-final=" << last->independent_final
-                      << " recombined-final=" << last->merged_final
-                      << " net-speedup=" << last->independent_total_ns() / last->merged_total_ns() << "\n";
+            if (verbose)
+                std::cout << "  sample=" << round - cli.warmups() + 1
+                          << " independent-final=" << last->independent_final
+                          << " recombined-final=" << last->merged_final
+                          << " net-speedup=" << last->independent_total_ns() / last->merged_total_ns() << "\n";
         }
         ++round;
     });
-    if (completed.size() != options.samples || totals.size() != options.samples)
+    if (completed.size() != options.samples ||
+        independent_totals.size() != options.samples ||
+        merged_totals.size() != options.samples)
         throw std::runtime_error("incorrect measured sample count");
-    describe_quality(*last);
+    if (!last)
+        throw std::runtime_error("missing final sample");
 
+    summary.independent_mean_ns = Bench::summarize(independent_totals).mean;
+    summary.recombined_mean_ns = Bench::summarize(merged_totals).mean;
+    summary.independent_final = last->independent_final;
+    summary.recombined_final = last->merged_final;
+    summary.x_final_ratio = width_ratio(last->continued_independent->state[0],
+                                        last->continued_merged->state[0]);
+    summary.y_final_ratio = width_ratio(last->continued_independent->state[1],
+                                        last->continued_merged->state[1]);
+    summary.invariant_initial_ratio = width_ratio(last->source->invariant,
+                                                  last->merged->invariant);
+    summary.invariant_final_ratio = width_ratio(last->continued_independent->invariant,
+                                                last->continued_merged->invariant);
+    summary.analytic_x_ratio = width_ratio(last->analytical_final->state[0],
+                                           last->continued_merged->state[0]);
+    summary.analytic_y_ratio = width_ratio(last->analytical_final->state[1],
+                                           last->continued_merged->state[1]);
+    summary.analytic_invariant_ratio = width_ratio(last->analytical_final->invariant,
+                                                   last->continued_merged->invariant);
+    if (!verbose)
+        return summary;
+
+    describe_quality(*last);
     Bench::Report report(std::string("Recombination timings: ") + scenario.name + " (nanoseconds)",
                          cli.summary_fields());
     report.set_parameter_header("One sample = fresh constraint reduction, reference recombination, "
                                 "independent and merged target-only continuation. "
                                 "Dataset generation, copying, quality evaluation and reporting are untimed. "
-                                 "Totals: contraction+independent vs contraction+recombination+merged.");
+                                "Totals: contraction+independent vs contraction+recombination+merged.");
     report.set_dimension_columns({{"Scenario"}, {"Phase"}, {"Inputs", 0u, Bench::TableAlignment::Right}});
     report.set_table_options(Bench::TableOptions::ruled());
     const std::string count = std::to_string(original.size());
@@ -458,6 +569,113 @@ void run_scenario(const Scenario& scenario, const Options& options, const Bench:
     row("total-independent", independent_totals);
     row("total-recombined", merged_totals);
     report.print();
+    return summary;
+}
+
+std::string csv_escape(const std::string& value) {
+    std::string escaped = "\"";
+    for (char character: value) {
+        if (character == '"')
+            escaped += "\"\"";
+        else if (character == '\r' || character == '\n')
+            escaped += ' ';
+        else
+            escaped += character;
+    }
+    escaped += '"';
+    return escaped;
+}
+
+void csv_number(std::ostream& stream, double value) {
+    if (std::isfinite(value))
+        stream << value;
+}
+
+void csv_success(std::ostream& stream, const Options& options,
+                 const Scenario& scenario, const ScenarioSummary& result) {
+    stream << options.step << ',' << options.accuracy << ',' << options.group_size << ','
+           << scenario.name << ",ok," << result.generated << ',' << result.selected
+           << ',' << options.samples << ',' << result.independent_final << ','
+           << result.recombined_final << ',';
+    csv_number(stream, result.independent_mean_ns);
+    stream << ',';
+    csv_number(stream, result.recombined_mean_ns);
+    stream << ',';
+    csv_number(stream, result.independent_mean_ns / result.recombined_mean_ns);
+    stream << ',';
+    csv_number(stream, result.x_final_ratio);
+    stream << ',';
+    csv_number(stream, result.y_final_ratio);
+    stream << ',';
+    csv_number(stream, result.invariant_initial_ratio);
+    stream << ',';
+    csv_number(stream, result.invariant_final_ratio);
+    stream << ',';
+    csv_number(stream, result.analytic_x_ratio);
+    stream << ',';
+    csv_number(stream, result.analytic_y_ratio);
+    stream << ',';
+    csv_number(stream, result.analytic_invariant_ratio);
+    stream << ",\"\"\n";
+}
+
+void csv_failure(std::ostream& stream, const Options& options,
+                 const Scenario& scenario, const std::string& message) {
+    stream << options.step << ',' << options.accuracy << ',' << options.group_size
+           << ',' << scenario.name << ",failed,";
+    // Exactly 15 empty metric fields between status and the error message.
+    for (unsigned index = 0u; index != 15u; ++index)
+        stream << ',';
+    stream << csv_escape(message) << '\n';
+}
+
+int run_sweep(const Scenario (&scenarios)[2], const Options& options,
+              const Bench::CommandLine& cli) {
+    const std::filesystem::path path(options.csv);
+    if (path.has_parent_path())
+        std::filesystem::create_directories(path.parent_path());
+    std::ofstream csv(path, std::ios::out | std::ios::trunc);
+    if (!csv)
+        throw std::runtime_error("cannot open CSV file: " + options.csv);
+    csv << std::setprecision(17);
+    csv << "step,accuracy,group_size,scenario,status,generated,selected,samples,"
+           "independent_final,recombined_final,independent_mean_ns,recombined_mean_ns,"
+           "net_speedup,x_final_ratio,y_final_ratio,invariant_initial_ratio,"
+           "invariant_final_ratio,analytic_x_ratio,analytic_y_ratio,"
+           "analytic_invariant_ratio,error\n";
+    bool failed = false;
+    for (double step: options.steps) {
+        for (unsigned group_size: options.groups) {
+            Options configuration = options;
+            configuration.step = step;
+            configuration.group_size = group_size;
+            for (const auto& scenario: scenarios) {
+                std::cout << "RUN " << scenario.name << " step=" << step
+                          << " group-size=" << group_size << " accuracy=" << options.accuracy
+                          << std::endl;
+                try {
+                    const auto result = run_scenario(scenario, configuration, cli, false);
+                    csv_success(csv, configuration, scenario, result);
+                    std::cout << "  ok generated=" << result.generated
+                              << " selected=" << result.selected
+                              << " independent-final=" << result.independent_final
+                              << " recombined-final=" << result.recombined_final
+                              << " speedup=" << result.independent_mean_ns / result.recombined_mean_ns
+                              << " invariant-inflation=" << result.invariant_final_ratio << '\n';
+                } catch (const std::exception& error) {
+                    failed = true;
+                    csv_failure(csv, configuration, scenario, error.what());
+                    std::cerr << "  FAILED " << scenario.name << " step=" << step
+                              << " group-size=" << group_size << ": " << error.what() << '\n';
+                }
+                csv.flush();
+                if (!csv)
+                    throw std::runtime_error("cannot write CSV file: " + options.csv);
+            }
+        }
+    }
+    std::cout << "CSV: " << path.string() << '\n';
+    return failed ? 1 : 0;
 }
 
 } // namespace
@@ -475,8 +693,10 @@ int main(int argc, const char* argv[]) {
             {"urgent-crossing", EventKind::URGENT, 3.0, 4.0},
             {"permissive-jump", EventKind::PERMISSIVE, 1.0, 2.0}
         };
+        if (options.sweep)
+            return run_sweep(scenarios, options, cli);
         for (const auto& scenario: scenarios)
-            run_scenario(scenario, options, cli);
+            run_scenario(scenario, options, cli, true);
         return 0;
     } catch (const std::exception& error) {
         std::cerr << "benchmark_recombination: " << error.what() << "\n";

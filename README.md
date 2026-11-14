@@ -132,20 +132,29 @@ For scaling, run with --step 0.0625, 0.015625, 0.00390625 and --group-size
 The generation orbit's reach/intermediate/final counts are printed, but they
 are not an integrator accepted-step count. The benchmark is not in CTest.
 
-### Reproducible benchmark sweep
+### Reproducible C++ benchmark sweep
 
-After building the Release benchmark, run:
+The benchmark executable runs the 3 x 3 step/group matrix **in process**,
+without Python, subprocesses or parsing its own text output. Each scenario
+produces one typed result, which is written directly to CSV. Failures carry
+their original C++ exception message, and the sweep continues with other
+configurations while returning a nonzero exit code if any failed.
 
 ```bash
-python3 benchmarks/sweep_recombination.py --samples 3 --warmups 1
+./build-release/benchmarks/benchmark_recombination \
+  --sweep 1 --samples 5 --warmups 1 \
+  --csv build-release/recombination-sweep.csv
 ```
 
-This runs the 3 x 3 matrix (maximum step 1/16, 1/64, 1/256;
-group size 2, 4, 8) for both scenarios. It writes a CSV summary,
-`metadata.json` (environment and options), and a complete log per
-configuration under `build-release/recombination-sweep/`. The script
-returns nonzero if any run fails, times out, or lacks the expected
-statistics. Use `--output`, `--steps`, `--groups`, `--samples`,
-`--warmups`, `--accuracy`, and `--timeout` to customise the sweep.
-If the finer steps are expensive, run one configuration before
-committing to the entire matrix. Results are machine-dependent.
+Default sweep axes are steps `0.0625,0.015625,0.00390625` and group
+sizes `2,4,8`. Restrict or change them directly using
+`--steps 0.0625,0.015625 --groups 2,4` (comma-separated).
+The single-configuration mode remains unchanged: use `--step` and
+`--group-size` without `--sweep 1` to obtain verbose numerical
+diagnostics. Run a single configuration first when a finer step may be expensive.
+
+The CSV includes configuration, selected checkpoint count, end-to-end means,
+speedup, final-state width ratios, invariant inflation and analytic-reference
+ratios. All ratios are diagnostics of outward bounds, not inclusion proofs.
+Failed rows contain an error message; incomplete runs are never reported as
+successful timing measurements. No benchmark run is registered in CTest.

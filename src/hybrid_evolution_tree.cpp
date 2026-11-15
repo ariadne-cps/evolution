@@ -218,7 +218,9 @@ class TreeHybridEvolutionBackend::Impl {
                 if (derives_trajectory(successor, result.successors.size(), whole_trajectory)) {
                     HybridEvolutionTrajectory child;
                     child.entries.push_back({successor.work, std::nullopt, std::nullopt});
-                    history.add_child(node, std::move(child), HybridEvolutionTrajectoryMetadata{false, origin});
+                    HybridEvolutionTrajectoryMetadata metadata;
+                    metadata.origin = origin;
+                    history.add_child(node, std::move(child), std::move(metadata));
                     // After an urgent branch, a later complete crossing concerns
                     // the remaining piece, not the original undivided trajectory.
                     if (successor.event_kind != EventKind::PERMISSIVE) {

@@ -226,6 +226,91 @@ class FrontierWindowRecombinationPolicy final : public HybridFrontierRecombinati
     bool enables_recombination() const override { return true; }
 };
 
+/** @brief Choose whether to delay execution of the first ready checkpoint.
+ *  @details Called only when another runnable checkpoint is available. Deferral
+ *  preserves work and does not change the physical time of any enclosure.
+ *  Decisions are allowed to depend on bounded previous deferral counts.
+ */
+class HybridFrontierDispatchPolicy {
+  public:
+    using CheckpointId = HybridEvolutionCheckpointId;
+    virtual ~HybridFrontierDispatchPolicy() = default;
+    virtual HybridFrontierDispatchPolicy* clone() const = 0;
+    /** @brief Request that a pending checkpoint be moved to the queue tail. */
+    virtual bool should_defer(const HybridEvolutionTree& history, CheckpointId candidate,
+                              const std::vector<CheckpointId>& other_ready,
+                              std::size_t previous_deferrals) const = 0;
+};
+
+/** @brief Preserve original FIFO work dispatch without waiting. */
+class ImmediateFrontierDispatchPolicy final : public HybridFrontierDispatchPolicy {
+  public:
+    ImmediateFrontierDispatchPolicy* clone() const override;
+    bool should_defer(const HybridEvolutionTree&, CheckpointId,
+                      const std::vector<CheckpointId>&, std::size_t) const override;
+};
+
+/** @brief Give earlier-time work a bounded chance to produce merge partners.
+ *  @details A ready checkpoint is delayed only while a different trajectory
+ *  has pending work at an earlier physical time within max_time_lag. Every
+ *  checkpoint is deferred at most max_deferrals times; progress is guaranteed
+ *  even when no compatible partner ever arrives.
+ */
+class BoundedTimeLagFrontierDispatchPolicy final : public HybridFrontierDispatchPolicy {
+    std::size_t _max_deferrals;
+    double _max_time_lag;
+
+  public:
+    explicit BoundedTimeLagFrontierDispatchPolicy(std::size_t max_deferrals = 8u,
+                                                  double max_time_lag = 1.0);
+    BoundedTimeLagFrontierDispatchPolicy* clone() const override;
+    bool should_defer(const HybridEvolutionTree& history, CheckpointId candidate,
+                      const std::vector<CheckpointId>& other_ready,
+                      std::size_t previous_deferrals) const override;
+};
+
+/** @brief Optional quality/cost gate after a sound numerical recombination.
+ *  @details Rejection keeps all original pending sources intact. This decision
+ *  does not replace the recombiner's sound covering contract.
+ */
+class HybridFrontierMergeAcceptancePolicy {
+  public:
+    using CheckpointId = HybridEvolutionCheckpointId;
+    virtual ~HybridFrontierMergeAcceptancePolicy() = default;
+    virtual HybridFrontierMergeAcceptancePolicy* clone() const = 0;
+    virtual bool accept(const HybridEvolutionTree& history,
+                        const std::vector<CheckpointId>& sources,
+                        const EnclosureRecombinationResult& result) const = 0;
+};
+
+/** @brief Accept every numerically valid reduction, preserving existing behavior. */
+class AcceptAllFrontierMergesPolicy final : public HybridFrontierMergeAcceptancePolicy {
+  public:
+    AcceptAllFrontierMergesPolicy* clone() const override;
+    bool accept(const HybridEvolutionTree&, const std::vector<CheckpointId>&,
+                const EnclosureRecombinationResult&) const override;
+};
+
+/** @brief Require controlled output-radius amplification and nonexpansive history.
+ *  @details Uses observed consecutive continuous checkpoint radii as a local
+ *  heuristic, not a formal contraction certificate for the vector field.
+ *  Rejects sources without a previously executed continuous continuation
+ *  step, to avoid treating a discrete reset or subdivision as contraction.
+ */
+class RadiusTrendFrontierMergesPolicy final : public HybridFrontierMergeAcceptancePolicy {
+    double _max_output_amplification;
+    double _max_continuation_growth;
+
+  public:
+    /** @brief Both ratios must be finite and strictly positive. */
+    explicit RadiusTrendFrontierMergesPolicy(double max_output_amplification = 2.0,
+                                             double max_continuation_growth = 1.0);
+    RadiusTrendFrontierMergesPolicy* clone() const override;
+    bool accept(const HybridEvolutionTree& history,
+                const std::vector<CheckpointId>& sources,
+                const EnclosureRecombinationResult& result) const override;
+};
+
 /** @brief Serial backend with parent-first and opt-in checkpoint-frontier schedules.
  *  @details The default/legacy grouping path finishes a parent before its derived
  *  trajectories and preserves the pre-existing order. The opt-in frontier path
@@ -257,7 +342,9 @@ class TreeHybridEvolutionBackend final : public HybridEvolutionBackendInterface 
         const HybridFrontierRecombinationPolicy& grouping,
         const HybridRecombinationTriggerPolicy& trigger = AfterEachStepRecombinationTriggerPolicy{},
         const EnclosureRecombinerInterface& recombiner = ReferenceEnclosureRecombiner{},
-        const EnclosureRecombinationContext& context = {});
+        const EnclosureRecombinationContext& context = {},
+        const HybridFrontierDispatchPolicy& dispatch = ImmediateFrontierDispatchPolicy{},
+        const HybridFrontierMergeAcceptancePolicy& acceptance = AcceptAllFrontierMergesPolicy{});
     /** @brief Release the owned trajectory history. */
     ~TreeHybridEvolutionBackend() override;
     /** @brief Disallow copying the owner and its trajectory identities. */
@@ -285,6 +372,8 @@ class TreeHybridEvolutionBackend final : public HybridEvolutionBackendInterface 
 class TreeHybridEvolutionBackendFactory : public HybridEvolutionBackendFactoryInterface {
     std::shared_ptr<const HybridRecombinationSchedulingPolicy> _grouping;
     std::shared_ptr<const HybridFrontierRecombinationPolicy> _frontier_grouping;
+    std::shared_ptr<const HybridFrontierDispatchPolicy> _frontier_dispatch;
+    std::shared_ptr<const HybridFrontierMergeAcceptancePolicy> _frontier_acceptance;
     std::shared_ptr<const HybridRecombinationTriggerPolicy> _trigger;
     std::shared_ptr<const EnclosureRecombinerInterface> _recombiner;
     EnclosureRecombinationContext _context;
@@ -303,7 +392,9 @@ class TreeHybridEvolutionBackendFactory : public HybridEvolutionBackendFactoryIn
         const HybridFrontierRecombinationPolicy& grouping,
         const HybridRecombinationTriggerPolicy& trigger = AfterEachStepRecombinationTriggerPolicy{},
         const EnclosureRecombinerInterface& recombiner = ReferenceEnclosureRecombiner{},
-        const EnclosureRecombinationContext& context = {});
+        const EnclosureRecombinationContext& context = {},
+        const HybridFrontierDispatchPolicy& dispatch = ImmediateFrontierDispatchPolicy{},
+        const HybridFrontierMergeAcceptancePolicy& acceptance = AcceptAllFrontierMergesPolicy{});
     /** @brief Clone the immutable factory settings without copying any run history. */
     TreeHybridEvolutionBackendFactory* clone() const override;
     /** @brief Create independent trajectory history; the numerical callback enforces the horizon. */

@@ -623,6 +623,123 @@ class TestHybridEvolutionTree : public Testing::ContextFixture {
         ARIADNE_TESTING_EXPECT_EQUAL(backend.release_orbit().final().size(), 2u);
     }
 
+    void test_bounded_frontier_wait_recovers_late_merge_partners() {
+        const auto initial = seed();
+        const auto advance = [&](const HybridEvolutionWorkItem& item, const HybridEvolutionStatistics&) {
+            const int value = label(item);
+            HybridEvolutionStepResult result;
+            if (value == 0) {
+                // The more advanced branch enters the queue first.
+                result.continue_with(marked(initial, 2), HybridEvolutionSuccessorKind::SUBDIVISION);
+                result.continue_with(marked(initial, 1), HybridEvolutionSuccessorKind::SUBDIVISION);
+            } else if (value == 1) {
+                result.continue_with(marked(initial, 2));
+            } else if (value == 2) {
+                result.record_final(item.enclosure);
+            } else {
+                throw std::logic_error("Unexpected checkpoint");
+            }
+            return result;
+        };
+        TreeHybridEvolutionBackend immediate(initial, FrontierWindowRecombinationPolicy(2u, 0.0));
+        immediate.set_semantics(Semantics::UPPER);
+        std::vector<int> direct_order;
+        immediate.run([&](const HybridEvolutionWorkItem& item, const HybridEvolutionStatistics& stats) {
+            direct_order.push_back(label(item));
+            return advance(item, stats);
+        });
+        ARIADNE_TESTING_PROVE(direct_order == std::vector<int>({0, 2, 1, 2}));
+        ARIADNE_TESTING_EXPECT_EQUAL(immediate.release_orbit().final().size(), 2u);
+
+        TreeHybridEvolutionBackend waiting(
+            initial, FrontierWindowRecombinationPolicy(2u, 0.0),
+            AfterEachStepRecombinationTriggerPolicy{}, ReferenceEnclosureRecombiner{}, {},
+            BoundedTimeLagFrontierDispatchPolicy(2u, 2.0));
+        waiting.set_semantics(Semantics::UPPER);
+        std::vector<int> delayed_order;
+        waiting.run([&](const HybridEvolutionWorkItem& item, const HybridEvolutionStatistics& stats) {
+            delayed_order.push_back(label(item));
+            return advance(item, stats);
+        });
+        ARIADNE_TESTING_PROVE(delayed_order == std::vector<int>({0, 1, 2}));
+        const auto root = waiting.tree().root().value();
+        std::size_t replacements = 0u, retired = 0u;
+        for (const auto node: waiting.tree().descendants(root)) {
+            if (!waiting.tree().metadata(node).recombined_checkpoints.empty())
+                ++replacements;
+            retired += waiting.tree().object(node).retired_entries.size();
+        }
+        ARIADNE_TESTING_EXPECT_EQUAL(replacements, 1u);
+        ARIADNE_TESTING_EXPECT_EQUAL(retired, 2u);
+        ARIADNE_TESTING_EXPECT_EQUAL(waiting.release_orbit().final().size(), 1u);
+    }
+
+    void test_bounded_frontier_wait_does_not_starve_unmatched_work() {
+        const auto initial = seed();
+        TreeHybridEvolutionBackend backend(
+            initial, NoFrontierRecombinationPolicy{},
+            AfterEachStepRecombinationTriggerPolicy{}, ReferenceEnclosureRecombiner{}, {},
+            BoundedTimeLagFrontierDispatchPolicy(1u, 10.0));
+        std::vector<int> order;
+        backend.run([&](const HybridEvolutionWorkItem& item, const HybridEvolutionStatistics&) {
+            const int value = label(item);
+            order.push_back(value);
+            HybridEvolutionStepResult result;
+            if (value == 0) {
+                result.continue_with(marked(initial, 3), HybridEvolutionSuccessorKind::SUBDIVISION);
+                result.continue_with(marked(initial, 1), HybridEvolutionSuccessorKind::SUBDIVISION);
+            } else {
+                result.record_final(item.enclosure);
+            }
+            return result;
+        });
+        ARIADNE_TESTING_PROVE(order == std::vector<int>({0, 1, 3}));
+        ARIADNE_TESTING_EXPECT_EQUAL(backend.release_orbit().final().size(), 2u);
+        ARIADNE_TESTING_EXPECT_EXCEPTION(BoundedTimeLagFrontierDispatchPolicy(1u, -1.0));
+    }
+
+    void test_radius_trend_gate_accepts_only_profitable_continuations() {
+        DiscreteLocation q(1);
+        RealVariable x("x"), y("y");
+        HybridAutomaton system;
+        system.new_mode(q, {dot(x) = 1, dot(y) = 0});
+        GeneralHybridEvolver evolver(system);
+        const auto initial = evolver.enclosure(HybridExactBox(
+            q, RealSpace({x, y}), ExactBoxType({{-1, 1}, {0, 0}})));
+        const auto advance = [&](const HybridEvolutionWorkItem& item, const HybridEvolutionStatistics&) {
+            HybridEvolutionStepResult result;
+            if (label(item) == 0) {
+                result.continue_with(marked(initial, 1), HybridEvolutionSuccessorKind::SUBDIVISION);
+                result.continue_with(marked(initial, 1), HybridEvolutionSuccessorKind::SUBDIVISION);
+            } else if (label(item) == 1) {
+                result.continue_with(marked(initial, 2));
+            } else {
+                result.record_final(item.enclosure);
+            }
+            return result;
+        };
+        const auto verify = [&](const HybridFrontierMergeAcceptancePolicy& acceptance,
+                                std::size_t expected_replacements, std::size_t expected_finals) {
+            TreeHybridEvolutionBackend backend(
+                initial, FrontierWindowRecombinationPolicy(2u, 0.0),
+                EveryNStepsRecombinationTriggerPolicy(3u), ReferenceEnclosureRecombiner{}, {},
+                ImmediateFrontierDispatchPolicy{}, acceptance);
+            backend.set_semantics(Semantics::UPPER);
+            backend.run(advance);
+            const auto root = backend.tree().root().value();
+            std::size_t replacements = 0u;
+            for (const auto node: backend.tree().descendants(root))
+                if (!backend.tree().metadata(node).recombined_checkpoints.empty())
+                    ++replacements;
+            ARIADNE_TESTING_EXPECT_EQUAL(replacements, expected_replacements);
+            ARIADNE_TESTING_EXPECT_EQUAL(backend.release_orbit().final().size(), expected_finals);
+        };
+        verify(RadiusTrendFrontierMergesPolicy(100.0, 1.0), 1u, 1u);
+        verify(RadiusTrendFrontierMergesPolicy(0.1, 1.0), 0u, 2u);
+        ARIADNE_TESTING_EXPECT_EXCEPTION(RadiusTrendFrontierMergesPolicy(0.0, 1.0));
+        ARIADNE_TESTING_EXPECT_EXCEPTION(RadiusTrendFrontierMergesPolicy(2.0, -1.0));
+    }
+
     void test_parent_finishes_before_distinct_derived_trajectories() {
         auto initial = seed();
         TreeHybridEvolutionBackend backend(initial);
@@ -1133,6 +1250,9 @@ int main(int argc, char** argv) {
     ARIADNE_TESTING_ADD_TEST(TestHybridEvolutionTree, test_real_frontier_recombines_only_after_independent_continuous_steps);
     ARIADNE_TESTING_ADD_TEST(TestHybridEvolutionTree, test_real_post_reset_recombination_of_split_trajectories);
     ARIADNE_TESTING_ADD_TEST(TestHybridEvolutionTree, test_frontier_recombination_requires_progress_after_resplitting);
+    ARIADNE_TESTING_ADD_TEST(TestHybridEvolutionTree, test_bounded_frontier_wait_recovers_late_merge_partners);
+    ARIADNE_TESTING_ADD_TEST(TestHybridEvolutionTree, test_bounded_frontier_wait_does_not_starve_unmatched_work);
+    ARIADNE_TESTING_ADD_TEST(TestHybridEvolutionTree, test_radius_trend_gate_accepts_only_profitable_continuations);
     ARIADNE_TESTING_ADD_TEST(TestHybridEvolutionTree, test_split_pieces_are_parallel_and_completion_waits_for_all_of_them);
     ARIADNE_TESTING_ADD_TEST(TestHybridEvolutionTree, test_failure_preserves_incomplete_history_without_dispatching_children);
     ARIADNE_TESTING_ADD_TEST(TestHybridEvolutionTree, test_flat_and_tree_orbits_match_for_urgent_and_permissive_systems);

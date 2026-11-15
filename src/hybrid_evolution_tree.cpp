@@ -524,6 +524,26 @@ class TreeHybridEvolutionBackend::Impl {
             }
         }
         for (const auto& group: groups) {
+            // A merged enclosure can be subdivided again immediately by the
+            // numerical evolver. Do not let those pieces recombine at the same
+            // physical time: every source descending from a previous merge
+            // must have made strictly positive progress since that merge.
+            bool progressed = true;
+            double merge_time = -std::numeric_limits<double>::infinity();
+            for (const auto checkpoint: group) {
+                const auto& source_metadata = history.metadata(checkpoint.trajectory);
+                const auto time = history.object(checkpoint.trajectory).entries.at(checkpoint.entry)
+                                      .work.enclosure.time_range();
+                const double lower = time.lower_bound().raw().get_d();
+                const double upper = time.upper_bound().raw().get_d();
+                if (!std::isfinite(lower) || !std::isfinite(upper) ||
+                    (source_metadata.recombination_time_barrier &&
+                     !(lower > *source_metadata.recombination_time_barrier)))
+                    progressed = false;
+                merge_time = std::max(merge_time, upper);
+            }
+            if (!progressed)
+                continue;
             List<Enclosure> sources;
             for (const auto checkpoint: group)
                 sources.append(history.object(checkpoint.trajectory).entries.at(checkpoint.entry)
@@ -558,6 +578,7 @@ class TreeHybridEvolutionBackend::Impl {
                 trajectory.entries.push_back({work, std::nullopt, std::nullopt});
                 HybridEvolutionTrajectoryMetadata metadata;
                 metadata.pending_entries = 1u;
+                metadata.recombination_time_barrier = merge_time;
                 for (const auto index: output.source_indices)
                     metadata.recombined_checkpoints.push_back(group[index]);
                 const auto created = history.add_child(parent, std::move(trajectory), std::move(metadata));
@@ -606,6 +627,8 @@ class TreeHybridEvolutionBackend::Impl {
                     HybridEvolutionTrajectoryMetadata metadata;
                     metadata.origin = origin;
                     metadata.pending_entries = 1u;
+                    metadata.recombination_time_barrier =
+                        history.metadata(checkpoint.trajectory).recombination_time_barrier;
                     if (split)
                         metadata.whole_trajectory = false;
                     const auto created = history.add_child(checkpoint.trajectory, std::move(child),

@@ -1145,3 +1145,35 @@ Tests of numerical set inclusion are intentionally not duplicated here;
 the scheduler's required behaviors are work conservation, phase/event
 compatibility, genealogy, dispatch and preservation of previously computed
 contributions.
+
+### Prevention of non-progressing split/recombine cycles and integration regressions
+
+A frontier recombination replacement records a conservative
+`recombination_time_barrier`, equal to the largest upper bound of the
+physical times represented by its contributing checkpoints. The barrier is
+inherited by all new descendant trajectories, including those created by
+further numerical splitting and post-reset transitions. When a group contains
+any lineage descending from a previous recombination, **every such source**
+must have a current lower physical time strictly greater than its inherited
+barrier before the scheduler will attempt another recombination. This
+prevents an immediately subdivided merged enclosure from being recombined
+at the same time; the check occurs before invoking the numerical strategy
+and is independent of grouping policy. A strictly progressed replacement
+receives a new barrier.
+
+This is intentionally conservative: it may suppress a useful merge when
+validated time intervals still overlap the previous barrier, even though
+some trajectories have advanced. It does not prohibit subdivision or
+continued evolution, and is not a substitute for a numerical cost policy.
+
+Focused tests verify a synthetic split/recombine/resplit cycle has exactly
+one merge at unchanged physical time; one genuine
+`GeneralHybridEvolver` continuous-subdivision case merges only after each
+selected piece has advanced to positive physical time; and two real
+two-location systems force post-reset recombination after multiple
+continuous steps, respectively for urgent and permissive events. The
+test-only candidate policy filters for actual post-reset event history
+and permits one proposal, while the production scheduler still performs
+the compatibility, provenance, radius and upper-semantics checks.
+
+The original parent-first backend and default flat backend remain unchanged.

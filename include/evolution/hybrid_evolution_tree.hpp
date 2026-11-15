@@ -78,6 +78,7 @@ struct HybridEvolutionTrajectoryMetadata {
     std::vector<HybridEvolutionCheckpointId> recombined_checkpoints; //!< Exact entry-level provenance of a frontier replacement.
     std::size_t pending_entries = 0u; //!< Number of still-pending work items in frontier mode.
     bool whole_trajectory = true; //!< Whole-source urgent continuation eligibility in frontier mode.
+    std::optional<double> recombination_time_barrier; //!< Upper time bound of the most recent frontier merge along this lineage; block re-merging until time has advanced strictly beyond it.
 };
 
 /** @brief Generic two-parameter genealogy with Evolution-owned objects and metadata. */

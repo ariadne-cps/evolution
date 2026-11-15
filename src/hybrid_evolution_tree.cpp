@@ -557,6 +557,7 @@ class TreeHybridEvolutionBackend::Impl {
      *  per-step evaluation, only unevolved child checkpoints are selected.
      */
     Void schedule_recombination(HybridEvolutionTree::NodeId parent) {
+        LOGGING_SCOPE_CREATE;
         if (!policy->enables_recombination())
             return;
         const auto groups = policy->select(history, parent);
@@ -613,7 +614,7 @@ class TreeHybridEvolutionBackend::Impl {
                     << " sources=" << group.size() << " outputs=" << result.outputs.size());
                 continue;
             }
-            LOGGING_PRINTLN_AT(3, "RECOMBINE parent-first"
+            LOGGING_PRINTLN("RECOMBINE parent-first"
                 << " location=" << history.object(group.front()).entries.front().work.enclosure.location()
                 << " t=" << history.object(group.front()).entries.front().work.enclosure.time_range()
                 << " sources=" << group.size() << " outputs=" << result.outputs.size()
@@ -666,6 +667,7 @@ class TreeHybridEvolutionBackend::Impl {
      *  append-only history with their original result-less checkpoint records.
      */
     Void schedule_frontier_recombination(std::deque<HybridEvolutionCheckpointId>& ready) {
+        LOGGING_SCOPE_CREATE;
         if (!frontier_policy->enables_recombination())
             return;
         std::vector<HybridEvolutionCheckpointId> pending;
@@ -755,7 +757,7 @@ class TreeHybridEvolutionBackend::Impl {
                 continue;
             }
             const auto& first = history.object(group.front().trajectory).entries.at(group.front().entry).work.enclosure;
-            LOGGING_PRINTLN_AT(3, "RECOMBINE frontier"
+            LOGGING_PRINTLN("RECOMBINE frontier"
                 << " location=" << first.location()
                 << " t=" << first.time_range()
                 << " sources=" << group.size() << " outputs=" << result.outputs.size()

@@ -1291,8 +1291,8 @@ and global flat default are unchanged.
 
 ### Compact structural-event logging (2026-11-15)
 
-Structural changes to evolved sets have one-line diagnostics at logging
-level **3**, without printing any full enclosure, domain or function patch:
+Structural changes to evolved sets use `LOGGING_PRINTLN`, just like the
+ordinary `#r=... #i=... #f=...` progress summary:
 
 - `SPLIT`: location, time interval, number of nonempty successor pieces,
   parent bounding-box radius, configured maximum radius and parameter count.
@@ -1302,14 +1302,18 @@ level **3**, without printing any full enclosure, domain or function patch:
 - `RECOMBINE parent-first` and `RECOMBINE frontier`: location, source
   time interval, number of source checkpoints and replacement outputs,
   maximum input radius and maximum output radius. These messages are
-  emitted only for **accepted**, provenance-complete reductions.
-  Rejected numerical proposals and quality-gate rejections use level **4**,
-  with compact reasons, rather than presenting a rejection as a structural
-  change.
+  emitted only for accepted, provenance-complete reductions.
 
-The ordinary `#r=... #i=... #f=...` progress summary remains at its
-existing level. The detailed `HybridEnclosure` and
-`ScaledFunctionPatch` dumps were previously moved to deep logging in
-`hybrid_evolver.cpp`; the new event diagnostics do not reintroduce
-multiline representations. Numerical radius statistics for recombination
-are calculated lazily, only when the logging level enables their messages.
+The recombination scheduling functions create a logging scope so accepted
+merge diagnostics have the same effective relative depth as the per-step
+summary during normal evolver calls. Rejected numerical proposals and
+quality-gate rejections use `LOGGING_PRINTLN_AT(4, ...)` relative to
+their scheduling scope; they are more verbose than accepted merges.
+
+The 29 complete enclosure and function-patch dumps in
+`hybrid_evolver.cpp` use `LOGGING_PRINTLN_AT(1, ...)`, one relative
+level below their respective scopes. At verbosity 0, these scoped
+diagnostics are suppressed. Printing full domains and `ScaledFunctionPatch`
+objects is never required for the normal progress and event messages.
+Numerical radius statistics for recombination are calculated lazily,
+only when the logging level enables their messages.

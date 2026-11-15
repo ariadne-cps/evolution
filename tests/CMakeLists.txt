@@ -31,5 +31,14 @@ foreach(TEST IN LISTS UNIT_TESTS)
     add_test(NAME ${TEST} COMMAND $<TARGET_FILE:${TEST}> --concise)
     set_property(TEST ${TEST} PROPERTY LABELS "evolution")
 endforeach()
+
+# Full hybrid and vector-field evolution suites are unusually expensive with
+# MSVC's unoptimized Debug runtime. Keep their complete test coverage while
+# allowing more time than the workflow's default 240-second CTest timeout.
+if(WIN32 AND CMAKE_BUILD_TYPE STREQUAL "Debug")
+    set_tests_properties(test_hybrid_evolver test_vector_field_evolver
+        PROPERTIES TIMEOUT 600)
+endif()
+
 add_custom_target(tests)
 add_dependencies(tests ${UNIT_TESTS})

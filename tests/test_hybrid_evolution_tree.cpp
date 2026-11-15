@@ -394,7 +394,9 @@ class TestHybridEvolutionTree : public Testing::ContextFixture {
         const SingleWindowFrontierPolicy grouping(audit);
         evolver.set_evolution_backend_factory(
             AuditedFrontierBackendFactory(grouping, {}, audit));
-        const auto orbit = evolver.orbit(initial, HybridTime(0.03125_x, 0), Semantics::UPPER);
+        // A zero discrete-step limit stops before continuous subdivision.
+        // One step allows continuous evolution; this system has no discrete transitions.
+        const auto orbit = evolver.orbit(initial, HybridTime(0.03125_x, 1), Semantics::UPPER);
 
         // A real numerical split must have produced a compatible candidate,
         // the production recombiner must have been invoked, and original work
@@ -426,13 +428,15 @@ class TestHybridEvolutionTree : public Testing::ContextFixture {
 
         evolver.set_evolution_backend_factory(
             TreeHybridEvolutionBackendFactory(NoFrontierRecombinationPolicy{}));
-        const auto baseline = evolver.orbit(initial, HybridTime(0.03125_x, 0), Semantics::UPPER);
+        // Use the same positive discrete-step limit in both runs: zero stops
+        // before continuous subdivision, even without discrete transitions.
+        const auto baseline = evolver.orbit(initial, HybridTime(0.03125_x, 1), Semantics::UPPER);
 
         auto audit = std::make_shared<FrontierIntegrationAudit>();
         const SingleWindowFrontierPolicy grouping(audit);
         evolver.set_evolution_backend_factory(AuditedFrontierBackendFactory(
             grouping, EnclosureRecombinationContext(0.0_x), audit));
-        const auto actual = evolver.orbit(initial, HybridTime(0.03125_x, 0), Semantics::UPPER);
+        const auto actual = evolver.orbit(initial, HybridTime(0.03125_x, 1), Semantics::UPPER);
 
         ARIADNE_TESTING_PROVE(audit->split_successors >= 2u);
         ARIADNE_TESTING_EXPECT_EQUAL(audit->selected_groups, 1u);

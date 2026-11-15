@@ -29,6 +29,7 @@
 #ifndef ARIADNE_HYBRID_EVOLUTION_TREE_HPP
 #define ARIADNE_HYBRID_EVOLUTION_TREE_HPP
 
+#include "evolution/enclosure_recombiner.hpp"
 #include "evolution/hybrid_evolution_backend.hpp"
 #include "tree/derivation_tree.hpp"
 
@@ -69,9 +70,61 @@ struct HybridEvolutionTrajectoryMetadata {
 /** @brief Generic two-parameter genealogy with Evolution-owned objects and metadata. */
 using HybridEvolutionTree = DerivationTree<HybridEvolutionTrajectory, HybridEvolutionTrajectoryMetadata>;
 
-/** @brief Per-completed-parent policy for selecting disjoint sibling groups to recombine.
- *  @details The backend performs numerical recombination and validates groups;
- *  policies only select indices. A policy must not mutate the tree.
+/** @brief Points at which a scheduler may reconsider pending recombination. */
+enum class HybridRecombinationEvaluationPoint : std::uint8_t {
+    AFTER_STEP,       //!< A numerical work item has completed and its results have been committed.
+    PARENT_COMPLETE   //!< All work of this trajectory has completed.
+};
+
+/** @brief Immutable policy specifying when pending children should be inspected.
+ *  @details Called with the completed step count of the parent trajectory.
+ *  Scheduling decisions must be stateless and must not mutate the history.
+ */
+class HybridRecombinationTriggerPolicy {
+  public:
+    using NodeId = HybridEvolutionTree::NodeId;
+    virtual ~HybridRecombinationTriggerPolicy() = default;
+    /** @brief Clone an independently owned policy with the same configuration. */
+    virtual HybridRecombinationTriggerPolicy* clone() const = 0;
+    /** @brief Decide whether to invoke grouping at this committed work boundary. */
+    virtual bool should_evaluate(const HybridEvolutionTree& tree, NodeId parent,
+                                 HybridRecombinationEvaluationPoint point,
+                                 std::size_t completed_steps) const = 0;
+};
+
+/** @brief Inspect children only when their parent trajectory is complete. */
+class OnParentCompletionRecombinationTriggerPolicy final : public HybridRecombinationTriggerPolicy {
+  public:
+    OnParentCompletionRecombinationTriggerPolicy* clone() const override;
+    bool should_evaluate(const HybridEvolutionTree&, NodeId,
+                         HybridRecombinationEvaluationPoint point, std::size_t) const override;
+};
+
+/** @brief Inspect children after every committed numerical step, continuous or discrete. */
+class AfterEachStepRecombinationTriggerPolicy final : public HybridRecombinationTriggerPolicy {
+  public:
+    AfterEachStepRecombinationTriggerPolicy* clone() const override;
+    bool should_evaluate(const HybridEvolutionTree&, NodeId,
+                         HybridRecombinationEvaluationPoint point, std::size_t) const override;
+};
+
+/** @brief Inspect children after each N steps and flush any remainder at parent completion. */
+class EveryNStepsRecombinationTriggerPolicy final : public HybridRecombinationTriggerPolicy {
+    std::size_t _period;
+
+  public:
+    /** @brief Configure the positive number of completed steps between inspections. */
+    explicit EveryNStepsRecombinationTriggerPolicy(std::size_t period);
+    EveryNStepsRecombinationTriggerPolicy* clone() const override;
+    bool should_evaluate(const HybridEvolutionTree&, NodeId,
+                         HybridRecombinationEvaluationPoint point,
+                         std::size_t completed_steps) const override;
+};
+
+/** @brief Policy for selecting disjoint, unevolved sibling groups at evaluation points.
+ *  @details The trigger chooses when this selection runs; this policy decides
+ *  which pending children are candidates. Numerical construction is delegated
+ *  to a separately injected enclosure recombiner. Policies must not mutate the tree.
  */
 class HybridRecombinationSchedulingPolicy {
   public:
@@ -79,7 +132,7 @@ class HybridRecombinationSchedulingPolicy {
     virtual ~HybridRecombinationSchedulingPolicy() = default;
     /** @brief Clone the immutable selection settings. */
     virtual HybridRecombinationSchedulingPolicy* clone() const = 0;
-    /** @brief Select disjoint groups of unevolved children after parent completion. */
+    /** @brief Select disjoint groups of unevolved children at the requested boundary. */
     virtual std::vector<std::vector<NodeId>> select(const HybridEvolutionTree& tree, NodeId parent) const = 0;
     /** @brief Whether this policy can request upper-enclosure recombination. */
     virtual bool enables_recombination() const = 0;
@@ -119,9 +172,11 @@ class SiblingWindowRecombinationSchedulingPolicy final : public HybridRecombinat
  *  subdivision or an urgent derived branch separates portions, subsequent resets
  *  derive children even if the final remaining piece has a coverage certificate. Orbit is
  *  projected from explicit history contributions after successful completion.
- *  The default policy performs no recombination; an opt-in sibling-window policy
- *  can replace compatible unevolved children under upper semantics. Original
- *  siblings remain in the tree as retired provenance, without numerical results.
+ *  The default grouping policy performs no recombination. Independent trigger,
+ *  grouping and numerical strategies control when, which and how compatible
+ *  unevolved siblings are recombined under upper semantics. Children are not
+ *  dispatched until their parent is complete, even with step-wise evaluation.
+ *  Original siblings remain as retired provenance, without numerical results.
  *  No history editing or concurrent tree mutation is performed.
  */
 class TreeHybridEvolutionBackend final : public HybridEvolutionBackendInterface {
@@ -130,8 +185,12 @@ class TreeHybridEvolutionBackend final : public HybridEvolutionBackendInterface 
 
   public:
     /** @brief Create the root trajectory with its unprocessed initial checkpoint. */
-    explicit TreeHybridEvolutionBackend(const HybridEnclosure& initial,
-                                        const HybridRecombinationSchedulingPolicy& policy = NoRecombinationSchedulingPolicy{});
+    explicit TreeHybridEvolutionBackend(
+        const HybridEnclosure& initial,
+        const HybridRecombinationSchedulingPolicy& grouping = NoRecombinationSchedulingPolicy{},
+        const HybridRecombinationTriggerPolicy& trigger = OnParentCompletionRecombinationTriggerPolicy{},
+        const EnclosureRecombinerInterface& recombiner = ReferenceEnclosureRecombiner{},
+        const EnclosureRecombinationContext& context = {});
     /** @brief Release the owned trajectory history. */
     ~TreeHybridEvolutionBackend() override;
     /** @brief Disallow copying the owner and its trajectory identities. */
@@ -152,15 +211,25 @@ class TreeHybridEvolutionBackend final : public HybridEvolutionBackendInterface 
     const HybridEvolutionTree& tree() const noexcept;
 };
 
-/** @brief Factory selecting the serial trajectory-tree backend for ordinary orbit() calls. */
+/** @brief Factory selecting the serial trajectory-tree backend for ordinary orbit() calls.
+ *  @details The independent grouping, timing, numerical recombiner and radius
+ *  context settings are cloned or copied for each run.
+ */
 class TreeHybridEvolutionBackendFactory : public HybridEvolutionBackendFactoryInterface {
-    std::shared_ptr<const HybridRecombinationSchedulingPolicy> _policy;
+    std::shared_ptr<const HybridRecombinationSchedulingPolicy> _grouping;
+    std::shared_ptr<const HybridRecombinationTriggerPolicy> _trigger;
+    std::shared_ptr<const EnclosureRecombinerInterface> _recombiner;
+    EnclosureRecombinationContext _context;
 
   public:
-    /** @brief Use the default no-op scheduling policy. */
+    /** @brief Use default no-op grouping and parent-completion evaluation. */
     TreeHybridEvolutionBackendFactory();
-    /** @brief Copy the opt-in policy independently of its original lifetime. */
-    explicit TreeHybridEvolutionBackendFactory(const HybridRecombinationSchedulingPolicy& policy);
+    /** @brief Independently choose grouping, evaluation timing, numerical method and radius context. */
+    explicit TreeHybridEvolutionBackendFactory(
+        const HybridRecombinationSchedulingPolicy& grouping,
+        const HybridRecombinationTriggerPolicy& trigger = OnParentCompletionRecombinationTriggerPolicy{},
+        const EnclosureRecombinerInterface& recombiner = ReferenceEnclosureRecombiner{},
+        const EnclosureRecombinationContext& context = {});
     /** @brief Clone the immutable factory settings without copying any run history. */
     TreeHybridEvolutionBackendFactory* clone() const override;
     /** @brief Create independent trajectory history; the numerical callback enforces the horizon. */

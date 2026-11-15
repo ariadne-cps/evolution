@@ -940,16 +940,50 @@ quality indicators without replacing a future rigorous inclusion
 procedure on constrained models.
 
 
-### Implemented optional trajectory recombination scheduling
+### Implemented configurable recombination scheduling
 
-`TreeHybridEvolutionBackendFactory()` preserves the original parent-first
-execution exactly: it uses `NoRecombinationSchedulingPolicy`. To opt into
-recombination, pass `SiblingWindowRecombinationSchedulingPolicy(max_group_size,
-max_time_spread)` to the tree backend factory, then supply that factory to
-`HybridEvolverBase::set_evolution_backend_factory()`.
+The tree backend separates three independent, cloneable strategies:
+
+- **When:** `OnParentCompletionRecombinationTriggerPolicy` (default),
+  `AfterEachStepRecombinationTriggerPolicy`, or
+  `EveryNStepsRecombinationTriggerPolicy(n)` (including a final check for
+  remaining pending children). Trigger decisions run after complete publication
+  of each numerical work result, or after publishing parent completion.
+- **Which:** `NoRecombinationSchedulingPolicy` (default, with zero
+  recombiner invocations), or
+  `SiblingWindowRecombinationSchedulingPolicy(max_group_size,max_time_spread)`.
+  Custom grouping policies implement `HybridRecombinationSchedulingPolicy`.
+- **How:** `EnclosureRecombinerInterface` supplies the numerical covering
+  algorithm. `ReferenceEnclosureRecombiner` is the default. Optional
+  `EnclosureRecombinationContext` supplies a per-run radius limit.
+
+For example, select window grouping after every step:
+
+```cpp
+evolver.set_evolution_backend_factory(TreeHybridEvolutionBackendFactory(
+    SiblingWindowRecombinationSchedulingPolicy(8u, 0.125),
+    AfterEachStepRecombinationTriggerPolicy{}));
+```
+
+`TreeHybridEvolutionBackendFactory()` preserves parent-first execution
+without recombination. The numeric strategy and all policies are copied by
+the backend/factory, so temporary policy objects are safe. A callback
+can inspect completed steps before the parent is complete, but **no child
+trajectory starts evolving until its parent is complete**. The scheduler
+never recombines already evolved child checkpoints or alters prior parent
+contributions. The existing `Semantics::UPPER` precondition remains.
+
+Custom numerical strategies may return multiple outputs. The backend accepts
+them only when they reduce the number of trajectories, cover every selected
+source according to the numerical interface's provenance contract, and satisfy
+the requested radius. Otherwise it preserves the original pending sources.
+Each replacement stores its own source-node IDs and the original source
+nodes remain as retired genealogy. Sound coverage of outputs remains the
+responsibility of the injected numerical recombiner's contract.
+
 
 The window policy greedily forms disjoint groups of **consecutive sibling
-children**, after the parent trajectory is complete and before any child
+children**, at each trigger-selected evaluation point and before any child
 starts evolving. Groups must share transition event and kind, target location,
 state and auxiliary spaces, processing phase, previous-event history, and
 symbolic auxiliary mapping. All their birth-time intervals must fit within
@@ -958,8 +992,9 @@ configured maximum count) are proposed. It does not use bounding-box overlap
 as a mathematical certificate.
 
 The backend validates the groups again, recombines their continuous enclosures
-with `ReferenceEnclosureRecombiner`, checks complete source provenance, and
-only then substitutes one unevolved replacement trajectory. The absorbed
+with the configured `EnclosureRecombinerInterface`, checks complete source
+provenance, and only then substitutes one or more unevolved replacement
+trajectories. The absorbed
 children remain as retired nodes with their original source-entry provenance;
 the replacement records their stable node IDs and retains discrete context.
 Previously published parent contributions remain unchanged. Invalid or incomplete

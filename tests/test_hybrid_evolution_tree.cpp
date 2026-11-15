@@ -28,6 +28,7 @@
 
 #include <algorithm>
 #include "concise_logging.hpp"
+#include <memory>
 #include <sstream>
 #include <stdexcept>
 
@@ -75,6 +76,28 @@ std::vector<std::string> descriptions(const ListSet<HybridEnclosure>& sets) {
     std::sort(result.begin(), result.end());
     return result;
 }
+
+/** @brief Sound no-change numerical strategy, used to verify injected recombiners.
+ *  @details One output per input is valid but cannot reduce the number of
+ *  trajectories; the backend should preserve the original pending children.
+ */
+class IdentityEnclosureRecombiner final : public EnclosureRecombinerInterface {
+  public:
+    IdentityEnclosureRecombiner* clone() const override { return new IdentityEnclosureRecombiner(*this); }
+
+    EnclosureRecombinationResult recombine(
+        const List<Enclosure>& enclosures, const EnclosureRecombinationContext&) const override {
+        EnclosureRecombinationResult result;
+        for (SizeType index = 0; index != enclosures.size(); ++index) {
+            EnclosureRecombinationOutput output{enclosures[index], {}};
+            output.source_indices.append(index);
+            result.outputs.append(output);
+        }
+        return result;
+    }
+
+    OutputStream& _write(OutputStream& os) const override { return os << "IdentityEnclosureRecombiner"; }
+};
 
 class ConcurrencyScope {
     std::size_t _previous = ThreadManager::instance().concurrency();
@@ -262,6 +285,94 @@ class TestHybridEvolutionTree : public Testing::ContextFixture {
         ARIADNE_TESTING_PROVE(!lower.tree().metadata(lower.tree().root().value()).complete);
     }
 
+    void test_recombination_evaluation_triggers() {
+        const auto initial = seed();
+        const DiscreteEvent jump("jump");
+        const auto verify = [&](const HybridRecombinationSchedulingPolicy& grouping,
+                                const HybridRecombinationTriggerPolicy& timing,
+                                bool after_first, bool after_second, bool after_complete,
+                                std::size_t expected_final_count) {
+            TreeHybridEvolutionBackend backend(initial, grouping, timing);
+            const auto root = backend.tree().root().value();
+            bool observed_after_first = false;
+            bool observed_after_second = false;
+            backend.set_semantics(Semantics::UPPER);
+            backend.run([&](const HybridEvolutionWorkItem& item, const HybridEvolutionStatistics&) {
+                const auto marker = label(item);
+                HybridEvolutionStepResult result;
+                if (marker == 0) {
+                    // Two discrete successors remain blocked while the parent continues.
+                    result.transition_to(marked(initial, 100), jump, EventKind::URGENT);
+                    result.transition_to(marked(initial, 100), jump, EventKind::URGENT);
+                    result.continue_with(marked(initial, 1));
+                } else if (marker == 1 || marker == 2) {
+                    const auto children = backend.tree().children(root);
+                    ARIADNE_TESTING_PROVE(!backend.tree().metadata(root).complete);
+                    ARIADNE_TESTING_PROVE(children.size() >= 2u);
+                    const bool retired = backend.tree().metadata(children[0]).retired_for_recombination;
+                    if (marker == 1)
+                        observed_after_first = retired;
+                    else
+                        observed_after_second = retired;
+                    if (marker == 1)
+                        result.continue_with(marked(initial, 2));
+                    else
+                        result.record_final(item.enclosure);
+                } else {
+                    ARIADNE_TESTING_PROVE(backend.tree().metadata(root).complete);
+                    result.record_final(item.enclosure);
+                }
+                return result;
+            });
+            const auto children = backend.tree().children(root);
+            ARIADNE_TESTING_EXPECT_EQUAL(observed_after_first, after_first);
+            ARIADNE_TESTING_EXPECT_EQUAL(observed_after_second, after_second);
+            ARIADNE_TESTING_EXPECT_EQUAL(backend.tree().metadata(children[0]).retired_for_recombination,
+                                         after_complete);
+            ARIADNE_TESTING_EXPECT_EQUAL(backend.release_orbit().final().size(), expected_final_count);
+        };
+        const SiblingWindowRecombinationSchedulingPolicy window(2u, 0.0);
+        verify(NoRecombinationSchedulingPolicy{}, AfterEachStepRecombinationTriggerPolicy{},
+               false, false, false, 3u);
+        verify(window, OnParentCompletionRecombinationTriggerPolicy{},
+               false, false, true, 2u);
+        verify(window, AfterEachStepRecombinationTriggerPolicy{},
+               true, true, true, 2u);
+        verify(window, EveryNStepsRecombinationTriggerPolicy(2u),
+               false, true, true, 2u);
+        ARIADNE_TESTING_EXPECT_EXCEPTION(EveryNStepsRecombinationTriggerPolicy(0u));
+    }
+
+    void test_numerical_recombination_strategy_is_injected() {
+        const auto initial = seed();
+        const DiscreteEvent jump("jump");
+        TreeHybridEvolutionBackendFactory factory(
+            SiblingWindowRecombinationSchedulingPolicy(2u, 0.0),
+            AfterEachStepRecombinationTriggerPolicy{},
+            IdentityEnclosureRecombiner{});
+        // The factory owns clones of all three temporary strategies.
+        const auto advance = [&](const HybridEvolutionWorkItem& item, const HybridEvolutionStatistics&) {
+            HybridEvolutionStepResult result;
+            if (label(item) == 0) {
+                result.transition_to(marked(initial, 100), jump, EventKind::URGENT);
+                result.transition_to(marked(initial, 100), jump, EventKind::URGENT);
+            } else {
+                result.record_final(item.enclosure);
+            }
+            return result;
+        };
+        auto first = factory.create(initial, Real(1));
+        first->set_semantics(Semantics::UPPER);
+        first->run(advance);
+        // A sound identity strategy supplies two outputs for two sources;
+        // the scheduler correctly rejects this ineffective replacement.
+        ARIADNE_TESTING_EXPECT_EQUAL(first->release_orbit().final().size(), 2u);
+        auto second = factory.create(initial, Real(1));
+        second->set_semantics(Semantics::UPPER);
+        second->run(advance);
+        ARIADNE_TESTING_EXPECT_EQUAL(second->release_orbit().final().size(), 2u);
+    }
+
     void test_split_pieces_are_parallel_and_completion_waits_for_all_of_them() {
         auto initial = seed();
         TreeHybridEvolutionBackend backend(initial);
@@ -415,6 +526,8 @@ int main(int argc, char** argv) {
     ARIADNE_TESTING_ADD_TEST(TestHybridEvolutionTree, test_only_certified_single_urgent_transition_continues_the_node);
     ARIADNE_TESTING_ADD_TEST(TestHybridEvolutionTree, test_noop_and_window_recombination_policies);
     ARIADNE_TESTING_ADD_TEST(TestHybridEvolutionTree, test_recombination_policy_rejects_lower_semantics_and_invalid_settings);
+    ARIADNE_TESTING_ADD_TEST(TestHybridEvolutionTree, test_recombination_evaluation_triggers);
+    ARIADNE_TESTING_ADD_TEST(TestHybridEvolutionTree, test_numerical_recombination_strategy_is_injected);
     ARIADNE_TESTING_ADD_TEST(TestHybridEvolutionTree, test_split_pieces_are_parallel_and_completion_waits_for_all_of_them);
     ARIADNE_TESTING_ADD_TEST(TestHybridEvolutionTree, test_failure_preserves_incomplete_history_without_dispatching_children);
     ARIADNE_TESTING_ADD_TEST(TestHybridEvolutionTree, test_flat_and_tree_orbits_match_for_urgent_and_permissive_systems);

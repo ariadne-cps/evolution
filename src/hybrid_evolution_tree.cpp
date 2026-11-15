@@ -41,6 +41,43 @@
 
 namespace Ariadne {
 
+OnParentCompletionRecombinationTriggerPolicy* OnParentCompletionRecombinationTriggerPolicy::clone() const {
+    return new OnParentCompletionRecombinationTriggerPolicy(*this);
+}
+
+bool OnParentCompletionRecombinationTriggerPolicy::should_evaluate(
+    const HybridEvolutionTree&, NodeId, HybridRecombinationEvaluationPoint point, std::size_t) const {
+    return point == HybridRecombinationEvaluationPoint::PARENT_COMPLETE;
+}
+
+AfterEachStepRecombinationTriggerPolicy* AfterEachStepRecombinationTriggerPolicy::clone() const {
+    return new AfterEachStepRecombinationTriggerPolicy(*this);
+}
+
+bool AfterEachStepRecombinationTriggerPolicy::should_evaluate(
+    const HybridEvolutionTree&, NodeId, HybridRecombinationEvaluationPoint point, std::size_t) const {
+    return point == HybridRecombinationEvaluationPoint::AFTER_STEP;
+}
+
+EveryNStepsRecombinationTriggerPolicy::EveryNStepsRecombinationTriggerPolicy(std::size_t period)
+    : _period(period) {
+    if (_period == 0u)
+        throw std::invalid_argument("Recombination evaluation period must be positive");
+}
+
+EveryNStepsRecombinationTriggerPolicy* EveryNStepsRecombinationTriggerPolicy::clone() const {
+    return new EveryNStepsRecombinationTriggerPolicy(*this);
+}
+
+bool EveryNStepsRecombinationTriggerPolicy::should_evaluate(
+    const HybridEvolutionTree&, NodeId, HybridRecombinationEvaluationPoint point,
+    std::size_t completed_steps) const {
+    if (point == HybridRecombinationEvaluationPoint::AFTER_STEP)
+        return completed_steps % _period == 0u;
+    return point == HybridRecombinationEvaluationPoint::PARENT_COMPLETE &&
+           completed_steps % _period != 0u;
+}
+
 NoRecombinationSchedulingPolicy* NoRecombinationSchedulingPolicy::clone() const {
     return new NoRecombinationSchedulingPolicy(*this);
 }
@@ -147,14 +184,22 @@ class TreeHybridEvolutionBackend::Impl {
     HybridEvolutionTree history;
     HybridEvolutionStatistics statistics;
     std::unique_ptr<const HybridRecombinationSchedulingPolicy> policy;
+    std::unique_ptr<const HybridRecombinationTriggerPolicy> trigger;
+    std::unique_ptr<const EnclosureRecombinerInterface> recombiner;
+    EnclosureRecombinationContext context;
     Semantics semantics = Semantics::LOWER;
     Bool started = false;
     Bool complete = false;
     Bool released = false;
 
     /** @brief Create a trajectory seed without an implicit Orbit contribution. */
-    explicit Impl(const HybridEnclosure& initial, const HybridRecombinationSchedulingPolicy& scheduling_policy)
-        : policy(scheduling_policy.clone()) {
+    explicit Impl(const HybridEnclosure& initial,
+                  const HybridRecombinationSchedulingPolicy& grouping,
+                  const HybridRecombinationTriggerPolicy& timing,
+                  const EnclosureRecombinerInterface& method,
+                  const EnclosureRecombinationContext& limits)
+        : policy(grouping.clone()), trigger(timing.clone()),
+          recombiner(method.clone()), context(limits) {
         HybridEvolutionTrajectory trajectory;
         trajectory.entries.push_back({
             {initial, HybridEvolutionPhase::PROCESS_STARTING_EVENTS},
@@ -203,6 +248,7 @@ class TreeHybridEvolutionBackend::Impl {
     Void process_trajectory(HybridEvolutionTree::NodeId node, const StepFunction& advance) {
         std::deque<std::size_t> pending{0};
         Bool whole_trajectory = true;
+        std::size_t completed_steps = 0u;
         while (!pending.empty()) {
             const auto entry_index = pending.front();
             pending.pop_front();
@@ -236,12 +282,18 @@ class TreeHybridEvolutionBackend::Impl {
             }
             // Appending continuations can relocate entries: reacquire by index.
             history.object(node).entries.at(entry_index).result.emplace(std::move(result));
+            ++completed_steps;
+            if (policy->enables_recombination() &&
+                trigger->should_evaluate(history, node, HybridRecombinationEvaluationPoint::AFTER_STEP,
+                                         completed_steps))
+                schedule_recombination(node);
         }
         history.metadata(node).complete = true;
     }
 
-    /** @brief Replace accepted sibling groups while keeping their unevolved sources inspectable.
-     *  This runs strictly after parent completion and before any child dispatch.
+    /** @brief Replace accepted sibling groups at safe work-publication boundaries.
+     *  No child has started evolving before its parent completes; even during
+     *  per-step evaluation, only unevolved child checkpoints are selected.
      */
     Void schedule_recombination(HybridEvolutionTree::NodeId parent) {
         if (!policy->enables_recombination())
@@ -270,25 +322,41 @@ class TreeHybridEvolutionBackend::Impl {
             List<Enclosure> sources;
             for (const auto source: group)
                 sources.append(history.object(source).entries.front().work.enclosure.continuous_set());
-            const auto result = ReferenceEnclosureRecombiner().recombine(sources);
-            // Reject an ineffective or incomplete replacement without losing any work.
-            if (result.outputs.size() != 1u || !result.discarded_sources.empty() ||
-                !result.radius_limit_satisfied ||
-                result.outputs.front().source_indices.size() != group.size())
+            const auto result = recombiner->recombine(sources, context);
+            // Replacements must provide complete provenance and reduce the
+            // number of unevolved trajectories, not just change representations.
+            if (result.outputs.empty() || result.outputs.size() >= group.size() ||
+                !result.discarded_sources.empty() || !result.radius_limit_satisfied)
                 continue;
-            Bool complete_coverage = true;
-            for (std::size_t index = 0; index != group.size(); ++index)
-                if (result.outputs.front().source_indices[index] != index)
+            std::vector<bool> represented(group.size(), false);
+            bool complete_coverage = true;
+            for (const auto& output: result.outputs) {
+                if (output.source_indices.empty())
                     complete_coverage = false;
-            if (!complete_coverage)
+                for (const auto index: output.source_indices) {
+                    if (index >= group.size()) {
+                        complete_coverage = false;
+                    } else {
+                        represented[index] = true;
+                    }
+                }
+            }
+            if (!std::all_of(represented.begin(), represented.end(), [](bool covered) { return covered; }) ||
+                !complete_coverage)
                 continue;
-            auto replacement = history.object(group.front()).entries.front().work;
-            replacement.enclosure.replace_continuous_set(result.outputs.front().enclosure);
-            HybridEvolutionTrajectory trajectory;
-            trajectory.entries.push_back({replacement, std::nullopt, std::nullopt});
-            HybridEvolutionTrajectoryMetadata metadata;
-            metadata.recombined_sources = group;
-            history.add_child(parent, std::move(trajectory), std::move(metadata));
+            // Commit all replacements before retiring the original sources.
+            // Invalid or ineffective results leave every original child runnable.
+            for (const auto& output: result.outputs) {
+                const auto representative = group[output.source_indices.front()];
+                auto replacement = history.object(representative).entries.front().work;
+                replacement.enclosure.replace_continuous_set(output.enclosure);
+                HybridEvolutionTrajectory trajectory;
+                trajectory.entries.push_back({replacement, std::nullopt, std::nullopt});
+                HybridEvolutionTrajectoryMetadata metadata;
+                for (const auto index: output.source_indices)
+                    metadata.recombined_sources.push_back(group[index]);
+                history.add_child(parent, std::move(trajectory), std::move(metadata));
+            }
             for (const auto source: group)
                 history.metadata(source).retired_for_recombination = true;
         }
@@ -317,8 +385,10 @@ class TreeHybridEvolutionBackend::Impl {
 };
 
 TreeHybridEvolutionBackend::TreeHybridEvolutionBackend(
-    const HybridEnclosure& initial, const HybridRecombinationSchedulingPolicy& policy)
-    : _impl(std::make_unique<Impl>(initial, policy)) {}
+    const HybridEnclosure& initial, const HybridRecombinationSchedulingPolicy& grouping,
+    const HybridRecombinationTriggerPolicy& timing, const EnclosureRecombinerInterface& method,
+    const EnclosureRecombinationContext& limits)
+    : _impl(std::make_unique<Impl>(initial, grouping, timing, method, limits)) {}
 
 TreeHybridEvolutionBackend::~TreeHybridEvolutionBackend() = default;
 
@@ -340,8 +410,12 @@ Void TreeHybridEvolutionBackend::run(const StepFunction& advance) {
         const auto node = ready.front();
         ready.pop_front();
         _impl->process_trajectory(node, advance);
-        // Only after publishing completion may policy inspect all born children.
-        _impl->schedule_recombination(node);
+        // The trigger can request a final evaluation for any pending children.
+        if (_impl->policy->enables_recombination() &&
+            _impl->trigger->should_evaluate(_impl->history, node,
+                HybridRecombinationEvaluationPoint::PARENT_COMPLETE,
+                _impl->history.object(node).entries.size()))
+            _impl->schedule_recombination(node);
         for (const auto child: _impl->history.children(node)) {
             if (!_impl->history.metadata(child).retired_for_recombination)
                 ready.push_back(child);
@@ -370,18 +444,22 @@ const HybridEvolutionTree& TreeHybridEvolutionBackend::tree() const noexcept {
 }
 
 TreeHybridEvolutionBackendFactory::TreeHybridEvolutionBackendFactory()
-    : _policy(std::make_shared<NoRecombinationSchedulingPolicy>()) {}
+    : TreeHybridEvolutionBackendFactory(NoRecombinationSchedulingPolicy{}) {}
 
 TreeHybridEvolutionBackendFactory::TreeHybridEvolutionBackendFactory(
-    const HybridRecombinationSchedulingPolicy& policy)
-    : _policy(policy.clone()) {}
+    const HybridRecombinationSchedulingPolicy& grouping,
+    const HybridRecombinationTriggerPolicy& timing,
+    const EnclosureRecombinerInterface& method,
+    const EnclosureRecombinationContext& limits)
+    : _grouping(grouping.clone()), _trigger(timing.clone()),
+      _recombiner(method.clone()), _context(limits) {}
 
 TreeHybridEvolutionBackendFactory* TreeHybridEvolutionBackendFactory::clone() const {
     return new TreeHybridEvolutionBackendFactory(*this);
 }
 
 std::unique_ptr<HybridEvolutionBackendInterface> TreeHybridEvolutionBackendFactory::create(const HybridEnclosure& initial, const Real&) const {
-    return std::make_unique<TreeHybridEvolutionBackend>(initial, *_policy);
+    return std::make_unique<TreeHybridEvolutionBackend>(initial, *_grouping, *_trigger, *_recombiner, _context);
 }
 
 } // namespace Ariadne

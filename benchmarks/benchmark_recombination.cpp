@@ -152,10 +152,10 @@ List<ArgumentParser> argument_parsers(Options& options) {
     parsers.append(make_valued_argument_parser("", "distributed-count",
                                                "Fixed number of time-distributed source enclosures (requires --time-window)",
                                                [&options](const String& value) -> VoidFunction {
-                                                   const auto count = Bench::parse_unsigned<unsigned>(value);
-                                                   if (count < 2u)
+                                                   const auto requested_count = Bench::parse_unsigned<unsigned>(value);
+                                                   if (requested_count < 2u)
                                                        throw std::invalid_argument("distributed-count must be >= 2");
-                                                   return [&options, count] { options.distributed_count = count; };
+                                                   return [&options, requested_count] { options.distributed_count = requested_count; };
                                                }));
     parsers.append(make_valued_argument_parser("", "distributed-counts",
                                                "Sweep source counts within the same window, comma-separated",

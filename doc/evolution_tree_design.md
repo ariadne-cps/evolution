@@ -1076,3 +1076,30 @@ continuous recombination *after* independent split-branch steps, both
 permissive and urgent post-reset merging across separate trajectories, and
 no-op frontier execution. Provenance and upper-only gating are checked.
 
+
+### Frontier integration test matrix (2026-11-15)
+
+In addition to scheduler-only synthetic tests, `test_hybrid_evolution_tree`
+compares complete `Orbit<HybridEnclosure>` collections for the flat backend
+and the global frontier with `NoFrontierRecombinationPolicy`. The comparison
+uses cardinality and sorted full enclosure descriptions for reach,
+intermediate and final collections, plus the initial enclosure; changing the
+internal trajectory ordering must not alter the numerical work or results.
+
+The real-evolver integration cases include:
+
+- urgent and permissive crossings accumulated over multiple continuous steps,
+  for upper and lower semantics;
+- subdivision enabled on a wide source set before/near an urgent guard;
+- zero-time termination and a short nonzero time horizon;
+- an invariant restricting the admissible part of a wide source enclosure.
+
+These tests deliberately use frontier **no-op** to establish parity independently
+of numerical recombination. Separate synthetic tests verify recombination
+mechanics, cross-trajectory provenance and trigger behavior. Further real
+upper-approximation inclusion and performance tests are still necessary before
+the global frontier is considered a general drop-in replacement for the flat
+backend.
+
+During review, the frontier runner was corrected not to retain a reference
+to a node's metadata across calls that can grow the derivation tree.

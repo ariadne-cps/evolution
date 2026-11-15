@@ -137,6 +137,83 @@ class TestHybridEvolutionTree : public Testing::ContextFixture {
     }
 
   public:
+    /** @brief Compare complete numerical Orbit collections with the flat oracle.
+     *  @details With recombination disabled, the frontier is permitted to change
+     *  work order and genealogy, not reachability results or classifications.
+     */
+    void compare_flat_and_frontier_orbits(
+        GeneralHybridEvolver& evolver, const HybridEnclosure& initial,
+        const HybridTerminationCriterion& termination, Semantics semantics) {
+        evolver.set_evolution_backend_factory(FlatHybridEvolutionBackendFactory());
+        const auto flat = evolver.orbit(initial, termination, semantics);
+        evolver.set_evolution_backend_factory(
+            TreeHybridEvolutionBackendFactory(NoFrontierRecombinationPolicy{}));
+        const auto frontier = evolver.orbit(initial, termination, semantics);
+
+        ARIADNE_TESTING_EXPECT_EQUAL(frontier.reach().size(), flat.reach().size());
+        ARIADNE_TESTING_EXPECT_EQUAL(frontier.intermediate().size(), flat.intermediate().size());
+        ARIADNE_TESTING_EXPECT_EQUAL(frontier.final().size(), flat.final().size());
+        ARIADNE_TESTING_PROVE(descriptions(frontier.reach()) == descriptions(flat.reach()));
+        ARIADNE_TESTING_PROVE(descriptions(frontier.intermediate()) == descriptions(flat.intermediate()));
+        ARIADNE_TESTING_PROVE(descriptions(frontier.final()) == descriptions(flat.final()));
+        std::ostringstream expected_initial, actual_initial;
+        expected_initial << flat.initial();
+        actual_initial << frontier.initial();
+        ARIADNE_TESTING_EXPECT_EQUAL(actual_initial.str(), expected_initial.str());
+    }
+
+  public:
+    void test_flat_and_frontier_orbits_match_on_real_hybrid_transitions() {
+        ConcurrencyScope concurrency;
+        for (auto event_kind: {EventKind::URGENT, EventKind::PERMISSIVE}) {
+            DiscreteLocation source(1), target(2);
+            RealVariable x("x"), y("y");
+            DiscreteEvent jump("jump");
+            HybridAutomaton system;
+            system.new_mode(source, {dot(x) = 1, dot(y) = 0});
+            system.new_mode(target, {dot(x) = 0, dot(y) = 0});
+            system.new_transition(source, jump, target,
+                                  {next(x) = x, next(y) = y}, x >= 0, event_kind);
+            GeneralHybridEvolver evolver(system);
+            evolver.configuration().set_maximum_step_size(0.25_x);
+            const auto initial = evolver.enclosure(HybridExactBox(
+                source, RealSpace({x, y}),
+                ExactBoxType({{-1, -0.75_x}, {0, 0}})));
+            for (auto semantics: {Semantics::UPPER, Semantics::LOWER})
+                compare_flat_and_frontier_orbits(evolver, initial, HybridTime(2, 1), semantics);
+        }
+    }
+
+    void test_flat_and_frontier_orbits_match_on_real_splitting_and_invariants() {
+        ConcurrencyScope concurrency;
+        DiscreteLocation source(1), target(2);
+        RealVariable x("x"), y("y");
+        DiscreteEvent jump("jump"), invariant("invariant");
+        HybridAutomaton system;
+        system.new_mode(source, {dot(x) = 1, dot(y) = 0});
+        system.new_mode(target, {dot(x) = 0, dot(y) = 0});
+        system.new_transition(source, jump, target,
+                              {next(x) = x, next(y) = y}, x >= 0, EventKind::URGENT);
+        GeneralHybridEvolver evolver(system);
+        evolver.configuration().set_enable_subdivisions(true);
+        evolver.configuration().set_maximum_enclosure_radius(0.25_x);
+        const auto wide = evolver.enclosure(HybridExactBox(
+            source, RealSpace({x, y}), ExactBoxType({{-1, 1}, {0, 0}})));
+        for (auto semantics: {Semantics::UPPER, Semantics::LOWER}) {
+            compare_flat_and_frontier_orbits(evolver, wide, HybridTime(0.03125_x, 1), semantics);
+            compare_flat_and_frontier_orbits(evolver, wide, HybridTime(0, 1), semantics);
+        }
+        system.new_invariant(source, x <= -0.5_dec, invariant);
+        GeneralHybridEvolver constrained(system);
+        constrained.configuration().set_enable_subdivisions(true);
+        constrained.configuration().set_maximum_enclosure_radius(0.25_x);
+        const auto restricted = constrained.enclosure(HybridExactBox(
+            source, RealSpace({x, y}), ExactBoxType({{-1, 1}, {0, 0}})));
+        for (auto semantics: {Semantics::UPPER, Semantics::LOWER})
+            compare_flat_and_frontier_orbits(
+                constrained, restricted, HybridTime(0.03125_x, 1), semantics);
+    }
+
     void test_parent_finishes_before_distinct_derived_trajectories() {
         auto initial = seed();
         TreeHybridEvolutionBackend backend(initial);
@@ -639,6 +716,8 @@ int main(int argc, char** argv) {
     ARIADNE_TESTING_ADD_TEST(TestHybridEvolutionTree, test_numerical_recombination_strategy_is_injected);
     ARIADNE_TESTING_ADD_TEST(TestHybridEvolutionTree, test_frontier_recombines_continuous_split_branches_after_evolution);
     ARIADNE_TESTING_ADD_TEST(TestHybridEvolutionTree, test_frontier_recombines_cross_trajectory_transitions);
+    ARIADNE_TESTING_ADD_TEST(TestHybridEvolutionTree, test_flat_and_frontier_orbits_match_on_real_hybrid_transitions);
+    ARIADNE_TESTING_ADD_TEST(TestHybridEvolutionTree, test_flat_and_frontier_orbits_match_on_real_splitting_and_invariants);
     ARIADNE_TESTING_ADD_TEST(TestHybridEvolutionTree, test_split_pieces_are_parallel_and_completion_waits_for_all_of_them);
     ARIADNE_TESTING_ADD_TEST(TestHybridEvolutionTree, test_failure_preserves_incomplete_history_without_dispatching_children);
     ARIADNE_TESTING_ADD_TEST(TestHybridEvolutionTree, test_flat_and_tree_orbits_match_for_urgent_and_permissive_systems);

@@ -590,17 +590,17 @@ class TreeHybridEvolutionBackend::Impl {
             auto result = advance(history.object(checkpoint.trajectory).entries.at(checkpoint.entry).work,
                                   statistics);
             count(result);
-            auto& trajectory_metadata = history.metadata(checkpoint.trajectory);
             for (const auto& successor: result.successors) {
                 if (successor.kind == HybridEvolutionSuccessorKind::SUBDIVISION)
-                    trajectory_metadata.whole_trajectory = false;
+                    history.metadata(checkpoint.trajectory).whole_trajectory = false;
             }
             for (std::size_t ordinal = 0; ordinal != result.successors.size(); ++ordinal) {
                 const auto& successor = result.successors[ordinal];
                 const HybridEvolutionEntryOrigin origin{checkpoint.entry, ordinal};
                 const bool split = successor.kind == HybridEvolutionSuccessorKind::SUBDIVISION;
-                if (split || derives_trajectory(successor, result.successors.size(),
-                                                trajectory_metadata.whole_trajectory)) {
+                if (split || derives_trajectory(
+                                 successor, result.successors.size(),
+                                 history.metadata(checkpoint.trajectory).whole_trajectory)) {
                     HybridEvolutionTrajectory child;
                     child.entries.push_back({successor.work, std::nullopt, std::nullopt});
                     HybridEvolutionTrajectoryMetadata metadata;
@@ -627,14 +627,15 @@ class TreeHybridEvolutionBackend::Impl {
             if (metadata.pending_entries == 0u)
                 throw std::logic_error("Invalid checkpoint completion count");
             --metadata.pending_entries;
-            if (metadata.pending_entries == 0u)
+            const bool trajectory_completed = metadata.pending_entries == 0u;
+            if (trajectory_completed)
                 metadata.complete = true;
             ++global_steps;
             if (frontier_policy->enables_recombination() &&
                 trigger->should_evaluate(history, checkpoint.trajectory,
                     HybridRecombinationEvaluationPoint::AFTER_STEP, global_steps))
                 schedule_frontier_recombination(ready);
-            if (metadata.complete && frontier_policy->enables_recombination() &&
+            if (trajectory_completed && frontier_policy->enables_recombination() &&
                 trigger->should_evaluate(history, checkpoint.trajectory,
                     HybridRecombinationEvaluationPoint::PARENT_COMPLETE, global_steps))
                 schedule_frontier_recombination(ready);

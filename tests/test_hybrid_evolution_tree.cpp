@@ -99,6 +99,168 @@ class IdentityEnclosureRecombiner final : public EnclosureRecombinerInterface {
     OutputStream& _write(OutputStream& os) const override { return os << "IdentityEnclosureRecombiner"; }
 };
 
+/** @brief Inspect a complete real-evolver frontier run without changing the scheduler. */
+struct FrontierIntegrationAudit {
+    std::size_t selection_checks = 0u;
+    std::size_t selected_groups = 0u;
+    std::size_t numerical_calls = 0u;
+    std::size_t replacement_trajectories = 0u;
+    std::size_t retired_checkpoints = 0u;
+    std::size_t processed_checkpoints = 0u;
+    std::size_t pending_checkpoints = 0u;
+    std::size_t split_successors = 0u;
+    std::size_t transition_successors = 0u;
+    bool valid_provenance = true;
+    bool all_trajectories_complete = true;
+};
+
+/** @brief Bound test-only recombination to one compatible window.
+ *  @details This prevents a merged wide enclosure from immediately being
+ *  recombined again if the physical evolver decides to subdivide it.
+ */
+class SingleWindowFrontierPolicy final : public HybridFrontierRecombinationPolicy {
+    std::shared_ptr<FrontierIntegrationAudit> _audit;
+    FrontierWindowRecombinationPolicy _window;
+    bool _require_evolved_checkpoint;
+    mutable bool _selected = false;
+
+  public:
+    explicit SingleWindowFrontierPolicy(std::shared_ptr<FrontierIntegrationAudit> audit,
+                                        bool require_evolved_checkpoint = false)
+        : _audit(std::move(audit)), _window(2u, 0.5),
+          _require_evolved_checkpoint(require_evolved_checkpoint) {}
+
+    SingleWindowFrontierPolicy* clone() const override {
+        return new SingleWindowFrontierPolicy(*this);
+    }
+
+    std::vector<std::vector<CheckpointId>> select(
+        const HybridEvolutionTree& tree, const std::vector<CheckpointId>& pending) const override {
+        ++_audit->selection_checks;
+        if (_selected)
+            return {};
+        std::vector<CheckpointId> eligible;
+        for (const auto checkpoint: pending)
+            if (!_require_evolved_checkpoint || checkpoint.entry > 0u)
+                eligible.push_back(checkpoint);
+        const auto groups = _window.select(tree, eligible);
+        if (groups.empty())
+            return {};
+        _selected = true;
+        ++_audit->selected_groups;
+        return {groups.front()};
+    }
+
+    bool enables_recombination() const override { return true; }
+};
+
+/** @brief Count actual numerical invocations while using the production algorithm. */
+class ObservedReferenceEnclosureRecombiner final : public EnclosureRecombinerInterface {
+    std::shared_ptr<FrontierIntegrationAudit> _audit;
+
+  public:
+    explicit ObservedReferenceEnclosureRecombiner(std::shared_ptr<FrontierIntegrationAudit> audit)
+        : _audit(std::move(audit)) {}
+    ObservedReferenceEnclosureRecombiner* clone() const override {
+        return new ObservedReferenceEnclosureRecombiner(*this);
+    }
+    EnclosureRecombinationResult recombine(
+        const List<Enclosure>& sources, const EnclosureRecombinationContext& context) const override {
+        ++_audit->numerical_calls;
+        return ReferenceEnclosureRecombiner().recombine(sources, context);
+    }
+    OutputStream& _write(OutputStream& os) const override {
+        return os << "ObservedReferenceEnclosureRecombiner";
+    }
+};
+
+/** @brief Expose a read-only genealogical audit through an evolver backend factory. */
+class AuditedFrontierBackend final : public HybridEvolutionBackendInterface {
+    TreeHybridEvolutionBackend _backend;
+    std::shared_ptr<FrontierIntegrationAudit> _audit;
+
+  public:
+    AuditedFrontierBackend(const HybridEnclosure& initial,
+                           const HybridFrontierRecombinationPolicy& grouping,
+                           const EnclosureRecombinationContext& context,
+                           std::shared_ptr<FrontierIntegrationAudit> audit)
+        : _backend(initial, grouping, AfterEachStepRecombinationTriggerPolicy{},
+                   ObservedReferenceEnclosureRecombiner(audit), context),
+          _audit(std::move(audit)) {}
+
+    Void set_semantics(Semantics semantics) override { _backend.set_semantics(semantics); }
+    Void run(const StepFunction& step) override { _backend.run(step); }
+
+    Orbit<HybridEnclosure> release_orbit() override {
+        auto orbit = _backend.release_orbit();
+        const auto& tree = _backend.tree();
+        const auto root = tree.root().value();
+        std::vector<HybridEvolutionTree::NodeId> nodes{root};
+        const auto descendants = tree.descendants(root);
+        nodes.insert(nodes.end(), descendants.begin(), descendants.end());
+        for (const auto node: nodes) {
+            const auto& trajectory = tree.object(node);
+            const auto& metadata = tree.metadata(node);
+            _audit->all_trajectories_complete =
+                _audit->all_trajectories_complete && static_cast<bool>(metadata.complete);
+            for (std::size_t entry = 0u; entry != trajectory.entries.size(); ++entry) {
+                const bool retired = std::find(trajectory.retired_entries.begin(),
+                                               trajectory.retired_entries.end(), entry) !=
+                                     trajectory.retired_entries.end();
+                if (retired)
+                    ++_audit->retired_checkpoints;
+                else if (trajectory.entries[entry].result)
+                    ++_audit->processed_checkpoints;
+                else
+                    ++_audit->pending_checkpoints;
+                if (trajectory.entries[entry].result) {
+                    for (const auto& successor: trajectory.entries[entry].result->successors) {
+                        if (successor.kind == HybridEvolutionSuccessorKind::SUBDIVISION)
+                            ++_audit->split_successors;
+                        if (successor.kind == HybridEvolutionSuccessorKind::TRANSITION)
+                            ++_audit->transition_successors;
+                    }
+                }
+            }
+            if (!metadata.recombined_checkpoints.empty()) {
+                ++_audit->replacement_trajectories;
+                for (const auto source: metadata.recombined_checkpoints) {
+                    if (!tree.contains(source.trajectory)) {
+                        _audit->valid_provenance = false;
+                        continue;
+                    }
+                    const auto& original = tree.object(source.trajectory);
+                    if (source.entry >= original.entries.size() ||
+                        original.entries[source.entry].result ||
+                        std::find(original.retired_entries.begin(), original.retired_entries.end(),
+                                  source.entry) == original.retired_entries.end())
+                        _audit->valid_provenance = false;
+                }
+            }
+        }
+        return orbit;
+    }
+};
+
+class AuditedFrontierBackendFactory final : public HybridEvolutionBackendFactoryInterface {
+    std::shared_ptr<const HybridFrontierRecombinationPolicy> _grouping;
+    EnclosureRecombinationContext _context;
+    std::shared_ptr<FrontierIntegrationAudit> _audit;
+
+  public:
+    AuditedFrontierBackendFactory(const HybridFrontierRecombinationPolicy& grouping,
+                                  const EnclosureRecombinationContext& context,
+                                  std::shared_ptr<FrontierIntegrationAudit> audit)
+        : _grouping(grouping.clone()), _context(context), _audit(std::move(audit)) {}
+    AuditedFrontierBackendFactory* clone() const override {
+        return new AuditedFrontierBackendFactory(*this);
+    }
+    std::unique_ptr<HybridEvolutionBackendInterface> create(
+        const HybridEnclosure& initial, const Real&) const override {
+        return std::make_unique<AuditedFrontierBackend>(initial, *_grouping, _context, _audit);
+    }
+};
+
 class ConcurrencyScope {
     std::size_t _previous = ThreadManager::instance().concurrency();
 
@@ -212,6 +374,127 @@ class TestHybridEvolutionTree : public Testing::ContextFixture {
         for (auto semantics: {Semantics::UPPER, Semantics::LOWER})
             compare_flat_and_frontier_orbits(
                 constrained, restricted, HybridTime(0.03125_x, 1), semantics);
+    }
+
+
+    void test_real_frontier_recombination_after_continuous_subdivision() {
+        ConcurrencyScope concurrency;
+        DiscreteLocation q(1);
+        RealVariable x("x"), y("y");
+        HybridAutomaton system;
+        system.new_mode(q, {dot(x) = 1, dot(y) = 0});
+        GeneralHybridEvolver evolver(system);
+        evolver.configuration().set_enable_subdivisions(true);
+        evolver.configuration().set_maximum_enclosure_radius(0.25_x);
+        evolver.configuration().set_maximum_step_size(0.25_x);
+        const auto initial = evolver.enclosure(HybridExactBox(
+            q, RealSpace({x, y}), ExactBoxType({{-1, 1}, {0, 0}})));
+
+        auto audit = std::make_shared<FrontierIntegrationAudit>();
+        const SingleWindowFrontierPolicy grouping(audit);
+        evolver.set_evolution_backend_factory(
+            AuditedFrontierBackendFactory(grouping, {}, audit));
+        const auto orbit = evolver.orbit(initial, HybridTime(0.03125_x, 0), Semantics::UPPER);
+
+        // A real numerical split must have produced a compatible candidate,
+        // the production recombiner must have been invoked, and original work
+        // must have been replaced without erasing processed contributions.
+        ARIADNE_TESTING_PROVE(audit->split_successors >= 2u);
+        ARIADNE_TESTING_EXPECT_EQUAL(audit->selected_groups, 1u);
+        ARIADNE_TESTING_EXPECT_EQUAL(audit->numerical_calls, 1u);
+        ARIADNE_TESTING_PROVE(audit->replacement_trajectories >= 1u);
+        ARIADNE_TESTING_PROVE(audit->retired_checkpoints >= 2u);
+        ARIADNE_TESTING_PROVE(audit->processed_checkpoints > 0u);
+        ARIADNE_TESTING_EXPECT_EQUAL(audit->pending_checkpoints, 0u);
+        ARIADNE_TESTING_PROVE(audit->all_trajectories_complete);
+        ARIADNE_TESTING_PROVE(audit->valid_provenance);
+        ARIADNE_TESTING_PROVE(orbit.final().size() > 0u);
+    }
+
+    void test_real_frontier_recombination_radius_rejection_preserves_work() {
+        ConcurrencyScope concurrency;
+        DiscreteLocation q(1);
+        RealVariable x("x"), y("y");
+        HybridAutomaton system;
+        system.new_mode(q, {dot(x) = 1, dot(y) = 0});
+        GeneralHybridEvolver evolver(system);
+        evolver.configuration().set_enable_subdivisions(true);
+        evolver.configuration().set_maximum_enclosure_radius(0.25_x);
+        evolver.configuration().set_maximum_step_size(0.25_x);
+        const auto initial = evolver.enclosure(HybridExactBox(
+            q, RealSpace({x, y}), ExactBoxType({{-1, 1}, {0, 0}})));
+
+        evolver.set_evolution_backend_factory(
+            TreeHybridEvolutionBackendFactory(NoFrontierRecombinationPolicy{}));
+        const auto baseline = evolver.orbit(initial, HybridTime(0.03125_x, 0), Semantics::UPPER);
+
+        auto audit = std::make_shared<FrontierIntegrationAudit>();
+        const SingleWindowFrontierPolicy grouping(audit);
+        evolver.set_evolution_backend_factory(AuditedFrontierBackendFactory(
+            grouping, EnclosureRecombinationContext(0.0_x), audit));
+        const auto actual = evolver.orbit(initial, HybridTime(0.03125_x, 0), Semantics::UPPER);
+
+        ARIADNE_TESTING_PROVE(audit->split_successors >= 2u);
+        ARIADNE_TESTING_EXPECT_EQUAL(audit->selected_groups, 1u);
+        ARIADNE_TESTING_EXPECT_EQUAL(audit->numerical_calls, 1u);
+        ARIADNE_TESTING_EXPECT_EQUAL(audit->replacement_trajectories, 0u);
+        ARIADNE_TESTING_EXPECT_EQUAL(audit->retired_checkpoints, 0u);
+        ARIADNE_TESTING_EXPECT_EQUAL(audit->pending_checkpoints, 0u);
+        ARIADNE_TESTING_PROVE(audit->all_trajectories_complete);
+        ARIADNE_TESTING_EXPECT_EQUAL(actual.reach().size(), baseline.reach().size());
+        ARIADNE_TESTING_EXPECT_EQUAL(actual.intermediate().size(), baseline.intermediate().size());
+        ARIADNE_TESTING_EXPECT_EQUAL(actual.final().size(), baseline.final().size());
+        ARIADNE_TESTING_PROVE(descriptions(actual.reach()) == descriptions(baseline.reach()));
+        ARIADNE_TESTING_PROVE(descriptions(actual.intermediate()) == descriptions(baseline.intermediate()));
+        ARIADNE_TESTING_PROVE(descriptions(actual.final()) == descriptions(baseline.final()));
+    }
+
+    void test_real_frontier_enabled_across_urgent_and_permissive_resets() {
+        ConcurrencyScope concurrency;
+        for (auto event_kind: {EventKind::URGENT, EventKind::PERMISSIVE}) {
+            DiscreteLocation source(1), target(2);
+            RealVariable x("x"), y("y");
+            DiscreteEvent jump("jump");
+            HybridAutomaton system;
+            system.new_mode(source, {dot(x) = 1, dot(y) = 0});
+            system.new_mode(target, {dot(x) = 0, dot(y) = 0});
+            system.new_transition(source, jump, target,
+                                  {next(x) = x, next(y) = y}, x >= 0, event_kind);
+            GeneralHybridEvolver evolver(system);
+            // The wide crossing interval is visited over several continuous
+            // steps before every piece can reach the guard.
+            evolver.configuration().set_maximum_step_size(0.125_x);
+            const auto initial = evolver.enclosure(HybridExactBox(
+                source, RealSpace({x, y}),
+                ExactBoxType({{-1, -0.75_x}, {0, 0}})));
+
+            auto audit = std::make_shared<FrontierIntegrationAudit>();
+            const SingleWindowFrontierPolicy grouping(audit);
+            evolver.set_evolution_backend_factory(
+                AuditedFrontierBackendFactory(grouping, {}, audit));
+            const auto orbit = evolver.orbit(initial, HybridTime(2, 1), Semantics::UPPER);
+            ARIADNE_TESTING_PROVE(audit->processed_checkpoints > 1u);
+            ARIADNE_TESTING_PROVE(audit->transition_successors > 0u);
+            ARIADNE_TESTING_PROVE(audit->all_trajectories_complete);
+            ARIADNE_TESTING_PROVE(audit->valid_provenance);
+            ARIADNE_TESTING_EXPECT_EQUAL(audit->pending_checkpoints, 0u);
+            std::size_t target_final = 0u;
+            std::size_t source_final = 0u;
+            for (const auto& final: orbit.final()) {
+                if (final.location() == target) {
+                    ++target_final;
+                    ARIADNE_TESTING_PROVE(!final.previous_events().empty());
+                    ARIADNE_TESTING_EXPECT_EQUAL(final.previous_events().back(), jump);
+                } else {
+                    ARIADNE_TESTING_EXPECT_EQUAL(final.location(), source);
+                    ++source_final;
+                    ARIADNE_TESTING_PROVE(final.previous_events().empty());
+                }
+            }
+            ARIADNE_TESTING_PROVE(target_final > 0u);
+            if (event_kind == EventKind::PERMISSIVE)
+                ARIADNE_TESTING_PROVE(source_final > 0u);
+        }
     }
 
     void test_parent_finishes_before_distinct_derived_trajectories() {
@@ -718,6 +1001,9 @@ int main(int argc, char** argv) {
     ARIADNE_TESTING_ADD_TEST(TestHybridEvolutionTree, test_frontier_recombines_cross_trajectory_transitions);
     ARIADNE_TESTING_ADD_TEST(TestHybridEvolutionTree, test_flat_and_frontier_orbits_match_on_real_hybrid_transitions);
     ARIADNE_TESTING_ADD_TEST(TestHybridEvolutionTree, test_flat_and_frontier_orbits_match_on_real_splitting_and_invariants);
+    ARIADNE_TESTING_ADD_TEST(TestHybridEvolutionTree, test_real_frontier_recombination_after_continuous_subdivision);
+    ARIADNE_TESTING_ADD_TEST(TestHybridEvolutionTree, test_real_frontier_recombination_radius_rejection_preserves_work);
+    ARIADNE_TESTING_ADD_TEST(TestHybridEvolutionTree, test_real_frontier_enabled_across_urgent_and_permissive_resets);
     ARIADNE_TESTING_ADD_TEST(TestHybridEvolutionTree, test_split_pieces_are_parallel_and_completion_waits_for_all_of_them);
     ARIADNE_TESTING_ADD_TEST(TestHybridEvolutionTree, test_failure_preserves_incomplete_history_without_dispatching_children);
     ARIADNE_TESTING_ADD_TEST(TestHybridEvolutionTree, test_flat_and_tree_orbits_match_for_urgent_and_permissive_systems);

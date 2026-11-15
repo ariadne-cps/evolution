@@ -1103,3 +1103,45 @@ backend.
 
 During review, the frontier runner was corrected not to retain a reference
 to a node's metadata across calls that can grow the derivation tree.
+
+### End-to-end frontier recombination integration tests (2026-11-15)
+
+The numerical covering guarantee is established by the
+`EnclosureRecombinerInterface` contract and its dedicated tests. The
+frontier integration tests deliberately focus instead on **scheduler
+correctness while actual evolution and recombination are enabled**.
+
+A test-only backend wrapper audits the completed trajectory tree during
+`release_orbit()`, preserving the production `TreeHybridEvolutionBackend`
+and `ReferenceEnclosureRecombiner`. The audit counts processed/retired/
+outstanding checkpoints, generated splitting/transition successors, accepted
+replacement trajectories and exact entry-level source provenance.
+
+The integration matrix now contains:
+
+1. **Numerically generated continuous splitting:** run a genuine
+   `GeneralHybridEvolver` with subdivision enabled and one bounded
+   reference recombination. Require an actual numerical invocation, at least
+   one replacement trajectory, source retirements, complete genealogy and
+   no outstanding work after Orbit release.
+2. **Radius-based rejection:** use the identical real system and candidate
+   policy but request zero output radius. Require the numerical attempt to
+   occur, no source retirement or replacement, and exactly equal classified
+   Orbit collections compared to the no-recombination frontier.
+3. **Hybrid urgent/permissive crossings:** use a real two-mode automaton with
+   multiple continuous steps and explicit guard/reset while recombination
+   remains enabled. Require event successors, completed frontier work and
+   valid target-event history; permissive transitions additionally retain
+   a non-jumping source possibility. This test does **not** presume that every
+   crossing yields compatible simultaneous checkpoints or forces a merge.
+
+For deterministic test bounds the first-compatible-window grouping fixture
+permits a **single** numerical proposal; this avoids a misleading resplit/
+recombine oscillation when reconstituting an enclosure wider than the
+evolver's configured subdivision radius. Production grouping policies and
+the reference recombiner are not modified by the test fixture.
+
+Tests of numerical set inclusion are intentionally not duplicated here;
+the scheduler's required behaviors are work conservation, phase/event
+compatibility, genealogy, dispatch and preservation of previously computed
+contributions.

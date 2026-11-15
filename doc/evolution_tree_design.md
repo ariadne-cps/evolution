@@ -1238,3 +1238,53 @@ radius-trend policy independently accepts a nonexpansive continuation
 and rejects an uneconomical same-source-radius merge. Actual numerical
 `GeneralHybridEvolver` post-reset and continuous-subdivision scenarios
 remain covered by the earlier integration tests.
+
+
+### Exhaustive compatible-sibling grouping without a recombination radius cap (2026-11-15)
+
+For applications that **initially subdivide by**
+`maximum_enclosure_radius`, then finish the source trajectory before
+processing discrete successors, the parent-first tree backend offers the
+opt-in `AllCompatibleSiblingRecombinationSchedulingPolicy`.
+
+This policy takes every **unprocessed, direct discrete child of one
+completed parent** and partitions those children by the existing strict
+discrete compatibility predicate. It does not require adjacency in the
+genealogy, cap the number of sources, or impose a birth-time window.
+Each compatibility class with at least two members is passed **once**
+to the numerical `ReferenceEnclosureRecombiner`; each singleton is
+dispatched unchanged. Different transition events or kinds, destination
+locations, phase, event histories, state/auxiliary spaces and auxiliary
+mappings are never mixed.
+
+To allow the numerical evolver to split the covering result again, **do
+not specify an `EnclosureRecombinationContext` radius limit**. The
+usual `evolver.configuration().set_maximum_enclosure_radius(12.0)`
+and `set_enable_subdivisions(true)` still control splitting at
+the beginning of each subsequent continuous evolution step. Merging
+may therefore produce a larger enclosure; it is not guaranteed to
+improve performance, and re-splitting may erase the reduction.
+
+For the parent-first hybrid case, including SPRE22:
+
+```cpp
+evolver.configuration().set_maximum_enclosure_radius(12.0);
+evolver.configuration().set_enable_subdivisions(true);
+evolver.set_evolution_backend_factory(TreeHybridEvolutionBackendFactory(
+    AllCompatibleSiblingRecombinationSchedulingPolicy{},
+    OnParentCompletionRecombinationTriggerPolicy{}));
+```
+
+Parent completion is **not a general location-wide barrier**: this
+configuration handles all compatible direct children of each completed
+parent trajectory and only then dispatches those children. It does not
+merge checkpoint descendants that are not siblings or wait for every
+trajectory in a location across unrelated parents. It operates only with
+`Semantics::UPPER` when recombination is enabled.
+
+The regression suite checks (1) a three-child group and a two-child
+group interleaved with an incompatible singleton, including exact
+source provenance and unchanged singleton execution, and (2) a
+three-to-one recombination followed by splitting its replacement into
+two ordinary continuation pieces. The numeric covering algorithm
+and global flat default are unchanged.

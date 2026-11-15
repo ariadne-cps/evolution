@@ -363,6 +363,39 @@ SiblingWindowRecombinationSchedulingPolicy::select(const HybridEvolutionTree& tr
 }
 
 
+AllCompatibleSiblingRecombinationSchedulingPolicy*
+AllCompatibleSiblingRecombinationSchedulingPolicy::clone() const {
+    return new AllCompatibleSiblingRecombinationSchedulingPolicy(*this);
+}
+
+std::vector<std::vector<HybridEvolutionTree::NodeId>>
+AllCompatibleSiblingRecombinationSchedulingPolicy::select(
+    const HybridEvolutionTree& tree, NodeId parent) const {
+    std::vector<std::vector<NodeId>> groups;
+    for (const auto child: tree.children(parent)) {
+        const auto& metadata = tree.metadata(child);
+        if (metadata.retired_for_recombination || metadata.complete || !metadata.origin ||
+            tree.object(child).entries.size() != 1u ||
+            tree.object(child).entries.front().result)
+            continue;
+
+        bool grouped = false;
+        for (auto& group: groups) {
+            if (compatible_recombination_children(tree, parent, group.front(), child)) {
+                group.push_back(child);
+                grouped = true;
+                break;
+            }
+        }
+        if (!grouped)
+            groups.push_back({child});
+    }
+    groups.erase(std::remove_if(groups.begin(), groups.end(),
+                                [](const auto& group) { return group.size() < 2u; }),
+                 groups.end());
+    return groups;
+}
+
 /** @brief Run state, kept out of the installed backend class's representation. */
 class TreeHybridEvolutionBackend::Impl {
   public:

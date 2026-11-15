@@ -179,6 +179,24 @@ class SiblingWindowRecombinationSchedulingPolicy final : public HybridRecombinat
     bool enables_recombination() const override { return true; }
 };
 
+/** @brief Recombine every compatible unevolved discrete child of a completed parent.
+ *  @details Grouping ignores sibling adjacency, group cardinality, birth-time
+ *  spread and output radius. Distinct events, event kinds, target locations,
+ *  processing phases, previous-event histories and auxiliary mappings are
+ *  never put in the same group. Each compatibility class with at least two
+ *  children is passed to the numerical recombiner as a single group.
+ *  Use with OnParentCompletionRecombinationTriggerPolicy to defer all
+ *  recombination until the parent has finished evolving.
+ *  After a successful merge, the regular evolver may immediately subdivide
+ *  a large replacement according to maximum_enclosure_radius.
+ */
+class AllCompatibleSiblingRecombinationSchedulingPolicy final : public HybridRecombinationSchedulingPolicy {
+  public:
+    AllCompatibleSiblingRecombinationSchedulingPolicy* clone() const override;
+    std::vector<std::vector<NodeId>> select(const HybridEvolutionTree& tree, NodeId parent) const override;
+    bool enables_recombination() const override { return true; }
+};
+
 /** @brief Select arbitrary compatible, unevolved checkpoints from the global frontier.
  *  @details The policy sees all queued checkpoints, not merely siblings; each
  *  selected checkpoint must be present, unprocessed and unique. The backend

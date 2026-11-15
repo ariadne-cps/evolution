@@ -31,19 +31,43 @@
 #include "ariadne-testing.hpp"
 #include "logging/logging.hpp"
 
-/** @brief Redirect Ariadne Logger diagnostics independently of the test reporter.
- *  @details Logger output goes to the platform's null device on every test
- *  execution, just as in constraint-solving. Do not change logger verbosity:
- *  the same logging expressions are evaluated, including dedicated verbose
- *  fixture variants, so coverage is preserved. --concise and --full still
- *  control only Ariadne Testing's console reporter.
+/** @brief Discard logger output while preserving log expression evaluation.
+ *  @details The nonblocking scheduler can leave a large diagnostic queue to
+ *  drain when the test runner has already printed its final summary. The
+ *  blocking scheduler handles messages when they are emitted, avoiding
+ *  lengthy asynchronous shutdown. No verbosity or mute level is changed.
+ *  The console reporter's --concise option is independent of this policy.
  */
+class ScopedEvolutionTestLogging {
+  public:
+    ScopedEvolutionTestLogging() {
+        auto& logger = Ariadne::Logger::instance();
+        // The test has not yet started; switching here cannot interfere with
+        // a running diagnostic fixture. It drains any startup queue.
+        logger.use_blocking_scheduler();
+#ifdef _WIN32
+        logger.redirect_to_file("NUL");
+#else
+        logger.redirect_to_file("/dev/null");
+#endif
+        // The sink discards text: terminal-dependent line wrapping adds
+        // work without observable output. LOGGING_* expressions still run.
+        logger.configuration().set_handles_multiline_output(false);
+    }
+
+    ~ScopedEvolutionTestLogging() {
+        // std::clog must no longer reference Logger's owned file buffer
+        // when the test process reaches static destruction.
+        Ariadne::Logger::instance().redirect_to_console();
+    }
+
+    ScopedEvolutionTestLogging(const ScopedEvolutionTestLogging&) = delete;
+    ScopedEvolutionTestLogging& operator=(const ScopedEvolutionTestLogging&) = delete;
+};
+
+/** @brief Execute the complete suite with synchronous discarded log output. */
 template<class Argv>
 int run_evolution_test_suite(const Ariadne::Testing::Suite& suite, int argc, Argv argv) {
-#ifdef _WIN32
-    Ariadne::Logger::instance().redirect_to_file("NUL");
-#else
-    Ariadne::Logger::instance().redirect_to_file("/dev/null");
-#endif
+    ScopedEvolutionTestLogging logging;
     return Ariadne::Testing::run_suite(suite, argc, argv);
 }

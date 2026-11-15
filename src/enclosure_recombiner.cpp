@@ -75,16 +75,16 @@ UpperBoxType constrained_image_bounds(const Enclosure& source,
     const auto parameter_domain = source.reduced_domain();
     UpperBoxType bounds = [&] {
         ScopedRecombinationTimer timer(profile ? &profile->image_bounds_ns : nullptr);
-        UpperBoxType bounds = apply(image, parameter_domain);
+        UpperBoxType image_bounds = apply(image, parameter_domain);
         // A source predicate g in C also bounds any image f by C+range(f-g).
         // In particular, this retains equalities shared with the reference even
         // when an oblique constraint cannot contract the parameter box itself.
         for (SizeType k = 0; k != image.result_size(); ++k) {
             for (const auto& constraint: source.constraint_models()) {
-                bounds[k] = intersection(bounds[k], UpperIntervalType(constraint.bounds()) + apply(image.get(k) - constraint.function(), parameter_domain));
+                image_bounds[k] = intersection(image_bounds[k], UpperIntervalType(constraint.bounds()) + apply(image.get(k) - constraint.function(), parameter_domain));
             }
         }
-        return bounds;
+        return image_bounds;
     }();
     if (definitely(bounds.is_empty()))
         return bounds;
@@ -266,12 +266,12 @@ EnclosureRecombinationResult ReferenceEnclosureRecombiner::recombine(const List<
         const auto image = [&] {
             ScopedRecombinationTimer timer(profile ? &profile->image_setup_ns : nullptr);
             const auto source_map = join(join(source.state_function(), source.time_function()), source.dwell_time_function());
-            auto image = factory.create_zeros(component_count + constraint_count, common_domain);
+            auto residual_image = factory.create_zeros(component_count + constraint_count, common_domain);
             for (SizeType k = 0; k != component_count; ++k)
-                image.set(k, index == 0u ? factory.create_zero(common_domain) : source_map.get(k) - reference_map.get(k));
+                residual_image.set(k, index == 0u ? factory.create_zero(common_domain) : source_map.get(k) - reference_map.get(k));
             for (SizeType k = 0; k != constraint_count; ++k)
-                image.set(component_count + k, result.constraint(k).function());
-            return image;
+                residual_image.set(component_count + k, result.constraint(k).function());
+            return residual_image;
         }();
         const auto bounds = constrained_image_bounds(source, image, profile);
         if (definitely(bounds.is_empty()))

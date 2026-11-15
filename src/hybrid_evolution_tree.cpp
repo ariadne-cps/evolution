@@ -37,6 +37,7 @@
 
 #include "evolution/enclosure_recombiner.hpp"
 #include "function/formula.hpp"
+#include "function/formula.tpl.hpp"
 
 namespace Ariadne {
 

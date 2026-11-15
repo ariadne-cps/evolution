@@ -1007,3 +1007,72 @@ tree backend are unaffected. The current policy intentionally does not
 recombine non-siblings or already-evolved descendants, and it does not yet
 consider output radius or measured continuation cost when deciding whether a
 sound replacement is profitable.
+
+
+### Global checkpoint frontier for continuous and discrete recombination (2026-11-15)
+
+The trajectory tree is the **append-only genealogy**, not the unit of
+scheduling or the sole source of recombination candidates. An opt-in
+`TreeHybridEvolutionBackendFactory(FrontierWindowRecombinationPolicy(...))`
+constructs a globally interleaved checkpoint frontier while preserving the
+existing parent-first constructor, tests and no-op defaults.
+
+A checkpoint has a stable `HybridEvolutionCheckpointId{trajectory, entry}`.
+Under frontier scheduling, **subdivision creates separate child trajectories**,
+and continuous continuations/reconditioning append checkpoints to the same
+trajectory. All new pending checkpoints go into a single serial FIFO ready
+queue, so split branches can evolve independently and later become candidates
+for recombination. Permissive/urgent post-reset checkpoints enter the same
+frontier, with their originating source entry and transition evidence retained
+in the history. This mode is deliberately serial and does not add concurrent
+tree mutation.
+
+The frontier grouping policy is independent of the existing sibling policy:
+`NoFrontierRecombinationPolicy` never recombines, and
+`FrontierWindowRecombinationPolicy(max_group_size, max_time_spread)` greedily
+selects compatible pending checkpoints **across trajectories and ancestors**.
+It is not limited to siblings or to checkpoints at a parent's completion. The
+backend rechecks membership and disjoint selection, physical location, state
+and auxiliary spaces, event history, processing phase, symbolic auxiliary
+mapping, and overlapping current time ranges before calling the configured
+`EnclosureRecombinerInterface`. The window policy further limits the overall
+time span. This is a conservative compatibility filter, not a claim that any
+two checkpoints whose physical ranges overlap ought to be merged.
+
+The existing trigger choices apply to the global frontier: per-step, every N
+globally completed steps, or when a trajectory's local pending work completes.
+Every N steps also checks remaining sources at completion boundaries. Timing,
+group selection, numerical algorithm, and numerical radius context remain
+separately configurable. The reference recombiner constructs a validated outer
+covering in UPPER semantics; LOWER semantics is rejected if grouping is enabled.
+A user-defined grouping policy may incorporate local contractivity estimates,
+radius growth, cost models or waiting criteria without changing the numerical
+recombination algorithm.
+
+After a successful covering recombination, the original pending entries are
+marked as retired, **not deleted**; all already processed results remain
+untouched. Replacement trajectories are placed under the nearest common
+ancestor of their sources and record exact entry-level provenance in
+`recombined_checkpoints`. A replacement can itself become a future input.
+The `Orbit` projection ignores unprocessed retired entries, while retaining
+all successfully processed historical contributions. If the recombiner cannot
+provide complete source provenance, satisfy radius constraints or reduce the
+pending count, all source checkpoints remain independently runnable.
+
+Example opt-in continuous/discrete frontier scheduler:
+
+```cpp
+evolver.set_evolution_backend_factory(TreeHybridEvolutionBackendFactory(
+    FrontierWindowRecombinationPolicy(8u, 0.125),
+    AfterEachStepRecombinationTriggerPolicy{}));
+```
+
+This change **does not** guarantee that a suitable checkpoint pair is
+available at a particular moment: time synchronization and FIFO work ordering
+affect when compatible pending sources coexist. It also does not yet implement
+a specialized contractivity estimator or delayed-dispatch control; those are
+possible future grouping/scheduling strategies. Synthetic regressions cover
+continuous recombination *after* independent split-branch steps, both
+permissive and urgent post-reset merging across separate trajectories, and
+no-op frontier execution. Provenance and upper-only gating are checked.
+

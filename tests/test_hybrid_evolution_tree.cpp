@@ -373,6 +373,115 @@ class TestHybridEvolutionTree : public Testing::ContextFixture {
         ARIADNE_TESTING_EXPECT_EQUAL(second->release_orbit().final().size(), 2u);
     }
 
+    void test_frontier_recombines_continuous_split_branches_after_evolution() {
+        const auto initial = seed();
+        const auto advance = [&](const HybridEvolutionWorkItem& item, const HybridEvolutionStatistics&) {
+            HybridEvolutionStepResult result;
+            switch (label(item)) {
+                case 0:
+                    result.continue_with(marked(initial, 10), HybridEvolutionSuccessorKind::SUBDIVISION);
+                    result.continue_with(marked(initial, 20), HybridEvolutionSuccessorKind::SUBDIVISION);
+                    break;
+                case 10:
+                case 20:
+                    result.continue_with(marked(initial, 30));
+                    break;
+                case 30:
+                    result.record_final(item.enclosure);
+                    break;
+                default:
+                    throw std::logic_error("Unexpected frontier checkpoint");
+            }
+            return result;
+        };
+        // The no-op frontier still interleaves numerical pieces without merging.
+        TreeHybridEvolutionBackend baseline(initial, NoFrontierRecombinationPolicy{});
+        std::vector<int> baseline_order;
+        baseline.run([&](const HybridEvolutionWorkItem& work, const HybridEvolutionStatistics& stats) {
+            baseline_order.push_back(label(work));
+            return advance(work, stats);
+        });
+        ARIADNE_TESTING_PROVE(baseline_order == std::vector<int>({0, 10, 20, 30, 30}));
+        ARIADNE_TESTING_EXPECT_EQUAL(baseline.release_orbit().final().size(), 2u);
+
+        // A three-step trigger waits until both split branches have evolved
+        // independently once; neither branch is complete at the merge point.
+        TreeHybridEvolutionBackend merged(
+            initial, FrontierWindowRecombinationPolicy(2u, 0.0),
+            EveryNStepsRecombinationTriggerPolicy(3u));
+        merged.set_semantics(Semantics::UPPER);
+        std::vector<int> merged_order;
+        merged.run([&](const HybridEvolutionWorkItem& work, const HybridEvolutionStatistics& stats) {
+            merged_order.push_back(label(work));
+            return advance(work, stats);
+        });
+        ARIADNE_TESTING_PROVE(merged_order == std::vector<int>({0, 10, 20, 30}));
+        const auto root = merged.tree().root().value();
+        const auto children = merged.tree().children(root);
+        ARIADNE_TESTING_EXPECT_EQUAL(children.size(), 3u);
+        ARIADNE_TESTING_EXPECT_EQUAL(merged.tree().object(children[0]).retired_entries.size(), 1u);
+        ARIADNE_TESTING_EXPECT_EQUAL(merged.tree().object(children[1]).retired_entries.size(), 1u);
+        ARIADNE_TESTING_PROVE(merged.tree().metadata(children[0]).complete);
+        ARIADNE_TESTING_PROVE(merged.tree().metadata(children[1]).complete);
+        const auto& provenance = merged.tree().metadata(children[2]).recombined_checkpoints;
+        ARIADNE_TESTING_EXPECT_EQUAL(provenance.size(), 2u);
+        const HybridEvolutionCheckpointId first_expected{children[0], 1u};
+        const HybridEvolutionCheckpointId second_expected{children[1], 1u};
+        ARIADNE_TESTING_PROVE(provenance[0] == first_expected);
+        ARIADNE_TESTING_PROVE(provenance[1] == second_expected);
+        ARIADNE_TESTING_EXPECT_EQUAL(merged.release_orbit().final().size(), 1u);
+    }
+
+    void test_frontier_recombines_cross_trajectory_transitions() {
+        const auto initial = seed();
+        const DiscreteEvent jump("jump");
+        for (auto event_kind: {EventKind::PERMISSIVE, EventKind::URGENT}) {
+            const auto advance = [&](const HybridEvolutionWorkItem& item, const HybridEvolutionStatistics&) {
+                HybridEvolutionStepResult result;
+                switch (label(item)) {
+                    case 0:
+                        result.continue_with(marked(initial, 10), HybridEvolutionSuccessorKind::SUBDIVISION);
+                        result.continue_with(marked(initial, 20), HybridEvolutionSuccessorKind::SUBDIVISION);
+                        break;
+                    case 10:
+                    case 20:
+                        result.transition_to(marked(initial, 100), jump, event_kind);
+                        break;
+                    case 100:
+                        result.record_final(item.enclosure);
+                        break;
+                    default:
+                        throw std::logic_error("Unexpected transition checkpoint");
+                }
+                return result;
+            };
+            TreeHybridEvolutionBackend baseline(initial, NoFrontierRecombinationPolicy{});
+            baseline.run(advance);
+            ARIADNE_TESTING_EXPECT_EQUAL(baseline.release_orbit().final().size(), 2u);
+
+            TreeHybridEvolutionBackend merged(
+                initial, FrontierWindowRecombinationPolicy(2u, 0.0),
+                EveryNStepsRecombinationTriggerPolicy(3u));
+            merged.set_semantics(Semantics::UPPER);
+            merged.run(advance);
+            const auto root = merged.tree().root().value();
+            const auto children = merged.tree().children(root);
+            ARIADNE_TESTING_EXPECT_EQUAL(children.size(), 3u);
+            const auto& sources = merged.tree().metadata(children[2]).recombined_checkpoints;
+            ARIADNE_TESTING_EXPECT_EQUAL(sources.size(), 2u);
+            ARIADNE_TESTING_PROVE(merged.tree().parent(sources[0].trajectory) == children[0]);
+            ARIADNE_TESTING_PROVE(merged.tree().parent(sources[1].trajectory) == children[1]);
+            ARIADNE_TESTING_EXPECT_EQUAL(merged.release_orbit().final().size(), 1u);
+        }
+        ARIADNE_TESTING_EXPECT_EXCEPTION(FrontierWindowRecombinationPolicy(1u, 0.125));
+        ARIADNE_TESTING_EXPECT_EXCEPTION(FrontierWindowRecombinationPolicy(2u, -1.0));
+        TreeHybridEvolutionBackend lower(initial, FrontierWindowRecombinationPolicy{});
+        lower.set_semantics(Semantics::LOWER);
+        ARIADNE_TESTING_EXPECT_EXCEPTION(lower.run([](const HybridEvolutionWorkItem&, const HybridEvolutionStatistics&) {
+            return HybridEvolutionStepResult{};
+        }));
+    }
+
     void test_split_pieces_are_parallel_and_completion_waits_for_all_of_them() {
         auto initial = seed();
         TreeHybridEvolutionBackend backend(initial);
@@ -528,6 +637,8 @@ int main(int argc, char** argv) {
     ARIADNE_TESTING_ADD_TEST(TestHybridEvolutionTree, test_recombination_policy_rejects_lower_semantics_and_invalid_settings);
     ARIADNE_TESTING_ADD_TEST(TestHybridEvolutionTree, test_recombination_evaluation_triggers);
     ARIADNE_TESTING_ADD_TEST(TestHybridEvolutionTree, test_numerical_recombination_strategy_is_injected);
+    ARIADNE_TESTING_ADD_TEST(TestHybridEvolutionTree, test_frontier_recombines_continuous_split_branches_after_evolution);
+    ARIADNE_TESTING_ADD_TEST(TestHybridEvolutionTree, test_frontier_recombines_cross_trajectory_transitions);
     ARIADNE_TESTING_ADD_TEST(TestHybridEvolutionTree, test_split_pieces_are_parallel_and_completion_waits_for_all_of_them);
     ARIADNE_TESTING_ADD_TEST(TestHybridEvolutionTree, test_failure_preserves_incomplete_history_without_dispatching_children);
     ARIADNE_TESTING_ADD_TEST(TestHybridEvolutionTree, test_flat_and_tree_orbits_match_for_urgent_and_permissive_systems);

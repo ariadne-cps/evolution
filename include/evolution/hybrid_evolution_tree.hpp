@@ -54,9 +54,19 @@ struct HybridEvolutionEntry {
     std::optional<HybridEvolutionStepResult> result;  //!< Absent until this checkpoint is processed successfully.
 };
 
+/** @brief Stable checkpoint identity: one entry of a genealogy trajectory. */
+struct HybridEvolutionCheckpointId {
+    DerivationTreeNodeId trajectory;
+    std::size_t entry;
+
+    friend bool operator==(const HybridEvolutionCheckpointId&,
+                           const HybridEvolutionCheckpointId&) = default;
+};
+
 /** @brief One trajectory's ordered history; a trajectory is one generic tree node. */
 struct HybridEvolutionTrajectory {
     std::vector<HybridEvolutionEntry> entries; //!< Seed followed by continuations and numerical pieces.
+    std::vector<std::size_t> retired_entries;   //!< Unprocessed checkpoints replaced by certified frontier recombination.
 };
 
 /** @brief Local trajectory completion and provenance of its birth. */
@@ -65,6 +75,9 @@ struct HybridEvolutionTrajectoryMetadata {
     std::optional<HybridEvolutionEntryOrigin> origin; //!< Parent entry/successor producing the seed; absent at the root and at a recombined replacement.
     bool retired_for_recombination = false;            //!< Original child kept as provenance, never dispatched or projected.
     std::vector<DerivationTreeNodeId> recombined_sources; //!< Original sibling IDs represented by a replacement.
+    std::vector<HybridEvolutionCheckpointId> recombined_checkpoints; //!< Exact entry-level provenance of a frontier replacement.
+    std::size_t pending_entries = 0u; //!< Number of still-pending work items in frontier mode.
+    bool whole_trajectory = true; //!< Whole-source urgent continuation eligibility in frontier mode.
 };
 
 /** @brief Generic two-parameter genealogy with Evolution-owned objects and metadata. */
@@ -165,19 +178,62 @@ class SiblingWindowRecombinationSchedulingPolicy final : public HybridRecombinat
     bool enables_recombination() const override { return true; }
 };
 
-/** @brief Serial backend completing a trajectory before scheduling its derived children.
- *  @details Continuous steps, reconditioning and subdivision extend a node's
- *  history. Unresolved/permissive resets create child trajectories. A sole urgent
- *  successor with a whole-source certificate continues an undivided node. Once
- *  subdivision or an urgent derived branch separates portions, subsequent resets
- *  derive children even if the final remaining piece has a coverage certificate. Orbit is
- *  projected from explicit history contributions after successful completion.
- *  The default grouping policy performs no recombination. Independent trigger,
- *  grouping and numerical strategies control when, which and how compatible
- *  unevolved siblings are recombined under upper semantics. Children are not
- *  dispatched until their parent is complete, even with step-wise evaluation.
- *  Original siblings remain as retired provenance, without numerical results.
- *  No history editing or concurrent tree mutation is performed.
+/** @brief Select arbitrary compatible, unevolved checkpoints from the global frontier.
+ *  @details The policy sees all queued checkpoints, not merely siblings; each
+ *  selected checkpoint must be present, unprocessed and unique. The backend
+ *  validates numerical/discrete compatibility independently of the policy.
+ */
+class HybridFrontierRecombinationPolicy {
+  public:
+    using CheckpointId = HybridEvolutionCheckpointId;
+    virtual ~HybridFrontierRecombinationPolicy() = default;
+    /** @brief Clone immutable grouping configuration. */
+    virtual HybridFrontierRecombinationPolicy* clone() const = 0;
+    /** @brief Propose disjoint groups of pending checkpoint identities. */
+    virtual std::vector<std::vector<CheckpointId>> select(
+        const HybridEvolutionTree& history, const std::vector<CheckpointId>& pending) const = 0;
+    /** @brief True when numerical upper-covering recombination may be attempted. */
+    virtual bool enables_recombination() const = 0;
+};
+
+/** @brief Frontier scheduler without numerical recombination. */
+class NoFrontierRecombinationPolicy final : public HybridFrontierRecombinationPolicy {
+  public:
+    NoFrontierRecombinationPolicy* clone() const override;
+    std::vector<std::vector<CheckpointId>> select(
+        const HybridEvolutionTree&, const std::vector<CheckpointId>&) const override;
+    bool enables_recombination() const override { return false; }
+};
+
+/** @brief Greedy global time-window grouping across split branches and reset trajectories.
+ *  @details Enforces a maximum time span and batch size; nonadjacent pending
+ *  checkpoints can be grouped. Backend rechecks compatibility and coverage.
+ *  The default permits only overlapping time intervals (including identical
+ *  point times); no arbitrary time shift is introduced.
+ */
+class FrontierWindowRecombinationPolicy final : public HybridFrontierRecombinationPolicy {
+    std::size_t _max_group_size;
+    double _max_time_spread;
+
+  public:
+    /** @brief Configure number of sources and maximum common time-window span. */
+    explicit FrontierWindowRecombinationPolicy(std::size_t max_group_size = 8u,
+                                               double max_time_spread = 0.125);
+    FrontierWindowRecombinationPolicy* clone() const override;
+    std::vector<std::vector<CheckpointId>> select(
+        const HybridEvolutionTree& history, const std::vector<CheckpointId>& pending) const override;
+    bool enables_recombination() const override { return true; }
+};
+
+/** @brief Serial backend with parent-first and opt-in checkpoint-frontier schedules.
+ *  @details The default/legacy grouping path finishes a parent before its derived
+ *  trajectories and preserves the pre-existing order. The opt-in frontier path
+ *  schedules individual work items across trajectories; subdivision creates
+ *  explicit child trajectories, and completed branches can meet again through
+ *  time-compatible pending checkpoints, including after continuous evolution.
+ *  No processed result is removed or recombined retroactively. Original pending
+ *  work is retired only after certified full coverage of the selected sources.
+ *  Numerical recombination requires upper semantics in both schedules.
  */
 class TreeHybridEvolutionBackend final : public HybridEvolutionBackendInterface {
     class Impl;
@@ -189,6 +245,16 @@ class TreeHybridEvolutionBackend final : public HybridEvolutionBackendInterface 
         const HybridEnclosure& initial,
         const HybridRecombinationSchedulingPolicy& grouping = NoRecombinationSchedulingPolicy{},
         const HybridRecombinationTriggerPolicy& trigger = OnParentCompletionRecombinationTriggerPolicy{},
+        const EnclosureRecombinerInterface& recombiner = ReferenceEnclosureRecombiner{},
+        const EnclosureRecombinationContext& context = {});
+    /** @brief Use a global checkpoint frontier, with configurable time and grouping policies.
+     *  @details Unlike the parent-first constructor, this permits continuous
+     *  branches from earlier subdivisions to be recombined before they terminate.
+     */
+    explicit TreeHybridEvolutionBackend(
+        const HybridEnclosure& initial,
+        const HybridFrontierRecombinationPolicy& grouping,
+        const HybridRecombinationTriggerPolicy& trigger = AfterEachStepRecombinationTriggerPolicy{},
         const EnclosureRecombinerInterface& recombiner = ReferenceEnclosureRecombiner{},
         const EnclosureRecombinationContext& context = {});
     /** @brief Release the owned trajectory history. */
@@ -217,6 +283,7 @@ class TreeHybridEvolutionBackend final : public HybridEvolutionBackendInterface 
  */
 class TreeHybridEvolutionBackendFactory : public HybridEvolutionBackendFactoryInterface {
     std::shared_ptr<const HybridRecombinationSchedulingPolicy> _grouping;
+    std::shared_ptr<const HybridFrontierRecombinationPolicy> _frontier_grouping;
     std::shared_ptr<const HybridRecombinationTriggerPolicy> _trigger;
     std::shared_ptr<const EnclosureRecombinerInterface> _recombiner;
     EnclosureRecombinationContext _context;
@@ -228,6 +295,12 @@ class TreeHybridEvolutionBackendFactory : public HybridEvolutionBackendFactoryIn
     explicit TreeHybridEvolutionBackendFactory(
         const HybridRecombinationSchedulingPolicy& grouping,
         const HybridRecombinationTriggerPolicy& trigger = OnParentCompletionRecombinationTriggerPolicy{},
+        const EnclosureRecombinerInterface& recombiner = ReferenceEnclosureRecombiner{},
+        const EnclosureRecombinationContext& context = {});
+    /** @brief Opt into interleaved checkpoint evolution and cross-trajectory recombination. */
+    explicit TreeHybridEvolutionBackendFactory(
+        const HybridFrontierRecombinationPolicy& grouping,
+        const HybridRecombinationTriggerPolicy& trigger = AfterEachStepRecombinationTriggerPolicy{},
         const EnclosureRecombinerInterface& recombiner = ReferenceEnclosureRecombiner{},
         const EnclosureRecombinationContext& context = {});
     /** @brief Clone the immutable factory settings without copying any run history. */

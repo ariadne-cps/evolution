@@ -963,13 +963,13 @@ int run_sweep(const Scenario (&scenarios)[2], const Options& options,
             const auto groups = !window ? options.groups
                 : !options.distributed_counts.empty() ? options.distributed_counts
                 : std::vector<unsigned>{options.distributed_count.value_or(options.group_size)};
-            for (const auto size: groups) {
+            for (const auto selection_count: groups) {
                 auto configuration = options;
                 configuration.step = step;
-                configuration.group_size = size;
+                configuration.group_size = selection_count;
                 configuration.time_window = window;
                 if (window && !options.distributed_counts.empty())
-                    configuration.distributed_count = size;
+                    configuration.distributed_count = selection_count;
                 for (const auto& scenario: scenarios) {
                     std::cout << "RUN " << scenario.name << " step=" << step;
                     if (window) {
@@ -979,7 +979,7 @@ int run_sweep(const Scenario (&scenarios)[2], const Options& options,
                         else
                             std::cout << " all-sources";
                     } else {
-                        std::cout << " group-size=" << size;
+                        std::cout << " group-size=" << selection_count;
                     }
                     std::cout << " accuracy=" << options.accuracy << std::endl;
                     try {

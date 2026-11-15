@@ -1320,12 +1320,16 @@ only when the logging level enables their messages.
 
 ### Concurrent checkpoint admission and dynamic parent completion barriers (2026-11-15)
 
-The tree backend now uses the shared `DynamicWorkload` engine whenever
-`ThreadManager::instance().concurrency() > 0`. With concurrency zero,
-the original deterministic serial execution is retained, including its
-historical order-dependent tests.
+The tree backend uses **one shared scheduling and publication loop**
+built on `DynamicWorkload`, regardless of the worker count. With
+`ThreadManager::instance().concurrency() == 0`, the workload consumes
+one item at a time using its sequential queue. Positive concurrency permits
+multiple simultaneous consumers, but neither the state machine nor the
+parent-first/frontier policy interpretation changes. The older dedicated
+serial loops `process_trajectory` and `run_frontier` were removed.
+The zero-concurrency regression tests still check deterministic execution.
 
-The concurrent scheduler separates ready work from held work. Every ready
+The unified scheduler separates ready work from held work. Every ready
 checkpoint has a workload token. A worker acquires the scheduling mutex,
 takes one admissible checkpoint and a snapshot of the global counters,
 then performs its numerical evolution **outside the lock**. Its completed
@@ -1368,5 +1372,5 @@ claimed for execution.
 The added concurrent regressions force two independent pieces to execute
 simultaneously. They check both parent-first's last-publisher barrier
 and accepted post-barrier recombination, and frontier's concurrent split
-dispatch with complete final provenance. The global flat backend and the
-zero-concurrency tree execution remain unaffected.
+dispatch with complete final provenance. The global flat backend remains unchanged; tree evolution now follows
+the same implementation with zero, one or several workers.

@@ -509,53 +509,6 @@ class TreeHybridEvolutionBackend::Impl {
         }
     }
 
-    /** @brief Complete all pieces of one trajectory; leave its children unprocessed. */
-    Void process_trajectory(HybridEvolutionTree::NodeId node, const StepFunction& advance) {
-        std::deque<std::size_t> pending{0};
-        Bool whole_trajectory = true;
-        std::size_t completed_steps = 0u;
-        while (!pending.empty()) {
-            const auto entry_index = pending.front();
-            pending.pop_front();
-            auto result = advance(history.object(node).entries.at(entry_index).work, statistics);
-            count(result);
-            for (const auto& successor: result.successors) {
-                if (successor.kind == HybridEvolutionSuccessorKind::SUBDIVISION) {
-                    whole_trajectory = false;
-                }
-            }
-            for (std::size_t ordinal = 0; ordinal != result.successors.size(); ++ordinal) {
-                const auto& successor = result.successors[ordinal];
-                const HybridEvolutionEntryOrigin origin{entry_index, ordinal};
-                if (derives_trajectory(successor, result.successors.size(), whole_trajectory)) {
-                    HybridEvolutionTrajectory child;
-                    child.entries.push_back({successor.work, std::nullopt, std::nullopt});
-                    HybridEvolutionTrajectoryMetadata metadata;
-                    metadata.origin = origin;
-                    history.add_child(node, std::move(child), std::move(metadata));
-                    // After an urgent branch, a later complete crossing concerns
-                    // the remaining piece, not the original undivided trajectory.
-                    if (successor.event_kind != EventKind::PERMISSIVE) {
-                        whole_trajectory = false;
-                    }
-                } else {
-                    auto& entries = history.object(node).entries;
-                    const auto next_index = entries.size();
-                    entries.push_back({successor.work, origin, std::nullopt});
-                    pending.push_back(next_index);
-                }
-            }
-            // Appending continuations can relocate entries: reacquire by index.
-            history.object(node).entries.at(entry_index).result.emplace(std::move(result));
-            ++completed_steps;
-            if (policy->enables_recombination() &&
-                trigger->should_evaluate(history, node, HybridRecombinationEvaluationPoint::AFTER_STEP,
-                                         completed_steps))
-                schedule_recombination(node);
-        }
-        history.metadata(node).complete = true;
-    }
-
     /** @brief Replace accepted sibling groups at safe work-publication boundaries.
      *  No child has started evolving before its parent completes; even during
      *  per-step evaluation, only unevolved child checkpoints are selected.
@@ -795,111 +748,16 @@ class TreeHybridEvolutionBackend::Impl {
         }
     }
 
-    /** @brief Interleave work items from all branches, including split enclosures. */
-    Void run_frontier(const StepFunction& advance) {
-        const auto root = history.root().value();
-        std::deque<HybridEvolutionCheckpointId> ready{{root, 0u}};
-        std::vector<std::pair<HybridEvolutionCheckpointId, std::size_t>> deferrals;
-        while (!ready.empty()) {
-            const auto checkpoint = ready.front();
-            ready.pop_front();
-            const auto& retired = history.object(checkpoint.trajectory).retired_entries;
-            if (std::find(retired.begin(), retired.end(), checkpoint.entry) != retired.end())
-                continue;
-            if (history.object(checkpoint.trajectory).entries.at(checkpoint.entry).result)
-                throw std::logic_error("Checkpoint cannot be executed twice");
-            // Only defer when a different, still-runnable work item is queued.
-            // Keeping the per-item count across queue rotations guarantees
-            // bounded waiting even when all candidates request deferral.
-            const auto deferred = std::find_if(deferrals.begin(), deferrals.end(),
-                [&](const auto& entry) { return entry.first == checkpoint; });
-            const auto previous_deferrals = deferred == deferrals.end() ? 0u : deferred->second;
-            std::vector<HybridEvolutionCheckpointId> alternatives;
-            for (const auto other: ready) {
-                const auto& other_trajectory = history.object(other.trajectory);
-                if (!other_trajectory.entries.at(other.entry).result &&
-                    std::find(other_trajectory.retired_entries.begin(),
-                              other_trajectory.retired_entries.end(), other.entry) ==
-                        other_trajectory.retired_entries.end())
-                    alternatives.push_back(other);
-            }
-            if (!alternatives.empty() &&
-                frontier_dispatch->should_defer(history, checkpoint, alternatives, previous_deferrals)) {
-                if (deferred == deferrals.end())
-                    deferrals.push_back({checkpoint, 1u});
-                else
-                    ++deferred->second;
-                ready.push_back(checkpoint);
-                continue;
-            }
-            if (deferred != deferrals.end())
-                deferrals.erase(deferred);
-            auto result = advance(history.object(checkpoint.trajectory).entries.at(checkpoint.entry).work,
-                                  statistics);
-            count(result);
-            for (const auto& successor: result.successors) {
-                if (successor.kind == HybridEvolutionSuccessorKind::SUBDIVISION)
-                    history.metadata(checkpoint.trajectory).whole_trajectory = false;
-            }
-            for (std::size_t ordinal = 0; ordinal != result.successors.size(); ++ordinal) {
-                const auto& successor = result.successors[ordinal];
-                const HybridEvolutionEntryOrigin origin{checkpoint.entry, ordinal};
-                const bool split = successor.kind == HybridEvolutionSuccessorKind::SUBDIVISION;
-                if (split || derives_trajectory(
-                                 successor, result.successors.size(),
-                                 history.metadata(checkpoint.trajectory).whole_trajectory)) {
-                    HybridEvolutionTrajectory child;
-                    child.entries.push_back({successor.work, std::nullopt, std::nullopt});
-                    HybridEvolutionTrajectoryMetadata metadata;
-                    metadata.origin = origin;
-                    metadata.pending_entries = 1u;
-                    metadata.recombination_time_barrier =
-                        history.metadata(checkpoint.trajectory).recombination_time_barrier;
-                    if (split)
-                        metadata.whole_trajectory = false;
-                    const auto created = history.add_child(checkpoint.trajectory, std::move(child),
-                                                           std::move(metadata));
-                    ready.push_back({created, 0u});
-                    if (successor.kind == HybridEvolutionSuccessorKind::TRANSITION &&
-                        successor.event_kind != EventKind::PERMISSIVE)
-                        history.metadata(checkpoint.trajectory).whole_trajectory = false;
-                } else {
-                    auto& entries = history.object(checkpoint.trajectory).entries;
-                    const auto index = entries.size();
-                    entries.push_back({successor.work, origin, std::nullopt});
-                    ++history.metadata(checkpoint.trajectory).pending_entries;
-                    ready.push_back({checkpoint.trajectory, index});
-                }
-            }
-            history.object(checkpoint.trajectory).entries.at(checkpoint.entry).result.emplace(std::move(result));
-            auto& metadata = history.metadata(checkpoint.trajectory);
-            if (metadata.pending_entries == 0u)
-                throw std::logic_error("Invalid checkpoint completion count");
-            --metadata.pending_entries;
-            const bool trajectory_completed = metadata.pending_entries == 0u;
-            if (trajectory_completed)
-                metadata.complete = true;
-            ++global_steps;
-            if (frontier_policy->enables_recombination() &&
-                trigger->should_evaluate(history, checkpoint.trajectory,
-                    HybridRecombinationEvaluationPoint::AFTER_STEP, global_steps))
-                schedule_frontier_recombination(ready);
-            if (trajectory_completed && frontier_policy->enables_recombination() &&
-                trigger->should_evaluate(history, checkpoint.trajectory,
-                    HybridRecombinationEvaluationPoint::PARENT_COMPLETE, global_steps))
-                schedule_frontier_recombination(ready);
-        }
-    }
-
-    /** @brief Execute admissible checkpoints concurrently with serialized publication.
-     *  @details Every ready checkpoint has one DynamicWorkload token; the token
+    /** @brief Execute admissible checkpoints with serialized result publication.
+     *  @details The same scheduler handles zero or several worker threads.
+     *  Every ready checkpoint has one DynamicWorkload token; the token
      *  takes a checkpoint from the protected queue before beginning numerical
      *  work. In parent-first mode, discrete children remain held in the tree
      *  until the last in-flight or queued continuation of their parent has
      *  published its result. In frontier mode, only ready (not in-flight)
      *  checkpoints can be grouped or retired for recombination.
      */
-    Void run_concurrent(const StepFunction& advance) {
+    Void run_scheduled(const StepFunction& advance) {
         struct Token {};
         struct ParentProgress {
             HybridEvolutionTree::NodeId node;
@@ -971,8 +829,9 @@ class TreeHybridEvolutionBackend::Impl {
                 if (!work)
                     return;
 
-                // Numerical evolution never holds the scheduler lock. Flat
-                // backend uses the same StepFunction concurrently.
+                // Numerical evolution never holds the scheduler lock.
+                // DynamicWorkload runs this call directly at concurrency zero
+                // or distributes it among available workers otherwise.
                 HybridEvolutionStepResult result = advance(*work, snapshot);
 
                 std::lock_guard<std::mutex> lock(schedule_mutex);
@@ -1158,35 +1017,9 @@ Void TreeHybridEvolutionBackend::run(const StepFunction& advance) {
         _impl->semantics != Semantics::UPPER)
         throw std::invalid_argument("Recombination is only sound for upper semantics");
     _impl->started = true;
-    // Zero concurrency retains the historical deterministic serial order.
-    // With a thread pool, the same scheduler policies admit work dynamically
-    // while the completed-result publication and genealogy remain serialized.
-    if (ThreadManager::instance().concurrency() > 0u) {
-        _impl->run_concurrent(advance);
-        _impl->complete = true;
-        return;
-    }
-    if (_impl->use_frontier) {
-        _impl->run_frontier(advance);
-        _impl->complete = true;
-        return;
-    }
-    std::deque<HybridEvolutionTree::NodeId> ready{_impl->history.root().value()};
-    while (!ready.empty()) {
-        const auto node = ready.front();
-        ready.pop_front();
-        _impl->process_trajectory(node, advance);
-        // The trigger can request a final evaluation for any pending children.
-        if (_impl->policy->enables_recombination() &&
-            _impl->trigger->should_evaluate(_impl->history, node,
-                HybridRecombinationEvaluationPoint::PARENT_COMPLETE,
-                _impl->history.object(node).entries.size()))
-            _impl->schedule_recombination(node);
-        for (const auto child: _impl->history.children(node)) {
-            if (!_impl->history.metadata(child).retired_for_recombination)
-                ready.push_back(child);
-        }
-    }
+    // The scheduler is identical for sequential and concurrent execution:
+    // DynamicWorkload controls how many ready checkpoints run at once.
+    _impl->run_scheduled(advance);
     _impl->complete = true;
 }
 

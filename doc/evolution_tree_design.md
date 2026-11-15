@@ -1,8 +1,9 @@
 # Evolution tree design proposal
 
-Status: the flat and serial trajectory-tree backends are implemented.
-Continuous enclosure recombination is implemented; hybrid trajectory
-recombination, backtracking and per-work numerical alternatives remain design proposals.
+Status: flat and serial trajectory-tree backends and continuous enclosure
+recombination are implemented. The trajectory-tree backend additionally supports
+opt-in recombination of compatible, unevolved sibling trajectories at parent
+completion. Backtracking and per-work numerical alternatives remain proposals.
 
 ## Starting functions
 
@@ -257,9 +258,9 @@ subset/alternative ID namespaces.
 The scheduler drains every local piece of the current trajectory before marking
 that node complete and releasing its children. Unrelated ready trajectories are
 processed breadth first. Children generated at different source entries remain
-distinct trajectories, including when they share parent/event provenance. No
-recombination is performed. The completed-parent boundary is the insertion
-point for a later domain-specific recombination policy.
+distinct trajectories, including when they share parent/event provenance. The default policy does not
+recombine. The completed-parent boundary also permits an opt-in,
+upper-semantics sibling-window recombination policy.
 
 A reset normally derives a child. It continues the same node only when it is
 the sole successor, is urgent/impact, carries a FULL_SOURCE certificate, and
@@ -544,10 +545,10 @@ outputs and reports all input indices as discarded. The existing free operation
 `recombine(const List<Enclosure>&)` remains a single-output convenience wrapper
 around the reference implementation, retaining its nonempty-list precondition
 and returning a typed empty enclosure when no output survives. These operations
-do not change trajectory identity or modify a backend. Hybrid trajectory-level
-recombination remains a later extension. The current C++ benchmark generates
-actual hybrid post-reset checkpoint enclosures and recombines them externally;
-it does not automatically recombine within the evolver.
+do not change trajectory identity or modify a backend. The tree backend now has an opt-in,
+upper-semantics sibling-window scheduling policy described below. The existing
+C++ benchmark still recombines post-reset checkpoint enclosures externally,
+so its measurements do not quantify the integrated scheduler overhead.
 
 Contract source copies with their own constraints and discard only proven-empty
 ones. A singleton surviving source is returned without reparameterisation.
@@ -937,3 +938,37 @@ equality or permissive inequality; its violation-bound diagnostic
 captures possible excess due to wrapping. These provide verifiable
 quality indicators without replacing a future rigorous inclusion
 procedure on constrained models.
+
+
+### Implemented optional trajectory recombination scheduling
+
+`TreeHybridEvolutionBackendFactory()` preserves the original parent-first
+execution exactly: it uses `NoRecombinationSchedulingPolicy`. To opt into
+recombination, pass `SiblingWindowRecombinationSchedulingPolicy(max_group_size,
+max_time_spread)` to the tree backend factory, then supply that factory to
+`HybridEvolverBase::set_evolution_backend_factory()`.
+
+The window policy greedily forms disjoint groups of **consecutive sibling
+children**, after the parent trajectory is complete and before any child
+starts evolving. Groups must share transition event and kind, target location,
+state and auxiliary spaces, processing phase, previous-event history, and
+symbolic auxiliary mapping. All their birth-time intervals must fit within
+the configured maximum span. Only groups of at least two (and at most the
+configured maximum count) are proposed. It does not use bounding-box overlap
+as a mathematical certificate.
+
+The backend validates the groups again, recombines their continuous enclosures
+with `ReferenceEnclosureRecombiner`, checks complete source provenance, and
+only then substitutes one unevolved replacement trajectory. The absorbed
+children remain as retired nodes with their original source-entry provenance;
+the replacement records their stable node IDs and retains discrete context.
+Previously published parent contributions remain unchanged. Invalid or incomplete
+recombination outputs cause the original children to continue independently,
+rather than losing work.
+
+Recombination is strictly **UPPER**-semantics only; requesting it under LOWER
+semantics throws before numerical work. The flat backend and the default no-op
+tree backend are unaffected. The current policy intentionally does not
+recombine non-siblings or already-evolved descendants, and it does not yet
+consider output radius or measured continuation cost when deciding whether a
+sound replacement is profitable.

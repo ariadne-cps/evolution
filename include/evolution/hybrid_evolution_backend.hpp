@@ -35,6 +35,7 @@
 #include <optional>
 #include <vector>
 
+#include "evolution/evolver_interface.hpp"
 #include "evolution/hybrid_orbit.hpp"
 #include "system/discrete_event.hpp"
 #include "system/hybrid_automaton_interface.hpp"
@@ -145,6 +146,10 @@ class HybridEvolutionBackendInterface {
     using StepFunction = std::function<HybridEvolutionStepResult(const HybridEvolutionWorkItem&, const HybridEvolutionStatistics&)>;
     /** @brief Destroy the backend after all its worker callbacks have joined. */
     virtual ~HybridEvolutionBackendInterface() = default;
+    /** @brief Supply the requested approximation semantics before running.
+     *  @details Defaults to a no-op for backends that do not need semantic gating.
+     */
+    virtual Void set_semantics(Semantics) {}
     /** @brief Execute the run once, propagating errors after outstanding workers join. */
     virtual Void run(const StepFunction& advance) = 0;
     /** @brief Transfer the conventional Orbit after successful run completion, once. */

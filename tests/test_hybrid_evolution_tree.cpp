@@ -198,6 +198,70 @@ class TestHybridEvolutionTree : public Testing::ContextFixture {
         }
     }
 
+    void test_noop_and_window_recombination_policies() {
+        const auto initial = seed();
+        const DiscreteEvent jump("jump");
+        const DiscreteEvent other("other");
+        const auto advance = [&](const HybridEvolutionWorkItem& item, const HybridEvolutionStatistics&) {
+            HybridEvolutionStepResult result;
+            if (label(item) == 0) {
+                result.transition_to(marked(initial, 100), jump, EventKind::URGENT);
+                result.transition_to(marked(initial, 100), jump, EventKind::URGENT);
+                result.transition_to(marked(initial, 200), other, EventKind::URGENT);
+            } else {
+                result.record_final(item.enclosure);
+            }
+            return result;
+        };
+
+        NoRecombinationSchedulingPolicy noop;
+        TreeHybridEvolutionBackend baseline(initial, noop);
+        baseline.set_semantics(Semantics::UPPER);
+        baseline.run(advance);
+        ARIADNE_TESTING_EXPECT_EQUAL(baseline.tree().size(), 4u);
+        ARIADNE_TESTING_EXPECT_EQUAL(baseline.release_orbit().final().size(), 3u);
+
+        SiblingWindowRecombinationSchedulingPolicy window(2u, 0.0);
+        TreeHybridEvolutionBackend recombined(initial, window);
+        const auto root = recombined.tree().root().value();
+        recombined.set_semantics(Semantics::UPPER);
+        recombined.run([&](const HybridEvolutionWorkItem& item, const HybridEvolutionStatistics& stats) {
+            if (label(item) != 0)
+                ARIADNE_TESTING_PROVE(recombined.tree().metadata(root).complete);
+            return advance(item, stats);
+        });
+        const auto children = recombined.tree().children(root);
+        ARIADNE_TESTING_EXPECT_EQUAL(children.size(), 4u);
+        ARIADNE_TESTING_EXPECT_EQUAL(recombined.tree().size(), 5u);
+        ARIADNE_TESTING_PROVE(recombined.tree().metadata(children[0]).retired_for_recombination);
+        ARIADNE_TESTING_PROVE(recombined.tree().metadata(children[1]).retired_for_recombination);
+        ARIADNE_TESTING_PROVE(!recombined.tree().object(children[0]).entries[0].result);
+        ARIADNE_TESTING_PROVE(!recombined.tree().object(children[1]).entries[0].result);
+        ARIADNE_TESTING_PROVE(!recombined.tree().metadata(children[2]).retired_for_recombination);
+        const auto& replacement = recombined.tree().metadata(children[3]);
+        ARIADNE_TESTING_PROVE(replacement.complete);
+        ARIADNE_TESTING_PROVE(!replacement.origin);
+        ARIADNE_TESTING_EXPECT_EQUAL(replacement.recombined_sources.size(), 2u);
+        ARIADNE_TESTING_PROVE(replacement.recombined_sources[0] == children[0]);
+        ARIADNE_TESTING_PROVE(replacement.recombined_sources[1] == children[1]);
+        const auto orbit = recombined.release_orbit();
+        ARIADNE_TESTING_EXPECT_EQUAL(orbit.final().size(), 2u);
+        ARIADNE_TESTING_EXPECT_EQUAL(orbit.reach().size(), 0u);
+    }
+
+    void test_recombination_policy_rejects_lower_semantics_and_invalid_settings() {
+        const auto initial = seed();
+        ARIADNE_TESTING_EXPECT_EXCEPTION(SiblingWindowRecombinationSchedulingPolicy(1u, 1.0));
+        ARIADNE_TESTING_EXPECT_EXCEPTION(SiblingWindowRecombinationSchedulingPolicy(2u, -1.0));
+        TreeHybridEvolutionBackend lower(initial, SiblingWindowRecombinationSchedulingPolicy{});
+        lower.set_semantics(Semantics::LOWER);
+        ARIADNE_TESTING_EXPECT_EXCEPTION(lower.run([](const HybridEvolutionWorkItem&, const HybridEvolutionStatistics&) {
+            return HybridEvolutionStepResult{};
+        }));
+        ARIADNE_TESTING_EXPECT_EQUAL(lower.tree().size(), 1u);
+        ARIADNE_TESTING_PROVE(!lower.tree().metadata(lower.tree().root().value()).complete);
+    }
+
     void test_split_pieces_are_parallel_and_completion_waits_for_all_of_them() {
         auto initial = seed();
         TreeHybridEvolutionBackend backend(initial);
@@ -349,6 +413,8 @@ int main(int argc, char** argv) {
     ARIADNE_TESTING_SUITE("test_hybrid_evolution_tree");
     ARIADNE_TESTING_ADD_TEST(TestHybridEvolutionTree, test_parent_finishes_before_distinct_derived_trajectories);
     ARIADNE_TESTING_ADD_TEST(TestHybridEvolutionTree, test_only_certified_single_urgent_transition_continues_the_node);
+    ARIADNE_TESTING_ADD_TEST(TestHybridEvolutionTree, test_noop_and_window_recombination_policies);
+    ARIADNE_TESTING_ADD_TEST(TestHybridEvolutionTree, test_recombination_policy_rejects_lower_semantics_and_invalid_settings);
     ARIADNE_TESTING_ADD_TEST(TestHybridEvolutionTree, test_split_pieces_are_parallel_and_completion_waits_for_all_of_them);
     ARIADNE_TESTING_ADD_TEST(TestHybridEvolutionTree, test_failure_preserves_incomplete_history_without_dispatching_children);
     ARIADNE_TESTING_ADD_TEST(TestHybridEvolutionTree, test_flat_and_tree_orbits_match_for_urgent_and_permissive_systems);

@@ -227,6 +227,11 @@ class HybridEnclosure
     HybridBasicSet<Enclosure> state_auxiliary_set() const;
     //! \brief The continuous enclosure.
     const ContinuousStateSetType& continuous_set() const;
+    /** @brief Replace the continuous enclosure while retaining discrete location,
+     *         state and auxiliary labels, and previous-event history.
+     *  @pre The new enclosure has the same state and auxiliary dimensions.
+     */
+    Void replace_continuous_set(const Enclosure& set);
 
     //! \brief Set the time function to zero.
     Void clear_time();

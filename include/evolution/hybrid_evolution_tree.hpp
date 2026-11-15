@@ -61,11 +61,56 @@ struct HybridEvolutionTrajectory {
 /** @brief Local trajectory completion and provenance of its birth. */
 struct HybridEvolutionTrajectoryMetadata {
     Bool complete = false;                            //!< All local pieces processed and all derived children published; independent of descendants.
-    std::optional<HybridEvolutionEntryOrigin> origin; //!< Parent entry/successor producing the seed; absent at the root.
+    std::optional<HybridEvolutionEntryOrigin> origin; //!< Parent entry/successor producing the seed; absent at the root and at a recombined replacement.
+    bool retired_for_recombination = false;            //!< Original child kept as provenance, never dispatched or projected.
+    std::vector<DerivationTreeNodeId> recombined_sources; //!< Original sibling IDs represented by a replacement.
 };
 
 /** @brief Generic two-parameter genealogy with Evolution-owned objects and metadata. */
 using HybridEvolutionTree = DerivationTree<HybridEvolutionTrajectory, HybridEvolutionTrajectoryMetadata>;
+
+/** @brief Per-completed-parent policy for selecting disjoint sibling groups to recombine.
+ *  @details The backend performs numerical recombination and validates groups;
+ *  policies only select indices. A policy must not mutate the tree.
+ */
+class HybridRecombinationSchedulingPolicy {
+  public:
+    using NodeId = HybridEvolutionTree::NodeId;
+    virtual ~HybridRecombinationSchedulingPolicy() = default;
+    /** @brief Clone the immutable selection settings. */
+    virtual HybridRecombinationSchedulingPolicy* clone() const = 0;
+    /** @brief Select disjoint groups of unevolved children after parent completion. */
+    virtual std::vector<std::vector<NodeId>> select(const HybridEvolutionTree& tree, NodeId parent) const = 0;
+    /** @brief Whether this policy can request upper-enclosure recombination. */
+    virtual bool enables_recombination() const = 0;
+};
+
+/** @brief Preserve the existing parent-first schedule without recombination. */
+class NoRecombinationSchedulingPolicy final : public HybridRecombinationSchedulingPolicy {
+  public:
+    NoRecombinationSchedulingPolicy* clone() const override;
+    std::vector<std::vector<NodeId>> select(const HybridEvolutionTree& tree, NodeId parent) const override;
+    bool enables_recombination() const override { return false; }
+};
+
+/** @brief Greedily group consecutive compatible siblings within a birth-time window.
+ *  @details Groups have at least two and at most max_group_size sources. Different
+ *  events, target locations, state/auxiliary spaces, phases, event histories and
+ *  symbolic auxiliary maps are not combined. A group is never split across
+ *  unrelated siblings. Upper semantics is required for numerical recombination.
+ */
+class SiblingWindowRecombinationSchedulingPolicy final : public HybridRecombinationSchedulingPolicy {
+    std::size_t _max_group_size;
+    double _max_time_spread;
+
+  public:
+    /** @brief Configure a bounded batch size and birth-time interval width. */
+    explicit SiblingWindowRecombinationSchedulingPolicy(std::size_t max_group_size = 8u,
+                                                         double max_time_spread = 0.125);
+    SiblingWindowRecombinationSchedulingPolicy* clone() const override;
+    std::vector<std::vector<NodeId>> select(const HybridEvolutionTree& tree, NodeId parent) const override;
+    bool enables_recombination() const override { return true; }
+};
 
 /** @brief Serial backend completing a trajectory before scheduling its derived children.
  *  @details Continuous steps, reconditioning and subdivision extend a node's
@@ -74,7 +119,10 @@ using HybridEvolutionTree = DerivationTree<HybridEvolutionTrajectory, HybridEvol
  *  subdivision or an urgent derived branch separates portions, subsequent resets
  *  derive children even if the final remaining piece has a coverage certificate. Orbit is
  *  projected from explicit history contributions after successful completion.
- *  No recombination, history editing or concurrent tree mutation is performed.
+ *  The default policy performs no recombination; an opt-in sibling-window policy
+ *  can replace compatible unevolved children under upper semantics. Original
+ *  siblings remain in the tree as retired provenance, without numerical results.
+ *  No history editing or concurrent tree mutation is performed.
  */
 class TreeHybridEvolutionBackend final : public HybridEvolutionBackendInterface {
     class Impl;
@@ -82,7 +130,8 @@ class TreeHybridEvolutionBackend final : public HybridEvolutionBackendInterface 
 
   public:
     /** @brief Create the root trajectory with its unprocessed initial checkpoint. */
-    explicit TreeHybridEvolutionBackend(const HybridEnclosure& initial);
+    explicit TreeHybridEvolutionBackend(const HybridEnclosure& initial,
+                                        const HybridRecombinationSchedulingPolicy& policy = NoRecombinationSchedulingPolicy{});
     /** @brief Release the owned trajectory history. */
     ~TreeHybridEvolutionBackend() override;
     /** @brief Disallow copying the owner and its trajectory identities. */
@@ -92,6 +141,7 @@ class TreeHybridEvolutionBackend final : public HybridEvolutionBackendInterface 
     /** @brief Run once, processing each trajectory's pieces before releasing its children.
      *  @note Callback failures leave an inspectable incomplete history and prohibit Orbit release.
      */
+    Void set_semantics(Semantics semantics) override;
     Void run(const StepFunction& advance) override;
     /** @brief Materialize the conventional Orbit once, retaining history for const inspection. */
     Orbit<HybridEnclosure> release_orbit() override;
@@ -104,8 +154,14 @@ class TreeHybridEvolutionBackend final : public HybridEvolutionBackendInterface 
 
 /** @brief Factory selecting the serial trajectory-tree backend for ordinary orbit() calls. */
 class TreeHybridEvolutionBackendFactory : public HybridEvolutionBackendFactoryInterface {
+    std::shared_ptr<const HybridRecombinationSchedulingPolicy> _policy;
+
   public:
-    /** @brief Clone the stateless factory without copying any run history. */
+    /** @brief Use the default no-op scheduling policy. */
+    TreeHybridEvolutionBackendFactory();
+    /** @brief Copy the opt-in policy independently of its original lifetime. */
+    explicit TreeHybridEvolutionBackendFactory(const HybridRecombinationSchedulingPolicy& policy);
+    /** @brief Clone the immutable factory settings without copying any run history. */
     TreeHybridEvolutionBackendFactory* clone() const override;
     /** @brief Create independent trajectory history; the numerical callback enforces the horizon. */
     std::unique_ptr<HybridEvolutionBackendInterface> create(const HybridEnclosure& initial, const Real& final_time) const override;

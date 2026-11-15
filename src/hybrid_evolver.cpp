@@ -362,6 +362,7 @@ Orbit<HybridEnclosure>
     ARIADNE_PRECONDITION(this->system().state_auxiliary_space()[initial.location()] == initial.state_auxiliary_space())
 
     auto backend = _backend_factory_ptr->create(initial, termination.maximum_time());
+    backend->set_semantics(semantics);
     backend->run([this, &termination, semantics](const HybridEvolutionWorkItem& item, const HybridEvolutionStatistics& statistics) {
         return this->_process_working_set(item, termination, semantics, statistics);
     });

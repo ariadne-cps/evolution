@@ -232,6 +232,12 @@ SizeType
     return this->_set.number_of_parameters();
 }
 
+Void HybridEnclosure::replace_continuous_set(const Enclosure& set) {
+    ARIADNE_PRECONDITION(set.state_dimension() == this->state_dimension());
+    ARIADNE_PRECONDITION(set.auxiliary_mapping().result_size() == this->auxiliary_space().dimension());
+    this->_set = LabelledEnclosure(set, this->state_space(), this->auxiliary_space());
+}
+
 const ExactBoxType
     HybridEnclosure::parameter_domain() const {
     return this->_set.domain();

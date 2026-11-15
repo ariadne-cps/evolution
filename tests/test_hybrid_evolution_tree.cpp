@@ -1091,6 +1091,64 @@ class TestHybridEvolutionTree : public Testing::ContextFixture {
         ARIADNE_TESTING_EXPECT_EQUAL(merged.release_orbit().final().size(), 2u);
     }
 
+    void test_waiting_keeps_early_replacements_held_until_parent_completion() {
+        const auto initial = seed();
+        const DiscreteEvent first("first"), second("second");
+        TreeHybridEvolutionBackend backend(
+            initial, AllCompatibleSiblingRecombinationSchedulingPolicy{},
+            AfterEachStepRecombinationTriggerPolicy{});
+        backend.set_semantics(Semantics::UPPER);
+        const auto root = backend.tree().root().value();
+        std::vector<int> observed;
+        backend.run([&](const HybridEvolutionWorkItem& item, const HybridEvolutionStatistics&) {
+            const auto marker = label(item);
+            observed.push_back(marker);
+            HybridEvolutionStepResult result;
+            if (marker == 0) {
+                result.transition_to(marked(initial, 100), first, EventKind::URGENT);
+                result.transition_to(marked(initial, 100), first, EventKind::URGENT);
+                result.continue_with(marked(initial, 1));
+            } else if (marker == 1) {
+                // The first pair has already been merged at AFTER_STEP, but
+                // its replacement must still be held while the parent runs.
+                const auto children = backend.tree().children(root);
+                ARIADNE_TESTING_EXPECT_EQUAL(children.size(), 3u);
+                ARIADNE_TESTING_PROVE(!backend.tree().metadata(root).complete);
+                ARIADNE_TESTING_PROVE(backend.tree().metadata(children[0]).retired_for_recombination);
+                ARIADNE_TESTING_PROVE(backend.tree().metadata(children[1]).retired_for_recombination);
+                ARIADNE_TESTING_PROVE(!backend.tree().object(children[2]).entries.front().result);
+                result.transition_to(marked(initial, 200), second, EventKind::PERMISSIVE);
+                result.transition_to(marked(initial, 200), second, EventKind::PERMISSIVE);
+                result.continue_with(marked(initial, 2));
+            } else if (marker == 2) {
+                // Both accepted replacements are still withheld.
+                const auto children = backend.tree().children(root);
+                ARIADNE_TESTING_EXPECT_EQUAL(children.size(), 6u);
+                ARIADNE_TESTING_PROVE(!backend.tree().metadata(root).complete);
+                ARIADNE_TESTING_PROVE(!backend.tree().object(children[2]).entries.front().result);
+                ARIADNE_TESTING_PROVE(!backend.tree().object(children[5]).entries.front().result);
+                result.record_final(item.enclosure);
+            } else if (marker == 100 || marker == 200) {
+                ARIADNE_TESTING_PROVE(backend.tree().metadata(root).complete);
+                result.record_final(item.enclosure);
+            } else {
+                throw std::logic_error("Unexpected waiting-queue checkpoint");
+            }
+            return result;
+        });
+        const auto children = backend.tree().children(root);
+        ARIADNE_TESTING_PROVE(observed == std::vector<int>({0, 1, 2, 100, 200}));
+        ARIADNE_TESTING_EXPECT_EQUAL(children.size(), 6u);
+        for (auto i: {0u, 1u, 3u, 4u})
+            ARIADNE_TESTING_PROVE(backend.tree().metadata(children[i]).retired_for_recombination);
+        for (auto i: {2u, 5u}) {
+            ARIADNE_TESTING_PROVE(backend.tree().metadata(children[i]).complete);
+            ARIADNE_TESTING_EXPECT_EQUAL(
+                backend.tree().metadata(children[i]).recombined_sources.size(), 2u);
+        }
+        ARIADNE_TESTING_EXPECT_EQUAL(backend.release_orbit().final().size(), 3u);
+    }
+
     void test_recombination_policy_rejects_lower_semantics_and_invalid_settings() {
         const auto initial = seed();
         ARIADNE_TESTING_EXPECT_EXCEPTION(SiblingWindowRecombinationSchedulingPolicy(1u, 1.0));
@@ -1457,6 +1515,7 @@ int main(int argc, char** argv) {
     ARIADNE_TESTING_ADD_TEST(TestHybridEvolutionTree, test_noop_and_window_recombination_policies);
     ARIADNE_TESTING_ADD_TEST(TestHybridEvolutionTree, test_all_compatible_siblings_merge_nonadjacent_unbounded_groups);
     ARIADNE_TESTING_ADD_TEST(TestHybridEvolutionTree, test_all_compatible_siblings_can_resplit_after_unbounded_merge);
+    ARIADNE_TESTING_ADD_TEST(TestHybridEvolutionTree, test_waiting_keeps_early_replacements_held_until_parent_completion);
     ARIADNE_TESTING_ADD_TEST(TestHybridEvolutionTree, test_recombination_policy_rejects_lower_semantics_and_invalid_settings);
     ARIADNE_TESTING_ADD_TEST(TestHybridEvolutionTree, test_recombination_evaluation_triggers);
     ARIADNE_TESTING_ADD_TEST(TestHybridEvolutionTree, test_numerical_recombination_strategy_is_injected);

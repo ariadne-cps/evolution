@@ -1329,13 +1329,24 @@ parent-first/frontier policy interpretation changes. The older dedicated
 serial loops `process_trajectory` and `run_frontier` were removed.
 The zero-concurrency regression tests still check deterministic execution.
 
-The unified scheduler separates ready work from held work. Every ready
-checkpoint has a workload token. A worker acquires the scheduling mutex,
-takes one admissible checkpoint and a snapshot of the global counters,
-then performs its numerical evolution **outside the lock**. Its completed
-result is published to the genealogy under the scheduling mutex, including
-successor creation, contribution counts, recombination evaluation, and
-release of newly admissible work.
+The unified scheduler owns **three distinct collections**:
+- `ready`: FIFO of admissible checkpoint IDs; each entry has a
+  corresponding `DynamicWorkload` token, whose worker claims it under
+  the scheduling mutex.
+- `waiting`: groups keyed by parent trajectory ID, each containing the
+  ordered IDs of discrete successor trajectories **not yet admissible**,
+  including replacements created by early or final sibling recombination.
+  These are not workload tokens and cannot be claimed by a worker.
+- `active`: groups keyed by the same parent IDs, with an
+  `outstanding` count of admitted and executing checkpoints, plus
+  whole-source provenance state and the number of committed steps.
+
+The genealogical `history` is append-only provenance, not a scheduling
+queue. A worker snapshots its checkpoint and global counters under the
+mutex, performs numerical evolution **outside the lock**, then commits
+its result, successors, statistics, and scheduling decisions under the
+same mutex. `waiting` is authoritative for admission; policies retain
+their existing read-only genealogy queries to select compatible siblings.
 
 **Parent-first admission**: a per-parent `outstanding` count covers the
 parent's ready and executing checkpoints, but not discrete children held
@@ -1343,8 +1354,12 @@ pending recombination. A continuation or subdivision increments the count
 while being published; publication of the finished checkpoint decrements
 it. The worker publishing the last result (count becomes zero) marks the
 parent complete, invokes the parent-completion trigger, recombines any
-compatible held children, then admits only nonretired children as ready
-work. There is no fixed thread barrier or location-wide completion test.
+compatible held children, then **drains that parent's `waiting`
+group**, transferring only nonretired children to `ready` and registering
+new `active` and empty `waiting` groups for them. Closed groups are
+removed from the scheduler's maps; the provenance tree still contains
+both retired source nodes and accepted replacement nodes. There is no
+fixed thread barrier or location-wide completion test.
 The parent/child relationship determines the dynamic barrier; other
 independent parents may proceed simultaneously.
 
@@ -1374,3 +1389,13 @@ simultaneously. They check both parent-first's last-publisher barrier
 and accepted post-barrier recombination, and frontier's concurrent split
 dispatch with complete final provenance. The global flat backend remains unchanged; tree evolution now follows
 the same implementation with zero, one or several workers.
+
+A focused regression exercises `AfterEachStepRecombinationTriggerPolicy`
+with two successive compatible successor groups: each is reduced early,
+but both replacements remain blocked until the last parent continuation
+has committed. The ordinary `NoRecombinationSchedulingPolicy`, window,
+periodic, and frontier tests still execute via this one scheduler.
+The group key is **the parent trajectory**, not the location. Extending
+the policy to a location/generation barrier would require a different
+grouping key and explicit closure semantics for reentrant transitions;
+the two-queue architecture does not silently equate those concepts.

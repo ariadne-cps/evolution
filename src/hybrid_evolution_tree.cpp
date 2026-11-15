@@ -513,7 +513,8 @@ class TreeHybridEvolutionBackend::Impl {
      *  No child has started evolving before its parent completes; even during
      *  per-step evaluation, only unevolved child checkpoints are selected.
      */
-    Void schedule_recombination(HybridEvolutionTree::NodeId parent) {
+    Void schedule_recombination(HybridEvolutionTree::NodeId parent,
+                                std::vector<HybridEvolutionTree::NodeId>& waiting_children) {
         LOGGING_SCOPE_CREATE;
         if (!policy->enables_recombination())
             return;
@@ -588,7 +589,10 @@ class TreeHybridEvolutionBackend::Impl {
                 HybridEvolutionTrajectoryMetadata metadata;
                 for (const auto index: output.source_indices)
                     metadata.recombined_sources.push_back(group[index]);
-                history.add_child(parent, std::move(trajectory), std::move(metadata));
+                const auto created = history.add_child(parent, std::move(trajectory), std::move(metadata));
+                // Accepted replacements remain blocked like their sources.
+                // Only completion of this scheduling group can admit them.
+                waiting_children.push_back(created);
             }
             for (const auto source: group)
                 history.metadata(source).retired_for_recombination = true;
@@ -752,27 +756,37 @@ class TreeHybridEvolutionBackend::Impl {
      *  @details The same scheduler handles zero or several worker threads.
      *  Every ready checkpoint has one DynamicWorkload token; the token
      *  takes a checkpoint from the protected queue before beginning numerical
-     *  work. In parent-first mode, discrete children remain held in the tree
-     *  until the last in-flight or queued continuation of their parent has
-     *  published its result. In frontier mode, only ready (not in-flight)
+     *  work. In parent-first mode, discrete children are registered in an
+     *  explicit waiting group, separate from the genealogy, until the last
+     *  in-flight or queued continuation of their parent has published its
+     *  result. In frontier mode, only ready (not in-flight)
      *  checkpoints can be grouped or retired for recombination.
      */
     Void run_scheduled(const StepFunction& advance) {
         struct Token {};
-        struct ParentProgress {
+        struct ActiveGroup {
             HybridEvolutionTree::NodeId node;
+            // Counts admissible + in-flight checkpoints, not waiting children.
             std::size_t outstanding = 1u;
             Bool whole_trajectory = true;
             std::size_t completed_steps = 0u;
+        };
+        struct WaitingGroup {
+            HybridEvolutionTree::NodeId node;
+            // Ordered discrete descendants, including accepted replacements.
+            std::vector<HybridEvolutionTree::NodeId> children;
         };
         using Workload = DynamicWorkload<Token>;
         const auto root = history.root().value();
         std::mutex schedule_mutex;
         std::deque<HybridEvolutionCheckpointId> ready{{root, 0u}};
         std::vector<std::pair<HybridEvolutionCheckpointId, std::size_t>> deferrals;
-        std::vector<ParentProgress> parents;
-        if (!use_frontier)
-            parents.push_back({root, 1u, true, 0u});
+        std::vector<ActiveGroup> active;
+        std::vector<WaitingGroup> waiting;
+        if (!use_frontier) {
+            active.push_back({root, 1u, true, 0u});
+            waiting.push_back({root, {}});
+        }
 
         Workload workload(
             [](const Token&, SharedPointer<ProgressIndicator>) {},
@@ -902,10 +916,12 @@ class TreeHybridEvolutionBackend::Impl {
                             HybridRecombinationEvaluationPoint::PARENT_COMPLETE, global_steps))
                         evaluate_frontier();
                 } else {
-                    auto stage = std::find_if(parents.begin(), parents.end(),
+                    auto stage = std::find_if(active.begin(), active.end(),
                         [&](const auto& item) { return item.node == checkpoint.trajectory; });
-                    if (stage == parents.end() || stage->outstanding == 0u)
-                        throw std::logic_error("Checkpoint has no active parent scheduling group");
+                    auto held = std::find_if(waiting.begin(), waiting.end(),
+                        [&](const auto& item) { return item.node == checkpoint.trajectory; });
+                    if (stage == active.end() || held == waiting.end() || stage->outstanding == 0u)
+                        throw std::logic_error("Checkpoint has no active scheduling group");
                     for (const auto& successor: result.successors)
                         if (successor.kind == HybridEvolutionSuccessorKind::SUBDIVISION)
                             stage->whole_trajectory = false;
@@ -917,8 +933,11 @@ class TreeHybridEvolutionBackend::Impl {
                             child.entries.push_back({successor.work, std::nullopt, std::nullopt});
                             HybridEvolutionTrajectoryMetadata metadata;
                             metadata.origin = origin;
-                            history.add_child(checkpoint.trajectory, std::move(child), std::move(metadata));
-                            // Discrete children stay held, not yet admissible.
+                            const auto created = history.add_child(
+                                checkpoint.trajectory, std::move(child), std::move(metadata));
+                            // The waiting queue, rather than a genealogy scan,
+                            // owns the scheduler's list of blocked successors.
+                            held->children.push_back(created);
                             if (successor.event_kind != EventKind::PERMISSIVE)
                                 stage->whole_trajectory = false;
                         } else {
@@ -934,7 +953,7 @@ class TreeHybridEvolutionBackend::Impl {
                     if (policy->enables_recombination() &&
                         trigger->should_evaluate(history, checkpoint.trajectory,
                             HybridRecombinationEvaluationPoint::AFTER_STEP, stage->completed_steps))
-                        schedule_recombination(checkpoint.trajectory);
+                        schedule_recombination(checkpoint.trajectory, held->children);
                     if (--stage->outstanding == 0u) {
                         // All producers of this parent's discrete children
                         // have published, including those spawned by splits.
@@ -943,11 +962,18 @@ class TreeHybridEvolutionBackend::Impl {
                             trigger->should_evaluate(history, checkpoint.trajectory,
                                 HybridRecombinationEvaluationPoint::PARENT_COMPLETE,
                                 history.object(checkpoint.trajectory).entries.size()))
-                            schedule_recombination(checkpoint.trajectory);
-                        for (const auto child: history.children(checkpoint.trajectory)) {
+                            schedule_recombination(checkpoint.trajectory, held->children);
+                        // Last publisher closes the active group and drains its
+                        // waiting queue atomically. Retired sources stay only
+                        // in the genealogy, never in the ready queue.
+                        const auto released = std::move(held->children);
+                        waiting.erase(held);
+                        active.erase(stage);
+                        for (const auto child: released) {
                             if (history.metadata(child).retired_for_recombination)
                                 continue;
-                            parents.push_back({child, 1u, true, 0u});
+                            active.push_back({child, 1u, true, 0u});
+                            waiting.push_back({child, {}});
                             enqueue({child, 0u});
                         }
                     }

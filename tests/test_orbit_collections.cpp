@@ -27,7 +27,6 @@
  */
 
 #include <memory>
-#include "concise_logging.hpp"
 #include <sstream>
 
 #include "evolution/hybrid_orbit.hpp"
@@ -35,6 +34,7 @@
 #include "evolution/orbit.hpp"
 #include "function/taylor_function.hpp"
 #include "labelled/figure.hpp"
+#include "logging/test_runner.hpp"
 #include "recording_canvas.hpp"
 #include "rendering/figure.hpp"
 
@@ -223,5 +223,5 @@ int main(int argc, char* argv[]) {
     ARIADNE_TESTING_ADD_TEST(TestOrbitCollections, test_labelled_collections);
     ARIADNE_TESTING_ADD_TEST(TestOrbitCollections, test_hybrid_collections);
     ARIADNE_TESTING_ADD_TEST(TestOrbitCollections, test_enclosure_collections);
-    return run_evolution_test_suite(ariadne_test_suite, argc, argv);
+    return Ariadne::Testing::run_logging_suite(ariadne_test_suite, argc, argv);
 }

@@ -27,7 +27,6 @@
  */
 
 #include <cmath>
-#include "concise_logging.hpp"
 #include <iostream>
 #include <memory>
 #include <sstream>
@@ -42,6 +41,7 @@
 #include "hybrid/hybrid_set.hpp"
 #include "hybrid/hybrid_space.hpp"
 #include "labelled/figure.hpp"
+#include "logging/test_runner.hpp"
 #include "recording_canvas.hpp"
 
 #include "ariadne-testing.hpp"
@@ -395,5 +395,5 @@ int main(int argc, char* argv[]) {
     ARIADNE_TESTING_ADD_TEST(TestHybridEnclosure, test_construct);
     ARIADNE_TESTING_ADD_TEST(TestHybridEnclosure, test_space_having_time);
     ARIADNE_TESTING_ADD_TEST(TestHybridEnclosure, test_auxiliary);
-    return run_evolution_test_suite(ariadne_test_suite, argc, argv);
+    return Ariadne::Testing::run_logging_suite(ariadne_test_suite, argc, argv);
 }

@@ -27,13 +27,13 @@
  */
 
 #include <algorithm>
-#include "concise_logging.hpp"
 #include <atomic>
 #include <sstream>
 #include <stdexcept>
 
 #include "evolution/hybrid_evolution_backend.hpp"
 #include "evolution/hybrid_evolver.hpp"
+#include "logging/test_runner.hpp"
 #include "system/hybrid_automata.hpp"
 #include "threading/thread_manager.hpp"
 
@@ -290,5 +290,5 @@ int main(int argc, char** argv) {
     ARIADNE_TESTING_ADD_TEST(TestHybridEvolutionBackend, test_failed_step_cannot_release_an_orbit);
     ARIADNE_TESTING_ADD_TEST(TestHybridEvolutionBackend, test_evolver_accepts_an_independent_scheduler);
     ARIADNE_TESTING_ADD_TEST(TestHybridEvolutionBackend, test_step_preserves_transition_and_subdivision_provenance);
-    return run_evolution_test_suite(ariadne_test_suite, argc, argv);
+    return Ariadne::Testing::run_logging_suite(ariadne_test_suite, argc, argv);
 }

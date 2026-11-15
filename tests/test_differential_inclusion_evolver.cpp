@@ -27,7 +27,6 @@
  */
 
 #include <limits>
-#include "concise_logging.hpp"
 #include <sstream>
 
 #include "../src/inclusion_evolver_state.hpp"
@@ -42,6 +41,7 @@
 #include "integration/integrator.hpp"
 #include "labelled/figure.hpp"
 #include "log_verbosity_scope.hpp"
+#include "logging/test_runner.hpp"
 #include "set/function_set.hpp"
 
 #include "ariadne-testing.hpp"
@@ -195,5 +195,5 @@ int main(int argc, const char* argv[]) {
     ARIADNE_TESTING_ADD_TEST(TestDifferentialInclusionEvolver, test_periodic_reconditioning);
     ARIADNE_TESTING_ADD_TEST(TestDifferentialInclusionEvolver, test_scheduling_and_diagnostic_configuration);
     ARIADNE_TESTING_ADD_TEST(TestDifferentialInclusionEvolver, test_error_preserving_reconditioner_and_empty_inputs);
-    return run_evolution_test_suite(ariadne_test_suite, argc, argv);
+    return Ariadne::Testing::run_logging_suite(ariadne_test_suite, argc, argv);
 }

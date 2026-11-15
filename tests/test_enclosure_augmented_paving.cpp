@@ -28,8 +28,8 @@
 
 // Verify the continuous and hybrid enclosure-to-augmented-paving adapters.
 #include "evolution/enclosure_augmented_paving.hpp"
-#include "concise_logging.hpp"
 #include "function/taylor_function.hpp"
+#include "logging/test_runner.hpp"
 #include "paving/paver.hpp"
 
 #include "ariadne-testing.hpp"
@@ -109,5 +109,5 @@ int main(int argc, char** argv) {
     ARIADNE_TESTING_SUITE("test_enclosure_augmented_paving");
     ARIADNE_TESTING_ADD_TEST(TestEnclosureAugmentedPaving, test_continuous);
     ARIADNE_TESTING_ADD_TEST(TestEnclosureAugmentedPaving, test_hybrid);
-    return run_evolution_test_suite(ariadne_test_suite, argc, argv);
+    return Ariadne::Testing::run_logging_suite(ariadne_test_suite, argc, argv);
 }

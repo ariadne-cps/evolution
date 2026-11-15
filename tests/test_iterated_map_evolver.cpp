@@ -27,7 +27,6 @@
  */
 
 #include <fstream>
-#include "concise_logging.hpp"
 #include <iostream>
 #include <memory>
 
@@ -46,6 +45,7 @@
 #include "geometry/box.hpp"
 #include "labelled/figure.hpp"
 #include "log_verbosity_scope.hpp"
+#include "logging/test_runner.hpp"
 #include "numeric/rational.hpp"
 #include "set/list_set.hpp"
 #include "system/iterated_map.hpp"
@@ -200,5 +200,5 @@ int main(int argc, const char* argv[]) {
     ARIADNE_TESTING_ADD_TEST(TestIteratedMapEvolver, test_stopping_policies);
     ARIADNE_TESTING_ADD_TEST(TestIteratedMapEvolver, test_evolve);
     ARIADNE_TESTING_ADD_TEST(TestIteratedMapEvolver, test_subdivide);
-    return run_evolution_test_suite(ariadne_test_suite, argc, argv);
+    return Ariadne::Testing::run_logging_suite(ariadne_test_suite, argc, argv);
 }

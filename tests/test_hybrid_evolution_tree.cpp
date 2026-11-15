@@ -27,13 +27,13 @@
  */
 
 #include <algorithm>
-#include "concise_logging.hpp"
 #include <memory>
 #include <sstream>
 #include <stdexcept>
 
 #include "evolution/hybrid_evolution_tree.hpp"
 #include "evolution/hybrid_evolver.hpp"
+#include "logging/test_runner.hpp"
 #include "system/hybrid_automata.hpp"
 #include "threading/thread_manager.hpp"
 
@@ -1009,5 +1009,5 @@ int main(int argc, char** argv) {
     ARIADNE_TESTING_ADD_TEST(TestHybridEvolutionTree, test_flat_and_tree_orbits_match_for_urgent_and_permissive_systems);
     ARIADNE_TESTING_ADD_TEST(TestHybridEvolutionTree, test_flat_and_tree_orbit_counts_match_at_time_and_discrete_limits);
     ARIADNE_TESTING_ADD_TEST(TestHybridEvolutionTree, test_flat_and_tree_orbit_counts_match_with_initial_jumps_and_splitting);
-    return run_evolution_test_suite(ariadne_test_suite, argc, argv);
+    return Ariadne::Testing::run_logging_suite(ariadne_test_suite, argc, argv);
 }

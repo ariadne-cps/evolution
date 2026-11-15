@@ -27,9 +27,9 @@
  */
 
 #include "evolution/hybrid_evolver.hpp"
-#include "concise_logging.hpp"
 #include "integration/integrator.hpp"
 #include "log_verbosity_scope.hpp"
+#include "logging/test_runner.hpp"
 #include "system/hybrid_automata.hpp"
 
 #include "ariadne-testing.hpp"
@@ -273,5 +273,5 @@ int main(int argc, char** argv) {
     ARIADNE_TESTING_ADD_TEST(TestHybridStepContracts, test_timing_straddles_final_time_without_unwinding);
     ARIADNE_TESTING_ADD_TEST(TestHybridStepContracts, test_rejected_step_and_guard_inputs);
     ARIADNE_TESTING_ADD_TEST(TestHybridStepContracts, test_grazing_whose_maximum_is_in_the_past);
-    return run_evolution_test_suite(ariadne_test_suite, argc, argv);
+    return Ariadne::Testing::run_logging_suite(ariadne_test_suite, argc, argv);
 }

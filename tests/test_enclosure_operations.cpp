@@ -27,13 +27,13 @@
  */
 
 #include <sstream>
-#include "concise_logging.hpp"
 
 #include "algebra/sweeper.hpp"
 #include "evolution/enclosure.hpp"
 #include "function/taylor_function.decl.hpp"
 #include "function/taylor_model.hpp"
 #include "labelled/figure.hpp"
+#include "logging/test_runner.hpp"
 #include "paving/paver.hpp"
 #include "set/list_set.hpp"
 
@@ -366,5 +366,5 @@ int main(int argc, char* argv[]) {
     ARIADNE_TESTING_ADD_TEST(TestEnclosureOperations, test_constrained_reconditioning_and_products);
     ARIADNE_TESTING_ADD_TEST(TestEnclosureOperations, test_clock_error_reconditioning);
     ARIADNE_TESTING_ADD_TEST(TestEnclosureOperations, test_degenerate_sets_and_remaining_contracts);
-    return run_evolution_test_suite(ariadne_test_suite, argc, argv);
+    return Ariadne::Testing::run_logging_suite(ariadne_test_suite, argc, argv);
 }

@@ -27,7 +27,6 @@
  */
 
 #include <cmath>
-#include "concise_logging.hpp"
 #include <fstream>
 #include <iostream>
 #include <sstream>
@@ -44,6 +43,7 @@
 #include "integration/integrator.hpp"
 #include "labelled/figure.hpp"
 #include "log_verbosity_scope.hpp"
+#include "logging/test_runner.hpp"
 #include "numeric/rational.hpp"
 #include "set/list_set.hpp"
 #include "utility/tuple.hpp"
@@ -280,5 +280,5 @@ int main(int argc, const char* argv[]) {
     ARIADNE_TESTING_ADD_TEST(TestVectorFieldSimulator, test_multiple_real_box_vdp_cycle);
     ARIADNE_TESTING_ADD_TEST(TestVectorFieldSimulator, test_multiple_trajectories_x);
     ARIADNE_TESTING_ADD_TEST(TestVectorFieldSimulator, test_multiple_trajectories_xy);
-    return run_evolution_test_suite(ariadne_test_suite, argc, argv);
+    return Ariadne::Testing::run_logging_suite(ariadne_test_suite, argc, argv);
 }

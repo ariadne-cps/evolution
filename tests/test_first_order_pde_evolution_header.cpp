@@ -28,7 +28,21 @@
 
 // Regression: the public PDE evolution header also compiles as the first include.
 #include "evolution/first_order_pde.hpp"
+#include "logging/test_runner.hpp"
 
-int main() {
-    return 0;
+#include "ariadne-testing.hpp"
+
+class TestFirstOrderPDEEvolutionHeader : public Ariadne::Testing::ContextFixture {
+  public:
+    using ContextFixture::ContextFixture;
+
+    void test_header_compiles() {
+        ARIADNE_TESTING_PROVE(true);
+    }
+};
+
+int main(int argc, char** argv) {
+    ARIADNE_TESTING_SUITE("test_first_order_pde_evolution_header");
+    ARIADNE_TESTING_ADD_TEST(TestFirstOrderPDEEvolutionHeader, test_header_compiles);
+    return Ariadne::Testing::run_logging_suite(ariadne_test_suite, argc, argv);
 }

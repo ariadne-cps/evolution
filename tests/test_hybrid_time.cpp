@@ -27,10 +27,10 @@
  */
 
 #include <sstream>
-#include "concise_logging.hpp"
 #include <string>
 
 #include "evolution/hybrid_time.hpp"
+#include "logging/test_runner.hpp"
 
 #include "ariadne-testing.hpp"
 using namespace Ariadne;
@@ -122,5 +122,5 @@ int main(int argc, char* argv[]) {
     ARIADNE_TESTING_ADD_TEST(TestHybridTime, test_construction_and_arithmetic);
     ARIADNE_TESTING_ADD_TEST(TestHybridTime, test_comparison_semantics);
     ARIADNE_TESTING_ADD_TEST(TestHybridTime, test_termination);
-    return run_evolution_test_suite(ariadne_test_suite, argc, argv);
+    return Ariadne::Testing::run_logging_suite(ariadne_test_suite, argc, argv);
 }

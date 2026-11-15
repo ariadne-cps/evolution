@@ -27,7 +27,6 @@
  */
 
 #include <fstream>
-#include "concise_logging.hpp"
 #include <iostream>
 
 #include "../src/evolution_time.hpp"
@@ -44,6 +43,7 @@
 #include "integration/integrator.hpp"
 #include "labelled/figure.hpp"
 #include "log_verbosity_scope.hpp"
+#include "logging/test_runner.hpp"
 #include "numeric/rational.hpp"
 #include "set/list_set.hpp"
 #include "utility/tuple.hpp"
@@ -328,5 +328,5 @@ int main(int argc, const char* argv[]) {
     ARIADNE_TESTING_ADD_TEST(TestVectorFieldEvolver, test_constrained_initial_subdivision_and_tiny_horizon);
     ARIADNE_TESTING_ADD_TEST(TestVectorFieldEvolver, test_binary64_step_limits);
     ARIADNE_TESTING_ADD_TEST(TestVectorFieldEvolver, test_lower_termination_diagnostics);
-    return run_evolution_test_suite(ariadne_test_suite, argc, argv);
+    return Ariadne::Testing::run_logging_suite(ariadne_test_suite, argc, argv);
 }

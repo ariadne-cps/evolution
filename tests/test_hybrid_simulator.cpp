@@ -27,13 +27,13 @@
  */
 
 #include <cmath>
-#include "concise_logging.hpp"
 #include <sstream>
 
 #include "evolution/hybrid_orbit.hpp"
 #include "evolution/hybrid_simulator.hpp"
 #include "evolution/hybrid_time.hpp"
 #include "log_verbosity_scope.hpp"
+#include "logging/test_runner.hpp"
 #include "system/hybrid_automata.hpp"
 
 #include "ariadne-testing.hpp"
@@ -194,5 +194,5 @@ int main(int argc, char* argv[]) {
     ARIADNE_TESTING_ADD_TEST(TestHybridSimulator, test_transitions_and_termination);
     ARIADNE_TESTING_ADD_TEST(TestHybridSimulator, test_invariant_and_progress_stopping);
     ARIADNE_TESTING_ADD_TEST(TestHybridSimulator, test_box_sampling);
-    return run_evolution_test_suite(ariadne_test_suite, argc, argv);
+    return Ariadne::Testing::run_logging_suite(ariadne_test_suite, argc, argv);
 }

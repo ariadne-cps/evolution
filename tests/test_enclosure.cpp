@@ -27,7 +27,6 @@
  */
 
 #include <fstream>
-#include "concise_logging.hpp"
 #include <iostream>
 
 #include "algebra/algebra.hpp"
@@ -43,6 +42,7 @@
 #include "integration/integrator.hpp"
 #include "labelled/figure.hpp"
 #include "logging/logging.hpp"
+#include "logging/test_runner.hpp"
 #include "numeric/rational.hpp"
 #include "set/function_set.hpp"
 #include "set/list_set.hpp"
@@ -319,5 +319,5 @@ int main(int argc, char* argv[]) {
     ARIADNE_TESTING_ADD_TEST(TestEnclosure, test_labelled_product);
     ARIADNE_TESTING_ADD_TEST(TestEnclosure, test_labelled_drawers);
     ARIADNE_TESTING_ADD_TEST(TestEnclosure, test_labelled_with_auxiliary_draw);
-    return run_evolution_test_suite(ariadne_test_suite, argc, argv);
+    return Ariadne::Testing::run_logging_suite(ariadne_test_suite, argc, argv);
 }

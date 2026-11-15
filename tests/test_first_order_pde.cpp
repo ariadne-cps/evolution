@@ -27,12 +27,12 @@
  */
 
 #include <cmath>
-#include "concise_logging.hpp"
 #include <vector>
 
 #include "algebra/tensor.hpp"
 #include "evolution/first_order_pde.hpp"
 #include "function/function.hpp"
+#include "logging/test_runner.hpp"
 #include "numeric/float_bounds.hpp"
 #include "numeric/numeric.hpp"
 #include "system/first_order_pde.hpp"
@@ -222,5 +222,5 @@ int main(int argc, char** argv) {
     ARIADNE_TESTING_ADD_TEST(TestFirstOrderPDE, test_double_precision_contracts);
     ARIADNE_TESTING_ADD_TEST(TestFirstOrderPDE, test_double_precision_evolution);
     ARIADNE_TESTING_ADD_TEST(TestFirstOrderPDE, test_multiple_precision_contracts);
-    return run_evolution_test_suite(ariadne_test_suite, argc, argv);
+    return Ariadne::Testing::run_logging_suite(ariadne_test_suite, argc, argv);
 }

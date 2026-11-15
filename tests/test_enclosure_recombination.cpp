@@ -27,13 +27,13 @@
  */
 
 #include <limits>
-#include "concise_logging.hpp"
 #include <sstream>
 #include <utility>
 
 #include "algebra/sweeper.hpp"
 #include "evolution/enclosure_recombiner.hpp"
 #include "function/taylor_function.hpp"
+#include "logging/test_runner.hpp"
 
 #include "ariadne-testing.hpp"
 
@@ -552,5 +552,5 @@ int main(int argc, char* argv[]) {
     ARIADNE_TESTING_ADD_TEST(TestEnclosureRecombination, test_non_dyadic_normalisation_with_padded_parameters_and_clock);
     ARIADNE_TESTING_ADD_TEST(TestEnclosureRecombination, test_empty_singleton_and_duplicate_sources);
     ARIADNE_TESTING_ADD_TEST(TestEnclosureRecombination, test_input_contracts_and_auxiliary_mapping);
-    return run_evolution_test_suite(ariadne_test_suite, argc, argv);
+    return Ariadne::Testing::run_logging_suite(ariadne_test_suite, argc, argv);
 }

@@ -966,10 +966,10 @@ class TreeHybridEvolutionBackend::Impl {
                         // Last publisher closes the active group and drains its
                         // waiting queue atomically. Retired sources stay only
                         // in the genealogy, never in the ready queue.
-                        const auto released = std::move(held->children);
+                        const auto ready_children = std::move(held->children);
                         waiting.erase(held);
                         active.erase(stage);
-                        for (const auto child: released) {
+                        for (const auto child: ready_children) {
                             if (history.metadata(child).retired_for_recombination)
                                 continue;
                             active.push_back({child, 1u, true, 0u});

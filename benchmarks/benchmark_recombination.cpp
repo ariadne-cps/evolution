@@ -279,12 +279,12 @@ List<Enclosure> generate(const Scenario& scenario, const Options& options,
             if (bounds.upper_bound().raw().get_d() < window_start ||
                 bounds.lower_bound().raw().get_d() > window_end)
                 continue;
-            auto source = checkpoint.continuous_set();
-            source.new_state_time_constraint(ValidatedConstraint(
+            auto checkpoint_set = checkpoint.continuous_set();
+            checkpoint_set.new_state_time_constraint(ValidatedConstraint(
                 ExactDouble(window_start), absolute_time, ExactDouble(window_end)));
-            auto probe = source;
+            auto probe = checkpoint_set;
             if (!definitely(probe.is_empty()))
-                window_sources.append(std::move(source));
+                window_sources.append(std::move(checkpoint_set));
         }
         eligible = window_sources.size();
         if (!options.distributed_count) {

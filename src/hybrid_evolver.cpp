@@ -1281,9 +1281,18 @@ Void HybridEvolverBase::
     // Test to see if set requires reconditioning
     if (this->_configuration_ptr->enable_reconditioning() &&
         (possibly(norm(starting_set.state_function().errors()) > this->_configuration_ptr->maximum_spacial_error()) || possibly(starting_set.time_function().error() > this->_configuration_ptr->maximum_spacial_error()) || possibly(starting_set.continuous_set().dwell_time_function().error() > this->_configuration_ptr->maximum_spacial_error()))) {
-        LOGGING_PRINTLN_AT(1, "reconditioning: errors " << starting_set.state_function().errors());
         HybridEnclosure reconditioned_set = starting_set;
         this->_recondition(reconditioned_set);
+        LOGGING_PRINTLN_AT(3, "RECONDITION location=" << location
+            << " t=" << starting_set.time_range()
+            << " parameters=" << starting_set.number_of_parameters()
+            << "->" << reconditioned_set.number_of_parameters()
+            << " radius=" << starting_set.continuous_set().radius()
+            << "->" << reconditioned_set.continuous_set().radius()
+            << " state_error=" << sup_norm(starting_set.state_function().errors())
+            << "->" << sup_norm(reconditioned_set.state_function().errors())
+            << " time_error=" << starting_set.time_function().error()
+            << "->" << reconditioned_set.time_function().error());
         result.continue_with(reconditioned_set, HybridEvolutionSuccessorKind::RECONDITIONING);
         return;
     }
@@ -1295,13 +1304,18 @@ Void HybridEvolverBase::
             result.stop_reason = HybridEvolutionStopReason::LOWER_SIZE_LIMIT;
             return;
         } else if (this->_configuration_ptr->enable_subdivisions()) {
-            LOGGING_PRINTLN_AT(1, "Set too large, splitting");
             List<HybridEnclosure> split_sets = starting_set.split();
             for (SizeType i = 0; i != split_sets.size(); ++i) {
                 if (!definitely(split_sets[i].is_empty())) {
                     result.continue_with(split_sets[i], HybridEvolutionSuccessorKind::SUBDIVISION);
                 }
             }
+            LOGGING_PRINTLN_AT(3, "SPLIT location=" << location
+                << " t=" << starting_set.time_range()
+                << " pieces=" << result.successors.size()
+                << " radius=" << starting_bounding_box.radius()
+                << " limit=" << this->_configuration_ptr->maximum_enclosure_radius()
+                << " parameters=" << starting_set.number_of_parameters());
             return;
         }
     }

@@ -38,6 +38,7 @@
 #include "evolution/enclosure_recombiner.hpp"
 #include "function/formula.hpp"
 #include "function/formula.tpl.hpp"
+#include "logging/logging.hpp"
 
 namespace Ariadne {
 
@@ -99,6 +100,21 @@ SiblingWindowRecombinationSchedulingPolicy* SiblingWindowRecombinationScheduling
 }
 
 namespace {
+
+// Radius diagnostics are evaluated only inside enabled logging macros.
+double largest_source_radius(const List<Enclosure>& sources) {
+    double radius = 0.0;
+    for (const auto& source: sources)
+        radius = std::max(radius, source.radius().raw().get_d());
+    return radius;
+}
+
+double largest_output_radius(const EnclosureRecombinationResult& result) {
+    double radius = 0.0;
+    for (const auto& output: result.outputs)
+        radius = std::max(radius, output.enclosure.radius().raw().get_d());
+    return radius;
+}
 
 // Require the same transition family and identical symbolic auxiliary maps.
 // This check is shared by the built-in policy and the backend's policy validation.
@@ -568,11 +584,16 @@ class TreeHybridEvolutionBackend::Impl {
             for (const auto source: group)
                 sources.append(history.object(source).entries.front().work.enclosure.continuous_set());
             const auto result = recombiner->recombine(sources, context);
-            // Replacements must provide complete provenance and reduce the
-            // number of unevolved trajectories, not just change representations.
+            // An unsuccessful numerical proposal leaves all children runnable.
             if (result.outputs.empty() || result.outputs.size() >= group.size() ||
-                !result.discarded_sources.empty() || !result.radius_limit_satisfied)
+                !result.discarded_sources.empty() || !result.radius_limit_satisfied) {
+                LOGGING_PRINTLN_AT(4, "RECOMBINE rejected parent-first"
+                    << " sources=" << group.size()
+                    << " outputs=" << result.outputs.size()
+                    << " discarded=" << result.discarded_sources.size()
+                    << " radius_ok=" << result.radius_limit_satisfied);
                 continue;
+            }
             std::vector<bool> represented(group.size(), false);
             bool complete_coverage = true;
             for (const auto& output: result.outputs) {
@@ -587,8 +608,17 @@ class TreeHybridEvolutionBackend::Impl {
                 }
             }
             if (!std::all_of(represented.begin(), represented.end(), [](bool covered) { return covered; }) ||
-                !complete_coverage)
+                !complete_coverage) {
+                LOGGING_PRINTLN_AT(4, "RECOMBINE rejected parent-first: incomplete provenance"
+                    << " sources=" << group.size() << " outputs=" << result.outputs.size());
                 continue;
+            }
+            LOGGING_PRINTLN_AT(3, "RECOMBINE parent-first"
+                << " location=" << history.object(group.front()).entries.front().work.enclosure.location()
+                << " t=" << history.object(group.front()).entries.front().work.enclosure.time_range()
+                << " sources=" << group.size() << " outputs=" << result.outputs.size()
+                << " max_source_radius=" << largest_source_radius(sources)
+                << " max_output_radius=" << largest_output_radius(result));
             // Commit all replacements before retiring the original sources.
             // Invalid or ineffective results leave every original child runnable.
             for (const auto& output: result.outputs) {
@@ -692,8 +722,14 @@ class TreeHybridEvolutionBackend::Impl {
                                    .work.enclosure.continuous_set());
             const auto result = recombiner->recombine(sources, context);
             if (result.outputs.empty() || result.outputs.size() >= group.size() ||
-                !result.discarded_sources.empty() || !result.radius_limit_satisfied)
+                !result.discarded_sources.empty() || !result.radius_limit_satisfied) {
+                LOGGING_PRINTLN_AT(4, "RECOMBINE rejected frontier"
+                    << " sources=" << group.size()
+                    << " outputs=" << result.outputs.size()
+                    << " discarded=" << result.discarded_sources.size()
+                    << " radius_ok=" << result.radius_limit_satisfied);
                 continue;
+            }
             std::vector<bool> represented(group.size(), false);
             bool full_coverage = true;
             for (const auto& output: result.outputs) {
@@ -708,10 +744,23 @@ class TreeHybridEvolutionBackend::Impl {
                 }
             }
             if (!full_coverage ||
-                !std::all_of(represented.begin(), represented.end(), [](bool covered) { return covered; }))
+                !std::all_of(represented.begin(), represented.end(), [](bool covered) { return covered; })) {
+                LOGGING_PRINTLN_AT(4, "RECOMBINE rejected frontier: incomplete provenance"
+                    << " sources=" << group.size() << " outputs=" << result.outputs.size());
                 continue;
-            if (!frontier_acceptance->accept(history, group, result))
+            }
+            if (!frontier_acceptance->accept(history, group, result)) {
+                LOGGING_PRINTLN_AT(4, "RECOMBINE rejected frontier: quality gate"
+                    << " sources=" << group.size() << " outputs=" << result.outputs.size());
                 continue;
+            }
+            const auto& first = history.object(group.front().trajectory).entries.at(group.front().entry).work.enclosure;
+            LOGGING_PRINTLN_AT(3, "RECOMBINE frontier"
+                << " location=" << first.location()
+                << " t=" << first.time_range()
+                << " sources=" << group.size() << " outputs=" << result.outputs.size()
+                << " max_source_radius=" << largest_source_radius(sources)
+                << " max_output_radius=" << largest_output_radius(result));
             const auto parent = common_ancestor(group);
             for (const auto& output: result.outputs) {
                 const auto representative = group[output.source_indices.front()];

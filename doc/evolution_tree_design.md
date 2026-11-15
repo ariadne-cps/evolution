@@ -1288,3 +1288,28 @@ source provenance and unchanged singleton execution, and (2) a
 three-to-one recombination followed by splitting its replacement into
 two ordinary continuation pieces. The numeric covering algorithm
 and global flat default are unchanged.
+
+### Compact structural-event logging (2026-11-15)
+
+Structural changes to evolved sets have one-line diagnostics at logging
+level **3**, without printing any full enclosure, domain or function patch:
+
+- `SPLIT`: location, time interval, number of nonempty successor pieces,
+  parent bounding-box radius, configured maximum radius and parameter count.
+- `RECONDITION`: location, time interval, parameter count and enclosure
+  radius before/after, state-function error bound before/after and
+  time-function error before/after.
+- `RECOMBINE parent-first` and `RECOMBINE frontier`: location, source
+  time interval, number of source checkpoints and replacement outputs,
+  maximum input radius and maximum output radius. These messages are
+  emitted only for **accepted**, provenance-complete reductions.
+  Rejected numerical proposals and quality-gate rejections use level **4**,
+  with compact reasons, rather than presenting a rejection as a structural
+  change.
+
+The ordinary `#r=... #i=... #f=...` progress summary remains at its
+existing level. The detailed `HybridEnclosure` and
+`ScaledFunctionPatch` dumps were previously moved to deep logging in
+`hybrid_evolver.cpp`; the new event diagnostics do not reintroduce
+multiline representations. Numerical radius statistics for recombination
+are calculated lazily, only when the logging level enables their messages.

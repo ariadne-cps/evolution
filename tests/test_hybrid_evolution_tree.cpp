@@ -27,7 +27,11 @@
  */
 
 #include <algorithm>
+#include <atomic>
+#include <chrono>
+#include <condition_variable>
 #include <memory>
+#include <mutex>
 #include <sstream>
 #include <stdexcept>
 
@@ -274,6 +278,15 @@ class ConcurrencyScope {
   public:
     ConcurrencyScope() { ThreadManager::instance().set_concurrency(0); }
     ~ConcurrencyScope() { ThreadManager::instance().set_concurrency(_previous); }
+};
+
+/** @brief Restore the thread pool when a parallel regression finishes. */
+class ParallelConcurrencyScope {
+    std::size_t _previous = ThreadManager::instance().concurrency();
+
+  public:
+    ParallelConcurrencyScope() { ThreadManager::instance().set_concurrency(2u); }
+    ~ParallelConcurrencyScope() { ThreadManager::instance().set_concurrency(_previous); }
 };
 
 } // namespace
@@ -738,6 +751,110 @@ class TestHybridEvolutionTree : public Testing::ContextFixture {
         verify(RadiusTrendFrontierMergesPolicy(0.1, 1.0), 0u, 2u);
         ARIADNE_TESTING_EXPECT_EXCEPTION(RadiusTrendFrontierMergesPolicy(0.0, 1.0));
         ARIADNE_TESTING_EXPECT_EXCEPTION(RadiusTrendFrontierMergesPolicy(2.0, -1.0));
+    }
+
+    void test_parallel_parent_first_last_publisher_merges_held_children() {
+        if (ThreadManager::instance().maximum_concurrency() < 2u)
+            return;
+        ParallelConcurrencyScope concurrency;
+        const auto initial = seed();
+        const DiscreteEvent jump("jump");
+        std::mutex gate_mutex;
+        std::condition_variable gate;
+        unsigned running = 0u;
+        std::atomic<unsigned> numerical_finished{0u};
+        std::atomic<unsigned> successors_executed{0u};
+        std::atomic<bool> premature_release{false};
+        TreeHybridEvolutionBackend backend(
+            initial, AllCompatibleSiblingRecombinationSchedulingPolicy{},
+            OnParentCompletionRecombinationTriggerPolicy{});
+        backend.set_semantics(Semantics::UPPER);
+        backend.run([&](const HybridEvolutionWorkItem& item, const HybridEvolutionStatistics&) {
+            HybridEvolutionStepResult result;
+            switch (label(item)) {
+                case 0:
+                    result.continue_with(marked(initial, 1), HybridEvolutionSuccessorKind::SUBDIVISION);
+                    result.continue_with(marked(initial, 2), HybridEvolutionSuccessorKind::SUBDIVISION);
+                    break;
+                case 1:
+                case 2: {
+                    // Both numerical tasks must be simultaneously active:
+                    // a serial implementation fails the bounded wait.
+                    std::unique_lock<std::mutex> lock(gate_mutex);
+                    ++running;
+                    gate.notify_all();
+                    if (!gate.wait_for(lock, std::chrono::seconds(15),
+                                       [&] { return running == 2u; }))
+                        throw std::runtime_error("Parent split pieces were not executed in parallel");
+                    lock.unlock();
+                    result.transition_to(marked(initial, 100), jump, EventKind::URGENT);
+                    ++numerical_finished;
+                    break;
+                }
+                case 100:
+                    if (numerical_finished.load() != 2u)
+                        premature_release = true;
+                    ++successors_executed;
+                    result.record_final(item.enclosure);
+                    break;
+                default:
+                    throw std::logic_error("Unexpected parallel parent-first checkpoint");
+            }
+            return result;
+        });
+        const auto root = backend.tree().root().value();
+        const auto children = backend.tree().children(root);
+        ARIADNE_TESTING_EXPECT_EQUAL(running, 2u);
+        ARIADNE_TESTING_PROVE(!premature_release.load());
+        ARIADNE_TESTING_EXPECT_EQUAL(successors_executed.load(), 1u);
+        ARIADNE_TESTING_PROVE(backend.tree().metadata(root).complete);
+        ARIADNE_TESTING_EXPECT_EQUAL(children.size(), 3u);
+        ARIADNE_TESTING_PROVE(backend.tree().metadata(children[0]).retired_for_recombination);
+        ARIADNE_TESTING_PROVE(backend.tree().metadata(children[1]).retired_for_recombination);
+        ARIADNE_TESTING_EXPECT_EQUAL(
+            backend.tree().metadata(children[2]).recombined_sources.size(), 2u);
+        ARIADNE_TESTING_EXPECT_EQUAL(backend.release_orbit().final().size(), 1u);
+    }
+
+    void test_parallel_frontier_executes_independent_split_checkpoints() {
+        if (ThreadManager::instance().maximum_concurrency() < 2u)
+            return;
+        ParallelConcurrencyScope concurrency;
+        const auto initial = seed();
+        std::mutex gate_mutex;
+        std::condition_variable gate;
+        unsigned running = 0u;
+        TreeHybridEvolutionBackend backend(initial, NoFrontierRecombinationPolicy{});
+        backend.set_semantics(Semantics::UPPER);
+        backend.run([&](const HybridEvolutionWorkItem& item, const HybridEvolutionStatistics&) {
+            HybridEvolutionStepResult result;
+            switch (label(item)) {
+                case 0:
+                    result.continue_with(marked(initial, 1), HybridEvolutionSuccessorKind::SUBDIVISION);
+                    result.continue_with(marked(initial, 2), HybridEvolutionSuccessorKind::SUBDIVISION);
+                    break;
+                case 1:
+                case 2: {
+                    std::unique_lock<std::mutex> lock(gate_mutex);
+                    ++running;
+                    gate.notify_all();
+                    if (!gate.wait_for(lock, std::chrono::seconds(15),
+                                       [&] { return running == 2u; }))
+                        throw std::runtime_error("Frontier split pieces were not executed in parallel");
+                    lock.unlock();
+                    result.record_final(item.enclosure);
+                    break;
+                }
+                default:
+                    throw std::logic_error("Unexpected parallel frontier checkpoint");
+            }
+            return result;
+        });
+        const auto root = backend.tree().root().value();
+        ARIADNE_TESTING_EXPECT_EQUAL(running, 2u);
+        for (const auto node: backend.tree().descendants(root))
+            ARIADNE_TESTING_PROVE(backend.tree().metadata(node).complete);
+        ARIADNE_TESTING_EXPECT_EQUAL(backend.release_orbit().final().size(), 2u);
     }
 
     void test_parent_finishes_before_distinct_derived_trajectories() {
@@ -1334,6 +1451,8 @@ class TestHybridEvolutionTree : public Testing::ContextFixture {
 int main(int argc, char** argv) {
     ARIADNE_TESTING_SUITE("test_hybrid_evolution_tree");
     ARIADNE_TESTING_ADD_TEST(TestHybridEvolutionTree, test_parent_finishes_before_distinct_derived_trajectories);
+    ARIADNE_TESTING_ADD_TEST(TestHybridEvolutionTree, test_parallel_parent_first_last_publisher_merges_held_children);
+    ARIADNE_TESTING_ADD_TEST(TestHybridEvolutionTree, test_parallel_frontier_executes_independent_split_checkpoints);
     ARIADNE_TESTING_ADD_TEST(TestHybridEvolutionTree, test_only_certified_single_urgent_transition_continues_the_node);
     ARIADNE_TESTING_ADD_TEST(TestHybridEvolutionTree, test_noop_and_window_recombination_policies);
     ARIADNE_TESTING_ADD_TEST(TestHybridEvolutionTree, test_all_compatible_siblings_merge_nonadjacent_unbounded_groups);

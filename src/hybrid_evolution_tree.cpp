@@ -32,6 +32,8 @@
 #include <cmath>
 #include <deque>
 #include <limits>
+#include <mutex>
+#include <optional>
 #include <stdexcept>
 #include <utility>
 
@@ -39,6 +41,8 @@
 #include "function/formula.hpp"
 #include "function/formula.tpl.hpp"
 #include "logging/logging.hpp"
+#include "threading/thread_manager.hpp"
+#include "threading/workload.hpp"
 
 namespace Ariadne {
 
@@ -887,6 +891,212 @@ class TreeHybridEvolutionBackend::Impl {
         }
     }
 
+    /** @brief Execute admissible checkpoints concurrently with serialized publication.
+     *  @details Every ready checkpoint has one DynamicWorkload token; the token
+     *  takes a checkpoint from the protected queue before beginning numerical
+     *  work. In parent-first mode, discrete children remain held in the tree
+     *  until the last in-flight or queued continuation of their parent has
+     *  published its result. In frontier mode, only ready (not in-flight)
+     *  checkpoints can be grouped or retired for recombination.
+     */
+    Void run_concurrent(const StepFunction& advance) {
+        struct Token {};
+        struct ParentProgress {
+            HybridEvolutionTree::NodeId node;
+            std::size_t outstanding = 1u;
+            Bool whole_trajectory = true;
+            std::size_t completed_steps = 0u;
+        };
+        using Workload = DynamicWorkload<Token>;
+        const auto root = history.root().value();
+        std::mutex schedule_mutex;
+        std::deque<HybridEvolutionCheckpointId> ready{{root, 0u}};
+        std::vector<std::pair<HybridEvolutionCheckpointId, std::size_t>> deferrals;
+        std::vector<ParentProgress> parents;
+        if (!use_frontier)
+            parents.push_back({root, 1u, true, 0u});
+
+        Workload workload(
+            [](const Token&, SharedPointer<ProgressIndicator>) {},
+            [&](Workload::Access& producer, const Token&) {
+                HybridEvolutionCheckpointId checkpoint;
+                std::optional<HybridEvolutionWorkItem> work;
+                HybridEvolutionStatistics snapshot;
+                {
+                    std::lock_guard<std::mutex> lock(schedule_mutex);
+                    // Tokens are allowed to outlive ready checkpoints retired
+                    // by a concurrent recombination: such tokens do no work.
+                    while (!ready.empty()) {
+                        const auto candidate = ready.front();
+                        ready.pop_front();
+                        const auto& trajectory = history.object(candidate.trajectory);
+                        if (std::find(trajectory.retired_entries.begin(),
+                                      trajectory.retired_entries.end(), candidate.entry) !=
+                            trajectory.retired_entries.end())
+                            continue;
+                        if (trajectory.entries.at(candidate.entry).result)
+                            throw std::logic_error("Checkpoint cannot be executed twice");
+
+                        if (use_frontier) {
+                            const auto deferred = std::find_if(deferrals.begin(), deferrals.end(),
+                                [&](const auto& entry) { return entry.first == candidate; });
+                            const auto previous = deferred == deferrals.end() ? 0u : deferred->second;
+                            std::vector<HybridEvolutionCheckpointId> alternatives;
+                            for (const auto other: ready) {
+                                const auto& other_trajectory = history.object(other.trajectory);
+                                if (!other_trajectory.entries.at(other.entry).result &&
+                                    std::find(other_trajectory.retired_entries.begin(),
+                                              other_trajectory.retired_entries.end(), other.entry) ==
+                                        other_trajectory.retired_entries.end())
+                                    alternatives.push_back(other);
+                            }
+                            if (!alternatives.empty() &&
+                                frontier_dispatch->should_defer(history, candidate, alternatives, previous)) {
+                                if (deferred == deferrals.end())
+                                    deferrals.push_back({candidate, 1u});
+                                else
+                                    ++deferred->second;
+                                ready.push_back(candidate);
+                                continue;
+                            }
+                            if (deferred != deferrals.end())
+                                deferrals.erase(deferred);
+                        }
+                        checkpoint = candidate;
+                        work.emplace(trajectory.entries.at(candidate.entry).work);
+                        snapshot = statistics;
+                        break;
+                    }
+                }
+                if (!work)
+                    return;
+
+                // Numerical evolution never holds the scheduler lock. Flat
+                // backend uses the same StepFunction concurrently.
+                HybridEvolutionStepResult result = advance(*work, snapshot);
+
+                std::lock_guard<std::mutex> lock(schedule_mutex);
+                const auto enqueue = [&](HybridEvolutionCheckpointId next) {
+                    ready.push_back(next);
+                    producer.append(Token{});
+                };
+                const auto evaluate_frontier = [&] {
+                    const auto previous_size = ready.size();
+                    schedule_frontier_recombination(ready);
+                    // Recombined replacements append new ready checkpoints;
+                    // existing retired tokens may still be in the workload.
+                    for (std::size_t i = previous_size; i != ready.size(); ++i)
+                        producer.append(Token{});
+                };
+
+                count(result);
+                if (use_frontier) {
+                    for (const auto& successor: result.successors) {
+                        if (successor.kind == HybridEvolutionSuccessorKind::SUBDIVISION)
+                            history.metadata(checkpoint.trajectory).whole_trajectory = false;
+                    }
+                    for (std::size_t ordinal = 0; ordinal != result.successors.size(); ++ordinal) {
+                        const auto& successor = result.successors[ordinal];
+                        const HybridEvolutionEntryOrigin origin{checkpoint.entry, ordinal};
+                        const bool split = successor.kind == HybridEvolutionSuccessorKind::SUBDIVISION;
+                        if (split || derives_trajectory(
+                                successor, result.successors.size(),
+                                history.metadata(checkpoint.trajectory).whole_trajectory)) {
+                            HybridEvolutionTrajectory child;
+                            child.entries.push_back({successor.work, std::nullopt, std::nullopt});
+                            HybridEvolutionTrajectoryMetadata metadata;
+                            metadata.origin = origin;
+                            metadata.pending_entries = 1u;
+                            metadata.recombination_time_barrier =
+                                history.metadata(checkpoint.trajectory).recombination_time_barrier;
+                            if (split)
+                                metadata.whole_trajectory = false;
+                            const auto created = history.add_child(checkpoint.trajectory,
+                                                                  std::move(child), std::move(metadata));
+                            enqueue({created, 0u});
+                            if (successor.kind == HybridEvolutionSuccessorKind::TRANSITION &&
+                                successor.event_kind != EventKind::PERMISSIVE)
+                                history.metadata(checkpoint.trajectory).whole_trajectory = false;
+                        } else {
+                            auto& entries = history.object(checkpoint.trajectory).entries;
+                            const auto index = entries.size();
+                            entries.push_back({successor.work, origin, std::nullopt});
+                            ++history.metadata(checkpoint.trajectory).pending_entries;
+                            enqueue({checkpoint.trajectory, index});
+                        }
+                    }
+                    history.object(checkpoint.trajectory).entries.at(checkpoint.entry).result.emplace(std::move(result));
+                    auto& metadata = history.metadata(checkpoint.trajectory);
+                    if (metadata.pending_entries == 0u)
+                        throw std::logic_error("Invalid checkpoint completion count");
+                    --metadata.pending_entries;
+                    const bool finished = metadata.pending_entries == 0u;
+                    if (finished)
+                        metadata.complete = true;
+                    ++global_steps;
+                    if (frontier_policy->enables_recombination() &&
+                        trigger->should_evaluate(history, checkpoint.trajectory,
+                            HybridRecombinationEvaluationPoint::AFTER_STEP, global_steps))
+                        evaluate_frontier();
+                    if (finished && frontier_policy->enables_recombination() &&
+                        trigger->should_evaluate(history, checkpoint.trajectory,
+                            HybridRecombinationEvaluationPoint::PARENT_COMPLETE, global_steps))
+                        evaluate_frontier();
+                } else {
+                    auto stage = std::find_if(parents.begin(), parents.end(),
+                        [&](const auto& item) { return item.node == checkpoint.trajectory; });
+                    if (stage == parents.end() || stage->outstanding == 0u)
+                        throw std::logic_error("Checkpoint has no active parent scheduling group");
+                    for (const auto& successor: result.successors)
+                        if (successor.kind == HybridEvolutionSuccessorKind::SUBDIVISION)
+                            stage->whole_trajectory = false;
+                    for (std::size_t ordinal = 0; ordinal != result.successors.size(); ++ordinal) {
+                        const auto& successor = result.successors[ordinal];
+                        const HybridEvolutionEntryOrigin origin{checkpoint.entry, ordinal};
+                        if (derives_trajectory(successor, result.successors.size(), stage->whole_trajectory)) {
+                            HybridEvolutionTrajectory child;
+                            child.entries.push_back({successor.work, std::nullopt, std::nullopt});
+                            HybridEvolutionTrajectoryMetadata metadata;
+                            metadata.origin = origin;
+                            history.add_child(checkpoint.trajectory, std::move(child), std::move(metadata));
+                            // Discrete children stay held, not yet admissible.
+                            if (successor.event_kind != EventKind::PERMISSIVE)
+                                stage->whole_trajectory = false;
+                        } else {
+                            auto& entries = history.object(checkpoint.trajectory).entries;
+                            const auto index = entries.size();
+                            entries.push_back({successor.work, origin, std::nullopt});
+                            ++stage->outstanding;
+                            enqueue({checkpoint.trajectory, index});
+                        }
+                    }
+                    history.object(checkpoint.trajectory).entries.at(checkpoint.entry).result.emplace(std::move(result));
+                    ++stage->completed_steps;
+                    if (policy->enables_recombination() &&
+                        trigger->should_evaluate(history, checkpoint.trajectory,
+                            HybridRecombinationEvaluationPoint::AFTER_STEP, stage->completed_steps))
+                        schedule_recombination(checkpoint.trajectory);
+                    if (--stage->outstanding == 0u) {
+                        // All producers of this parent's discrete children
+                        // have published, including those spawned by splits.
+                        history.metadata(checkpoint.trajectory).complete = true;
+                        if (policy->enables_recombination() &&
+                            trigger->should_evaluate(history, checkpoint.trajectory,
+                                HybridRecombinationEvaluationPoint::PARENT_COMPLETE,
+                                history.object(checkpoint.trajectory).entries.size()))
+                            schedule_recombination(checkpoint.trajectory);
+                        for (const auto child: history.children(checkpoint.trajectory)) {
+                            if (history.metadata(child).retired_for_recombination)
+                                continue;
+                            parents.push_back({child, 1u, true, 0u});
+                            enqueue({child, 0u});
+                        }
+                    }
+                }
+            });
+        workload.append(Token{}).process();
+    }
+
     /** @brief Append one trajectory's explicit contributions in creation order. */
     Void project_trajectory(HybridEvolutionTree::NodeId node, Orbit<HybridEnclosure>& orbit) const {
         const auto& trajectory = history.object(node);
@@ -948,6 +1158,14 @@ Void TreeHybridEvolutionBackend::run(const StepFunction& advance) {
         _impl->semantics != Semantics::UPPER)
         throw std::invalid_argument("Recombination is only sound for upper semantics");
     _impl->started = true;
+    // Zero concurrency retains the historical deterministic serial order.
+    // With a thread pool, the same scheduler policies admit work dynamically
+    // while the completed-result publication and genealogy remain serialized.
+    if (ThreadManager::instance().concurrency() > 0u) {
+        _impl->run_concurrent(advance);
+        _impl->complete = true;
+        return;
+    }
     if (_impl->use_frontier) {
         _impl->run_frontier(advance);
         _impl->complete = true;

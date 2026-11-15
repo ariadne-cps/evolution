@@ -23,7 +23,7 @@
  */
 
 /** @file evolution/hybrid_evolution_tree.hpp
- *  @brief Trajectory histories and a serial parent-first hybrid evolution backend.
+ *  @brief Trajectory histories and policy-driven concurrent hybrid evolution.
  */
 
 #ifndef ARIADNE_HYBRID_EVOLUTION_TREE_HPP
@@ -152,7 +152,7 @@ class HybridRecombinationSchedulingPolicy {
     virtual bool enables_recombination() const = 0;
 };
 
-/** @brief Preserve the existing parent-first schedule without recombination. */
+/** @brief Preserve parent-first admission without recombination. */
 class NoRecombinationSchedulingPolicy final : public HybridRecombinationSchedulingPolicy {
   public:
     NoRecombinationSchedulingPolicy* clone() const override;
@@ -329,7 +329,7 @@ class RadiusTrendFrontierMergesPolicy final : public HybridFrontierMergeAcceptan
                 const EnclosureRecombinationResult& result) const override;
 };
 
-/** @brief Serial backend with parent-first and opt-in checkpoint-frontier schedules.
+/** @brief Backend with parent-first and opt-in checkpoint-frontier schedules.
  *  @details The default/legacy grouping path finishes a parent before its derived
  *  trajectories and preserves the pre-existing order. The opt-in frontier path
  *  schedules individual work items across trajectories; subdivision creates

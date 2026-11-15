@@ -1317,3 +1317,56 @@ diagnostics are suppressed. Printing full domains and `ScaledFunctionPatch`
 objects is never required for the normal progress and event messages.
 Numerical radius statistics for recombination are calculated lazily,
 only when the logging level enables their messages.
+
+### Concurrent checkpoint admission and dynamic parent completion barriers (2026-11-15)
+
+The tree backend now uses the shared `DynamicWorkload` engine whenever
+`ThreadManager::instance().concurrency() > 0`. With concurrency zero,
+the original deterministic serial execution is retained, including its
+historical order-dependent tests.
+
+The concurrent scheduler separates ready work from held work. Every ready
+checkpoint has a workload token. A worker acquires the scheduling mutex,
+takes one admissible checkpoint and a snapshot of the global counters,
+then performs its numerical evolution **outside the lock**. Its completed
+result is published to the genealogy under the scheduling mutex, including
+successor creation, contribution counts, recombination evaluation, and
+release of newly admissible work.
+
+**Parent-first admission**: a per-parent `outstanding` count covers the
+parent's ready and executing checkpoints, but not discrete children held
+pending recombination. A continuation or subdivision increments the count
+while being published; publication of the finished checkpoint decrements
+it. The worker publishing the last result (count becomes zero) marks the
+parent complete, invokes the parent-completion trigger, recombines any
+compatible held children, then admits only nonretired children as ready
+work. There is no fixed thread barrier or location-wide completion test.
+The parent/child relationship determines the dynamic barrier; other
+independent parents may proceed simultaneously.
+
+**Frontier admission**: checkpoints of distinct trajectories, including
+split branches and reset successors, are immediately eligible; the global
+trigger, window grouping, bounded time-lag dispatch, radius-trend
+acceptance and inherited merge-time barrier retain their semantics.
+Grouping inspects only ready checkpoint identities, never work already
+dispatched to a numerical worker. Recombination replacements add ready
+workload tokens; tokens belonging to retired checkpoints safely become
+no-ops if they have not yet been claimed.
+
+All genealogy and scheduler mutations are serialized during publication.
+The numerical `advance` operation is not run under the scheduler lock.
+Completion detection includes work currently executing, preventing the
+last publisher from releasing a parent's children prematurely. A
+numerical exception leaves the backend incomplete, so
+`release_orbit()` remains unavailable. Under concurrency the order of
+step completion, and therefore the sequence of window/trigger evaluations,
+can vary: the scheduler promises dependency safety and accepted numerical
+coverage, not bitwise determinism of recombination choices. In
+particular, no worker may retire a checkpoint that has already been
+claimed for execution.
+
+The added concurrent regressions force two independent pieces to execute
+simultaneously. They check both parent-first's last-publisher barrier
+and accepted post-barrier recombination, and frontier's concurrent split
+dispatch with complete final provenance. The global flat backend and the
+zero-concurrency tree execution remain unaffected.

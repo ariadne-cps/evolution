@@ -29,6 +29,7 @@
 #include "evolution/enclosure_recombiner.hpp"
 
 #include <algorithm>
+#include <chrono>
 #include <cmath>
 #include <utility>
 
@@ -42,26 +43,56 @@
 namespace Ariadne {
 namespace {
 
+using RecombinationClock = std::chrono::steady_clock;
+
+std::uint64_t phase_elapsed_ns(RecombinationClock::time_point start) {
+    return static_cast<std::uint64_t>(
+        std::chrono::duration_cast<std::chrono::nanoseconds>(RecombinationClock::now() - start).count());
+}
+
+// In ordinary (unprofiled) calls this guard never reads a clock.
+class ScopedRecombinationTimer {
+    std::uint64_t* _elapsed;
+    RecombinationClock::time_point _start{};
+  public:
+    explicit ScopedRecombinationTimer(std::uint64_t* elapsed) : _elapsed(elapsed) {
+        if (_elapsed)
+            _start = RecombinationClock::now();
+    }
+    ~ScopedRecombinationTimer() {
+        if (_elapsed)
+            *_elapsed += phase_elapsed_ns(_start);
+    }
+    ScopedRecombinationTimer(const ScopedRecombinationTimer&) = delete;
+    ScopedRecombinationTimer& operator=(const ScopedRecombinationTimer&) = delete;
+};
+
 // Bound an image on the feasible parameter set by contracting its graph.
 // Keeping each source's own constraints here avoids intersecting alternatives.
 UpperBoxType constrained_image_bounds(const Enclosure& source,
-                                      const ValidatedVectorMultivariateFunctionPatch& image) {
+                                      const ValidatedVectorMultivariateFunctionPatch& image,
+                                      EnclosureRecombinationProfile* profile) {
     const auto parameter_domain = source.reduced_domain();
-    UpperBoxType bounds = apply(image, parameter_domain);
-    // A source predicate g in C also bounds any image f by C+range(f-g).
-    // In particular, this retains equalities shared with the reference even
-    // when an oblique constraint cannot contract the parameter box itself.
-    for (SizeType k = 0; k != image.result_size(); ++k) {
-        for (const auto& constraint: source.constraint_models()) {
-            bounds[k] = intersection(bounds[k], UpperIntervalType(constraint.bounds()) + apply(image.get(k) - constraint.function(), parameter_domain));
+    UpperBoxType bounds = [&] {
+        ScopedRecombinationTimer timer(profile ? &profile->image_bounds_ns : nullptr);
+        UpperBoxType bounds = apply(image, parameter_domain);
+        // A source predicate g in C also bounds any image f by C+range(f-g).
+        // In particular, this retains equalities shared with the reference even
+        // when an oblique constraint cannot contract the parameter box itself.
+        for (SizeType k = 0; k != image.result_size(); ++k) {
+            for (const auto& constraint: source.constraint_models()) {
+                bounds[k] = intersection(bounds[k], UpperIntervalType(constraint.bounds()) + apply(image.get(k) - constraint.function(), parameter_domain));
+            }
         }
-    }
+        return bounds;
+    }();
     if (definitely(bounds.is_empty()))
         return bounds;
     ARIADNE_PRECONDITION_MSG(definitely(bounds.is_bounded()), "Unbounded recombination image: " << bounds);
     if (source.number_of_constraints() == 0u || parameter_domain.size() == 0u)
         return bounds;
 
+    const auto graph_setup_start = profile ? RecombinationClock::now() : RecombinationClock::time_point{};
     const auto image_domain = cast_exact_box(bounds);
     const auto graph_domain = product(parameter_domain, image_domain);
     const auto& factory = source.configuration().function_factory();
@@ -81,7 +112,12 @@ UpperBoxType constrained_image_bounds(const Enclosure& source,
     UpperBoxType feasible_graph(graph_domain);
     ConstraintSolver contractor;
     const PreparedConstraintSolverFunction prepared(graph);
-    contractor.reduce(feasible_graph, prepared, graph_bounds);
+    if (profile)
+        profile->graph_setup_ns += phase_elapsed_ns(graph_setup_start);
+    {
+        ScopedRecombinationTimer timer(profile ? &profile->graph_reduce_ns : nullptr);
+        contractor.reduce(feasible_graph, prepared, graph_bounds);
+    }
     if (definitely(feasible_graph.is_empty())) {
         bounds[0] = UpperIntervalType(1, -1);
         return bounds;
@@ -115,6 +151,14 @@ OutputStream& ReferenceEnclosureRecombiner::_write(OutputStream& os) const {
 
 EnclosureRecombinationResult ReferenceEnclosureRecombiner::recombine(const List<Enclosure>& enclosures,
                                                                      const EnclosureRecombinationContext& context) const {
+    return recombine(enclosures, context, nullptr);
+}
+
+EnclosureRecombinationResult ReferenceEnclosureRecombiner::recombine(const List<Enclosure>& enclosures,
+                                                                     const EnclosureRecombinationContext& context,
+                                                                     EnclosureRecombinationProfile* profile) const {
+    if (profile)
+        *profile = {};
     EnclosureRecombinationResult batch;
     if (enclosures.empty())
         return batch;
@@ -128,6 +172,8 @@ EnclosureRecombinationResult ReferenceEnclosureRecombiner::recombine(const List<
     List<SizeType> source_indices;
     source_indices.reserve(enclosures.size());
     SizeType parameter_count = 0u;
+    {
+    ScopedRecombinationTimer timer(profile ? &profile->filter_ns : nullptr);
     for (SizeType index = 0; index != enclosures.size(); ++index) {
         auto source = enclosures[index];
         ARIADNE_PRECONDITION_MSG(source.state_dimension() == state_dimension,
@@ -143,6 +189,7 @@ EnclosureRecombinationResult ReferenceEnclosureRecombiner::recombine(const List<
         parameter_count = std::max(parameter_count, source.number_of_parameters());
         sources.append(source);
         source_indices.append(index);
+    }
     }
     if (sources.empty())
         return batch;
@@ -171,6 +218,7 @@ EnclosureRecombinationResult ReferenceEnclosureRecombiner::recombine(const List<
     const auto& factory = reference.configuration().function_factory();
     const ExactBoxType common_domain(parameter_count, ExactIntervalType(0, 1));
     const auto normalise = [&](const Enclosure& source) {
+        ScopedRecombinationTimer timer(profile ? &profile->normalise_ns : nullptr);
         const auto reduced = source.reduced_domain();
         auto parameters = factory.create_zeros(reduced.size(), common_domain);
         for (SizeType k = 0; k != reduced.size(); ++k) {
@@ -215,13 +263,17 @@ EnclosureRecombinationResult ReferenceEnclosureRecombiner::recombine(const List<
         // Retain only the reference and the current transformed source, rather
         // than a second full collection of normalised function models.
         const auto source = index == 0u ? result : normalise(sources[index]);
-        const auto source_map = join(join(source.state_function(), source.time_function()), source.dwell_time_function());
-        auto image = factory.create_zeros(component_count + constraint_count, common_domain);
-        for (SizeType k = 0; k != component_count; ++k)
-            image.set(k, index == 0u ? factory.create_zero(common_domain) : source_map.get(k) - reference_map.get(k));
-        for (SizeType k = 0; k != constraint_count; ++k)
-            image.set(component_count + k, result.constraint(k).function());
-        const auto bounds = constrained_image_bounds(source, image);
+        const auto image = [&] {
+            ScopedRecombinationTimer timer(profile ? &profile->image_setup_ns : nullptr);
+            const auto source_map = join(join(source.state_function(), source.time_function()), source.dwell_time_function());
+            auto image = factory.create_zeros(component_count + constraint_count, common_domain);
+            for (SizeType k = 0; k != component_count; ++k)
+                image.set(k, index == 0u ? factory.create_zero(common_domain) : source_map.get(k) - reference_map.get(k));
+            for (SizeType k = 0; k != constraint_count; ++k)
+                image.set(component_count + k, result.constraint(k).function());
+            return image;
+        }();
+        const auto bounds = constrained_image_bounds(source, image, profile);
         if (definitely(bounds.is_empty()))
             continue;
         combined = first ? bounds : hull(combined, bounds);
@@ -241,6 +293,8 @@ EnclosureRecombinationResult ReferenceEnclosureRecombiner::recombine(const List<
     // See the constructive coverage proof in doc/evolution_tree_design.md.
     // The contractor uses each source's full constraint system and permits
     // different source constraint lists and ordering.
+    {
+    ScopedRecombinationTimer timer(profile ? &profile->output_assembly_ns : nullptr);
     for (SizeType k = 0; k != constraint_count; ++k) {
         const auto bounds = cast_exact_box(UpperBoxType({combined[component_count + k]}))[0];
         result._constraints[k] = ValidatedConstraintModel(bounds.lower_bound(), result.constraint(k).function(), bounds.upper_bound());
@@ -272,7 +326,11 @@ EnclosureRecombinationResult ReferenceEnclosureRecombiner::recombine(const List<
             result._dwell_time_function = result._dwell_time_function + correction;
     }
     result._variable_kinds.concatenate(List<EnclosureVariableKind>(residual_components.size(), EnclosureVariableKind::ERROR));
-    result.reduce();
+    }
+    {
+        ScopedRecombinationTimer timer(profile ? &profile->output_reduce_ns : nullptr);
+        result.reduce();
+    }
     return finish(std::move(result));
 }
 

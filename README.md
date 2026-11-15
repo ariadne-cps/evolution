@@ -259,6 +259,33 @@ general proof that the recombined **constrained set** contains the
 union of the source constrained sets. Such a proof requires verified
 joint feasibility/inclusion reasoning, not interval-hull comparisons.
 
+### Opt-in profiling inside reference recombination
+
+Use `--profile-recombine 1` to measure internal stages in addition to the
+existing end-to-end and phase timings. For example:
+
+```bash
+./build-release/benchmarks/benchmark_recombination \
+  --sweep 1 --steps 0.015625 \
+  --time-window 0.625,0.75 --distributed-counts 2,4,8 \
+  --samples 5 --warmups 1 --profile-recombine 1 \
+  --csv build-release/recombination-profile.csv
+```
+
+The CSV includes eight `recombine_*_ns` mean durations: input filtering
+(including emptiness checks), parameter normalisation, residual-image
+construction, direct image bounding, constraint-graph setup, constraint-solver
+reduction, output assembly, and final output reduction. When profiling is
+disabled (default), these columns are blank and the reference implementation
+does not read a clock. Each profiled call resets the counters.
+
+The internal durations are exclusive but **not exhaustive**: hull accumulation,
+control flow, provenance and profiling overhead are not assigned to a stage.
+Consequently they need not sum to `recombination_mean_ns`. Compare profiled
+and unprofiled end-to-end runs on the same input to estimate instrumentation
+overhead before claiming a speedup. Time-distributed subsets omit the remaining
+eligible sources, so they measure cardinality scaling, not full-window coverage.
+
 ### Why reference recombination is conservative
 
 The reference upper-enclosure recombiner has a **constructive inclusion

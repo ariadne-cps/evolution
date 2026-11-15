@@ -142,6 +142,28 @@ class TestEnclosureRecombination : public Testing::ContextFixture {
         ARIADNE_TESTING_EXPECT_EQUAL(description(singleton.outputs.front().enclosure), description(first));
     }
 
+    void test_optional_profile_preserves_recombination_results() {
+        Enclosure first(domain, EffectiveVectorMultivariateFunction{s, sqr(s)}, config);
+        Enclosure second(domain, EffectiveVectorMultivariateFunction{s, sqr(s) + Real(1 / 4_q)}, config);
+        ReferenceEnclosureRecombiner reference;
+        const auto plain = reference.recombine({first, second});
+        EnclosureRecombinationProfile profile;
+        profile.filter_ns = 123u;
+        const auto profiled = reference.recombine({first, second}, {}, &profile);
+        ARIADNE_TESTING_EXPECT_EQUAL(profiled.outputs.size(), plain.outputs.size());
+        ARIADNE_TESTING_EXPECT_EQUAL(profiled.discarded_sources, plain.discarded_sources);
+        ARIADNE_TESTING_EXPECT_EQUAL(profiled.outputs.front().source_indices, plain.outputs.front().source_indices);
+        ARIADNE_TESTING_EXPECT_EQUAL(profiled.radius_limit_satisfied, plain.radius_limit_satisfied);
+        ARIADNE_TESTING_EXPECT_EQUAL(description(profiled.outputs.front().enclosure),
+                                     description(plain.outputs.front().enclosure));
+        ARIADNE_TESTING_PROVE(profile.normalise_ns + profile.image_setup_ns +
+                              profile.output_assembly_ns + profile.output_reduce_ns > 0u);
+        const auto none = reference.recombine({}, {}, &profile);
+        ARIADNE_TESTING_EXPECT_EQUAL(none.outputs.size(), 0u);
+        ARIADNE_TESTING_PROVE(profile.filter_ns == 0u && profile.normalise_ns == 0u &&
+                             profile.output_reduce_ns == 0u);
+    }
+
     void test_radius_request_is_reported_without_losing_coverage() {
         Enclosure first(domain, EffectiveVectorMultivariateFunction{s, sqr(s)}, config);
         Enclosure second(domain, EffectiveVectorMultivariateFunction{s, sqr(s) + Real(1 / 4_q)}, config);
@@ -515,6 +537,7 @@ int main(int argc, char* argv[]) {
     ARIADNE_TESTING_SUITE("test_enclosure_recombination");
     ARIADNE_TESTING_ADD_TEST(TestEnclosureRecombination, test_handle_dispatch_clone_lifetime_and_context);
     ARIADNE_TESTING_ADD_TEST(TestEnclosureRecombination, test_reference_batch_provenance_and_empty_inputs);
+    ARIADNE_TESTING_ADD_TEST(TestEnclosureRecombination, test_optional_profile_preserves_recombination_results);
     ARIADNE_TESTING_ADD_TEST(TestEnclosureRecombination, test_radius_request_is_reported_without_losing_coverage);
     ARIADNE_TESTING_ADD_TEST(TestEnclosureRecombination, test_nonlinear_reference_and_full_source_coverage);
     ARIADNE_TESTING_ADD_TEST(TestEnclosureRecombination, test_disjoint_constraints_are_united_and_domains_contracted);

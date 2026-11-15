@@ -29,6 +29,8 @@
 #ifndef ARIADNE_ENCLOSURE_RECOMBINER_HPP
 #define ARIADNE_ENCLOSURE_RECOMBINER_HPP
 
+#include <cstdint>
+
 #include "evolution/enclosure_recombiner_interface.hpp"
 #include "utility/handle.hpp"
 
@@ -48,6 +50,22 @@ class EnclosureRecombiner : public Handle<const EnclosureRecombinerInterface> {
     }
 };
 
+/** @brief Opt-in, per-call reference recombination phase durations in nanoseconds.
+ *  @details Phases are exclusive of each other but not exhaustive: control
+ *  flow, provenance, hull merging, and timer overhead remain unaccounted for.
+ *  A profiled call clears these counters before processing any sources.
+ */
+struct EnclosureRecombinationProfile {
+    std::uint64_t filter_ns = 0;          //!< Validate and filter input sources, including emptiness checks.
+    std::uint64_t normalise_ns = 0;       //!< Normalise source parameterisations and model constraints.
+    std::uint64_t image_setup_ns = 0;     //!< Construct joint residual images for each source.
+    std::uint64_t image_bounds_ns = 0;    //!< Calculate image ranges and tighten by source predicates.
+    std::uint64_t graph_setup_ns = 0;     //!< Assemble and prepare constraint graphs.
+    std::uint64_t graph_reduce_ns = 0;    //!< Run the prepared constraint solver on each graph.
+    std::uint64_t output_assembly_ns = 0; //!< Build the final residual parameterisation and predicates.
+    std::uint64_t output_reduce_ns = 0;   //!< Contract the final recombined enclosure.
+};
+
 /** @brief Recombine all surviving sources around the first source's nonlinear map.
  *  @details Contracts each source independently and encloses state/clock residuals
  *  in extra parameters. Reference predicates are relaxed over the source union.
@@ -64,6 +82,13 @@ class ReferenceEnclosureRecombiner : public EnclosureRecombinerInterface {
      */
     EnclosureRecombinationResult recombine(const List<Enclosure>& enclosures,
                                            const EnclosureRecombinationContext& context = {}) const override;
+    /** @brief Run the same reference algorithm while collecting optional per-call phase times.
+     *  @details A null profile disables all clock reads; the strategy keeps no profiling state.
+     *  This overload is reference-specific and does not change the polymorphic interface.
+     */
+    EnclosureRecombinationResult recombine(const List<Enclosure>& enclosures,
+                                           const EnclosureRecombinationContext& context,
+                                           EnclosureRecombinationProfile* profile) const;
     /** @brief Write the strategy name. */
     OutputStream& _write(OutputStream& os) const override;
 };

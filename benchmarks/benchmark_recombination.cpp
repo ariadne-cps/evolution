@@ -27,6 +27,7 @@
  */
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <filesystem>
 #include <fstream>
@@ -62,6 +63,7 @@ struct Options {
     unsigned group_size = 4u;
     unsigned samples = 3u;
     bool sweep = false;
+    bool profile_recombine = false;
     std::vector<double> steps = {1.0 / 16.0, 1.0 / 64.0, 1.0 / 256.0};
     std::vector<unsigned> groups = {2u, 4u, 8u};
     std::string csv = "recombination-sweep.csv";
@@ -178,6 +180,14 @@ List<ArgumentParser> argument_parsers(Options& options) {
                                                    if (enabled > 1u)
                                                        throw std::invalid_argument("sweep must be 0 or 1");
                                                    return [&options, enabled] { options.sweep = enabled == 1u; };
+                                               }));
+    parsers.append(make_valued_argument_parser("", "profile-recombine",
+                                               "Time reference recombination subphases: 1 enables (default: 0)",
+                                               [&options](const String& value) -> VoidFunction {
+                                                   const auto enabled = Bench::parse_unsigned<unsigned>(value);
+                                                   if (enabled > 1u)
+                                                       throw std::invalid_argument("profile-recombine must be 0 or 1");
+                                                   return [&options, enabled] { options.profile_recombine = enabled == 1u; };
                                                }));
     parsers.append(make_valued_argument_parser("", "steps",
                                                "Sweep maximum steps, comma-separated (default: 1/16,1/64,1/256)",
@@ -441,8 +451,23 @@ GuardQuality guard_quality(const Enclosure& source, bool urgent) {
     return {lower >= 0.0, std::max(0.0, -lower)};
 }
 
+constexpr std::size_t recombination_phase_count = 8u;
+
+std::array<double, recombination_phase_count> profile_values(const EnclosureRecombinationProfile& p) {
+    return {static_cast<double>(p.filter_ns), static_cast<double>(p.normalise_ns),
+            static_cast<double>(p.image_setup_ns), static_cast<double>(p.image_bounds_ns),
+            static_cast<double>(p.graph_setup_ns), static_cast<double>(p.graph_reduce_ns),
+            static_cast<double>(p.output_assembly_ns), static_cast<double>(p.output_reduce_ns)};
+}
+
+constexpr std::array<const char*, recombination_phase_count> recombination_phase_names = {
+    "filter", "normalise", "image-setup", "image-bounds",
+    "graph-setup", "graph-reduce", "output-assembly", "output-reduce"
+};
+
 struct Measurement {
     double contraction_ns = 0, recombination_ns = 0;
+    std::optional<EnclosureRecombinationProfile> recombination_profile;
     double independent_ns = 0, merged_ns = 0;
     SizeType independent_final = 0, merged_final = 0;
     EnclosureRecombinationResult result;
@@ -462,7 +487,7 @@ Measurement measure(const List<Enclosure>& original,
                     const GeneralHybridEvolver& continuation,
                     const HybridTerminationCriterion& stop,
                     DiscreteLocation target, RealSpace space,
-                    double final_time, bool urgent) {
+                    double final_time, bool urgent, bool profile_recombine) {
     Measurement m;
     List<Enclosure> contracted = original;
     const auto contraction_start = Bench::Clock::now();
@@ -472,7 +497,12 @@ Measurement measure(const List<Enclosure>& original,
     m.contraction_ns = Bench::elapsed_ns(contraction_start, contraction_end);
 
     const auto recombination_start = Bench::Clock::now();
-    m.result = ReferenceEnclosureRecombiner().recombine(contracted);
+    if (profile_recombine) {
+        m.recombination_profile.emplace();
+        m.result = ReferenceEnclosureRecombiner().recombine(contracted, {}, &*m.recombination_profile);
+    } else {
+        m.result = ReferenceEnclosureRecombiner().recombine(contracted);
+    }
     const auto recombination_end = Bench::Clock::now();
     m.recombination_ns = Bench::elapsed_ns(recombination_start, recombination_end);
     if (m.result.outputs.size() != 1u || !m.result.discarded_sources.empty() ||
@@ -636,6 +666,7 @@ struct ScenarioSummary {
     bool final_invariant_projection_certified = false;
     bool guard_universally_verified = false;
     double guard_violation_upper = 0.0;
+    std::array<double, recombination_phase_count> profile_mean_ns{};
     double contraction_mean_ns = 0.0, recombination_mean_ns = 0.0;
     double contract_recombine_mean_ns = 0.0;
     double continue_independent_mean_ns = 0.0, continue_recombined_mean_ns = 0.0;
@@ -685,11 +716,13 @@ ScenarioSummary run_scenario(const Scenario& scenario, const Options& options,
     Bench::Runner runner(cli);
     Bench::Samples contractions, recombinations, totals, independents, merged;
     Bench::Samples independent_totals, merged_totals;
+    std::array<Bench::Samples, recombination_phase_count> recombination_phases;
     std::optional<Measurement> last;
     unsigned round = 0u;
     const auto completed = runner.run(scenario.name, options.samples, [] {}, [&] {
         last = measure(original, continuation, stop, target, RealSpace({x, y}),
-                       scenario.continuation_horizon, scenario.kind == EventKind::URGENT);
+                       scenario.continuation_horizon, scenario.kind == EventKind::URGENT,
+                       options.profile_recombine);
     }, [&] {
         if (!last)
             throw std::runtime_error("missing measurement");
@@ -701,6 +734,11 @@ ScenarioSummary run_scenario(const Scenario& scenario, const Options& options,
             merged.add(last->merged_ns);
             independent_totals.add(last->independent_total_ns());
             merged_totals.add(last->merged_total_ns());
+            if (last->recombination_profile) {
+                const auto values = profile_values(*last->recombination_profile);
+                for (std::size_t i = 0; i != values.size(); ++i)
+                    recombination_phases[i].add(values[i]);
+            }
             if (verbose)
                 std::cout << "  sample=" << round - cli.warmups() + 1
                           << " independent-final=" << last->independent_final
@@ -718,6 +756,9 @@ ScenarioSummary run_scenario(const Scenario& scenario, const Options& options,
 
     summary.contraction_mean_ns = Bench::summarize(contractions).mean;
     summary.recombination_mean_ns = Bench::summarize(recombinations).mean;
+    if (options.profile_recombine)
+        for (std::size_t i = 0; i != recombination_phase_count; ++i)
+            summary.profile_mean_ns[i] = Bench::summarize(recombination_phases[i]).mean;
     summary.contract_recombine_mean_ns = Bench::summarize(totals).mean;
     summary.continue_independent_mean_ns = Bench::summarize(independents).mean;
     summary.continue_recombined_mean_ns = Bench::summarize(merged).mean;
@@ -763,6 +804,9 @@ ScenarioSummary run_scenario(const Scenario& scenario, const Options& options,
     };
     row("contract", contractions);
     row("recombine", recombinations);
+    if (options.profile_recombine)
+        for (std::size_t i = 0; i != recombination_phase_count; ++i)
+            row(recombination_phase_names[i], recombination_phases[i]);
     row("contract+recombine", totals);
     row("continue-independent", independents);
     row("continue-recombined", merged);
@@ -848,6 +892,11 @@ void csv_success(std::ostream& stream, const Options& options,
            << ',' << result.final_invariant_projection_certified
            << ',' << result.guard_universally_verified << ',';
     csv_number(stream, result.guard_violation_upper);
+    for (const auto value: result.profile_mean_ns) {
+        stream << ',';
+        if (options.profile_recombine)
+            csv_number(stream, value);
+    }
     stream << ",\"\"\n";
 }
 
@@ -856,8 +905,9 @@ void csv_failure(std::ostream& stream, const Options& options,
     csv_configuration(stream, options);
     stream << scenario.name << ",failed,";
     // Six count fields, five phase means, two totals, one speedup,
-    // seven quality ratios, four projection flags and two guard metrics.
-    for (unsigned index = 0u; index != 27u; ++index)
+    // seven quality ratios, four projection flags, two guard metrics,
+    // and eight optional internal phase timings.
+    for (unsigned index = 0u; index != 35u; ++index)
         stream << ',';
     stream << csv_escape(message) << '\n';
 }
@@ -903,7 +953,10 @@ int run_sweep(const Scenario (&scenarios)[2], const Options& options,
            "analytic_x_ratio,analytic_y_ratio,analytic_invariant_ratio,"
            "initial_coordinate_projection_certified,final_coordinate_projection_certified,"
            "initial_invariant_projection_certified,final_invariant_projection_certified,"
-           "guard_universally_verified,guard_violation_upper,error\n";
+           "guard_universally_verified,guard_violation_upper,"
+           "recombine_filter_ns,recombine_normalise_ns,recombine_image_setup_ns,recombine_image_bounds_ns,"
+           "recombine_graph_setup_ns,recombine_graph_reduce_ns,"
+           "recombine_output_assembly_ns,recombine_output_reduce_ns,error\n";
     bool failed = false;
     for (const auto step: options.steps) {
         for (const auto& window: windows) {

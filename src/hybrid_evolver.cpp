@@ -323,7 +323,7 @@ Orbit<HybridEnclosure>
     LOGGING_PRINTLN_AT(1, "initial_box=" << initial_box);
     HybridEnclosure initial_enclosure(initial_box, EnclosureConfiguration(this->function_factory()));
     set_auxiliary(this->system(), initial_enclosure);
-    LOGGING_PRINTLN_AT(2, "initial_enclosure=" << initial_enclosure);
+    LOGGING_PRINTLN_AT(6, "initial_enclosure=" << initial_enclosure);
     return this->orbit(initial_enclosure, termination, semantics);
 }
 
@@ -336,7 +336,7 @@ Orbit<HybridEnclosure>
     LOGGING_PRINTLN_AT(1, "initial_box=" << initial_box);
     HybridEnclosure initial_enclosure(initial_box, this->system().continuous_state_space(initial_box.location()), EnclosureConfiguration(this->function_factory()));
     set_auxiliary(this->system(), initial_enclosure);
-    LOGGING_PRINTLN_AT(2, "initial_enclosure=" << initial_enclosure);
+    LOGGING_PRINTLN_AT(6, "initial_enclosure=" << initial_enclosure);
     return this->orbit(initial_enclosure, termination, semantics);
 }
 
@@ -346,10 +346,10 @@ Orbit<HybridEnclosure>
               const HybridTerminationCriterion& termination,
               Semantics semantics) const {
     LOGGING_SCOPE_CREATE;
-    LOGGING_PRINTLN_AT(1, "initial_set=" << initial_set);
+    LOGGING_PRINTLN_AT(6, "initial_set=" << initial_set);
     HybridEnclosure initial_enclosure(initial_set, this->system().continuous_state_space(initial_set.location()), EnclosureConfiguration(this->function_factory()));
     set_auxiliary(this->system(), initial_enclosure);
-    LOGGING_PRINTLN_AT(2, "initial_enclosure=" << initial_enclosure);
+    LOGGING_PRINTLN_AT(6, "initial_enclosure=" << initial_enclosure);
     return this->orbit(initial_enclosure, termination, semantics);
 }
 
@@ -516,7 +516,7 @@ Void HybridEvolverBase::
                       const Map<DiscreteEvent, TransitionData>& transitions) const {
     LOGGING_SCOPE_CREATE;
     HybridEnclosure& invariant_set = initial_set;
-    LOGGING_PRINTLN("initial_set=" << initial_set);
+    LOGGING_PRINTLN_AT(6, "initial_set=" << initial_set);
     LOGGING_PRINTLN("transitions=" << transitions);
 
     // Apply restrictions due to invariants
@@ -569,7 +569,7 @@ Void HybridEvolverBase::
                         LOGGING_PRINTLN_AT(1, event << ": " << transition.event_kind << ", immediate");
                         result.record_reach(immediate_jump_set);
                         immediate_jump_set.apply_reset(event, transition.target, transition.target_space, transition.reset_function, transition.target_auxiliary_space, transition.target_auxiliary_function);
-                        LOGGING_PRINTLN_AT(2, "immediate_jump_set=" << immediate_jump_set);
+                        LOGGING_PRINTLN_AT(6, "immediate_jump_set=" << immediate_jump_set);
                         result.record_intermediate(immediate_jump_set);
                         // Only a strict whole-source activation certifies an immediate
                         // urgent reset. Do not infer coverage from successor count.
@@ -610,16 +610,16 @@ ValidatedVectorMultivariateFunctionPatch
     // more accurate, and the time domain might be used explicitly for the domain
     // of the resulting set.
     ValidatedVectorMultivariateFunctionPatch flow_model = integrator.flow_step(dynamic, initial_box, suggest(maximum_step_size));
-    LOGGING_PRINTLN_AT(1, "twosided_flow_model=" << flow_model);
+    LOGGING_PRINTLN_AT(6, "twosided_flow_model=" << flow_model);
     ExactBoxType flow_domain = flow_model.domain();
     // IntegratorInterface permits an actual step larger than its suggestion.
     // Restrict the validated flow to the configured maximum before using it.
     StepSizeType step_size = min(static_cast<StepSizeType>(flow_domain[flow_domain.size() - 1u].upper_bound()), maximum_step_size);
     flow_domain[flow_domain.size() - 1u] = ExactIntervalType(0, step_size);
     flow_model = restriction(flow_model, flow_domain);
-    LOGGING_PRINTLN_AT(1, "flow_model=" << flow_model);
+    LOGGING_PRINTLN_AT(6, "flow_model=" << flow_model);
     LOGGING_PRINTLN_AT(1, "flow_model: step_size=" << step_size << ", errors=" << std::scientific << flow_model.errors() << ", range=" << std::fixed << flow_model.range());
-    LOGGING_PRINTLN("flow_model=" << flow_model);
+    LOGGING_PRINTLN_AT(6, "flow_model=" << flow_model);
     return flow_model;
 }
 
@@ -636,7 +636,7 @@ Set<DiscreteEvent>
     UpperBoxType flow_bounds = flow.range();
     LOGGING_PRINTLN("flow_bounds=" << flow_bounds);
     reach_set.apply_full_reach_step(flow);
-    LOGGING_PRINTLN("reach_set=" << reach_set);
+    LOGGING_PRINTLN_AT(6, "reach_set=" << reach_set);
     for (Set<DiscreteEvent>::Iterator event_iter = events.begin(); event_iter != events.end(); ++event_iter) {
         const DiscreteEvent event = *event_iter;
         const EffectiveScalarMultivariateFunction& guard_function = guards[event];
@@ -982,14 +982,14 @@ Void HybridEvolverBase::
             if (transition_data.event_kind == EventKind::IMPACT) {
                 // For an IMPACT event, also impose that the flow derivative is positive at the crossing.
                 EffectiveScalarMultivariateFunction flow_derivative_function = lie_derivative(transition_data.guard_function, dynamic);
-                LOGGING_PRINTLN_AT(1, "flow_derivative_function=" << flow_derivative_function);
+                LOGGING_PRINTLN_AT(6, "flow_derivative_function=" << flow_derivative_function);
                 LOGGING_PRINTLN_AT(1, "jump_set.state_bounding_box()=" << jump_set.state_bounding_box());
                 UpperIntervalType flow_derivative_range = apply(flow_derivative_function, jump_set.state_bounding_box());
                 LOGGING_PRINTLN_AT(1, "flow_derivative_range=" << flow_derivative_range);
                 if (possibly(flow_derivative_range.lower_bound() <= 0)) {
                     jump_set.new_activation(event, flow_derivative_function);
                 }
-                LOGGING_PRINTLN_AT(1, "jump_set=" << jump_set);
+                LOGGING_PRINTLN_AT(6, "jump_set=" << jump_set);
                 if (definitely(jump_set.is_empty())) {
                     return;
                 }
@@ -1099,11 +1099,11 @@ Void HybridEvolverBase::
                 past_set.reduce();
                 LOGGING_PRINTLN_AT(1, "final_guard_range=" << final_guard_function.range());
                 LOGGING_PRINTLN_AT(1, "maximal_guard_function=" << maximal_guard_function);
-                LOGGING_PRINTLN_AT(1, "final_guard_function=" << final_guard_function);
+                LOGGING_PRINTLN_AT(6, "final_guard_function=" << final_guard_function);
                 LOGGING_PRINTLN_AT(1, "elapsed_time_function=" << elapsed_time_function);
                 LOGGING_PRINTLN_AT(1, "critical_time_function=" << critical_time_function);
                 LOGGING_PRINTLN_AT(1, "missing_set.is_empty()=" << missing_set.is_empty() << ", hitting_set.is_empty()=" << hitting_set.is_empty() << ", past_set.is_empty()=" << past_set.is_empty());
-                LOGGING_PRINTLN_AT(1, "hitting_set=" << hitting_set);
+                LOGGING_PRINTLN_AT(6, "hitting_set=" << hitting_set);
                 // FIXME: The guard range at the critical time may provide a stronger guarantee of emptiness than maximal_guard_function > zero, but we should ideally not rely on this
                 if (definitely(guard_range_at_critical_time > 0 || missing_set.is_empty())) {
                     // swap out missing set
@@ -1163,7 +1163,7 @@ Void HybridEvolverBase::
     const Set<DiscreteEvent>& terminating_events = termination.terminating_events();
 
     HybridEnclosure initial_set = jumped_set;
-    LOGGING_PRINTLN_AT(2, "initial_set=" << initial_set);
+    LOGGING_PRINTLN_AT(6, "initial_set=" << initial_set);
 
     LOGGING_RUN_MUTED(auto time_range = initial_set.time_range());
     if (definitely(time_range.lower_bound() > final_time)) {
@@ -1181,7 +1181,7 @@ Void HybridEvolverBase::
     Set<DiscreteEvent> events = transitions.keys();
 
     LOGGING_PRINTLN_AT(2, "dynamic=" << dynamic);
-    LOGGING_PRINTLN_AT(2, "initial_set " << initial_set);
+    LOGGING_PRINTLN_AT(6, "initial_set " << initial_set);
     LOGGING_PRINTLN_AT(2, "transitions=" << transitions);
 
     if (definitely(time_range.lower_bound() >= final_time)) {
@@ -1260,10 +1260,10 @@ Void HybridEvolverBase::
 
     LOGGING_PRINTLN_AT(2, "dynamic=" << dynamic);
 
-    LOGGING_PRINTLN_AT(2, "starting_set=" << starting_set);
+    LOGGING_PRINTLN_AT(6, "starting_set=" << starting_set);
     LOGGING_PRINTLN_AT(2, "starting_time=" << starting_set.time_function());
     if (definitely(starting_set.is_empty())) {
-        LOGGING_PRINTLN_AT(1, "Empty starting_set " << starting_set);
+        LOGGING_PRINTLN_AT(6, "Empty starting_set " << starting_set);
         result.stop_reason = HybridEvolutionStopReason::EMPTY;
         return;
     }
@@ -1381,8 +1381,8 @@ Void HybridEvolverBase::
     _apply_reach_step(reach_sets.front(), flow, timing_data);
     _apply_evolve_step(evolve_sets.front(), flow, timing_data);
 
-    LOGGING_PRINTLN_AT(1, "flow_reach_set=" << reach_sets.front() << "\n")
-    LOGGING_PRINTLN_AT(1, "flow_evolve_set=" << evolve_sets.front() << "\n")
+    LOGGING_PRINTLN_AT(6, "flow_reach_set=" << reach_sets.front() << "\n")
+    LOGGING_PRINTLN_AT(6, "flow_evolve_set=" << evolve_sets.front() << "\n")
 
     // Apply constraints on reach and evolve sets due to invariants and urgent guards
     for (Set<DiscreteEvent>::ConstIterator event_iter = blocking_events.begin();
@@ -1431,7 +1431,7 @@ Void HybridEvolverBase::
              evolve_set_iter != evolve_sets.end(); ++evolve_set_iter) {
             const HybridEnclosure& evolve_set = *evolve_set_iter;
             if (!definitely(evolve_set.is_empty())) {
-                LOGGING_PRINTLN("final_set=" << evolve_set);
+                LOGGING_PRINTLN_AT(6, "final_set=" << evolve_set);
                 result.record_final(evolve_set);
                 _step_data.finishing = true;
             }
@@ -1453,8 +1453,8 @@ Void HybridEvolverBase::
             } else if (definitely(evolve_set_time_range.upper_bound() <= timing_data.final_time)) {
                 // No need to introduce timing constraints
                 if (!definitely(evolve_set.is_empty())) {
-                    LOGGING_PRINTLN("evolve_set=" << evolve_set);
-                    LOGGING_PRINTLN("next_working_set=" << next_working_set);
+                    LOGGING_PRINTLN_AT(6, "evolve_set=" << evolve_set);
+                    LOGGING_PRINTLN_AT(6, "next_working_set=" << next_working_set);
                     result.continue_with(next_working_set);
                     result.record_intermediate(evolve_set);
                     _step_data.progress = true;
@@ -1468,8 +1468,8 @@ Void HybridEvolverBase::
                 // However, continue evolution without adding time constraint,
                 // since this will be introduced in the next step
                 if (!definitely(evolve_set.is_empty())) {
-                    LOGGING_PRINTLN("evolve_set=" << evolve_set);
-                    LOGGING_PRINTLN("next_working_set=" << next_working_set);
+                    LOGGING_PRINTLN_AT(6, "evolve_set=" << evolve_set);
+                    LOGGING_PRINTLN_AT(6, "next_working_set=" << next_working_set);
                     result.continue_with(next_working_set);
                     result.record_intermediate(evolve_set);
                     _step_data.progress = true;
@@ -1486,7 +1486,7 @@ Void HybridEvolverBase::
                 final_set.set_time(timing_data.final_time);
                 if (timing_data.finishing_kind != FinishingKind::BEFORE_FINAL_TIME && !definitely(final_set.is_empty())) {
                     // if(!definitely(final_set.is_empty())) {
-                    LOGGING_PRINTLN("final_set=" << final_set);
+                    LOGGING_PRINTLN_AT(6, "final_set=" << final_set);
                     result.record_final(final_set);
                     _step_data.finishing = true;
                 }
@@ -1554,7 +1554,7 @@ Void HybridEvolverBase::
                 _jump_set.apply_reset(event, target, transition.target_space, transition.reset_function, transition.target_auxiliary_space, transition.target_auxiliary_function);
                 result.transition_to(_jump_set, event, transition.event_kind, crossings[event].crossing_kind);
                 _step_data.events.insert(event);
-                LOGGING_PRINTLN_AT(2, "jump_set=" << _jump_set);
+                LOGGING_PRINTLN_AT(6, "jump_set=" << _jump_set);
             }
         }
     }
@@ -1806,7 +1806,7 @@ TimingData
                     ValidatedVectorMultivariateFunctionPatch identity = this->function_factory().create_identity(crossing_time.domain());
                     // TODO: Remove use of cast
                     ValidatedScalarMultivariateFunctionPatch step_time = crossing_time * 0 + static_cast<Dyadic>(step_size);
-                    LOGGING_PRINTLN_AT(1, "full flow=" << compose(flow, join(identity, step_time)));
+                    LOGGING_PRINTLN_AT(6, "full flow=" << compose(flow, join(identity, step_time)));
                     LOGGING_PRINTLN_AT(1, "guard range at crossing time=" << compose(guard, compose(flow, join(initial_set.state_function(), compose(crossing_time, initial_set.state_function())))).range());
                     LOGGING_PRINTLN_AT(1, "guard range at crossing time=" << compose(guard, compose(flow, join(identity, crossing_time))).range());
                     LOGGING_PRINTLN_AT(1, "No creep; event " << crossing_iter->first << " completely taken");

@@ -300,7 +300,7 @@ class TreeHybridEvolutionBackend::Impl {
                   const EnclosureRecombinerInterface& method,
                   const EnclosureRecombinationContext& limits)
         : frontier_policy(grouping.clone()), trigger(timing.clone()),
-          recombiner(method.clone()), context(limits), use_frontier(true) {
+          use_frontier(true), recombiner(method.clone()), context(limits) {
         HybridEvolutionTrajectory trajectory;
         trajectory.entries.push_back({
             {initial, HybridEvolutionPhase::PROCESS_STARTING_EVENTS},

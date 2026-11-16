@@ -116,6 +116,8 @@ struct HybridEvolutionStepResult {
     std::vector<HybridEvolutionSuccessor> successors;                        //!< Future work in production order.
     HybridEvolutionStopReason stop_reason = HybridEvolutionStopReason::NONE; //!< Local stopping information.
 
+    double continuous_evolution_time = 0.0; //!< Estimated continuous time processed once by this computation; structural steps contribute zero.
+
     /** @brief Record a swept reachable set. */
     Void record_reach(const HybridEnclosure& set);
     /** @brief Record an intermediate output without scheduling it implicitly. */
@@ -128,6 +130,51 @@ struct HybridEvolutionStepResult {
     Void transition_to(const HybridEnclosure& set, DiscreteEvent event, EventKind event_kind,
                        std::optional<CrossingKind> crossing_kind = std::nullopt,
                        HybridEvolutionTransitionResolution resolution = HybridEvolutionTransitionResolution::UNRESOLVED);
+};
+
+/** @brief One consistent estimate of completed and outstanding continuous evolution.
+ *  @details This is set-time work, not CPU time or a certified completion bound.
+ *  Remaining time includes queued, withheld and executing checkpoints. An absent
+ *  remaining estimate denotes an unbounded horizon or an invalid time bound.
+ */
+struct HybridEvolutionProgress {
+    double processed_time = 0.0;          //!< Sum of published continuous-step durations; shared prefixes counted once.
+    std::optional<double> remaining_time; //!< Sum of max(0, horizon - checkpoint lower time bound), when finite.
+    SizeType pending = 0u;                //!< All registered checkpoints not yet processed or replaced.
+    Bool complete = false;                //!< Successful workload exhaustion, independent of Orbit::final().
+    /** @brief Return processed/(processed+remaining), zero when unavailable, or one after successful completion. */
+    double completion_rate() const;
+};
+
+/** @brief Incremental set-time accounting shared by hybrid execution backends.
+ *  @details The caller serializes access. Claiming or moving a checkpoint does
+ *  not change its outstanding time; register at publication and remove only on
+ *  successful processing or committed replacement. No history traversal is needed.
+ */
+class HybridEvolutionProgressTracker {
+    std::optional<double> _horizon;
+    long double _processed = 0.0L;
+    long double _remaining = 0.0L;
+    SizeType _pending = 0u;
+    SizeType _unknown_pending = 0u;
+    Bool _complete = false;
+    Bool _valid_processed = true;
+    /** @brief Estimate this checkpoint's remaining continuous time when finite. */
+    std::optional<long double> remaining(const HybridEnclosure&) const;
+
+  public:
+    /** @brief Start without pending work; a missing or nonfinite horizon has no finite estimate. */
+    explicit HybridEvolutionProgressTracker(std::optional<double> horizon = std::nullopt);
+    /** @brief Register future work, regardless of its admission or execution state. */
+    Void add_pending(const HybridEnclosure&);
+    /** @brief Retire a registered checkpoint without crediting continuous evolution. */
+    Void remove_pending(const HybridEnclosure&);
+    /** @brief Replace one successfully processed work item by all its published successors and credit its duration once. */
+    Void publish(const HybridEvolutionWorkItem&, const HybridEvolutionStepResult&);
+    /** @brief Mark a successfully exhausted workload; outstanding checkpoints are an error. */
+    Void finish();
+    /** @brief Copy the current accounting without exposing mutable state. */
+    HybridEvolutionProgress snapshot() const;
 };
 
 /** @brief Consistent result counters for logging; not a numerical stopping criterion. */
@@ -150,6 +197,8 @@ class HybridEvolutionBackendInterface {
      *  @details Defaults to a no-op for backends that do not need semantic gating.
      */
     virtual Void set_semantics(Semantics) {}
+    /** @brief Read a consistent progress snapshot; custom backends can leave the estimate unavailable. */
+    virtual HybridEvolutionProgress progress() const { return {}; }
     /** @brief Execute the run once, propagating errors after outstanding workers join. */
     virtual Void run(const StepFunction& advance) = 0;
     /** @brief Transfer the conventional Orbit after successful run completion, once. */

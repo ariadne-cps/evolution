@@ -1110,6 +1110,100 @@ class TestHybridEvolutionTree : public Testing::ContextFixture {
         }
     }
 
+    void test_progress_recombines_waiting_time_without_inventing_evolution() {
+        ConcurrencyScope concurrency;
+        const auto initial = seed();
+        const DiscreteLocation target(2);
+        const DiscreteEvent jump("jump");
+        TreeHybridEvolutionBackend backend(initial, LocationCheckpointAdmissionPolicy{}, AllCompatibleRecombinationPolicy{});
+        backend.set_time_horizon(Real(10));
+        backend.set_semantics(Semantics::UPPER);
+        bool split = false;
+        unsigned targets = 0u;
+        backend.run([&](const HybridEvolutionWorkItem& item, const HybridEvolutionStatistics&) {
+            HybridEvolutionStepResult result;
+            const auto progress = backend.progress();
+            if (item.enclosure.location() == target) {
+                ARIADNE_TESTING_EXPECT_EQUAL(progress.processed_time, 4.0);
+                ARIADNE_TESTING_EXPECT_EQUAL(progress.pending, 1u);
+                ARIADNE_TESTING_EXPECT_EQUAL(progress.remaining_time.value(), 7.0);
+                if (item.phase == HybridEvolutionPhase::PROCESS_STARTING_EVENTS) {
+                    ++targets;
+                    result.continue_with(item.enclosure);
+                } else {
+                    result.continuous_evolution_time = 7.0;
+                    result.record_final(marked(item.enclosure, 10));
+                }
+            } else if (item.phase == HybridEvolutionPhase::PROCESS_STARTING_EVENTS) {
+                result.continue_with(initial);
+            } else if (label(item) == 0) {
+                result.continuous_evolution_time = 2.0;
+                result.continue_with(marked(initial, 2));
+            } else if (!split) {
+                split = true;
+                result.continue_with(item.enclosure, HybridEvolutionSuccessorKind::SUBDIVISION);
+                result.continue_with(item.enclosure, HybridEvolutionSuccessorKind::SUBDIVISION);
+            } else {
+                // One pending set is still in the source; the earlier reset
+                // image already waits in the target and must remain counted.
+                ARIADNE_TESTING_EXPECT_EQUAL(progress.pending, 2u);
+                ARIADNE_TESTING_EXPECT_EQUAL(progress.remaining_time.value(), progress.processed_time == 2.0 ? 16.0 : 15.0);
+                result.continuous_evolution_time = 1.0;
+                result.transition_to(jumped(item.enclosure, target, jump, 3), jump, EventKind::URGENT);
+            }
+            return result;
+        });
+        const auto progress = backend.progress();
+        ARIADNE_TESTING_EXPECT_EQUAL(targets, 1u);
+        ARIADNE_TESTING_EXPECT_EQUAL(progress.processed_time, 11.0);
+        ARIADNE_TESTING_EXPECT_EQUAL(progress.remaining_time.value(), 0.0);
+        ARIADNE_TESTING_PROVE(progress.complete);
+        ARIADNE_TESTING_EXPECT_EXCEPTION(backend.set_time_horizon(Real(20)));
+    }
+
+    void test_progress_counts_parallel_in_flight_work() {
+        if (ThreadManager::instance().maximum_concurrency() < 2u)
+            return;
+        ParallelConcurrencyScope concurrency;
+        const auto initial = seed();
+        std::vector<std::shared_ptr<const HybridEvolutionBackendFactoryInterface>> factories{
+            std::make_shared<FlatHybridEvolutionBackendFactory>(),
+            std::make_shared<TreeHybridEvolutionBackendFactory>(),
+            std::make_shared<TreeHybridEvolutionBackendFactory>(ImmediateCheckpointAdmissionPolicy{}),
+            std::make_shared<TreeHybridEvolutionBackendFactory>(LocationCheckpointAdmissionPolicy{})};
+        for (const auto& factory: factories) {
+            auto backend = factory->create(initial, Real(10));
+            std::mutex gate_mutex;
+            std::condition_variable gate;
+            unsigned entered = 0u;
+            HybridEvolutionProgress simultaneous;
+            backend->run([&](const HybridEvolutionWorkItem& item, const HybridEvolutionStatistics&) {
+                HybridEvolutionStepResult result;
+                if (label(item) == 0) {
+                    result.continuous_evolution_time = 2.0;
+                    result.continue_with(marked(initial, 2), HybridEvolutionSuccessorKind::SUBDIVISION);
+                    result.continue_with(marked(initial, 2), HybridEvolutionSuccessorKind::SUBDIVISION);
+                } else {
+                    std::unique_lock<std::mutex> lock(gate_mutex);
+                    ++entered;
+                    if (entered == 2u)
+                        simultaneous = backend->progress();
+                    gate.notify_all();
+                    if (!gate.wait_for(lock, std::chrono::seconds(15), [&] { return entered == 2u; }))
+                        throw std::runtime_error("Parallel progress regression did not claim both pieces");
+                    result.continuous_evolution_time = 8.0;
+                    result.record_final(marked(item.enclosure, 10));
+                }
+                return result;
+            });
+            ARIADNE_TESTING_EXPECT_EQUAL(simultaneous.pending, 2u);
+            ARIADNE_TESTING_EXPECT_EQUAL(simultaneous.processed_time, 2.0);
+            ARIADNE_TESTING_EXPECT_EQUAL(simultaneous.remaining_time.value(), 16.0);
+            ARIADNE_TESTING_EXPECT_EQUAL(backend->progress().processed_time, 18.0);
+            ARIADNE_TESTING_PROVE(backend->progress().complete == true);
+        }
+    }
+
     void test_parent_admission_releases_completed_families_without_global_barrier() {
         ConcurrencyScope concurrency;
         const auto initial = seed();
@@ -1930,6 +2024,8 @@ class TestHybridEvolutionTree : public Testing::ContextFixture {
 
 int main(int argc, char** argv) {
     ARIADNE_TESTING_SUITE("test_hybrid_evolution_tree");
+    ARIADNE_TESTING_ADD_TEST(TestHybridEvolutionTree, test_progress_recombines_waiting_time_without_inventing_evolution);
+    ARIADNE_TESTING_ADD_TEST(TestHybridEvolutionTree, test_progress_counts_parallel_in_flight_work);
     ARIADNE_TESTING_ADD_TEST(TestHybridEvolutionTree, test_periodic_ready_recombination_does_not_flush_on_each_admission);
     ARIADNE_TESTING_ADD_TEST(TestHybridEvolutionTree, test_sibling_window_ignores_interleaved_unrelated_parents);
     ARIADNE_TESTING_ADD_TEST(TestHybridEvolutionTree, test_parent_admission_releases_completed_families_without_global_barrier);

@@ -1395,6 +1395,12 @@ Void HybridEvolverBase::
     _apply_reach_step(reach_sets.front(), flow, timing_data);
     _apply_evolve_step(evolve_sets.front(), flow, timing_data);
 
+    // This one continuous computation can publish several outputs or successors.
+    // Credit its elapsed flow span once; structural steps never reach this path.
+    const double flow_duration = timing_data.parameter_dependent_evolution_time.range().upper_bound().raw().get_d();
+    const double remaining_duration = timing_data.final_time.get_d() - starting_set.time_range().lower_bound().get_d();
+    result.continuous_evolution_time = std::max(0.0, std::min(flow_duration, remaining_duration));
+
     LOGGING_PRINTLN_AT(1, "flow_reach_set=" << reach_sets.front() << "\n")
     LOGGING_PRINTLN_AT(1, "flow_evolve_set=" << evolve_sets.front() << "\n")
 

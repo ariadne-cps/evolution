@@ -444,6 +444,10 @@ class TreeHybridEvolutionBackend final : public HybridEvolutionBackendInterface 
     TreeHybridEvolutionBackend& operator=(const TreeHybridEvolutionBackend&) = delete;
     /** @brief Supply the approximation semantics before running. */
     Void set_semantics(Semantics semantics) override;
+    /** @brief Supply a finite-time progress horizon before running; omission leaves the estimate unavailable. */
+    Void set_time_horizon(const Real& final_time);
+    /** @brief Read set-time progress consistently with checkpoint publication and recombination. */
+    HybridEvolutionProgress progress() const override;
     /** @brief Run once with the selected admission and recombination policies.
      *  @note Callback failures leave an inspectable incomplete history and prohibit Orbit release.
      */

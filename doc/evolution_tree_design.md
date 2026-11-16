@@ -183,6 +183,60 @@ not a contraction proof. It supports READY only: choosing it with enabled
 WAITING recombination is rejected by both backend and factory. With no-op
 grouping the unused acceptance gate has no effect.
 
+## Set-time progress
+
+Flat and Tree share HybridEvolutionProgressTracker and expose a consistent
+HybridEvolutionProgress snapshot through backend.progress(). Let C be the sum
+of continuous time spans of successfully published computations, and let
+
+```text
+R = sum(max(0, horizon - lower_time(checkpoint)))
+progress = C / (C + R)
+```
+
+The sum includes every ready, waiting and in-flight checkpoint. Claiming work,
+changing admission state or reordering the queue does not alter the estimate.
+The remaining estimate uses the lower endpoint of each checkpoint's absolute
+time interval; it does not synchronise clocks or average their ranges.
+
+The numerical callback supplies continuous_evolution_time in StepResult. The
+built-in evolver records the upper range of the chosen parameter-dependent flow
+duration, clipped to the remaining horizon. It credits one continuous computation
+once even if that computation produces several reach/intermediate/final outputs
+or multiple successors. Initial-event handling, subdivision and reconditioning
+leave this duration zero. New custom numerical callbacks can supply the same
+metadata; omitted durations contribute zero rather than being inferred from
+output sets or constraints changing their time bounds.
+
+Publication removes the processed checkpoint from R, credits its reported time
+to C and registers every successor in R. Splitting replaces its source estimate
+by the sum of its piece estimates without duplicating the already computed prefix. A committed merge removes
+all source checkpoint estimates and adds each replacement's own estimate, without
+crediting continuous evolution. Rejected merges and retired no-op workload tokens
+do not alter progress. Empty or otherwise early-terminal work drops its remaining
+estimate without pretending to have evolved to the time horizon.
+
+For example, C=4 and one checkpoint at time 4 with horizon 10 gives R=6 and 40%.
+Splitting it into two checkpoints gives R=12 and 25%. Recombining those checkpoints
+into one at the same time returns to 40%, with C still equal to 4. Progress can
+therefore decrease when future work grows and increase when recombination reduces
+it. No monotonic smoothing hides these changes.
+
+These are computational set-time estimates, not CPU-time estimates, geometric
+probabilities or certified completion bounds. They do not predict future splits,
+permissive branches, numerical step costs or zero-time transition chains. Without
+a finite horizon or with nonfinite time bounds, remaining_time is unavailable
+and the logger shows no estimated progress until successful exhaustion. Zero-length
+horizons are handled without division by zero. The displayed percentage is capped
+at 99 while work remains; complete is set only after successful workload exhaustion,
+never by the presence of final Orbit contributions or after a failed callback.
+
+Counters are updated incrementally under each backend's publication mutex;
+progress never traverses the complete trajectory history. Snapshots are safe to
+read while numerical workers execute. Factory-created Tree runs receive the same
+horizon as Flat. Directly constructed Tree backends can call set_time_horizon()
+before run(); without it their finite-time estimate remains unavailable.
+
 ## Numerical construction and acceptance contract
 
 Only UPPER semantics permits enabled recombination. A proposal must have at

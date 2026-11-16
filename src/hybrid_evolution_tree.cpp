@@ -461,6 +461,8 @@ class TreeHybridEvolutionBackend::Impl {
   public:
     HybridEvolutionTree history;
     HybridEvolutionStatistics statistics;
+    HybridEvolutionProgressTracker progress_tracker;
+    mutable std::mutex schedule_mutex;
     std::unique_ptr<const HybridRecombinationGroupingPolicy> grouping_policy;
     std::unique_ptr<const HybridCheckpointDispatchPolicy> dispatch_policy;
     std::unique_ptr<const HybridRecombinationAcceptancePolicy> acceptance_policy;
@@ -498,6 +500,7 @@ class TreeHybridEvolutionBackend::Impl {
         HybridEvolutionTrajectoryMetadata metadata;
         metadata.pending_entries = 1u;
         history.create_root(std::move(trajectory), std::move(metadata));
+        progress_tracker.add_pending(initial);
     }
 
     /** @brief Classify successors using explicit provenance and whole-source evidence. */
@@ -678,8 +681,10 @@ class TreeHybridEvolutionBackend::Impl {
                     metadata.recombined_checkpoints.push_back(group[index]);
                 const auto created = history.add_child(parent, std::move(trajectory), std::move(metadata));
                 ready.push_back({created, 0u});
+                progress_tracker.add_pending(history.object(created).entries.front().work.enclosure);
             }
             for (const auto checkpoint: group) {
+                progress_tracker.remove_pending(history.object(checkpoint.trajectory).entries.at(checkpoint.entry).work.enclosure);
                 history.object(checkpoint.trajectory).retired_entries.push_back(checkpoint.entry);
                 auto& metadata = history.metadata(checkpoint.trajectory);
                 if (metadata.pending_entries == 0u)
@@ -703,7 +708,6 @@ class TreeHybridEvolutionBackend::Impl {
         struct Token {};
         using Workload = DynamicWorkload<Token>;
         const auto root = history.root().value();
-        std::mutex schedule_mutex;
         std::deque<HybridEvolutionCheckpointId> ready{
             {root, 0u}
         };
@@ -711,7 +715,12 @@ class TreeHybridEvolutionBackend::Impl {
         std::size_t in_flight = 0u;
         std::vector<std::pair<HybridEvolutionCheckpointId, std::size_t>> deferrals;
         Workload workload(
-            [](const Token&, SharedPointer<ProgressIndicator>) {},
+            [this](const Token&, SharedPointer<ProgressIndicator> indicator) {
+                std::lock_guard<std::mutex> lock(schedule_mutex);
+                const auto state = progress_tracker.snapshot();
+                indicator->update_current(state.complete ? 1.0 : std::min(0.99, state.completion_rate()));
+                indicator->update_final(1.0);
+            },
             [&](Workload::Access& producer, const Token&) {
                 HybridEvolutionCheckpointId checkpoint;
                 std::optional<HybridEvolutionWorkItem> work;
@@ -796,6 +805,7 @@ class TreeHybridEvolutionBackend::Impl {
                 };
 
                 count(result);
+                progress_tracker.publish(*work, result);
                 --in_flight;
                 {
                     const auto publish_successor = [&](HybridEvolutionCheckpointId next,
@@ -942,6 +952,18 @@ Void TreeHybridEvolutionBackend::set_semantics(Semantics semantics) {
     _impl->semantics = semantics;
 }
 
+Void TreeHybridEvolutionBackend::set_time_horizon(const Real& final_time) {
+    if (_impl->started)
+        throw std::logic_error("Cannot change the progress horizon after the run starts");
+    _impl->progress_tracker = HybridEvolutionProgressTracker(final_time.get_d());
+    _impl->progress_tracker.add_pending(_impl->history.object(_impl->history.root().value()).entries.front().work.enclosure);
+}
+
+HybridEvolutionProgress TreeHybridEvolutionBackend::progress() const {
+    std::lock_guard<std::mutex> lock(_impl->schedule_mutex);
+    return _impl->progress_tracker.snapshot();
+}
+
 Void TreeHybridEvolutionBackend::run(const StepFunction& advance) {
     if (_impl->started) {
         throw std::logic_error("A hybrid evolution backend can only run once");
@@ -953,6 +975,8 @@ Void TreeHybridEvolutionBackend::run(const StepFunction& advance) {
     // The scheduler is identical for sequential and concurrent execution:
     // DynamicWorkload controls how many ready checkpoints run at once.
     _impl->run_scheduled(advance);
+    std::lock_guard<std::mutex> lock(_impl->schedule_mutex);
+    _impl->progress_tracker.finish();
     _impl->complete = true;
 }
 
@@ -989,9 +1013,11 @@ TreeHybridEvolutionBackendFactory* TreeHybridEvolutionBackendFactory::clone() co
     return new TreeHybridEvolutionBackendFactory(*this);
 }
 
-std::unique_ptr<HybridEvolutionBackendInterface> TreeHybridEvolutionBackendFactory::create(const HybridEnclosure& initial, const Real&) const {
-    return std::make_unique<TreeHybridEvolutionBackend>(
+std::unique_ptr<HybridEvolutionBackendInterface> TreeHybridEvolutionBackendFactory::create(const HybridEnclosure& initial, const Real& final_time) const {
+    auto backend = std::make_unique<TreeHybridEvolutionBackend>(
         initial, *_admission, *_grouping, *_trigger, *_recombiner, _context, *_dispatch, *_acceptance);
+    backend->set_time_horizon(final_time);
+    return backend;
 }
 
 } // namespace Ariadne

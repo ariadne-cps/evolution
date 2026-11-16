@@ -103,6 +103,22 @@ The default trigger evaluates before admission, so location admission merges at
 its barrier, parent admission before releasing eligible descendants, and immediate
 admission after each publication. See the design document for configuration examples.
 
+## Hybrid evolution progress
+
+Flat and Tree estimate progress from continuous set-time already processed
+relative to processed plus remaining set-time. Remaining work includes ready,
+waiting and executing checkpoints, using the requested horizon and each set's
+lower absolute-time bound. Splitting sums the remaining estimates of its pieces;
+committed recombination replaces the source estimates by those of its outputs. Neither
+operation invents processed evolution time, so the percentage can move backwards
+when work grows. This measures continuous evolution, not elapsed CPU time.
+
+The numerical evolver reports each continuous step once, independently of its
+Orbit contributions. Backend `progress()` provides a consistent snapshot for
+monitoring; successful exhaustion sets completion even when an invariant, empty
+set or event limit stops evolution before the continuous horizon. See the design
+document for the accounting and treatment of unknown horizons.
+
 ## Recombination benchmark
 
 The `benchmark_recombination` executable compares the reference continuous

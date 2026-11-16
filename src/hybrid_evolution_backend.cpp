@@ -29,6 +29,8 @@
 #include "evolution/hybrid_evolution_backend.hpp"
 
 #include <algorithm>
+#include <cmath>
+#include <limits>
 #include <mutex>
 #include <stdexcept>
 #include <utility>
@@ -72,14 +74,81 @@ Void HybridEvolutionStepResult::transition_to(const HybridEnclosure& set, Discre
     });
 }
 
+double HybridEvolutionProgress::completion_rate() const {
+    if (complete)
+        return 1.0;
+    if (!remaining_time || !std::isfinite(processed_time) || !std::isfinite(*remaining_time))
+        return 0.0;
+    const long double total = static_cast<long double>(processed_time) + *remaining_time;
+    return total > 0.0L ? static_cast<double>(std::clamp(static_cast<long double>(processed_time) / total, 0.0L, 1.0L)) : 0.0;
+}
+
+HybridEvolutionProgressTracker::HybridEvolutionProgressTracker(std::optional<double> horizon)
+    : _horizon(horizon && std::isfinite(*horizon) ? horizon : std::nullopt) {}
+
+std::optional<long double> HybridEvolutionProgressTracker::remaining(const HybridEnclosure& enclosure) const {
+    if (!_horizon)
+        return std::nullopt;
+    const double lower = enclosure.time_range().lower_bound().get_d();
+    if (!std::isfinite(lower))
+        return std::nullopt;
+    return std::max(0.0L, static_cast<long double>(*_horizon) - lower);
+}
+
+Void HybridEvolutionProgressTracker::add_pending(const HybridEnclosure& enclosure) {
+    const auto duration = remaining(enclosure);
+    if (duration)
+        _remaining += *duration;
+    else
+        ++_unknown_pending;
+    ++_pending;
+}
+
+Void HybridEvolutionProgressTracker::remove_pending(const HybridEnclosure& enclosure) {
+    if (_pending == 0u)
+        throw std::logic_error("Cannot retire a checkpoint from an empty progress tracker");
+    const auto duration = remaining(enclosure);
+    if (duration)
+        _remaining = std::max(0.0L, _remaining - *duration);
+    else if (_unknown_pending != 0u)
+        --_unknown_pending;
+    else
+        throw std::logic_error("Unregistered unknown-time checkpoint");
+    if (--_pending == 0u)
+        _remaining = 0.0L;
+}
+
+Void HybridEvolutionProgressTracker::publish(const HybridEvolutionWorkItem& work, const HybridEvolutionStepResult& result) {
+    remove_pending(work.enclosure);
+    if (std::isfinite(result.continuous_evolution_time) && result.continuous_evolution_time >= 0.0)
+        _processed += result.continuous_evolution_time;
+    else
+        _valid_processed = false;
+    for (const auto& successor: result.successors)
+        add_pending(successor.work.enclosure);
+}
+
+Void HybridEvolutionProgressTracker::finish() {
+    if (_pending != 0u)
+        throw std::logic_error("Cannot complete progress while checkpoints remain pending");
+    _complete = true;
+}
+
+HybridEvolutionProgress HybridEvolutionProgressTracker::snapshot() const {
+    std::optional<double> remaining_estimate;
+    if (_valid_processed && _unknown_pending == 0u && _remaining <= std::numeric_limits<double>::max() &&
+        _processed <= std::numeric_limits<double>::max())
+        remaining_estimate = static_cast<double>(_remaining);
+    return {static_cast<double>(_processed), remaining_estimate, _pending, _complete};
+}
+
 namespace {
 
 /** @brief Per-run flat state; numerical callbacks never see its mutable Orbit. */
 class FlatHybridEvolutionBackend final : public HybridEvolutionBackendInterface {
     std::unique_ptr<Orbit<HybridEnclosure>> _orbit;
-    double _progress_start;
-    double _progress_duration;
-    std::mutex _mutex;
+    HybridEvolutionProgressTracker _progress;
+    mutable std::mutex _mutex;
     Bool _started = false;
     Bool _complete = false;
 
@@ -90,8 +159,9 @@ class FlatHybridEvolutionBackend final : public HybridEvolutionBackendInterface 
     }
 
     /** @brief Publish contributions before making any successor eligible to run. */
-    Void publish(const HybridEvolutionStepResult& result) {
+    Void publish(const HybridEvolutionWorkItem& work, const HybridEvolutionStepResult& result) {
         std::lock_guard<std::mutex> lock(_mutex);
+        _progress.publish(work, result);
         for (const auto& contribution: result.contributions) {
             switch (contribution.kind) {
                 case HybridEvolutionSetKind::REACH:
@@ -110,11 +180,16 @@ class FlatHybridEvolutionBackend final : public HybridEvolutionBackendInterface 
     }
 
   public:
-    /** @brief Preserve the input and the existing progress-indicator time scale. */
+    /** @brief Preserve the input and initialise accounting for its remaining evolution. */
     FlatHybridEvolutionBackend(const HybridEnclosure& initial, const Real& final_time)
         : _orbit(std::make_unique<Orbit<HybridEnclosure>>(initial)),
-          _progress_start(initial.time_range().lower_bound().get_d()),
-          _progress_duration(final_time.get_d() - _progress_start) {}
+          _progress(final_time.get_d()) { _progress.add_pending(initial); }
+
+    /** @brief Read both queued and executing work under the publication lock. */
+    HybridEvolutionProgress progress() const override {
+        std::lock_guard<std::mutex> lock(_mutex);
+        return _progress.snapshot();
+    }
 
     /** @brief Reuse DynamicWorkload execution while committing complete local results. */
     Void run(const StepFunction& advance) override {
@@ -124,25 +199,22 @@ class FlatHybridEvolutionBackend final : public HybridEvolutionBackendInterface 
         _started = true;
         using Workload = DynamicWorkload<HybridEvolutionWorkItem>;
         Workload workload(
-            [this](const HybridEvolutionWorkItem& item, SharedPointer<ProgressIndicator> indicator) {
-                if (_progress_duration > 0.0) {
-                    const double elapsed = item.enclosure.time_range().lower_bound().get_d() - _progress_start;
-                    indicator->update_current(std::clamp(elapsed, 0.0, _progress_duration));
-                    indicator->update_final(_progress_duration);
-                } else {
-                    indicator->update_current(1.0);
-                    indicator->update_final(1.0);
-                }
+            [this](const HybridEvolutionWorkItem&, SharedPointer<ProgressIndicator> indicator) {
+                const auto state = progress();
+                indicator->update_current(state.complete ? 1.0 : std::min(0.99, state.completion_rate()));
+                indicator->update_final(1.0);
             },
             [this, &advance](Workload::Access& pending, const HybridEvolutionWorkItem& item) {
                 const auto result = advance(item, statistics());
-                publish(result);
+                publish(item, result);
                 // No lock is held while submitting potentially concurrent work.
                 for (const auto& successor: result.successors) {
                     pending.append(successor.work);
                 }
             });
         workload.append({_orbit->initial(), HybridEvolutionPhase::PROCESS_STARTING_EVENTS}).process();
+        std::lock_guard<std::mutex> lock(_mutex);
+        _progress.finish();
         _complete = true;
     }
 

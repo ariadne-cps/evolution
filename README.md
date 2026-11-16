@@ -103,6 +103,25 @@ The default trigger evaluates before admission, so location admission merges at
 its barrier, parent admission before releasing eligible descendants, and immediate
 admission after each publication. See the design document for configuration examples.
 
+For large frontiers, spatial grouping limits the diameter of every group and
+previews its state hull before numerical recombination. Coordinate scales divide
+state coordinates when comparing centre distances; the radius remains unscaled.
+For example, this configuration limits position differences to 12 units and
+other coordinate differences to one unit, with at most eight sets per group:
+
+```cpp
+const Scalings scales(1.0_x, {{RealVariable("x"), 12.0_x}, {RealVariable("y"), 12.0_x}});
+evolver.set_evolution_backend_factory(TreeHybridEvolutionBackendFactory(
+    LocationCheckpointAdmissionPolicy{}, ProximityRecombinationPolicy(1.0, 8u, 12.0, scales),
+    EveryNStepsRecombinationTriggerPolicy(128u), ReferenceEnclosureRecombiner{},
+    EnclosureRecombinationContext(12.0_x)));
+```
+
+Waiting sets are considered every 128 completed steps and before admission.
+Replacement seeds wait for evolution before being eligible again, avoiding
+repeated accumulation of numerical parameters. The context also checks the
+actual output radius; unsuccessful merges preserve the original work.
+
 ## Hybrid evolution progress
 
 Flat and Tree measure temporal progress toward the requested final time across

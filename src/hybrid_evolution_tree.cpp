@@ -34,9 +34,11 @@
 #include <deque>
 #include <iterator>
 #include <limits>
+#include <map>
 #include <mutex>
 #include <optional>
 #include <stdexcept>
+#include <unordered_set>
 #include <utility>
 
 #include "evolution/enclosure_recombiner.hpp"
@@ -355,6 +357,157 @@ std::vector<std::vector<HybridEvolutionCheckpointId>>
     return groups;
 }
 
+ProximityRecombinationPolicy::ProximityRecombinationPolicy(
+    double maximum_center_distance, std::size_t max_group_size,
+    std::optional<double> maximum_enclosure_radius, const Scalings& scalings)
+    : _maximum_center_distance(maximum_center_distance), _max_group_size(max_group_size),
+      _maximum_enclosure_radius(maximum_enclosure_radius), _scalings(scalings) {
+    if (!std::isfinite(maximum_center_distance) || maximum_center_distance <= 0.0 ||
+        max_group_size < 2u ||
+        (maximum_enclosure_radius &&
+         (!std::isfinite(*maximum_enclosure_radius) || *maximum_enclosure_radius < 0.0)))
+        throw std::invalid_argument("Proximity recombination requires positive finite distance, group size >= 2 and finite nonnegative radius");
+}
+
+ProximityRecombinationPolicy* ProximityRecombinationPolicy::clone() const {
+    return new ProximityRecombinationPolicy(*this);
+}
+
+std::vector<std::vector<HybridEvolutionCheckpointId>>
+    ProximityRecombinationPolicy::select(
+        const HybridEvolutionTree& tree, const std::vector<CheckpointId>& pending) const {
+    struct Geometry {
+        CheckpointId checkpoint;
+        std::vector<double> center, lower, upper;
+    };
+    std::vector<Geometry> geometry;
+    std::map<std::size_t, std::vector<std::size_t>> indices;
+    for (const auto checkpoint: pending) {
+        if (checkpoint.entry == 0u && !tree.metadata(checkpoint.trajectory).recombined_checkpoints.empty())
+            continue;
+        const auto& enclosure = tree.object(checkpoint.trajectory).entries.at(checkpoint.entry).work.enclosure;
+        const auto& continuous = enclosure.continuous_set();
+        const auto space = enclosure.state_space();
+        const auto bounds = apply(enclosure.state_function(), continuous.reduced_domain());
+        Geometry item{checkpoint, {}, {}, {}};
+        bool valid = bounds.dimension() != 0u;
+        for (SizeType axis = 0; axis != bounds.dimension(); ++axis) {
+            const double scale = _scalings.scaling(space[axis]).get_d();
+            if (!std::isfinite(scale) || scale <= 0.0)
+                throw std::invalid_argument("Proximity recombination requires positive finite coordinate scales");
+            const double lower = bounds[axis].lower_bound().raw().get_d();
+            const double upper = bounds[axis].upper_bound().raw().get_d();
+            const double center = (lower / 2.0 + upper / 2.0) / scale;
+            valid = valid && std::isfinite(lower) && std::isfinite(upper) &&
+                    std::isfinite(center) && lower <= upper &&
+                    (!_maximum_enclosure_radius || upper / 2.0 - lower / 2.0 <= *_maximum_enclosure_radius);
+            item.center.push_back(center);
+            item.lower.push_back(lower);
+            item.upper.push_back(upper);
+        }
+        if (valid) {
+            indices[item.center.size()].push_back(geometry.size());
+            geometry.push_back(std::move(item));
+        }
+    }
+
+    std::vector<std::vector<CheckpointId>> groups;
+    std::vector<bool> used(geometry.size(), false);
+    for (auto& [dimension, index]: indices) {
+        std::vector<std::size_t> available(index.size());
+        // The median layout is a balanced k-d tree. Range queries avoid scanning
+        // an entire dispersed frontier for every small recombination group.
+        const auto build = [&](auto&& self, std::size_t first, std::size_t last, std::size_t depth) -> void {
+            if (first == last)
+                return;
+            const auto middle = first + (last - first) / 2u;
+            available[middle] = last - first;
+            const auto axis = depth % dimension;
+            std::nth_element(std::next(index.begin(), static_cast<std::ptrdiff_t>(first)),
+                             std::next(index.begin(), static_cast<std::ptrdiff_t>(middle)),
+                             std::next(index.begin(), static_cast<std::ptrdiff_t>(last)),
+                             [&](auto a, auto b) {
+                                 if (geometry[a].center[axis] != geometry[b].center[axis])
+                                     return geometry[a].center[axis] < geometry[b].center[axis];
+                                 return a < b;
+                             });
+            self(self, first, middle, depth + 1u);
+            self(self, middle + 1u, last, depth + 1u);
+        };
+        build(build, 0u, index.size(), 0u);
+        // Remove selected points from subtree counts, so dense frontiers do not
+        // repeatedly search already consumed groups from the root of the index.
+        const auto consume = [&](auto&& self, std::size_t point, std::size_t first,
+                                 std::size_t last, std::size_t depth) -> void {
+            const auto middle = first + (last - first) / 2u;
+            --available[middle];
+            if (index[middle] == point)
+                return;
+            const auto axis = depth % dimension;
+            const auto a = geometry[point].center[axis];
+            const auto b = geometry[index[middle]].center[axis];
+            if (a < b || (a == b && point < index[middle]))
+                self(self, point, first, middle, depth + 1u);
+            else
+                self(self, point, middle + 1u, last, depth + 1u);
+        };
+        // Seed order follows the supplied pending order, independent of index layout.
+        auto seeds = index;
+        std::sort(seeds.begin(), seeds.end());
+        for (const auto seed_index: seeds) {
+            if (used[seed_index])
+                continue;
+            const auto& seed_geometry = geometry[seed_index];
+            std::vector<CheckpointId> group{seed_geometry.checkpoint};
+            auto center_lower = seed_geometry.center;
+            auto center_upper = seed_geometry.center;
+            auto lower = seed_geometry.lower;
+            auto upper = seed_geometry.upper;
+            used[seed_index] = true;
+            consume(consume, seed_index, 0u, index.size(), 0u);
+            const auto visit = [&](auto&& self, std::size_t first, std::size_t last, std::size_t depth) -> void {
+                if (first == last || group.size() == _max_group_size)
+                    return;
+                const auto middle = first + (last - first) / 2u;
+                if (available[middle] == 0u)
+                    return;
+                const auto candidate_index = index[middle];
+                const auto& candidate = geometry[candidate_index];
+                bool nearby = !used[candidate_index];
+                for (std::size_t axis = 0; nearby && axis != dimension; ++axis) {
+                    nearby = std::max(center_upper[axis], candidate.center[axis]) -
+                                     std::min(center_lower[axis], candidate.center[axis]) <=
+                                 _maximum_center_distance &&
+                             (!_maximum_enclosure_radius ||
+                              std::max(upper[axis], candidate.upper[axis]) / 2.0 -
+                                      std::min(lower[axis], candidate.lower[axis]) / 2.0 <=
+                                  *_maximum_enclosure_radius);
+                }
+                if (nearby && compatible_checkpoints(tree, group.front(), candidate.checkpoint, false)) {
+                    group.push_back(candidate.checkpoint);
+                    used[candidate_index] = true;
+                    consume(consume, candidate_index, 0u, index.size(), 0u);
+                    for (std::size_t axis = 0; axis != dimension; ++axis) {
+                        center_lower[axis] = std::min(center_lower[axis], candidate.center[axis]);
+                        center_upper[axis] = std::max(center_upper[axis], candidate.center[axis]);
+                        lower[axis] = std::min(lower[axis], candidate.lower[axis]);
+                        upper[axis] = std::max(upper[axis], candidate.upper[axis]);
+                    }
+                }
+                const auto axis = depth % dimension;
+                if (candidate.center[axis] >= center_upper[axis] - _maximum_center_distance)
+                    self(self, first, middle, depth + 1u);
+                if (candidate.center[axis] <= center_lower[axis] + _maximum_center_distance)
+                    self(self, middle + 1u, last, depth + 1u);
+            };
+            visit(visit, 0u, index.size(), 0u);
+            if (group.size() >= 2u)
+                groups.push_back(std::move(group));
+        }
+    }
+    return groups;
+}
+
 ImmediateCheckpointDispatchPolicy* ImmediateCheckpointDispatchPolicy::clone() const {
     return new ImmediateCheckpointDispatchPolicy(*this);
 }
@@ -587,22 +740,29 @@ class TreeHybridEvolutionBackend::Impl {
                         << " pending=" << pending.size()
                         << " queue=" << (admission->recombination_queue() == HybridRecombinationQueue::READY ? "ready" : "waiting"));
         const auto groups = grouping_policy->select(history, pending);
-        if (groups.empty())
+        if (groups.empty()) {
             LOGGING_PRINTLN("RECOMBINE skipped: no compatible groups");
-        std::vector<HybridEvolutionCheckpointId> selected;
+            return;
+        }
+        std::unordered_set<const HybridEvolutionEntry*> pending_entries;
+        pending_entries.reserve(pending.size());
+        for (const auto checkpoint: pending)
+            pending_entries.insert(&history.object(checkpoint.trajectory).entries.at(checkpoint.entry));
+        std::unordered_set<const HybridEvolutionEntry*> selected;
         for (const auto& group: groups) {
             if (group.size() < 2u)
                 throw std::logic_error("Grouping policy selected fewer than two checkpoints");
             for (const auto checkpoint: group) {
                 if (!history.contains(checkpoint.trajectory) ||
-                    std::find(pending.begin(), pending.end(), checkpoint) == pending.end() ||
-                    std::find(selected.begin(), selected.end(), checkpoint) != selected.end())
+                    checkpoint.entry >= history.object(checkpoint.trajectory).entries.size())
+                    throw std::logic_error("Grouping policy selected unknown checkpoint");
+                const auto* entry = &history.object(checkpoint.trajectory).entries.at(checkpoint.entry);
+                if (!pending_entries.contains(entry) || !selected.insert(entry).second)
                     throw std::logic_error("Grouping policy selected unknown or overlapping checkpoint");
                 if (checkpoint != group.front() &&
                     !compatible_checkpoints(history, group.front(), checkpoint,
                                             grouping_policy->requires_time_overlap()))
                     throw std::logic_error("Grouping policy selected incompatible checkpoints");
-                selected.push_back(checkpoint);
             }
         }
         for (const auto& group: groups) {

@@ -30,6 +30,7 @@
 #include <atomic>
 #include <chrono>
 #include <condition_variable>
+#include <limits>
 #include <memory>
 #include <mutex>
 #include <sstream>
@@ -68,6 +69,21 @@ HybridEnclosure marked(const HybridEnclosure& initial, int label) {
 
 int label(const HybridEvolutionWorkItem& item) {
     return static_cast<int>(item.enclosure.time_range().lower_bound().get_d());
+}
+
+HybridEvolutionCheckpointId add_pending_checkpoint(
+    HybridEvolutionTree& tree, const HybridEnclosure& enclosure,
+    std::optional<DerivationTreeNodeId> parent = std::nullopt) {
+    HybridEvolutionTrajectory trajectory;
+    trajectory.entries.push_back({
+        {enclosure, HybridEvolutionPhase::PROCESS_STARTING_EVENTS},
+        std::nullopt,
+        std::nullopt
+    });
+    const auto node = tree.empty()
+                        ? tree.create_root(std::move(trajectory), HybridEvolutionTrajectoryMetadata{})
+                        : tree.add_child(parent.value_or(tree.root().value()), std::move(trajectory), HybridEvolutionTrajectoryMetadata{});
+    return {node, 0u};
 }
 
 HybridEnclosure jumped(const HybridEnclosure& source, DiscreteLocation target,
@@ -1502,6 +1518,177 @@ class TestHybridEvolutionTree : public Testing::ContextFixture {
         ARIADNE_TESTING_EXPECT_EQUAL(orbit.reach().size(), 0u);
     }
 
+    void test_proximity_bounds_normalized_diameter_radius_and_cardinality() {
+        const auto initial = seed();
+        const auto boxed = [&](ExactBoxType box) {
+            return HybridEnclosure(HybridExactBox(initial.location(), initial.state_space(), box), initial.configuration());
+        };
+        HybridEvolutionTree tree;
+        const auto a = add_pending_checkpoint(tree, boxed({
+                                                        {0, 0},
+                                                        {0, 0}
+        }));
+        const auto b = add_pending_checkpoint(tree, boxed({
+                                                        {75, 75},
+                                                        { 0,  0}
+        }));
+        const auto c = add_pending_checkpoint(tree, boxed({
+                                                        {150, 150},
+                                                        {  0,   0}
+        }),
+                                              b.trajectory);
+        const Scalings scales(1.0_x, {
+                                         {RealVariable("x"), 100.0_x}
+        });
+        const std::vector<HybridEvolutionCheckpointId> pending{a, b, c};
+        ARIADNE_TESTING_PROVE(ProximityRecombinationPolicy(1.0).select(tree, pending).empty());
+        const ProximityRecombinationPolicy local(1.0, 8u, 40.0, scales);
+        const auto groups = local.select(tree, pending);
+        ARIADNE_TESTING_EXPECT_EQUAL(groups.size(), 1u);
+        ARIADNE_TESTING_EXPECT_EQUAL(groups.front().size(), 2u);
+        ARIADNE_TESTING_PROVE(groups.front()[0] == a);
+        ARIADNE_TESTING_PROVE(groups.front()[1] == b);
+        // 0 -> .75 -> 1.5 is a chain, but its full normalized diameter exceeds one.
+        ARIADNE_TESTING_PROVE(ProximityRecombinationPolicy(1.0, 8u, 30.0, scales).select(tree, pending).empty());
+        // Geometric grouping is independent of immediate genealogy parents.
+        const auto unrelated = local.select(tree, {b, c});
+        ARIADNE_TESTING_EXPECT_EQUAL(unrelated.size(), 1u);
+        const auto far_y = add_pending_checkpoint(tree, boxed({
+                                                            {0, 0},
+                                                            {2, 2}
+        }));
+        ARIADNE_TESTING_PROVE(local.select(tree, {a, far_y}).empty());
+        const auto boundary_left = add_pending_checkpoint(tree, boxed({
+                                                                    {99, 99},
+                                                                    { 0,  0}
+        }));
+        const auto boundary_right = add_pending_checkpoint(tree, boxed({
+                                                                     {101, 101},
+                                                                     {  0,   0}
+        }));
+        ARIADNE_TESTING_EXPECT_EQUAL(local.select(tree, {boundary_left, boundary_right}).size(), 1u);
+
+        HybridEvolutionTree wide;
+        const auto first = add_pending_checkpoint(wide, boxed({
+                                                            {-50, 50},
+                                                            {  0,  0}
+        }));
+        const auto second = add_pending_checkpoint(wide, boxed({
+                                                             {25, 125},
+                                                             { 0,   0}
+        }));
+        ARIADNE_TESTING_PROVE(ProximityRecombinationPolicy(1.0, 8u, 60.0, scales).select(wide, {first, second}).empty());
+        ARIADNE_TESTING_EXPECT_EQUAL(ProximityRecombinationPolicy(1.0, 8u, 90.0, scales).select(wide, {first, second}).size(), 1u);
+
+        HybridEvolutionTree dense;
+        std::vector<HybridEvolutionCheckpointId> coincident;
+        for (unsigned i = 0; i != 10u; ++i)
+            coincident.push_back(add_pending_checkpoint(dense, initial));
+        const auto bounded = ProximityRecombinationPolicy(1.0, 3u).select(dense, coincident);
+        ARIADNE_TESTING_EXPECT_EQUAL(bounded.size(), 3u);
+        for (const auto& group: bounded)
+            ARIADNE_TESTING_EXPECT_EQUAL(group.size(), 3u);
+    }
+
+    void test_proximity_uses_reduced_domains_and_preserves_compatibility() {
+        const auto initial = seed();
+        auto constrained = HybridEnclosure(
+            HybridExactBox(initial.location(), initial.state_space(), ExactBoxType({
+                                                                          {0, 100},
+                                                                          {0,   0}
+        })),
+            initial.configuration());
+        const auto coordinate = EffectiveVectorMultivariateFunction::identity(2u);
+        constrained.new_state_constraint(DiscreteEvent("bound"), ValidatedConstraint(0, coordinate[0], 1));
+        constrained.reduce();
+        HybridEvolutionTree tree;
+        const auto a = add_pending_checkpoint(tree, constrained);
+        // Disjoint clock intervals are allowed; spatial distance is measured on the reduced set.
+        const auto b = add_pending_checkpoint(tree, marked(initial, 30));
+        const ProximityRecombinationPolicy policy(1.0, 8u, 1.0);
+        ARIADNE_TESTING_EXPECT_EQUAL(policy.select(tree, {a, b}).size(), 1u);
+        const auto other = add_pending_checkpoint(tree, jumped(initial, DiscreteLocation(2), DiscreteEvent("jump"), 30));
+        ARIADNE_TESTING_PROVE(policy.select(tree, {a, other}).empty());
+        const auto different_event = add_pending_checkpoint(tree, jumped(initial, initial.location(), DiscreteEvent("jump"), 30));
+        ARIADNE_TESTING_PROVE(policy.select(tree, {a, different_event}).empty());
+        tree.object(b.trajectory).entries[0].work.phase = HybridEvolutionPhase::EVOLVE_CONTINUOUSLY;
+        ARIADNE_TESTING_PROVE(policy.select(tree, {a, b}).empty());
+    }
+
+    void test_proximity_waiting_replacements_evolve_before_remerging() {
+        ConcurrencyScope concurrency;
+        const auto initial = seed();
+        const DiscreteLocation target(2);
+        const DiscreteEvent jump("jump");
+        TreeHybridEvolutionBackend backend(
+            initial, LocationCheckpointAdmissionPolicy{}, ProximityRecombinationPolicy(1.0, 2u, 1.0),
+            EveryNStepsRecombinationTriggerPolicy(2u), ReferenceEnclosureRecombiner{}, EnclosureRecombinationContext(1.0_x));
+        backend.set_semantics(Semantics::UPPER);
+        unsigned emitted = 0u, executed = 0u;
+        bool merged_before_completion = false;
+        backend.run([&](const HybridEvolutionWorkItem& item, const HybridEvolutionStatistics&) {
+            HybridEvolutionStepResult result;
+            if (item.enclosure.location() == target) {
+                ARIADNE_TESTING_EXPECT_EQUAL(emitted, 8u);
+                ++executed;
+                result.record_final(item.enclosure);
+            } else {
+                if (label(item) == 2) {
+                    for (const auto node: backend.tree().descendants(backend.tree().root().value()))
+                        merged_before_completion = merged_before_completion || !backend.tree().metadata(node).recombined_checkpoints.empty();
+                }
+                ++emitted;
+                result.transition_to(jumped(initial, target, jump, 100), jump, EventKind::PERMISSIVE);
+                if (emitted < 8u)
+                    result.continue_with(marked(initial, static_cast<int>(emitted)));
+            }
+            return result;
+        });
+        ARIADNE_TESTING_PROVE(merged_before_completion);
+        ARIADNE_TESTING_EXPECT_EQUAL(executed, 4u);
+        ARIADNE_TESTING_EXPECT_EQUAL(backend.release_orbit().final().size(), 4u);
+        // A replacement seed cannot be merged again while waiting, but a continuation can.
+        HybridEvolutionTree tree;
+        const auto a = add_pending_checkpoint(tree, initial);
+        const auto b = add_pending_checkpoint(tree, initial);
+        tree.metadata(a.trajectory).recombined_checkpoints.push_back(b);
+        const ProximityRecombinationPolicy policy(1.0);
+        ARIADNE_TESTING_PROVE(policy.select(tree, {a, b}).empty());
+        tree.object(a.trajectory).entries.push_back(tree.object(a.trajectory).entries[0]);
+        ARIADNE_TESTING_EXPECT_EQUAL(policy.select(tree, {
+                                                             {a.trajectory, 1u},
+                                                             b
+        })
+                                         .size(),
+                                     1u);
+    }
+
+    void test_proximity_selects_disjoint_local_pairs_in_a_large_frontier() {
+        const auto initial = seed();
+        HybridEvolutionTree tree;
+        std::vector<HybridEvolutionCheckpointId> pending;
+        for (int i = 0; i != 1024; ++i) {
+            const ExactDouble coordinate(4 * i);
+            const auto enclosure = HybridEnclosure(
+                HybridExactBox(initial.location(), initial.state_space(), ExactBoxType({
+                                                                              {coordinate, coordinate},
+                                                                              {         0,          0}
+            })),
+                initial.configuration());
+            pending.push_back(add_pending_checkpoint(tree, enclosure));
+            pending.push_back(add_pending_checkpoint(tree, enclosure));
+        }
+        const auto groups = ProximityRecombinationPolicy(1.0, 8u, 1.0).select(tree, pending);
+        ARIADNE_TESTING_EXPECT_EQUAL(groups.size(), 1024u);
+        for (const auto& group: groups)
+            ARIADNE_TESTING_EXPECT_EQUAL(group.size(), 2u);
+        ARIADNE_TESTING_EXPECT_EXCEPTION(ProximityRecombinationPolicy(0.0));
+        ARIADNE_TESTING_EXPECT_EXCEPTION(ProximityRecombinationPolicy(-1.0));
+        ARIADNE_TESTING_EXPECT_EXCEPTION(ProximityRecombinationPolicy(1.0, 1u));
+        ARIADNE_TESTING_EXPECT_EXCEPTION(ProximityRecombinationPolicy(1.0, 8u, -1.0));
+        ARIADNE_TESTING_EXPECT_EXCEPTION(ProximityRecombinationPolicy{std::numeric_limits<double>::infinity()});
+    }
+
     void test_all_compatible_siblings_merge_nonadjacent_unbounded_groups() {
         const auto initial = seed();
         const DiscreteEvent jump("jump"), other("other"), isolated("isolated");
@@ -2041,6 +2228,10 @@ int main(int argc, char** argv) {
     ARIADNE_TESTING_ADD_TEST(TestHybridEvolutionTree, test_parallel_frontier_executes_independent_split_checkpoints);
     ARIADNE_TESTING_ADD_TEST(TestHybridEvolutionTree, test_only_certified_single_urgent_transition_continues_the_node);
     ARIADNE_TESTING_ADD_TEST(TestHybridEvolutionTree, test_noop_and_window_recombination_policies);
+    ARIADNE_TESTING_ADD_TEST(TestHybridEvolutionTree, test_proximity_bounds_normalized_diameter_radius_and_cardinality);
+    ARIADNE_TESTING_ADD_TEST(TestHybridEvolutionTree, test_proximity_uses_reduced_domains_and_preserves_compatibility);
+    ARIADNE_TESTING_ADD_TEST(TestHybridEvolutionTree, test_proximity_waiting_replacements_evolve_before_remerging);
+    ARIADNE_TESTING_ADD_TEST(TestHybridEvolutionTree, test_proximity_selects_disjoint_local_pairs_in_a_large_frontier);
     ARIADNE_TESTING_ADD_TEST(TestHybridEvolutionTree, test_all_compatible_siblings_merge_nonadjacent_unbounded_groups);
     ARIADNE_TESTING_ADD_TEST(TestHybridEvolutionTree, test_all_compatible_siblings_can_resplit_after_unbounded_merge);
     ARIADNE_TESTING_ADD_TEST(TestHybridEvolutionTree, test_waiting_keeps_early_replacements_held_until_parent_completion);

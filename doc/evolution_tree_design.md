@@ -133,12 +133,29 @@ explicit pending checkpoint IDs rather than deriving eligibility from topology.
   cardinality and the hull of time ranges. ANY allows nonadjacent checkpoints
   but requires overlap with the group anchor. SIBLINGS selects consecutive
   compatible sibling seeds and permits disjoint times within the time span.
+- ProximityRecombinationPolicy(maximum_center_distance, max_group_size,
+  maximum_enclosure_radius, scalings) groups spatially nearby checkpoints across
+  arbitrary parents and disjoint clock intervals. Its normalized infinity-norm
+  diameter bounds every pair of centres, rather than linking a chain of close
+  neighbours. State bounds are evaluated over the current reduced parameter
+  domain; the optional preview radius bounds their unscaled bounding hull.
+  The numerical context must also specify a radius limit when the actual
+  recombined output must satisfy it: a small source hull does not guarantee a
+  small validated output.
 
 AllCompatible and Window share HybridRecombinationScope: ANY or SIBLINGS.
 SIBLINGS requires the same immediate genealogy parent and successor meaning
 (kind, event and event kind). Replacement provenance preserves that meaning
 when an early merge is considered again. ANY imposes no parent restriction.
-No implementation currently limits distance between set centres.
+
+Proximity uses an immutable balanced spatial index built for each selection,
+evaluates each candidate's geometry once, and greedily selects disjoint groups
+of at most the requested size. It does not promise an optimal partition.
+Unprocessed replacement seeds are excluded until they execute: repeatedly
+merging a held replacement can accumulate residual parameters without any
+reconditioning or physical evolution. Original singleton candidates remain
+available for later arrivals. The numerical recombiner still preserves all
+source constraints and clocks; grouping only controls which union is attempted.
 
 The backend independently requires equal locations, processing phases, state
 and auxiliary spaces, exact previous-event histories and structurally identical
@@ -301,6 +318,14 @@ evolver.set_evolution_backend_factory(TreeHybridEvolutionBackendFactory(
     ImmediateCheckpointAdmissionPolicy{}, WindowRecombinationPolicy(8u, 0.125),
     EveryNStepsRecombinationTriggerPolicy(8u)));
 
+// One active location; compact waiting work periodically in spatial groups.
+// Position units are scaled separately from other state variables.
+const Scalings scales(1.0_x, {{RealVariable("x"), 12.0_x}, {RealVariable("y"), 12.0_x}});
+evolver.set_evolution_backend_factory(TreeHybridEvolutionBackendFactory(
+    LocationCheckpointAdmissionPolicy{}, ProximityRecombinationPolicy(1.0, 8u, 12.0, scales),
+    EveryNStepsRecombinationTriggerPolicy(128u), ReferenceEnclosureRecombiner{},
+    EnclosureRecombinationContext(12.0_x)));
+
 // Parent admission, bounded consecutive sibling groups before release.
 evolver.set_evolution_backend_factory(TreeHybridEvolutionBackendFactory(
     ParentCheckpointAdmissionPolicy{},
@@ -316,10 +341,13 @@ injection, rejection without work loss, provenance, cross-parent grouping,
 resplitting progress, early waiting merges, parent dependencies after a merge,
 independent family release, location batches and simultaneous numerical workers.
 Periodic triggers and admission boundaries are tested separately.
+Spatial grouping tests cover normalized group diameter, cardinality, hull radius,
+reduced constraint domains, semantic compatibility, unrelated parents, a dispersed
+frontier and periodic compaction without repeatedly merging waiting replacements.
 
 The backend supports forward evolution. Backtracking, numerical-configuration
-alternatives, explicit recombinable-family keys, centre-distance grouping,
-radius-oriented partitioning and concurrent merge construction remain future
+alternatives, explicit recombinable-family keys, numerical radius-oriented
+partitioning and concurrent merge construction remain future
 work. General insertion/moving of genealogy nodes is outside the generic tree's
 append/prune contract. The normal evolver return value remains a conventional
 Orbit; exposing history alongside it is a separate API decision.

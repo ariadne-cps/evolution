@@ -31,6 +31,7 @@
 
 #include "evolution/enclosure_recombiner.hpp"
 #include "evolution/hybrid_evolution_backend.hpp"
+#include "evolution/scalings.hpp"
 #include "tree/derivation_tree.hpp"
 
 namespace Ariadne {
@@ -227,6 +228,43 @@ class WindowRecombinationPolicy final : public HybridRecombinationGroupingPolicy
     bool enables_recombination() const override { return true; }
     /** @brief Report whether grouping additionally requires time overlap. */
     bool requires_time_overlap() const override { return _scope == HybridRecombinationScope::ANY; }
+};
+
+/** @brief Spatially local grouping with bounded diameter, cardinality and optional state hull radius.
+ *  @details Centres and hulls are evaluated over each enclosure's current reduced
+ *  parameter domain. Distance is the infinity norm after dividing each state
+ *  coordinate by its Scalings value. The bound applies to every pair of centres,
+ *  preventing chains of nearby sets from joining distant endpoints. The optional
+ *  hull radius uses unscaled state coordinates, like Enclosure::radius().
+ *  Selection is greedy, uses a spatial index, permits disjoint clock intervals
+ *  and ignores genealogy parents. An unprocessed replacement seed is excluded
+ *  until it evolves, avoiding repeated accumulation of residual parameters.
+ *  Geometry only selects candidates; certified coverage and the actual output
+ *  radius remain the numerical recombiner's responsibility.
+ */
+class ProximityRecombinationPolicy final : public HybridRecombinationGroupingPolicy {
+    double _maximum_center_distance;
+    std::size_t _max_group_size;
+    std::optional<double> _maximum_enclosure_radius;
+    Scalings _scalings;
+
+  public:
+    /** @brief Configure a positive finite distance, group size >= 2 and optional finite nonnegative radius.
+     *  @param scalings Positive finite coordinate scales; unspecified variables use its default scale.
+     */
+    explicit ProximityRecombinationPolicy(double maximum_center_distance,
+                                          std::size_t max_group_size = 8u,
+                                          std::optional<double> maximum_enclosure_radius = std::nullopt,
+                                          const Scalings& scalings = Scalings(1.0));
+    /** @brief Clone immutable grouping settings. */
+    ProximityRecombinationPolicy* clone() const override;
+    /** @brief Select disjoint compatible spatial groups without requiring common ancestry. */
+    std::vector<std::vector<CheckpointId>> select(
+        const HybridEvolutionTree&, const std::vector<CheckpointId>&) const override;
+    /** @brief Report that numerical recombination is enabled. */
+    bool enables_recombination() const override { return true; }
+    /** @brief Permit different clock intervals; clocks remain covered by numerical recombination. */
+    bool requires_time_overlap() const override { return false; }
 };
 
 /** @brief Immutable policy separating checkpoint admission from genealogy and dispatch.

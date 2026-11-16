@@ -45,7 +45,7 @@ Void draw_enclosures_recorded(CanvasInterface& canvas, const EnclosureList& encl
         for (SizeType index = 0; index < count; ++index)
             workload.append(index);
         workload.process();
-        for (const auto& recording : recordings)
+        for (const auto& recording: recordings)
             recording.replay(canvas);
     }
 }

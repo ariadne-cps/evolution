@@ -31,6 +31,7 @@
 #include "algebra/algebra.hpp"
 #include "algebra/polynomial.hpp"
 #include "algebra/vector.hpp"
+#include "enclosure_recorded_draw.hpp"
 #include "evolution/hybrid_time.hpp"
 #include "function/constraint.hpp"
 #include "function/function.hpp"
@@ -50,7 +51,6 @@
 #include "rendering/figure.hpp"
 #include "set/affine_set.hpp"
 #include "system/discrete_event.hpp"
-#include "enclosure_recorded_draw.hpp"
 
 #include "constraint-solving/constraint_solver.hpp"
 #include "linear-programming/linear_programming.hpp"

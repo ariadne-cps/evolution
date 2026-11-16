@@ -203,7 +203,7 @@ split/recombine cycles at the same physical time. WAITING replacements can absor
 later arrivals without advancing time, since they cannot execute or resplit
 before admission. All merged clock ranges must remain finite.
 
-## Configuration examples and migration
+## Configuration examples
 
 One constructor is shared by the concrete backend and its factory. Its arguments
 are admission, grouping, trigger, recombiner, context, dispatch and acceptance;
@@ -228,17 +228,6 @@ evolver.set_evolution_backend_factory(TreeHybridEvolutionBackendFactory(
     ParentCheckpointAdmissionPolicy{},
     WindowRecombinationPolicy(8u, 0.125, HybridRecombinationScope::SIBLINGS)));
 ```
-
-The previous grouping-first constructor overloads and the parallel sibling and
-frontier grouping interfaces are removed. NoRecombinationSchedulingPolicy and
-NoFrontierRecombinationPolicy become NoRecombinationPolicy. SiblingWindow and
-FrontierWindow become WindowRecombinationPolicy with explicit scope; both
-AllCompatible variants become AllCompatibleRecombinationPolicy with scope.
-OnParentCompletion and OnSynchronizationCompletion triggers become
-BeforeAdmissionRecombinationTriggerPolicy with the corresponding admission.
-Dispatch/acceptance types use checkpoint/recombination names rather than a
-historical frontier execution-mode name. Existing default Flat selection and
-orbit() return types are unchanged.
 
 ## Verification and deferred work
 

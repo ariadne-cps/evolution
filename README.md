@@ -96,12 +96,12 @@ does not synchronise physical time or modify the genealogy to determine admissio
 Omit the second argument (or pass `NoRecombinationPolicy{}`) to retain this
 admission without numerical recombination. All Tree configurations use the same
 constructor: admission, grouping, trigger, recombiner, context, dispatch and
-acceptance. Defaults select parent admission without recombination. Grouping-first
-constructor overloads have been replaced by explicit admission; sibling restrictions
-are expressed with `HybridRecombinationScope::SIBLINGS` in the common grouping policies.
+acceptance. Defaults select parent admission without recombination. Sibling
+restrictions are expressed with `HybridRecombinationScope::SIBLINGS` in the common
+grouping policies.
 The default trigger evaluates before admission, so location admission merges at
 its barrier, parent admission before releasing eligible descendants, and immediate
-admission after each publication. See the design document for migration examples.
+admission after each publication. See the design document for configuration examples.
 
 ## Recombination benchmark
 

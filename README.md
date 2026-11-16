@@ -105,19 +105,17 @@ admission after each publication. See the design document for configuration exam
 
 ## Hybrid evolution progress
 
-Flat and Tree estimate progress from continuous set-time already processed
-relative to processed plus remaining set-time. Remaining work includes ready,
-waiting and executing checkpoints, using the requested horizon and each set's
-lower absolute-time bound. Splitting sums the remaining estimates of its pieces;
-committed recombination replaces the source estimates by those of its outputs. Neither
-operation invents processed evolution time, so the percentage can move backwards
-when work grows. This measures continuous evolution, not elapsed CPU time.
+Flat and Tree measure temporal progress toward the requested final time across
+ready, waiting and executing checkpoints. Each new branch inherits its elapsed
+time prefix. With a 200-second horizon, splitting a set at time 120 or creating
+permissive alternatives at that time preserves 60% progress. Recombination
+replaces source credits and remaining-time estimates by those of its outputs.
+Different branch times and clock uncertainty can still change the percentage.
 
-The numerical evolver reports each continuous step once, independently of its
-Orbit contributions. Backend `progress()` provides a consistent snapshot for
-monitoring; successful exhaustion sets completion even when an invariant, empty
-set or event limit stops evolution before the continuous horizon. See the design
-document for the accounting and treatment of unknown horizons.
+Backend `progress()` exposes the credited and remaining time, cumulative numerical
+work and successful completion separately. Recombination emits begin and outcome
+messages at the normal structural logging level; admission logs show actual hybrid
+checkpoint counts. See the design document for the accounting and diagnostics.
 
 ## Recombination benchmark
 

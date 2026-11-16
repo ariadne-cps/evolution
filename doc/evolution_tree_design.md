@@ -183,59 +183,83 @@ not a contraction proof. It supports READY only: choosing it with enabled
 WAITING recombination is rejected by both backend and factory. With no-op
 grouping the unused acceptance gate has no effect.
 
-## Set-time progress
+## Temporal progress toward the run horizon
 
 Flat and Tree share HybridEvolutionProgressTracker and expose a consistent
-HybridEvolutionProgress snapshot through backend.progress(). Let C be the sum
-of continuous time spans of successfully published computations, and let
+HybridEvolutionProgress snapshot through backend.progress(). Let t0 be the
+initial enclosure's lower absolute-time bound, T the requested final time, and
+D=max(0,T-t0). For the currently represented pending branches:
 
 ```text
-R = sum(max(0, horizon - lower_time(checkpoint)))
+C = sum(clamp(lower_time(checkpoint) - t0, 0, D)) + completed_terminal_branches * D
+R = sum(max(0, T - lower_time(checkpoint)))
 progress = C / (C + R)
 ```
 
-The sum includes every ready, waiting and in-flight checkpoint. Claiming work,
-changing admission state or reordering the queue does not alter the estimate.
-The remaining estimate uses the lower endpoint of each checkpoint's absolute
-time interval; it does not synchronise clocks or average their ranges.
+C is credited_time, not accumulated numerical computation cost. Every new branch
+inherits its elapsed prefix: splitting or a permissive transition at time 120
+with t0=0 and T=200 creates another branch already 60% through the horizon,
+not a new branch starting at zero. All sums include ready, waiting and in-flight
+checkpoints. Claiming work, changing admission state or reordering the queue does
+not alter the estimate. The bounds are conservative clock estimates, without
+synchronising clocks or averaging a time interval's endpoints.
 
-The numerical callback supplies continuous_evolution_time in StepResult. The
-built-in evolver records the upper range of the chosen parameter-dependent flow
-duration, clipped to the remaining horizon. It credits one continuous computation
-once even if that computation produces several reach/intermediate/final outputs
-or multiple successors. Initial-event handling, subdivision and reconditioning
-leave this duration zero. New custom numerical callbacks can supply the same
-metadata; omitted durations contribute zero rather than being inferred from
-output sets or constraints changing their time bounds.
+Publication removes the source's credit and remainder and registers every
+successor's corresponding credit and remainder. An early-terminal checkpoint
+has no future evolution to perform and contributes one complete horizon of
+completion credit. A committed merge removes its source estimates and adds
+its replacements' estimates; retired sources are not counted as terminal branches.
+Rejected merges and retired no-op workload tokens leave the accounting unchanged.
 
-Publication removes the processed checkpoint from R, credits its reported time
-to C and registers every successor in R. Splitting replaces its source estimate
-by the sum of its piece estimates without duplicating the already computed prefix. A committed merge removes
-all source checkpoint estimates and adds each replacement's own estimate, without
-crediting continuous evolution. Rejected merges and retired no-op workload tokens
-do not alter progress. Empty or otherwise early-terminal work drops its remaining
-estimate without pretending to have evolved to the time horizon.
+For example, one set at time 120 with horizon 200 gives C=120, R=80 and 60%.
+Two split pieces at the same time give C=240, R=160 and still 60%. Merging them
+back into one gives 60% again. Accumulating hundreds of permissive branches
+born at or after time 120 cannot by itself reset the indicator to zero.
+The percentage can still change when topology changes the relative weights of
+branches at different times, or when a replacement widens its clock bounds.
+No monotonic smoothing hides these changes.
 
-For example, C=4 and one checkpoint at time 4 with horizon 10 gives R=6 and 40%.
-Splitting it into two checkpoints gives R=12 and 25%. Recombining those checkpoints
-into one at the same time returns to 40%, with C still equal to 4. Progress can
-therefore decrease when future work grows and increase when recombination reduces
-it. No monotonic smoothing hides these changes.
+The numerical callback's continuous_evolution_time remains a separate diagnostic.
+processed_time sums that value once per published computation, independently of
+its number of Orbit contributions or successors. The built-in evolver reports
+the upper range of its chosen parameter-dependent flow duration, clipped to the
+remaining horizon. Structural steps contribute zero. This cumulative cost is
+not used as the progress numerator: counting shared prefixes once in the numerator
+but every new branch's future in the denominator would collapse progress during
+progressive permissive transitions. Invalid cost metadata marks processed_time
+unavailable (NaN) without resetting valid clock-based temporal progress.
 
-These are computational set-time estimates, not CPU-time estimates, geometric
-probabilities or certified completion bounds. They do not predict future splits,
-permissive branches, numerical step costs or zero-time transition chains. Without
-a finite horizon or with nonfinite time bounds, remaining_time is unavailable
-and the logger shows no estimated progress until successful exhaustion. Zero-length
-horizons are handled without division by zero. The displayed percentage is capped
-at 99 while work remains; complete is set only after successful workload exhaustion,
-never by the presence of final Orbit contributions or after a failed callback.
+These estimates are not CPU-time estimates, geometric probabilities or certified
+completion bounds. Without a finite horizon or a finite initial/pending time
+bound, remaining_time is unavailable and no temporal percentage is estimated
+until successful exhaustion. Zero-length horizons avoid division by zero.
+The displayed percentage is capped at 99 while work remains; complete is set
+only after successful workload exhaustion, independent of final Orbit contributions.
 
-Counters are updated incrementally under each backend's publication mutex;
-progress never traverses the complete trajectory history. Snapshots are safe to
-read while numerical workers execute. Factory-created Tree runs receive the same
-horizon as Flat. Directly constructed Tree backends can call set_time_horizon()
-before run(); without it their finite-time estimate remains unavailable.
+Counters are updated incrementally under the publication mutex, without traversing
+the full trajectory history. Snapshots are safe while numerical workers execute.
+Factory-created Tree runs receive the same horizon as Flat. A directly constructed
+Tree backend can call set_time_horizon() before run(); omission leaves the finite-time
+estimate unavailable.
+
+## Structural-operation diagnostics
+
+Recombination logs selection, a begin marker before numerical construction, and
+accepted, rejected or failed outcomes. Events include the source count, location,
+source time span, maximum source parameter count and numerical elapsed seconds;
+accepted merges also report output count, radius and clock range. No-compatible-group
+and no-time-progress skips are explicit. These events use the normal structural
+logging level, visible at verbosity 3 through the standard evolver entry point.
+
+ADMIT reports the next cohort's location and clock, ready/waiting/active checkpoint
+counts and its temporal-progress estimate. In particular, Workload's generic
+w/p/c counters count workload tokens, not all hybrid checkpoints. Tree waiting
+checkpoints have no runnable token until admission. Thus w=0,p=1 can mean that
+the last publisher is serially grouping or recombining many waiting sets under
+the publication lock; it does not establish that those sets have already merged.
+A begin marker without an outcome identifies numerical construction still in
+progress (or a subsequent interrupted execution), whereas an accepted marker
+confirms the replacement was committed before the next ADMIT event.
 
 ## Numerical construction and acceptance contract
 

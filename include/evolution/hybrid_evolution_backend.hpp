@@ -133,7 +133,9 @@ struct HybridEvolutionStepResult {
 };
 
 /** @brief One consistent estimate of completed and outstanding continuous evolution.
- *  @details This is set-time work, not CPU time or a certified completion bound.
+ *  @details credited_time drives temporal progress; processed_time separately
+ *  measures cumulative continuous computation. Neither is a CPU-time estimate
+ *  or a certified completion bound.
  *  Remaining time includes queued, withheld and executing checkpoints. An absent
  *  remaining estimate denotes an unbounded horizon or an invalid time bound.
  */
@@ -142,7 +144,8 @@ struct HybridEvolutionProgress {
     std::optional<double> remaining_time; //!< Sum of max(0, horizon - checkpoint lower time bound), when finite.
     SizeType pending = 0u;                //!< All registered checkpoints not yet processed or replaced.
     Bool complete = false;                //!< Successful workload exhaustion, independent of Orbit::final().
-    /** @brief Return processed/(processed+remaining), zero when unavailable, or one after successful completion. */
+    double credited_time = 0.0;           //!< Elapsed prefixes of represented pending branches plus completed-horizon credit for terminal branches.
+    /** @brief Return credited/(credited+remaining), zero when unavailable, or one after successful completion. */
     double completion_rate() const;
 };
 
@@ -155,21 +158,32 @@ class HybridEvolutionProgressTracker {
     std::optional<double> _horizon;
     long double _processed = 0.0L;
     long double _remaining = 0.0L;
+    long double _pending_credit = 0.0L;
+    long double _terminal_credit = 0.0L;
+    std::optional<double> _initial_time;
+    Bool _origin_recorded = false;
     SizeType _pending = 0u;
     SizeType _unknown_pending = 0u;
     Bool _complete = false;
     Bool _valid_processed = true;
     /** @brief Estimate this checkpoint's remaining continuous time when finite. */
     std::optional<long double> remaining(const HybridEnclosure&) const;
+    /** @brief Estimate an elapsed prefix relative to the run's initial absolute time. */
+    std::optional<long double> elapsed(const HybridEnclosure&) const;
+    /** @brief Return the finite continuous horizon length relative to the initial absolute time. */
+    std::optional<long double> duration() const;
 
   public:
     /** @brief Start without pending work; a missing or nonfinite horizon has no finite estimate. */
     explicit HybridEvolutionProgressTracker(std::optional<double> horizon = std::nullopt);
-    /** @brief Register future work, regardless of its admission or execution state. */
+    /** @brief Register future work and its elapsed prefix; the first registration fixes the run's initial time. */
     Void add_pending(const HybridEnclosure&);
     /** @brief Retire a registered checkpoint without crediting continuous evolution. */
     Void remove_pending(const HybridEnclosure&);
-    /** @brief Replace one successfully processed work item by all its published successors and credit its duration once. */
+    /** @brief Replace one processed item by its successors, inheriting their elapsed prefixes and recording actual work once.
+     *  @details A terminal item contributes a full horizon of completion credit;
+     *  it does not fabricate additional processed_time.
+     */
     Void publish(const HybridEvolutionWorkItem&, const HybridEvolutionStepResult&);
     /** @brief Mark a successfully exhausted workload; outstanding checkpoints are an error. */
     Void finish();

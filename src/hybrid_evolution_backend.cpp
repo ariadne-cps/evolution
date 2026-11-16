@@ -77,10 +77,10 @@ Void HybridEvolutionStepResult::transition_to(const HybridEnclosure& set, Discre
 double HybridEvolutionProgress::completion_rate() const {
     if (complete)
         return 1.0;
-    if (!remaining_time || !std::isfinite(processed_time) || !std::isfinite(*remaining_time))
+    if (!remaining_time || !std::isfinite(credited_time) || !std::isfinite(*remaining_time))
         return 0.0;
-    const long double total = static_cast<long double>(processed_time) + *remaining_time;
-    return total > 0.0L ? static_cast<double>(std::clamp(static_cast<long double>(processed_time) / total, 0.0L, 1.0L)) : 0.0;
+    const long double total = static_cast<long double>(credited_time) + *remaining_time;
+    return total > 0.0L ? static_cast<double>(std::clamp(static_cast<long double>(credited_time) / total, 0.0L, 1.0L)) : 0.0;
 }
 
 HybridEvolutionProgressTracker::HybridEvolutionProgressTracker(std::optional<double> horizon)
@@ -95,10 +95,37 @@ std::optional<long double> HybridEvolutionProgressTracker::remaining(const Hybri
     return std::max(0.0L, static_cast<long double>(*_horizon) - lower);
 }
 
+std::optional<long double> HybridEvolutionProgressTracker::duration() const {
+    if (!_horizon || !_initial_time)
+        return std::nullopt;
+    return std::max(0.0L, static_cast<long double>(*_horizon) - *_initial_time);
+}
+
+std::optional<long double> HybridEvolutionProgressTracker::elapsed(const HybridEnclosure& enclosure) const {
+    const auto span = duration();
+    if (!span)
+        return std::nullopt;
+    const double lower = enclosure.time_range().lower_bound().get_d();
+    if (!std::isfinite(lower))
+        return std::nullopt;
+    return std::clamp(static_cast<long double>(lower) - *_initial_time, 0.0L, *span);
+}
+
 Void HybridEvolutionProgressTracker::add_pending(const HybridEnclosure& enclosure) {
-    const auto duration = remaining(enclosure);
-    if (duration)
-        _remaining += *duration;
+    if (_complete)
+        throw std::logic_error("Cannot register work after progress completion");
+    if (!_origin_recorded) {
+        const double initial = enclosure.time_range().lower_bound().get_d();
+        if (std::isfinite(initial))
+            _initial_time = initial;
+        _origin_recorded = true;
+    }
+    const auto residual = remaining(enclosure);
+    const auto prefix = elapsed(enclosure);
+    if (prefix)
+        _pending_credit += *prefix;
+    if (residual)
+        _remaining += *residual;
     else
         ++_unknown_pending;
     ++_pending;
@@ -107,15 +134,20 @@ Void HybridEvolutionProgressTracker::add_pending(const HybridEnclosure& enclosur
 Void HybridEvolutionProgressTracker::remove_pending(const HybridEnclosure& enclosure) {
     if (_pending == 0u)
         throw std::logic_error("Cannot retire a checkpoint from an empty progress tracker");
-    const auto duration = remaining(enclosure);
-    if (duration)
-        _remaining = std::max(0.0L, _remaining - *duration);
+    const auto residual = remaining(enclosure);
+    const auto prefix = elapsed(enclosure);
+    if (prefix)
+        _pending_credit = std::max(0.0L, _pending_credit - *prefix);
+    if (residual)
+        _remaining = std::max(0.0L, _remaining - *residual);
     else if (_unknown_pending != 0u)
         --_unknown_pending;
     else
         throw std::logic_error("Unregistered unknown-time checkpoint");
-    if (--_pending == 0u)
+    if (--_pending == 0u) {
         _remaining = 0.0L;
+        _pending_credit = 0.0L;
+    }
 }
 
 Void HybridEvolutionProgressTracker::publish(const HybridEvolutionWorkItem& work, const HybridEvolutionStepResult& result) {
@@ -126,6 +158,10 @@ Void HybridEvolutionProgressTracker::publish(const HybridEvolutionWorkItem& work
         _valid_processed = false;
     for (const auto& successor: result.successors)
         add_pending(successor.work.enclosure);
+    if (result.successors.empty()) {
+        if (const auto span = duration())
+            _terminal_credit += *span;
+    }
 }
 
 Void HybridEvolutionProgressTracker::finish() {
@@ -136,10 +172,12 @@ Void HybridEvolutionProgressTracker::finish() {
 
 HybridEvolutionProgress HybridEvolutionProgressTracker::snapshot() const {
     std::optional<double> remaining_estimate;
-    if (_valid_processed && _unknown_pending == 0u && _remaining <= std::numeric_limits<double>::max() &&
-        _processed <= std::numeric_limits<double>::max())
+    const long double credit = _pending_credit + _terminal_credit;
+    if (duration() && _unknown_pending == 0u && _remaining <= std::numeric_limits<double>::max() &&
+        credit <= std::numeric_limits<double>::max())
         remaining_estimate = static_cast<double>(_remaining);
-    return {static_cast<double>(_processed), remaining_estimate, _pending, _complete};
+    const double processed = _valid_processed ? static_cast<double>(_processed) : std::numeric_limits<double>::quiet_NaN();
+    return {processed, remaining_estimate, _pending, _complete, static_cast<double>(credit)};
 }
 
 namespace {

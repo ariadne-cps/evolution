@@ -29,6 +29,7 @@
 #include "evolution/hybrid_evolution_tree.hpp"
 
 #include <algorithm>
+#include <chrono>
 #include <cmath>
 #include <deque>
 #include <iterator>
@@ -581,7 +582,13 @@ class TreeHybridEvolutionBackend::Impl {
         }
         if (pending.size() < 2u)
             return;
+        LOGGING_PRINTLN("RECOMBINE inspect"
+                        << " progress=" << 100.0 * progress_tracker.snapshot().completion_rate()
+                        << " pending=" << pending.size()
+                        << " queue=" << (admission->recombination_queue() == HybridRecombinationQueue::READY ? "ready" : "waiting"));
         const auto groups = grouping_policy->select(history, pending);
+        if (groups.empty())
+            LOGGING_PRINTLN("RECOMBINE skipped: no compatible groups");
         std::vector<HybridEvolutionCheckpointId> selected;
         for (const auto& group: groups) {
             if (group.size() < 2u)
@@ -607,6 +614,8 @@ class TreeHybridEvolutionBackend::Impl {
             // they may absorb later arrivals without advancing physical time.
             bool progressed = true;
             double merge_time = -std::numeric_limits<double>::infinity();
+            double earliest_time = std::numeric_limits<double>::infinity();
+            SizeType max_parameters = 0u;
             for (const auto checkpoint: group) {
                 const auto& source_metadata = history.metadata(checkpoint.trajectory);
                 const auto time = history.object(checkpoint.trajectory).entries.at(checkpoint.entry).work.enclosure.time_range();
@@ -618,20 +627,46 @@ class TreeHybridEvolutionBackend::Impl {
                      !(lower > *source_metadata.recombination_time_barrier)))
                     progressed = false;
                 merge_time = std::max(merge_time, upper);
+                earliest_time = std::min(earliest_time, lower);
+                max_parameters = std::max(max_parameters,
+                                          history.object(checkpoint.trajectory).entries.at(checkpoint.entry).work.enclosure.number_of_parameters());
             }
-            if (!progressed)
+            if (!progressed) {
+                LOGGING_PRINTLN("RECOMBINE skipped: no time progress"
+                                << " sources=" << group.size());
                 continue;
+            }
             List<Enclosure> sources;
             for (const auto checkpoint: group)
                 sources.append(history.object(checkpoint.trajectory).entries.at(checkpoint.entry).work.enclosure.continuous_set());
-            const auto result = recombiner->recombine(sources, context);
+            const auto location = history.object(group.front().trajectory).entries.at(group.front().entry).work.enclosure.location();
+            const auto source_time = history.object(group.front().trajectory).entries.at(group.front().entry).work.enclosure.time_range();
+            LOGGING_PRINTLN("RECOMBINE begin"
+                            << " progress=" << 100.0 * progress_tracker.snapshot().completion_rate()
+                            << " location=" << location
+                            << " sources=" << group.size()
+                            << " time=[" << earliest_time << "," << merge_time << "]"
+                            << " max_parameters=" << max_parameters);
+            const auto merge_start = std::chrono::steady_clock::now();
+            EnclosureRecombinationResult result;
+            try {
+                result = recombiner->recombine(sources, context);
+            } catch (...) {
+                LOGGING_PRINTLN("RECOMBINE failed"
+                                << " location=" << location
+                                << " sources=" << group.size()
+                                << " elapsed_seconds=" << std::chrono::duration<double>(std::chrono::steady_clock::now() - merge_start).count());
+                throw;
+            }
+            const double elapsed_seconds = std::chrono::duration<double>(std::chrono::steady_clock::now() - merge_start).count();
             if (result.outputs.empty() || result.outputs.size() >= group.size() ||
                 !result.discarded_sources.empty() || !result.radius_limit_satisfied) {
-                LOGGING_PRINTLN_AT(4, "RECOMBINE rejected"
-                                          << " sources=" << group.size()
-                                          << " outputs=" << result.outputs.size()
-                                          << " discarded=" << result.discarded_sources.size()
-                                          << " radius_ok=" << result.radius_limit_satisfied);
+                LOGGING_PRINTLN("RECOMBINE rejected"
+                                << " sources=" << group.size()
+                                << " outputs=" << result.outputs.size()
+                                << " discarded=" << result.discarded_sources.size()
+                                << " radius_ok=" << result.radius_limit_satisfied
+                                << " elapsed_seconds=" << elapsed_seconds);
                 continue;
             }
             std::vector<bool> represented(group.size(), false);
@@ -649,22 +684,17 @@ class TreeHybridEvolutionBackend::Impl {
             }
             if (!full_coverage ||
                 !std::all_of(represented.begin(), represented.end(), [](bool covered) { return covered; })) {
-                LOGGING_PRINTLN_AT(4, "RECOMBINE rejected: incomplete provenance"
-                                          << " sources=" << group.size() << " outputs=" << result.outputs.size());
+                LOGGING_PRINTLN("RECOMBINE rejected: incomplete provenance"
+                                << " sources=" << group.size() << " outputs=" << result.outputs.size()
+                                << " elapsed_seconds=" << elapsed_seconds);
                 continue;
             }
             if (!acceptance_policy->accept(history, group, result)) {
-                LOGGING_PRINTLN_AT(4, "RECOMBINE rejected: quality gate"
-                                          << " sources=" << group.size() << " outputs=" << result.outputs.size());
+                LOGGING_PRINTLN("RECOMBINE rejected: quality gate"
+                                << " sources=" << group.size() << " outputs=" << result.outputs.size()
+                                << " elapsed_seconds=" << elapsed_seconds);
                 continue;
             }
-            const auto& first = history.object(group.front().trajectory).entries.at(group.front().entry).work.enclosure;
-            LOGGING_PRINTLN("RECOMBINE"
-                            << " location=" << first.location()
-                            << " t=" << first.time_range()
-                            << " sources=" << group.size() << " outputs=" << result.outputs.size()
-                            << " max_source_radius=" << largest_source_radius(sources)
-                            << " max_output_radius=" << largest_output_radius(result));
             const auto parent = common_ancestor(group);
             for (const auto& output: result.outputs) {
                 const auto representative = group[output.source_indices.front()];
@@ -693,6 +723,15 @@ class TreeHybridEvolutionBackend::Impl {
                 if (metadata.pending_entries == 0u)
                     metadata.complete = true;
             }
+            LOGGING_PRINTLN("RECOMBINE accepted"
+                            << " progress=" << 100.0 * progress_tracker.snapshot().completion_rate()
+                            << " location=" << location
+                            << " t=" << source_time
+                            << " sources=" << group.size() << " outputs=" << result.outputs.size()
+                            << " max_source_radius=" << largest_source_radius(sources)
+                            << " max_output_radius=" << largest_output_radius(result)
+                            << " output_time=" << result.outputs.front().enclosure.time_function().range()
+                            << " elapsed_seconds=" << elapsed_seconds);
         }
     }
 
@@ -896,6 +935,20 @@ class TreeHybridEvolutionBackend::Impl {
                         }
                         if (batch_complete && !pending.empty() && admitted.empty())
                             throw std::logic_error("Admission policy left waiting work without a runnable batch");
+                        if (!admitted.empty()) {
+                            LOGGING_RUN_AT(1, const auto state = progress_tracker.snapshot());
+                            LOGGING_PRINTLN_AT(1, "ADMIT"
+                                                      << " progress=" << 100.0 * state.completion_rate()
+                                                      << " location=" << history.object(admitted.front().trajectory).entries.at(admitted.front().entry).work.enclosure.location()
+                                                      << " time=" << history.object(admitted.front().trajectory).entries.at(admitted.front().entry).work.enclosure.time_range()
+                                                      << " checkpoints=" << admitted.size()
+                                                      << " ready=" << ready.size() + admitted.size()
+                                                      << " waiting=" << pending.size() - admitted.size()
+                                                      << " active=" << in_flight
+                                                      << " credited_time=" << state.credited_time
+                                                      << " time_estimate_available=" << state.remaining_time.has_value()
+                                                      << " remaining_time=" << (state.remaining_time ? *state.remaining_time : 0.0));
+                        }
                         for (const auto next: admitted) {
                             waiting.erase(std::find(waiting.begin(), waiting.end(), next));
                             enqueue(next);

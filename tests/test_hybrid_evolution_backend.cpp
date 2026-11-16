@@ -158,7 +158,8 @@ class TestHybridEvolutionBackend : public Testing::ContextFixture {
         ARIADNE_TESTING_EXPECT_EQUAL(tracker.snapshot().processed_time, 4.0);
         ARIADNE_TESTING_EXPECT_EQUAL(tracker.snapshot().pending, 2u);
         ARIADNE_TESTING_EXPECT_EQUAL(tracker.snapshot().remaining_time.value(), 12.0);
-        ARIADNE_TESTING_EXPECT_EQUAL(tracker.snapshot().completion_rate(), 0.25);
+        ARIADNE_TESTING_EXPECT_EQUAL(tracker.snapshot().completion_rate(), 0.4);
+        ARIADNE_TESTING_EXPECT_EQUAL(tracker.snapshot().credited_time, 8.0);
 
         HybridEvolutionStepResult recondition;
         recondition.continue_with(at_four, HybridEvolutionSuccessorKind::RECONDITIONING);
@@ -183,6 +184,95 @@ class TestHybridEvolutionBackend : public Testing::ContextFixture {
         tracker.finish();
         ARIADNE_TESTING_PROVE(tracker.snapshot().complete == true);
         ARIADNE_TESTING_EXPECT_EQUAL(tracker.snapshot().completion_rate(), 1.0);
+    }
+
+    void test_progress_retains_the_120_second_prefix_when_permissive_branches_accumulate() {
+        DiscreteLocation q(1);
+        RealVariable x("x");
+        HybridAutomaton system;
+        system.new_mode(q, {dot(x) = 1});
+        GeneralHybridEvolver evolver(system);
+        const auto initial = evolver.enclosure(HybridExactBox(q, RealSpace({
+                                                                     x
+        }),
+                                                              ExactBoxType({{0, 0}})));
+        const auto at_time = [&](Real time) {
+            auto set = initial;
+            set.set_time_function(evolver.function_factory().create_constant(initial.parameter_domain(), time));
+            return set;
+        };
+        HybridEvolutionProgressTracker tracker(200.0);
+        tracker.add_pending(initial);
+        auto current = at_time(Real(120));
+        HybridEvolutionStepResult first;
+        first.continuous_evolution_time = 120.0;
+        first.continue_with(current);
+        tracker.publish({initial, HybridEvolutionPhase::EVOLVE_CONTINUOUSLY}, first);
+        ARIADNE_TESTING_EXPECT_EQUAL(tracker.snapshot().completion_rate(), 0.6);
+        for (unsigned n = 1u; n <= 500u; ++n) {
+            auto next = at_time(Real(120) + Real(n) / 1024);
+            HybridEvolutionStepResult branching;
+            branching.continuous_evolution_time = 1.0 / 1024.0;
+            branching.transition_to(next, DiscreteEvent("timeout"), EventKind::PERMISSIVE);
+            branching.continue_with(next);
+            tracker.publish({current, HybridEvolutionPhase::EVOLVE_CONTINUOUSLY}, branching);
+            current = std::move(next);
+        }
+        const auto progress = tracker.snapshot();
+        ARIADNE_TESTING_EXPECT_EQUAL(progress.pending, 501u);
+        ARIADNE_TESTING_EXPECT_EQUAL(static_cast<unsigned>(std::round(progress.completion_rate() * 100)), 60u);
+        ARIADNE_TESTING_PROVE(progress.completion_rate() >= 0.6);
+        ARIADNE_TESTING_PROVE(progress.completion_rate() < 0.603);
+    }
+
+    void test_temporal_progress_uses_the_initial_time_and_terminal_branch_credit() {
+        DiscreteLocation q(1);
+        RealVariable x("x");
+        HybridAutomaton system;
+        system.new_mode(q, {dot(x) = 1});
+        GeneralHybridEvolver evolver(system);
+        auto initial = evolver.enclosure(HybridExactBox(q, RealSpace({
+                                                               x
+        }),
+                                                        ExactBoxType({{0, 0}})));
+        initial.set_time_function(evolver.function_factory().create_constant(initial.parameter_domain(), Real(40)));
+        auto later = initial;
+        later.set_time_function(evolver.function_factory().create_constant(initial.parameter_domain(), Real(120)));
+        HybridEvolutionProgressTracker tracker(200.0);
+        tracker.add_pending(initial);
+        HybridEvolutionStepResult split;
+        split.continuous_evolution_time = 80.0;
+        split.continue_with(later, HybridEvolutionSuccessorKind::SUBDIVISION);
+        split.continue_with(later, HybridEvolutionSuccessorKind::SUBDIVISION);
+        tracker.publish({initial, HybridEvolutionPhase::EVOLVE_CONTINUOUSLY}, split);
+        ARIADNE_TESTING_EXPECT_EQUAL(tracker.snapshot().completion_rate(), 0.5);
+        tracker.publish({later, HybridEvolutionPhase::EVOLVE_CONTINUOUSLY}, {});
+        ARIADNE_TESTING_EXPECT_EQUAL(tracker.snapshot().processed_time, 80.0);
+        ARIADNE_TESTING_EXPECT_EQUAL(tracker.snapshot().credited_time, 240.0);
+        ARIADNE_TESTING_EXPECT_EQUAL(tracker.snapshot().remaining_time.value(), 80.0);
+        ARIADNE_TESTING_EXPECT_EQUAL(tracker.snapshot().completion_rate(), 0.75);
+    }
+
+    void test_invalid_cost_metadata_does_not_reset_valid_temporal_progress() {
+        DiscreteLocation q(1);
+        RealVariable x("x");
+        HybridAutomaton system;
+        system.new_mode(q, {dot(x) = 1});
+        GeneralHybridEvolver evolver(system);
+        const auto initial = evolver.enclosure(HybridExactBox(q, RealSpace({
+                                                                     x
+        }),
+                                                              ExactBoxType({{0, 0}})));
+        auto next = initial;
+        next.set_time_function(evolver.function_factory().create_constant(initial.parameter_domain(), Real(120)));
+        HybridEvolutionProgressTracker tracker(200.0);
+        tracker.add_pending(initial);
+        HybridEvolutionStepResult result;
+        result.continuous_evolution_time = std::numeric_limits<double>::quiet_NaN();
+        result.continue_with(next);
+        tracker.publish({initial, HybridEvolutionPhase::EVOLVE_CONTINUOUSLY}, result);
+        ARIADNE_TESTING_PROVE(std::isnan(tracker.snapshot().processed_time));
+        ARIADNE_TESTING_EXPECT_EQUAL(tracker.snapshot().completion_rate(), 0.6);
     }
 
     void test_progress_handles_zero_and_unknown_horizons() {
@@ -268,10 +358,12 @@ class TestHybridEvolutionBackend : public Testing::ContextFixture {
                     result.record_intermediate(at_ten); // Output roles must not inflate processed time.
                     result.continue_with(at_four);
                 } else if (!split) {
+                    ARIADNE_TESTING_EXPECT_EQUAL(progress.completion_rate(), 0.4);
                     split = true;
                     result.continue_with(at_four, HybridEvolutionSuccessorKind::SUBDIVISION);
                     result.continue_with(at_four, HybridEvolutionSuccessorKind::SUBDIVISION);
                 } else {
+                    ARIADNE_TESTING_EXPECT_EQUAL(progress.completion_rate(), pieces == 0u ? 0.4 : 0.7);
                     ARIADNE_TESTING_EXPECT_EQUAL(progress.pending, 2u - pieces);
                     ARIADNE_TESTING_EXPECT_EQUAL(progress.remaining_time.value(), pieces == 0u ? 12.0 : 6.0);
                     ARIADNE_TESTING_EXPECT_EQUAL(progress.processed_time, pieces == 0u ? 4.0 : 10.0);
@@ -476,6 +568,9 @@ class TestHybridEvolutionBackend : public Testing::ContextFixture {
 
 int main(int argc, char** argv) {
     ARIADNE_TESTING_SUITE("test_hybrid_evolution_backend");
+    ARIADNE_TESTING_ADD_TEST(TestHybridEvolutionBackend, test_temporal_progress_uses_the_initial_time_and_terminal_branch_credit);
+    ARIADNE_TESTING_ADD_TEST(TestHybridEvolutionBackend, test_invalid_cost_metadata_does_not_reset_valid_temporal_progress);
+    ARIADNE_TESTING_ADD_TEST(TestHybridEvolutionBackend, test_progress_retains_the_120_second_prefix_when_permissive_branches_accumulate);
     ARIADNE_TESTING_ADD_TEST(TestHybridEvolutionBackend, test_progress_uses_lower_clock_bounds_for_source_and_replacement_estimates);
     ARIADNE_TESTING_ADD_TEST(TestHybridEvolutionBackend, test_progress_revises_remaining_work_without_recounting_history);
     ARIADNE_TESTING_ADD_TEST(TestHybridEvolutionBackend, test_progress_handles_zero_and_unknown_horizons);

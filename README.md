@@ -74,6 +74,27 @@ configuration, concurrency and verbosity fixed when comparing results.
 The benchmark is separate from CTest: correctness tests assert explicit
 expectations and do not require generated plots or manual inspection.
 
+## Location-by-location hybrid evolution
+
+To finish all currently admitted work in one location before recombining pending
+discrete successors, select phased admission:
+
+```cpp
+evolver.set_evolution_backend_factory(TreeHybridEvolutionBackendFactory(
+    LocationCheckpointAdmissionPolicy{}));
+auto orbit = evolver.orbit(initial, termination, Semantics::UPPER);
+```
+
+Splits and continuous continuations execute in the active location. Discrete
+successors wait until both its ready queue and its in-flight worker count are
+empty. Compatible waiting sets are then recombined across trajectory parents;
+the next waiting location is admitted as one batch. Different destinations or
+event histories remain separate, and self-loops enter a later batch. The policy
+does not synchronise physical time or modify the genealogy to determine admission.
+Pass `NoFrontierRecombinationPolicy{}` as the second factory argument to retain
+this scheduling without numerical recombination. Existing default backends and
+their constructors are unchanged.
+
 ## Recombination benchmark
 
 The `benchmark_recombination` executable compares the reference continuous
@@ -84,7 +105,7 @@ evolver. Two nonlinear two-location systems have source dynamics
 the permissive case starts in `[1,2] x [-1/2,1/2]`. The generator
 terminates when the transition fires, then selects adjacent checkpoints in
 the middle of the jump-time order. This is **not** a benchmark of hybrid
-trajectory-tree recombination, which is not yet implemented.
+trajectory-tree recombination; it measures the numerical enclosure operation.
 
 ```bash
 cmake -S . -B build-release -DCMAKE_BUILD_TYPE=Release -DBUILD_PYTHON_BINDINGS=OFF

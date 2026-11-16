@@ -70,6 +70,15 @@ int label(const HybridEvolutionWorkItem& item) {
     return static_cast<int>(item.enclosure.time_range().lower_bound().get_d());
 }
 
+HybridEnclosure jumped(const HybridEnclosure& source, DiscreteLocation target,
+                       DiscreteEvent event, int time_label) {
+    auto result = marked(source, time_label);
+    result.apply_reset(event, target, source.state_space(),
+                       EffectiveVectorMultivariateFunction::identity(source.state_dimension()),
+                       source.auxiliary_space(), source.continuous_set().auxiliary_mapping());
+    return result;
+}
+
 std::vector<std::string> descriptions(const ListSet<HybridEnclosure>& sets) {
     std::vector<std::string> result;
     for (const auto& set: sets) {
@@ -192,6 +201,14 @@ class AuditedFrontierBackend final : public HybridEvolutionBackendInterface {
 
   public:
     AuditedFrontierBackend(const HybridEnclosure& initial,
+                           const HybridCheckpointAdmissionPolicy& admission,
+                           const HybridFrontierRecombinationPolicy& grouping,
+                           const EnclosureRecombinationContext& context,
+                           std::shared_ptr<FrontierIntegrationAudit> audit)
+        : _backend(initial, admission, grouping, OnSynchronizationCompletionRecombinationTriggerPolicy{},
+                   ObservedReferenceEnclosureRecombiner(audit), context),
+          _audit(std::move(audit)) {}
+    AuditedFrontierBackend(const HybridEnclosure& initial,
                            const HybridFrontierRecombinationPolicy& grouping,
                            const EnclosureRecombinationContext& context,
                            std::shared_ptr<FrontierIntegrationAudit> audit)
@@ -254,11 +271,17 @@ class AuditedFrontierBackend final : public HybridEvolutionBackendInterface {
 };
 
 class AuditedFrontierBackendFactory final : public HybridEvolutionBackendFactoryInterface {
+    std::shared_ptr<const HybridCheckpointAdmissionPolicy> _admission;
     std::shared_ptr<const HybridFrontierRecombinationPolicy> _grouping;
     EnclosureRecombinationContext _context;
     std::shared_ptr<FrontierIntegrationAudit> _audit;
 
   public:
+    AuditedFrontierBackendFactory(const HybridCheckpointAdmissionPolicy& admission,
+                                  const HybridFrontierRecombinationPolicy& grouping,
+                                  const EnclosureRecombinationContext& context,
+                                  std::shared_ptr<FrontierIntegrationAudit> audit)
+        : _admission(admission.clone()), _grouping(grouping.clone()), _context(context), _audit(std::move(audit)) {}
     AuditedFrontierBackendFactory(const HybridFrontierRecombinationPolicy& grouping,
                                   const EnclosureRecombinationContext& context,
                                   std::shared_ptr<FrontierIntegrationAudit> audit)
@@ -268,6 +291,8 @@ class AuditedFrontierBackendFactory final : public HybridEvolutionBackendFactory
     }
     std::unique_ptr<HybridEvolutionBackendInterface> create(
         const HybridEnclosure& initial, const Real&) const override {
+        if (_admission)
+            return std::make_unique<AuditedFrontierBackend>(initial, *_admission, *_grouping, _context, _audit);
         return std::make_unique<AuditedFrontierBackend>(initial, *_grouping, _context, _audit);
     }
 };
@@ -359,7 +384,9 @@ class TestHybridEvolutionTree : public Testing::ContextFixture {
             GeneralHybridEvolver evolver(system);
             evolver.configuration().set_maximum_step_size(0.25_x);
             const auto initial = evolver.enclosure(HybridExactBox(
-                source, RealSpace({x, y}),
+                source, RealSpace({
+                            x, y
+            }),
                 ExactBoxType({{-1, -0.75_x}, {0, 0}})));
             for (auto semantics: {Semantics::UPPER, Semantics::LOWER})
                 compare_flat_and_frontier_orbits(evolver, initial, HybridTime(2, 1), semantics);
@@ -380,7 +407,10 @@ class TestHybridEvolutionTree : public Testing::ContextFixture {
         evolver.configuration().set_enable_subdivisions(true);
         evolver.configuration().set_maximum_enclosure_radius(0.25_x);
         const auto wide = evolver.enclosure(HybridExactBox(
-            source, RealSpace({x, y}), ExactBoxType({{-1, 1}, {0, 0}})));
+            source, RealSpace({
+                        x, y
+        }),
+            ExactBoxType({{-1, 1}, {0, 0}})));
         for (auto semantics: {Semantics::UPPER, Semantics::LOWER}) {
             compare_flat_and_frontier_orbits(evolver, wide, HybridTime(0.03125_x, 1), semantics);
             compare_flat_and_frontier_orbits(evolver, wide, HybridTime(0, 1), semantics);
@@ -390,12 +420,14 @@ class TestHybridEvolutionTree : public Testing::ContextFixture {
         constrained.configuration().set_enable_subdivisions(true);
         constrained.configuration().set_maximum_enclosure_radius(0.25_x);
         const auto restricted = constrained.enclosure(HybridExactBox(
-            source, RealSpace({x, y}), ExactBoxType({{-1, 1}, {0, 0}})));
+            source, RealSpace({
+                        x, y
+        }),
+            ExactBoxType({{-1, 1}, {0, 0}})));
         for (auto semantics: {Semantics::UPPER, Semantics::LOWER})
             compare_flat_and_frontier_orbits(
                 constrained, restricted, HybridTime(0.03125_x, 1), semantics);
     }
-
 
     void test_real_frontier_recombination_after_continuous_subdivision() {
         ConcurrencyScope concurrency;
@@ -408,7 +440,10 @@ class TestHybridEvolutionTree : public Testing::ContextFixture {
         evolver.configuration().set_maximum_enclosure_radius(0.25_x);
         evolver.configuration().set_maximum_step_size(0.25_x);
         const auto initial = evolver.enclosure(HybridExactBox(
-            q, RealSpace({x, y}), ExactBoxType({{-1, 1}, {0, 0}})));
+            q, RealSpace({
+                   x, y
+        }),
+            ExactBoxType({{-1, 1}, {0, 0}})));
 
         auto audit = std::make_shared<FrontierIntegrationAudit>();
         const SingleWindowFrontierPolicy grouping(audit);
@@ -444,7 +479,10 @@ class TestHybridEvolutionTree : public Testing::ContextFixture {
         evolver.configuration().set_maximum_enclosure_radius(0.25_x);
         evolver.configuration().set_maximum_step_size(0.25_x);
         const auto initial = evolver.enclosure(HybridExactBox(
-            q, RealSpace({x, y}), ExactBoxType({{-1, 1}, {0, 0}})));
+            q, RealSpace({
+                   x, y
+        }),
+            ExactBoxType({{-1, 1}, {0, 0}})));
 
         evolver.set_evolution_backend_factory(
             TreeHybridEvolutionBackendFactory(NoFrontierRecombinationPolicy{}));
@@ -489,7 +527,9 @@ class TestHybridEvolutionTree : public Testing::ContextFixture {
             // steps before every piece can reach the guard.
             evolver.configuration().set_maximum_step_size(0.125_x);
             const auto initial = evolver.enclosure(HybridExactBox(
-                source, RealSpace({x, y}),
+                source, RealSpace({
+                            x, y
+            }),
                 ExactBoxType({{-1, -0.75_x}, {0, 0}})));
 
             auto audit = std::make_shared<FrontierIntegrationAudit>();
@@ -532,7 +572,10 @@ class TestHybridEvolutionTree : public Testing::ContextFixture {
         evolver.configuration().set_maximum_enclosure_radius(0.75_x);
         evolver.configuration().set_maximum_step_size(0.0625_x);
         const auto initial = evolver.enclosure(HybridExactBox(
-            q, RealSpace({x, y}), ExactBoxType({{0, 0}, {-1, 1}})));
+            q, RealSpace({
+                   x, y
+        }),
+            ExactBoxType({{0, 0}, {-1, 1}})));
 
         auto audit = std::make_shared<FrontierIntegrationAudit>();
         // Require the candidate checkpoint to be an actual continuation,
@@ -572,7 +615,9 @@ class TestHybridEvolutionTree : public Testing::ContextFixture {
             evolver.configuration().set_maximum_enclosure_radius(0.5_x);
             evolver.configuration().set_maximum_step_size(0.125_x);
             const auto initial = evolver.enclosure(HybridExactBox(
-                source, RealSpace({x, y}),
+                source, RealSpace({
+                            x, y
+            }),
                 ExactBoxType({{-0.5_x, -0.5_x}, {-1, 1}})));
 
             auto audit = std::make_shared<FrontierIntegrationAudit>();
@@ -718,7 +763,10 @@ class TestHybridEvolutionTree : public Testing::ContextFixture {
         system.new_mode(q, {dot(x) = 1, dot(y) = 0});
         GeneralHybridEvolver evolver(system);
         const auto initial = evolver.enclosure(HybridExactBox(
-            q, RealSpace({x, y}), ExactBoxType({{-1, 1}, {0, 0}})));
+            q, RealSpace({
+                   x, y
+        }),
+            ExactBoxType({{-1, 1}, {0, 0}})));
         const auto advance = [&](const HybridEvolutionWorkItem& item, const HybridEvolutionStatistics&) {
             HybridEvolutionStepResult result;
             if (label(item) == 0) {
@@ -855,6 +903,211 @@ class TestHybridEvolutionTree : public Testing::ContextFixture {
         for (const auto node: backend.tree().descendants(root))
             ARIADNE_TESTING_PROVE(backend.tree().metadata(node).complete);
         ARIADNE_TESTING_EXPECT_EQUAL(backend.release_orbit().final().size(), 2u);
+    }
+
+    void test_location_batch_merges_different_parents_after_all_producers_finish() {
+        ConcurrencyScope concurrency;
+        const auto initial = seed();
+        const DiscreteLocation target(2);
+        const DiscreteEvent jump("jump");
+        TreeHybridEvolutionBackend backend(initial, LocationCheckpointAdmissionPolicy{});
+        backend.set_semantics(Semantics::UPPER);
+        unsigned producers_finished = 0u, target_executions = 0u;
+        std::vector<int> source_order;
+        backend.run([&](const HybridEvolutionWorkItem& item, const HybridEvolutionStatistics&) {
+            HybridEvolutionStepResult result;
+            if (item.enclosure.location() == target) {
+                ARIADNE_TESTING_EXPECT_EQUAL(producers_finished, 2u);
+                ++target_executions;
+                result.record_final(item.enclosure);
+            } else {
+                source_order.push_back(label(item));
+                switch (label(item)) {
+                    case 0:
+                        result.continue_with(marked(initial, 1), HybridEvolutionSuccessorKind::SUBDIVISION);
+                        result.continue_with(marked(initial, 2), HybridEvolutionSuccessorKind::SUBDIVISION);
+                        break;
+                    case 1:
+                        result.transition_to(jumped(item.enclosure, target, jump, 10), jump, EventKind::URGENT);
+                        ++producers_finished;
+                        break;
+                    case 2:
+                        result.continue_with(marked(item.enclosure, 3));
+                        break;
+                    case 3:
+                        result.transition_to(jumped(item.enclosure, target, jump, 20), jump, EventKind::URGENT);
+                        ++producers_finished;
+                        break;
+                    default:
+                        throw std::logic_error("Unexpected location-batch source");
+                }
+            }
+            return result;
+        });
+        ARIADNE_TESTING_PROVE(source_order == std::vector<int>({0, 1, 2, 3}));
+        ARIADNE_TESTING_EXPECT_EQUAL(target_executions, 1u);
+        std::size_t replacements = 0u;
+        for (const auto node: backend.tree().descendants(backend.tree().root().value())) {
+            const auto& sources = backend.tree().metadata(node).recombined_checkpoints;
+            if (sources.empty())
+                continue;
+            ++replacements;
+            ARIADNE_TESTING_EXPECT_EQUAL(sources.size(), 2u);
+            ARIADNE_TESTING_PROVE(backend.tree().parent(sources[0].trajectory) != backend.tree().parent(sources[1].trajectory));
+        }
+        ARIADNE_TESTING_EXPECT_EQUAL(replacements, 1u);
+        ARIADNE_TESTING_EXPECT_EQUAL(backend.release_orbit().final().size(), 1u);
+    }
+
+    void test_location_early_replacements_stay_held_and_absorb_later_arrivals() {
+        ConcurrencyScope concurrency;
+        const auto initial = seed();
+        const DiscreteLocation target(2);
+        const DiscreteEvent jump("jump");
+        TreeHybridEvolutionBackend backend(initial, LocationCheckpointAdmissionPolicy{},
+                                           AllCompatibleCheckpointRecombinationPolicy{}, AfterEachStepRecombinationTriggerPolicy{});
+        backend.set_semantics(Semantics::UPPER);
+        unsigned finished = 0u, executions = 0u;
+        backend.run([&](const HybridEvolutionWorkItem& item, const HybridEvolutionStatistics&) {
+            HybridEvolutionStepResult result;
+            if (item.enclosure.location() == target) {
+                ARIADNE_TESTING_EXPECT_EQUAL(finished, 3u);
+                ++executions;
+                result.record_final(item.enclosure);
+            } else if (label(item) == 0) {
+                for (int index = 1; index <= 3; ++index)
+                    result.continue_with(marked(initial, index), HybridEvolutionSuccessorKind::SUBDIVISION);
+            } else if (label(item) == 3) {
+                result.continue_with(marked(item.enclosure, 4));
+            } else {
+                result.transition_to(jumped(item.enclosure, target, jump, label(item) * 10), jump, EventKind::URGENT);
+                ++finished;
+            }
+            return result;
+        });
+        ARIADNE_TESTING_EXPECT_EQUAL(executions, 1u);
+        ARIADNE_TESTING_EXPECT_EQUAL(backend.release_orbit().final().size(), 1u);
+    }
+
+    void test_location_batches_keep_destinations_separate_and_reenter_later() {
+        ConcurrencyScope concurrency;
+        const auto initial = seed();
+        const DiscreteLocation second(2), third(3);
+        const DiscreteEvent to_second("to-second"), to_third("to-third"), again("again");
+        TreeHybridEvolutionBackend backend(initial, LocationCheckpointAdmissionPolicy{});
+        backend.set_semantics(Semantics::UPPER);
+        unsigned source_finished = 0u;
+        std::vector<DiscreteLocation> batches;
+        backend.run([&](const HybridEvolutionWorkItem& item, const HybridEvolutionStatistics&) {
+            HybridEvolutionStepResult result;
+            if (!item.enclosure.previous_events().empty()) {
+                ARIADNE_TESTING_EXPECT_EQUAL(source_finished, 2u);
+                batches.push_back(item.enclosure.location());
+                result.record_final(item.enclosure);
+            } else if (label(item) == 0) {
+                result.continue_with(marked(initial, 1), HybridEvolutionSuccessorKind::SUBDIVISION);
+                result.continue_with(marked(initial, 2), HybridEvolutionSuccessorKind::SUBDIVISION);
+            } else {
+                const auto time_label = label(item) * 10;
+                result.transition_to(jumped(item.enclosure, second, to_second, time_label), to_second, EventKind::PERMISSIVE);
+                result.transition_to(jumped(item.enclosure, third, to_third, time_label), to_third, EventKind::PERMISSIVE);
+                result.transition_to(jumped(item.enclosure, initial.location(), again, time_label), again, EventKind::PERMISSIVE);
+                ++source_finished;
+            }
+            return result;
+        });
+        ARIADNE_TESTING_PROVE(batches == std::vector<DiscreteLocation>({second, third, initial.location()}));
+        ARIADNE_TESTING_EXPECT_EQUAL(backend.release_orbit().final().size(), 3u);
+    }
+
+    void test_parallel_location_batch_waits_for_in_flight_producers() {
+        if (ThreadManager::instance().maximum_concurrency() < 2u)
+            return;
+        ParallelConcurrencyScope concurrency;
+        const auto initial = seed();
+        const DiscreteLocation target(2);
+        const DiscreteEvent jump("jump");
+        std::mutex gate_mutex;
+        std::condition_variable gate;
+        unsigned running = 0u;
+        std::atomic<unsigned> finished{0u}, dispatched{0u};
+        std::atomic<bool> premature{false};
+        TreeHybridEvolutionBackend backend(initial, LocationCheckpointAdmissionPolicy{});
+        backend.set_semantics(Semantics::UPPER);
+        backend.run([&](const HybridEvolutionWorkItem& item, const HybridEvolutionStatistics&) {
+            HybridEvolutionStepResult result;
+            if (item.enclosure.location() == target) {
+                if (finished.load() != 2u)
+                    premature = true;
+                ++dispatched;
+                result.record_final(item.enclosure);
+            } else if (label(item) == 0) {
+                result.continue_with(marked(initial, 1), HybridEvolutionSuccessorKind::SUBDIVISION);
+                result.continue_with(marked(initial, 2), HybridEvolutionSuccessorKind::SUBDIVISION);
+            } else {
+                std::unique_lock<std::mutex> lock(gate_mutex);
+                ++running;
+                gate.notify_all();
+                if (!gate.wait_for(lock, std::chrono::seconds(15), [&] { return running == 2u; }))
+                    throw std::runtime_error("Location pieces did not execute concurrently");
+                lock.unlock();
+                result.transition_to(jumped(item.enclosure, target, jump, label(item) * 10), jump, EventKind::URGENT);
+                ++finished;
+            }
+            return result;
+        });
+        ARIADNE_TESTING_PROVE(!premature.load());
+        ARIADNE_TESTING_EXPECT_EQUAL(dispatched.load(), 1u);
+        ARIADNE_TESTING_EXPECT_EQUAL(backend.release_orbit().final().size(), 1u);
+    }
+
+    void test_location_factory_preserves_real_orbits_without_recombination() {
+        ConcurrencyScope concurrency;
+        const DiscreteLocation source(1), target(2);
+        const DiscreteEvent jump("jump");
+        RealVariable x("x"), y("y");
+        for (const auto kind: {EventKind::URGENT, EventKind::PERMISSIVE}) {
+            HybridAutomaton system;
+            system.new_mode(source, {dot(x) = 1, dot(y) = sqr(x)});
+            system.new_mode(target, {dot(x) = 1 + sqr(y), dot(y) = 1});
+            system.new_transition(source, jump, target, {next(x) = x, next(y) = y}, x >= 0, kind);
+            GeneralHybridEvolver evolver(system);
+            evolver.configuration().set_maximum_step_size(0.03125_x);
+            evolver.configuration().set_maximum_enclosure_radius(0.03125_x);
+            const auto initial = evolver.enclosure(HybridExactBox(source, RealSpace({
+                                                                              x, y
+            }),
+                                                                  ExactBoxType({{-0.0625_x, 0.0625_x}, {0, 0}})));
+            const auto expected = evolver.orbit(initial, HybridTime(0.125_x, 2), Semantics::UPPER);
+            evolver.set_evolution_backend_factory(TreeHybridEvolutionBackendFactory(
+                LocationCheckpointAdmissionPolicy{}, NoFrontierRecombinationPolicy{}));
+            const auto actual = evolver.orbit(initial, HybridTime(0.125_x, 2), Semantics::UPPER);
+            ARIADNE_TESTING_PROVE(descriptions(expected.reach()) == descriptions(actual.reach()));
+            ARIADNE_TESTING_PROVE(descriptions(expected.intermediate()) == descriptions(actual.intermediate()));
+            ARIADNE_TESTING_PROVE(descriptions(expected.final()) == descriptions(actual.final()));
+            const auto audit = std::make_shared<FrontierIntegrationAudit>();
+            evolver.set_evolution_backend_factory(AuditedFrontierBackendFactory(
+                LocationCheckpointAdmissionPolicy{}, AllCompatibleCheckpointRecombinationPolicy{}, {}, audit));
+            const auto recombined = evolver.orbit(initial, HybridTime(0.125_x, 2), Semantics::UPPER);
+            ARIADNE_TESTING_PROVE(audit->numerical_calls > 0u);
+            ARIADNE_TESTING_PROVE(audit->replacement_trajectories > 0u);
+            ARIADNE_TESTING_PROVE(audit->retired_checkpoints >= 2u);
+            ARIADNE_TESTING_EXPECT_EQUAL(audit->pending_checkpoints, 0u);
+            ARIADNE_TESTING_PROVE(audit->all_trajectories_complete);
+            ARIADNE_TESTING_PROVE(audit->valid_provenance);
+            ARIADNE_TESTING_PROVE(recombined.final().size() > 0u);
+            const auto rejected_audit = std::make_shared<FrontierIntegrationAudit>();
+            evolver.set_evolution_backend_factory(AuditedFrontierBackendFactory(
+                LocationCheckpointAdmissionPolicy{}, AllCompatibleCheckpointRecombinationPolicy{},
+                EnclosureRecombinationContext(0.0_x), rejected_audit));
+            const auto rejected = evolver.orbit(initial, HybridTime(0.125_x, 2), Semantics::UPPER);
+            ARIADNE_TESTING_PROVE(rejected_audit->numerical_calls > 0u);
+            ARIADNE_TESTING_EXPECT_EQUAL(rejected_audit->replacement_trajectories, 0u);
+            ARIADNE_TESTING_EXPECT_EQUAL(rejected_audit->retired_checkpoints, 0u);
+            ARIADNE_TESTING_PROVE(descriptions(expected.reach()) == descriptions(rejected.reach()));
+            ARIADNE_TESTING_PROVE(descriptions(expected.intermediate()) == descriptions(rejected.intermediate()));
+            ARIADNE_TESTING_PROVE(descriptions(expected.final()) == descriptions(rejected.final()));
+        }
     }
 
     void test_parent_finishes_before_distinct_derived_trajectories() {
@@ -1030,8 +1283,7 @@ class TestHybridEvolutionTree : public Testing::ContextFixture {
         for (std::size_t i = 0u; i != 6u; ++i) {
             const bool should_retire = i != 3u;
             ARIADNE_TESTING_PROVE(
-                static_cast<bool>(merged.tree().metadata(children[i]).retired_for_recombination)
-                == should_retire);
+                static_cast<bool>(merged.tree().metadata(children[i]).retired_for_recombination) == should_retire);
             if (should_retire)
                 ARIADNE_TESTING_PROVE(!merged.tree().object(children[i]).entries.front().result);
         }
@@ -1508,6 +1760,11 @@ class TestHybridEvolutionTree : public Testing::ContextFixture {
 
 int main(int argc, char** argv) {
     ARIADNE_TESTING_SUITE("test_hybrid_evolution_tree");
+    ARIADNE_TESTING_ADD_TEST(TestHybridEvolutionTree, test_location_batch_merges_different_parents_after_all_producers_finish);
+    ARIADNE_TESTING_ADD_TEST(TestHybridEvolutionTree, test_location_early_replacements_stay_held_and_absorb_later_arrivals);
+    ARIADNE_TESTING_ADD_TEST(TestHybridEvolutionTree, test_location_batches_keep_destinations_separate_and_reenter_later);
+    ARIADNE_TESTING_ADD_TEST(TestHybridEvolutionTree, test_parallel_location_batch_waits_for_in_flight_producers);
+    ARIADNE_TESTING_ADD_TEST(TestHybridEvolutionTree, test_location_factory_preserves_real_orbits_without_recombination);
     ARIADNE_TESTING_ADD_TEST(TestHybridEvolutionTree, test_parent_finishes_before_distinct_derived_trajectories);
     ARIADNE_TESTING_ADD_TEST(TestHybridEvolutionTree, test_parallel_parent_first_last_publisher_merges_held_children);
     ARIADNE_TESTING_ADD_TEST(TestHybridEvolutionTree, test_parallel_frontier_executes_independent_split_checkpoints);

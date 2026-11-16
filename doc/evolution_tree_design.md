@@ -1,9 +1,10 @@
 # Evolution tree design proposal
 
-Status: flat and serial trajectory-tree backends and continuous enclosure
-recombination are implemented. The trajectory-tree backend additionally supports
-opt-in recombination of compatible, unevolved sibling trajectories at parent
-completion. Backtracking and per-work numerical alternatives remain proposals.
+Status: flat and concurrent trajectory-tree backends and continuous enclosure
+recombination are implemented. The tree backend supports parent-first admission,
+an immediate global frontier, and single-location admission batches, with
+independent recombination policies. Backtracking and per-work numerical
+alternatives remain proposals.
 
 ## Starting functions
 
@@ -1399,3 +1400,64 @@ The group key is **the parent trajectory**, not the location. Extending
 the policy to a location/generation barrier would require a different
 grouping key and explicit closure semantics for reentrant transitions;
 the two-queue architecture does not silently equate those concepts.
+
+### Single-location admission batches
+
+`HybridCheckpointAdmissionPolicy` separates admission from genealogy, dispatch,
+candidate selection and numerical recombination. The existing global frontier
+uses `ImmediateCheckpointAdmissionPolicy`. The opt-in
+`LocationCheckpointAdmissionPolicy` runs exactly one location at a time:
+
+1. Continuous continuations, reconditioning and subdivision successors remain
+   ready in the active location, regardless of trajectory or immediate parent.
+2. Every discrete successor enters the held checkpoint queue, including a
+   fully resolved transition appended to the same trajectory and a self-loop.
+3. A batch closes only when its live ready queue is empty **and** its numerical
+   in-flight count is zero. The last publisher has already committed every
+   successor before this check. Genealogical node completion is not the barrier.
+4. `OnSynchronizationCompletionRecombinationTriggerPolicy` evaluates the entire
+   held queue. `AllCompatibleCheckpointRecombinationPolicy` forms compatibility
+   classes across parents and ancestors, without an adjacency, cardinality or
+   birth-time window restriction. Different destination locations, event histories,
+   processing phases, spaces or auxiliary mappings are never mixed.
+5. After validated replacements are committed, admission selects the first
+   remaining waiting location in publication order and admits all its checkpoints.
+   Rerouted or rejected sources remain waiting until their location is admitted.
+
+Unlike the existing frontier-window strategy, the all-compatible checkpoint
+policy explicitly permits disjoint time ranges: the numerical recombiner covers
+state and both clocks jointly. `requires_time_overlap()` defaults to true for
+existing/custom frontier policies, preserving the earlier backend filter, and
+the new all-compatible policy opts out. It still retains the structural,
+provenance, upper-semantics and radius checks. The no-progress barrier remains
+active for ready-queue merging, where a replacement could otherwise immediately
+resplit and merge again. Held replacements cannot execute or resplit before
+admission, so they may absorb later compatible arrivals without advancing time.
+Physical time is never shifted simply to make checkpoints compatible.
+
+The admission policy chooses whether triggers inspect ready or held checkpoints.
+Early evaluation, if explicitly requested, does not release held replacements.
+The scheduler admits the next batch only at the completion boundary. Self-loops
+and later returns to the same location therefore open later batches, rather
+than extending a completed batch indefinitely. Location ordering is FIFO by
+publication, and may vary with parallel completion order. This is not a barrier
+over every future visit to a location.
+
+```cpp
+evolver.set_evolution_backend_factory(TreeHybridEvolutionBackendFactory(
+    LocationCheckpointAdmissionPolicy{}));
+auto orbit = evolver.orbit(initial, termination, Semantics::UPPER);
+```
+
+This overload defaults to all-compatible pending grouping, synchronization-
+completion evaluation, the reference recombiner, unrestricted recombination
+radius, immediate dispatch and ordinary acceptance. Each remains injectable.
+The regular evolver radius still controls later numerical subdivision. Passing
+`NoFrontierRecombinationPolicy{}` after the admission policy tests or uses the
+same location-batch execution without changing the numerical collection.
+
+One `DynamicWorkload` remains active across all batches. Held checkpoints have
+no workload token until admission; replacements created by a held-queue merge
+also remain token-free. The scheduler tracks claimed numerical work explicitly,
+so an empty queue while other workers execute cannot prematurely close a batch.
+Existing parent-first and immediate-frontier constructors retain their behavior.

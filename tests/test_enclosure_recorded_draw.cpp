@@ -24,6 +24,7 @@
 
 #include "../src/enclosure_recorded_draw.hpp"
 #include "logging/test_runner.hpp"
+#include "rendering/rendering_base.hpp"
 #include "ariadne-testing.hpp"
 
 using namespace Ariadne;

@@ -50,7 +50,7 @@
 #include "rendering/figure.hpp"
 #include "set/affine_set.hpp"
 #include "system/discrete_event.hpp"
-#include "threading/workload.hpp"
+#include "enclosure_recorded_draw.hpp"
 
 #include "constraint-solving/constraint_solver.hpp"
 #include "linear-programming/linear_programming.hpp"
@@ -554,9 +554,9 @@ ListSet<HybridEnclosure::ContinuousStateSetType>
 }
 
 Void ListSet<HybridEnclosure>::draw(CanvasInterface& cnvs, const Set<DiscreteLocation>& locs, const Variables2d& vars) const {
-    StaticWorkload<HybridEnclosure, CanvasInterface*, const Set<DiscreteLocation>&, const Variables2d&> workload(
-        [](const HybridEnclosure& e, CanvasInterface* c, const Set<DiscreteLocation>& l, const Variables2d& v) { e.draw(*c, l, v); }, &cnvs, locs, vars);
-    workload.append(_list).process();
+    draw_enclosures_recorded(cnvs, *this, [&](const HybridEnclosure& enclosure, RecordingCanvas& recording) {
+        enclosure.draw(recording, locs, vars);
+    });
 }
 
 VariablesUpperBoxType

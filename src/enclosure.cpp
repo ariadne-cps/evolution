@@ -63,7 +63,7 @@
 #include "set/affine_set.hpp"
 #include "set/function_set.hpp"
 #include "symbolic/space.hpp"
-#include "threading/workload.hpp"
+#include "enclosure_recorded_draw.hpp"
 #include "utility/exceptions.hpp"
 #include "utility/macros.hpp"
 #include "utility/stopwatch.hpp"
@@ -1442,9 +1442,9 @@ ListSet<LabelledEnclosure>* ListSet<LabelledEnclosure>::clone() const {
 }
 
 Void ListSet<LabelledEnclosure>::draw(CanvasInterface& cnvs, const Variables2d& prj) const {
-    StaticWorkload<LabelledEnclosure, CanvasInterface*, const Variables2d&> workload(
-        [](const LabelledEnclosure& e, CanvasInterface* c, const Variables2d& p) { e.draw(*c, p); }, &cnvs, prj);
-    workload.append(this->_data).process();
+    draw_enclosures_recorded(cnvs, *this, [&](const LabelledEnclosure& enclosure, RecordingCanvas& recording) {
+        enclosure.draw(recording, prj);
+    });
 }
 
 } // namespace Ariadne

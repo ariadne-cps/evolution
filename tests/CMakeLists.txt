@@ -4,6 +4,7 @@ set(UNIT_TESTS
     test_scalings
     test_hybrid_time
     test_hybrid_enclosure
+    test_enclosure_recorded_draw
     test_hybrid_evolver
     test_hybrid_evolution_backend
     test_hybrid_evolution_tree

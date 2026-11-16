@@ -61,7 +61,7 @@ struct EnclosureRecombinationProfile {
     std::uint64_t image_setup_ns = 0;     //!< Construct joint residual images for each source.
     std::uint64_t image_bounds_ns = 0;    //!< Calculate image ranges and tighten by source predicates.
     std::uint64_t graph_setup_ns = 0;     //!< Assemble and prepare constraint graphs.
-    std::uint64_t graph_reduce_ns = 0;    //!< Run the prepared constraint solver on each graph.
+    std::uint64_t graph_reduce_ns = 0;    //!< Propagate each graph with prepared scalar procedures and variable dependencies.
     std::uint64_t output_assembly_ns = 0; //!< Build the final residual parameterisation and predicates.
     std::uint64_t output_reduce_ns = 0;   //!< Contract the final recombined enclosure.
 };
@@ -71,6 +71,8 @@ struct EnclosureRecombinationProfile {
  *  in extra parameters. Reference predicates are relaxed over the source union.
  *  At most one output is produced; this strategy does not subdivide to meet a
  *  requested radius. Such a request is checked and reported in the result.
+ *  Graphs eliminate fixed image coordinates and use prepared, dependency-aware
+ *  hull/shaving propagation; each source graph retains that source's predicates and bounds.
  */
 class ReferenceEnclosureRecombiner : public EnclosureRecombinerInterface {
   public:
@@ -83,7 +85,9 @@ class ReferenceEnclosureRecombiner : public EnclosureRecombinerInterface {
     EnclosureRecombinationResult recombine(const List<Enclosure>& enclosures,
                                            const EnclosureRecombinationContext& context = {}) const override;
     /** @brief Run the same reference algorithm while collecting optional per-call phase times.
-     *  @details A null profile disables all clock reads; the strategy keeps no profiling state.
+     *  @details A null profile disables the reference phase timers. The constraint
+     *  solver separately collects call-local propagation statistics. The strategy
+     *  keeps no profiling state.
      *  This overload is reference-specific and does not change the polymorphic interface.
      */
     EnclosureRecombinationResult recombine(const List<Enclosure>& enclosures,

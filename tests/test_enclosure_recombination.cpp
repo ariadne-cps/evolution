@@ -237,6 +237,79 @@ class TestEnclosureRecombination : public Testing::ContextFixture {
         expect_bounds(apply(reversed.state_function().get(0), reversed.reduced_domain()), -1, 1);
     }
 
+    void test_fixed_image_components_preserve_predicates_and_variable_residuals() {
+        const ExactBoxType square{
+            {-1, 1},
+            {-1, 1}
+        };
+        const auto coordinates = EffectiveVectorMultivariateFunction::identity(2u);
+        const auto x = coordinates[0];
+        const auto y = coordinates[1];
+        Enclosure first(square, EffectiveVectorMultivariateFunction{x, sqr(x), y},
+                        2 * x, {}, config);
+        Enclosure second(square, EffectiveVectorMultivariateFunction{x, sqr(x) + x / 4, y},
+                         2 * x + Real(1 / 4_q), {}, config);
+        first.new_zero_parameter_constraint(x + y);
+        second.new_zero_parameter_constraint(x + y);
+        const auto result = recombine({first, second});
+        // State x/y, dwell time and the oblique predicate have fixed residual
+        // images. The nonlinear coordinate and absolute clock remain variable.
+        ARIADNE_TESTING_EXPECT_EQUAL(result.number_of_parameters(), 4u);
+        ARIADNE_TESTING_EXPECT_EQUAL(result.number_of_constraints(), 1u);
+        expect_bounds(UpperIntervalType(result.constraint(0).bounds()), 0, 0);
+        expect_bounds(apply(result.state_function().get(1) - sqr(result.state_function().get(0)),
+                            result.domain()),
+                      -0.25, 0.25);
+        expect_bounds(apply(result.time_function() - 2 * result.state_function().get(0),
+                            result.domain()),
+                      0, 0.25);
+        expect_bounds(apply(result.dwell_time_function(), result.domain()), 0, 0);
+        const auto reverse = recombine({second, first});
+        expect_bounds(UpperIntervalType(reverse.constraint(0).bounds()), 0, 0);
+    }
+
+    void test_sparse_high_dimensional_graph_preserves_full_domain_witnesses() {
+        const ExactBoxType parameters(19u, ExactIntervalType(-1, 1));
+        const auto p = EffectiveVectorMultivariateFunction::identity(19u);
+        auto aggregate = p[4];
+        for (SizeType k = 5u; k != 18u; ++k)
+            aggregate = aggregate + p[k];
+        List<Enclosure> sources;
+        for (unsigned k = 0u; k != 8u; ++k) {
+            const Real offset(ExactDouble(static_cast<double>(k) / 64.0));
+            Enclosure source(parameters,
+                             EffectiveVectorMultivariateFunction{
+                                 p[0], sqr(p[0]) + p[1] + offset * p[18], p[2], p[3], aggregate / 16},
+                             EffectiveScalarMultivariateFunction::constant(19u, offset), {}, config);
+            source.new_zero_parameter_constraint(p[0] + p[18]);
+            for (SizeType j = 1u; j != 10u; ++j)
+                source.new_parameter_constraint(ValidatedConstraint(-2, p[j] + p[j + 1u], 2));
+            sources.append(std::move(source));
+        }
+        const auto batch = ReferenceEnclosureRecombiner().recombine(sources);
+        ARIADNE_TESTING_EXPECT_EQUAL(batch.outputs.size(), 1u);
+        ARIADNE_TESTING_EXPECT_EQUAL(batch.outputs.front().source_indices.size(), 8u);
+        ARIADNE_TESTING_PROVE(batch.discarded_sources.empty());
+        const auto& result = batch.outputs.front().enclosure;
+        ARIADNE_TESTING_EXPECT_EQUAL(result.number_of_constraints(), 10u);
+        ARIADNE_TESTING_EXPECT_EQUAL(result.number_of_parameters(), 21u);
+        const auto original_p1 = 2 * factory().create_coordinate(result.domain(), 1u) - 1;
+        // For each complete feasible source parameter box choose residuals
+        // (k*p18/64, k/64). Both belong to the returned residual box; the
+        // p0+p18=0 predicate is retained, including its high-index dependency.
+        expect_bounds(apply(result.state_function().get(1) - sqr(result.state_function().get(0)) - original_p1,
+                            result.domain()),
+                      -7.0 / 64.0, 7.0 / 64.0);
+        expect_bounds(apply(result.time_function(), result.domain()), 0, 7.0 / 64.0);
+        expect_bounds(apply(result.dwell_time_function(), result.domain()), 0, 0);
+        expect_bounds(UpperIntervalType(result.constraint(0).bounds()), 0, 0);
+        const auto original_p0 = 2 * factory().create_coordinate(result.domain(), 0u) - 1;
+        const auto original_p18 = 2 * factory().create_coordinate(result.domain(), 18u) - 1;
+        expect_bounds(apply(result.constraint(0).function() - original_p0 - original_p18,
+                            result.domain()),
+                      0, 0);
+    }
+
     void test_oblique_common_constraint_and_different_constraint_lists() {
         ExactBoxType square{
             {-1, 1},
@@ -547,6 +620,8 @@ int main(int argc, char* argv[]) {
     ARIADNE_TESTING_ADD_TEST(TestEnclosureRecombination, test_radius_request_is_reported_without_losing_coverage);
     ARIADNE_TESTING_ADD_TEST(TestEnclosureRecombination, test_nonlinear_reference_and_full_source_coverage);
     ARIADNE_TESTING_ADD_TEST(TestEnclosureRecombination, test_disjoint_constraints_are_united_and_domains_contracted);
+    ARIADNE_TESTING_ADD_TEST(TestEnclosureRecombination, test_fixed_image_components_preserve_predicates_and_variable_residuals);
+    ARIADNE_TESTING_ADD_TEST(TestEnclosureRecombination, test_sparse_high_dimensional_graph_preserves_full_domain_witnesses);
     ARIADNE_TESTING_ADD_TEST(TestEnclosureRecombination, test_oblique_common_constraint_and_different_constraint_lists);
     ARIADNE_TESTING_ADD_TEST(TestEnclosureRecombination, test_constraints_reduce_residuals_without_reducing_the_box);
     ARIADNE_TESTING_ADD_TEST(TestEnclosureRecombination, test_clock_maps_and_continued_evolution);

@@ -338,8 +338,9 @@ The CSV includes eight `recombine_*_ns` mean durations: input filtering
 (including emptiness checks), parameter normalisation, residual-image
 construction, direct image bounding, constraint-graph setup, constraint-solver
 reduction, output assembly, and final output reduction. When profiling is
-disabled (default), these columns are blank and the reference implementation
-does not read a clock. Each profiled call resets the counters.
+disabled (default), these columns are blank and the reference phase timers do
+not read a clock. The constraint solver independently collects call-local
+propagation statistics. Each profiled call resets the phase counters.
 
 The internal durations are exclusive but **not exhaustive**: hull accumulation,
 control flow, provenance and profiling overhead are not assigned to a stage.
@@ -347,6 +348,17 @@ Consequently they need not sum to `recombination_mean_ns`. Compare profiled
 and unprofiled end-to-end runs on the same input to estimate instrumentation
 overhead before claiming a speedup. Time-distributed subsets omit the remaining
 eligible sources, so they measure cardinality scaling, not full-window coverage.
+
+The reference implementation reuses models whose domain already matches the
+graph parameter domain. It also substitutes certified singleton image bounds
+for fixed graph coordinates, retaining their predicates for propagation into
+the other coordinates. This avoids identity compositions and reduces graph
+dimension, including after resets that set dwell time to zero. Source constraints
+and their bounds are preserved. Graph contraction uses the constraint solver's
+prepared propagation API, compiling each scalar function/procedure once and
+restricting shaving to its genuine variable dependencies. Hull propagation and
+adaptive shaving reach a fixed point using the existing validated contractors.
+Preparation and solver statistics remain local to each recombination call.
 
 ### Why reference recombination is conservative
 

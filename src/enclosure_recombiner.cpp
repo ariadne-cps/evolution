@@ -31,11 +31,14 @@
 #include <algorithm>
 #include <chrono>
 #include <cmath>
+#include <memory>
 #include <utility>
+#include <vector>
 
 #include "function/formula.hpp"
 #include "function/formula.tpl.hpp"
 #include "function/function.hpp"
+#include "function/procedure.hpp"
 #include "utility/macros.hpp"
 
 #include "constraint-solving/constraint_solver.hpp"
@@ -81,8 +84,9 @@ UpperBoxType constrained_image_bounds(const Enclosure& source,
         // In particular, this retains equalities shared with the reference even
         // when an oblique constraint cannot contract the parameter box itself.
         for (SizeType k = 0; k != image.result_size(); ++k) {
+            const auto component = image.get(k);
             for (const auto& constraint: source.constraint_models()) {
-                image_bounds[k] = intersection(image_bounds[k], UpperIntervalType(constraint.bounds()) + apply(image.get(k) - constraint.function(), parameter_domain));
+                image_bounds[k] = intersection(image_bounds[k], UpperIntervalType(constraint.bounds()) + apply(component - constraint.function(), parameter_domain));
             }
         }
         return image_bounds;
@@ -94,36 +98,76 @@ UpperBoxType constrained_image_bounds(const Enclosure& source,
         return bounds;
 
     const auto graph_setup_start = profile ? RecombinationClock::now() : RecombinationClock::time_point{};
-    const auto image_domain = cast_exact_box(bounds);
+    // Singleton image bounds are already certified by the range calculation.
+    // Adding a fixed graph variable cannot tighten that image,
+    // but would enlarge every embedded model and the solver's shaving loops.
+    List<SizeType> active_components;
+    for (SizeType k = 0; k != image.result_size(); ++k) {
+        if (bounds[k].lower_bound().raw() != bounds[k].upper_bound().raw())
+            active_components.append(k);
+    }
+    if (active_components.empty()) {
+        if (profile)
+            profile->graph_setup_ns += phase_elapsed_ns(graph_setup_start);
+        return bounds;
+    }
+    ExactBoxType image_domain(active_components.size());
+    const auto exact_bounds = cast_exact_box(bounds);
+    for (SizeType k = 0; k != active_components.size(); ++k)
+        image_domain[k] = exact_bounds[active_components[k]];
     const auto graph_domain = product(parameter_domain, image_domain);
     const auto& factory = source.configuration().function_factory();
     const auto parameter_count = parameter_domain.size();
     const auto constraint_count = source.number_of_constraints();
     auto graph = factory.create_zeros(constraint_count + image.result_size(), graph_domain);
     ExactBoxType graph_bounds(graph.result_size());
+    const auto restrict_to_parameters = [&](const ValidatedScalarMultivariateFunctionPatch& function) {
+        // Normalised sources already use parameter_domain. Restricting a Taylor
+        // patch to its own domain still performs a full identity composition.
+        return same(function.domain(), parameter_domain) ? function : restriction(function, parameter_domain);
+    };
     for (SizeType k = 0; k != constraint_count; ++k) {
-        graph.set(k, embed(restriction(source.constraint(k).function(), parameter_domain), image_domain));
+        graph.set(k, embed(restrict_to_parameters(source.constraint(k).function()), image_domain));
         graph_bounds[k] = source.constraint(k).bounds();
     }
+    SizeType active_index = 0u;
     for (SizeType k = 0; k != image.result_size(); ++k) {
-        graph.set(constraint_count + k,
-                  embed(restriction(image.get(k), parameter_domain), image_domain) - factory.create_coordinate(graph_domain, parameter_count + k));
-        graph_bounds[constraint_count + k] = ExactIntervalType(0, 0);
+        const auto component = embed(restrict_to_parameters(image.get(k)), image_domain);
+        if (active_index != active_components.size() && active_components[active_index] == k) {
+            graph.set(constraint_count + k,
+                      component - factory.create_coordinate(graph_domain, parameter_count + active_index));
+            graph_bounds[constraint_count + k] = ExactIntervalType(0, 0);
+            ++active_index;
+        } else {
+            // Retain the implied predicate even for a fixed image: it can
+            // help contract the parameters and therefore other image bounds.
+            graph.set(constraint_count + k, component);
+            graph_bounds[constraint_count + k] = exact_bounds[k];
+        }
     }
     UpperBoxType feasible_graph(graph_domain);
     ConstraintSolver contractor;
-    const PreparedConstraintSolverFunction prepared(graph);
+    std::vector<ConstraintPropagationConstraint> prepared;
+    prepared.reserve(graph.result_size());
+    for (SizeType k = 0; k != graph.result_size(); ++k) {
+        const ValidatedScalarMultivariateFunction function = graph.get(k);
+        prepared.push_back({function, graph_bounds[k], {}, false, false, std::make_shared<const ValidatedProcedure>(function)});
+    }
     if (profile)
         profile->graph_setup_ns += phase_elapsed_ns(graph_setup_start);
+    Bool graph_is_empty;
     {
         ScopedRecombinationTimer timer(profile ? &profile->graph_reduce_ns : nullptr);
-        contractor.reduce(feasible_graph, prepared, graph_bounds);
+        ConstraintPropagationStatistics statistics;
+        graph_is_empty = contractor.propagate(feasible_graph, prepared, false, statistics);
     }
-    if (definitely(feasible_graph.is_empty())) {
+    if (graph_is_empty || definitely(feasible_graph.is_empty())) {
         bounds[0] = UpperIntervalType(1, -1);
         return bounds;
     }
-    return project(feasible_graph, range(parameter_count, parameter_count + image.result_size()));
+    for (SizeType k = 0; k != active_components.size(); ++k)
+        bounds[active_components[k]] = feasible_graph[parameter_count + k];
+    return bounds;
 }
 
 } // namespace

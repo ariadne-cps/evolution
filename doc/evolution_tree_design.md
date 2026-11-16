@@ -493,6 +493,23 @@ box \(B_i\) therefore includes every value \(H_i(u)\) for feasible
 \(u\in E_i\). Conversion via `cast_exact_box` copies the
 outward-computed endpoints exactly; it does not narrow them.
 
+Graph construction introduces variables only for non-singleton image bounds.
+If an image component has the certified bound `[c,c]`, its graph variable is
+eliminated by substitution and the predicate `H_i(u)[k] in [c,c]` is retained.
+This preserves its propagation into parameter and other image bounds without
+carrying a fixed coordinate through every model and shaving pass. If every
+component is fixed, the certified image bounds can be returned directly.
+Models already defined on the requested parameter domain are reused rather
+than recomposed with the identity. The graph uses the constraint solver's
+prepared propagation API: each scalar function and its forward/backward
+procedure are compiled once per graph, so shaving visits genuine variable
+dependencies rather than all graph coordinates. Hull propagation and adaptive
+shaving run to the solver's fixed point, without derivative-assisted monotone
+contraction. Preparation and mutable propagation statistics belong to this
+call; no global cache or scheduler state is introduced. These optimizations
+retain source constraints and their bounds and use the existing validated
+contractors rather than a cheaper unvalidated approximation.
+
 **3. Explicit witness in the output.** Hull the validated boxes:
 \(B=\operatorname{hull}_i B_i\). Let \(R\) be the first
 \(\dim(F_i)\) coordinates of \(B\), and \(K_j\) its coordinates

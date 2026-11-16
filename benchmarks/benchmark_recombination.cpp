@@ -96,7 +96,6 @@ std::vector<double> parse_steps(const String& value) {
     return steps;
 }
 
-
 // A fixed absolute birth-time window separates group cardinality from the
 // integration-step resolution. Reject malformed endpoints before any evolution.
 std::pair<double, double> parse_time_window(const String& value) {
@@ -238,16 +237,16 @@ void configure(GeneralHybridEvolver& evolver, const Options& options) {
 }
 
 List<Enclosure> generate(const Scenario& scenario, const Options& options,
-                               DiscreteLocation source, DiscreteLocation target,
-                               DiscreteEvent jump, RealVariable x, RealVariable y,
-                               bool verbose, SizeType& generated, SizeType& eligible) {
+                         DiscreteLocation source, DiscreteLocation target,
+                         DiscreteEvent jump, RealVariable x, RealVariable y,
+                         bool verbose, SizeType& generated, SizeType& eligible) {
     GeneralHybridEvolver evolver(make_system(scenario, source, target, jump, x, y));
     configure(evolver, options);
     const HybridBoxSet initial = scenario.kind == EventKind::URGENT
-        ? HybridBoxSet(source, {Real(-2) <= x <= Real(-1), Real(-1 / 2_q) <= y <= Real(1 / 2_q)})
-        : HybridBoxSet(source, {Real(1) <= x <= Real(2), Real(-1 / 2_q) <= y <= Real(1 / 2_q)});
+                                   ? HybridBoxSet(source, {Real(-2) <= x <= Real(-1), Real(-1 / 2_q) <= y <= Real(1 / 2_q)})
+                                   : HybridBoxSet(source, {Real(1) <= x <= Real(2), Real(-1 / 2_q) <= y <= Real(1 / 2_q)});
     const HybridTerminationCriterion stop(Real(ExactDouble(scenario.generation_horizon)), Integer(8),
-                                           Set<DiscreteEvent>{jump});
+                                          Set<DiscreteEvent>{jump});
     const auto orbit = evolver.orbit(initial, stop, Semantics::UPPER);
     if (verbose)
         std::cout << "  generation reach=" << orbit.reach().size()
@@ -319,8 +318,8 @@ List<Enclosure> generate(const Scenario& scenario, const Options& options,
             std::cout << " with constrained time-window=[" << options.time_window->first
                       << "," << options.time_window->second << "]";
             std::cout << (options.distributed_count
-                ? " (distributed subset; not full-window coverage)"
-                : " (all eligible sources)");
+                              ? " (distributed subset; not full-window coverage)"
+                              : " (all eligible sources)");
         } else {
             std::cout << " (middle adjacent time window)";
         }
@@ -419,14 +418,14 @@ void check_reference_overlap(const Projection& reference, const Projection& evol
 // constrained sets, so a negative result is inconclusive. A positive result
 // certifies ONLY coordinate/clock projections, never full set inclusion.
 bool certified_coordinate_projection_containment(const Projection& source,
-                                                const Projection& output) {
+                                                 const Projection& output) {
     return definitely(subset(source.state, output.state)) &&
            definitely(subset(source.time, output.time)) &&
            definitely(subset(source.dwell, output.dwell));
 }
 
 bool certified_invariant_projection_containment(const Projection& source,
-                                               const Projection& output) {
+                                                const Projection& output) {
     return definitely(subset(source.invariant, output.invariant));
 }
 
@@ -462,8 +461,7 @@ std::array<double, recombination_phase_count> profile_values(const EnclosureReco
 
 constexpr std::array<const char*, recombination_phase_count> recombination_phase_names = {
     "filter", "normalise", "image-setup", "image-bounds",
-    "graph-setup", "graph-reduce", "output-assembly", "output-reduce"
-};
+    "graph-setup", "graph-reduce", "output-assembly", "output-reduce"};
 
 struct Measurement {
     double contraction_ns = 0, recombination_ns = 0;
@@ -719,11 +717,9 @@ ScenarioSummary run_scenario(const Scenario& scenario, const Options& options,
     std::array<Bench::Samples, recombination_phase_count> recombination_phases;
     std::optional<Measurement> last;
     unsigned round = 0u;
-    const auto completed = runner.run(scenario.name, options.samples, [] {}, [&] {
-        last = measure(original, continuation, stop, target, RealSpace({x, y}),
-                       scenario.continuation_horizon, scenario.kind == EventKind::URGENT,
-                       options.profile_recombine);
-    }, [&] {
+    const auto completed = runner.run(scenario.name, options.samples, [] {}, [&] { last = measure(original, continuation, stop, target, RealSpace({x, y}),
+                                                                                                  scenario.continuation_horizon, scenario.kind == EventKind::URGENT,
+                                                                                                  options.profile_recombine); }, [&] {
         if (!last)
             throw std::runtime_error("missing measurement");
         if (round >= cli.warmups()) {
@@ -745,8 +741,7 @@ ScenarioSummary run_scenario(const Scenario& scenario, const Options& options,
                           << " recombined-final=" << last->merged_final
                           << " net-speedup=" << last->independent_total_ns() / last->merged_total_ns() << "\n";
         }
-        ++round;
-    });
+        ++round; });
     if (completed.size() != options.samples ||
         independent_totals.size() != options.samples ||
         merged_totals.size() != options.samples)
@@ -796,7 +791,11 @@ ScenarioSummary run_scenario(const Scenario& scenario, const Options& options,
                                 "independent and merged target-only continuation. "
                                 "Dataset generation, copying, quality evaluation and reporting are untimed. "
                                 "Totals: contraction+independent vs contraction+recombination+merged.");
-    report.set_dimension_columns({{"Scenario"}, {"Phase"}, {"Inputs", 0u, Bench::TableAlignment::Right}});
+    report.set_dimension_columns({
+        {"Scenario"},
+        {"Phase"},
+        {"Inputs", 0u, Bench::TableAlignment::Right}
+    });
     report.set_table_options(Bench::TableOptions::ruled());
     const std::string count = std::to_string(original.size());
     const auto row = [&](const char* phase, const Bench::Samples& samples) {
@@ -960,9 +959,9 @@ int run_sweep(const Scenario (&scenarios)[2], const Options& options,
     bool failed = false;
     for (const auto step: options.steps) {
         for (const auto& window: windows) {
-            const auto groups = !window ? options.groups
-                : !options.distributed_counts.empty() ? options.distributed_counts
-                : std::vector<unsigned>{options.distributed_count.value_or(options.group_size)};
+            const auto groups = !window                             ? options.groups
+                              : !options.distributed_counts.empty() ? options.distributed_counts
+                                                                    : std::vector<unsigned>{options.distributed_count.value_or(options.group_size)};
             for (const auto selection_count: groups) {
                 auto configuration = options;
                 configuration.step = step;
@@ -1027,7 +1026,7 @@ int main(int argc, const char* argv[]) {
         if (!cli.acquire(argc, argv))
             return 0;
         const Scenario scenarios[] = {
-            {"urgent-crossing", EventKind::URGENT, 3.0, 4.0},
+            {"urgent-crossing",     EventKind::URGENT, 3.0, 4.0},
             {"permissive-jump", EventKind::PERMISSIVE, 1.0, 2.0}
         };
         if (options.sweep)

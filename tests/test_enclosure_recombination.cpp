@@ -157,11 +157,12 @@ class TestEnclosureRecombination : public Testing::ContextFixture {
         ARIADNE_TESTING_EXPECT_EQUAL(description(profiled.outputs.front().enclosure),
                                      description(plain.outputs.front().enclosure));
         ARIADNE_TESTING_PROVE(profile.normalise_ns + profile.image_setup_ns +
-                              profile.output_assembly_ns + profile.output_reduce_ns > 0u);
+                                  profile.output_assembly_ns + profile.output_reduce_ns >
+                              0u);
         const auto none = reference.recombine({}, {}, &profile);
         ARIADNE_TESTING_EXPECT_EQUAL(none.outputs.size(), 0u);
         ARIADNE_TESTING_PROVE(profile.filter_ns == 0u && profile.normalise_ns == 0u &&
-                             profile.output_reduce_ns == 0u);
+                              profile.output_reduce_ns == 0u);
     }
 
     void test_radius_request_is_reported_without_losing_coverage() {
@@ -328,7 +329,9 @@ class TestEnclosureRecombination : public Testing::ContextFixture {
     // BOTH offset triples, so each whole source curve embeds in its graph.
     // No sampled points, tolerance-based point matching or source boxing.
     void test_exact_joint_clock_and_state_coverage_witness() {
-        const ExactBoxType unit{{0, 1}};
+        const ExactBoxType unit{
+            {0, 1}
+        };
         Enclosure first(unit, EffectiveVectorMultivariateFunction{s, sqr(s)}, s, {}, config);
         Enclosure second(unit, EffectiveVectorMultivariateFunction{s, sqr(s) + Real(1 / 4_q)},
                          s + Real(1 / 2_q), {}, config);
@@ -347,7 +350,7 @@ class TestEnclosureRecombination : public Testing::ContextFixture {
         const auto ed = factory().create_coordinate(result.domain(), 3u);
         expect_bounds(apply(result.state_function().get(0) - u, result.domain()), 0, 0);
         expect_bounds(apply(result.state_function().get(1) - (sqr(u) + ey), result.domain()), 0, 0);
-        expect_bounds(apply(result.time_function() - (2*u + et), result.domain()), 0, 0);
+        expect_bounds(apply(result.time_function() - (2 * u + et), result.domain()), 0, 0);
         expect_bounds(apply(result.dwell_time_function() - (u + ed), result.domain()), 0, 0);
         // For every u, either constant residual triple (0,0,0) or
         // (1/4,3/4,1/4) is in this independent residual box.
@@ -361,10 +364,11 @@ class TestEnclosureRecombination : public Testing::ContextFixture {
     // birth times differ. One shared reference parameter and independent
     // residuals preserve both entire curves and their clock correlations.
     void test_guard_constrained_joint_coverage_witness() {
-        const ExactBoxType unit{{0, 1}};
+        const ExactBoxType unit{
+            {0, 1}
+        };
         Enclosure first(unit, EffectiveVectorMultivariateFunction{-s, s}, s, {}, config);
-        Enclosure second(unit, EffectiveVectorMultivariateFunction{
-                             -s - Real(1 / 4_q), s + Real(1 / 4_q)},
+        Enclosure second(unit, EffectiveVectorMultivariateFunction{-s - Real(1 / 4_q), s + Real(1 / 4_q)},
                          s + Real(1 / 4_q), {}, config);
         const auto coordinates = EffectiveVectorMultivariateFunction::identity(2u);
         first.new_zero_state_constraint(coordinates[0] + coordinates[1]);
@@ -464,7 +468,9 @@ class TestEnclosureRecombination : public Testing::ContextFixture {
     // may spill slightly beyond the endpoint. The second source also has an
     // extra degenerate parameter; it must not change joint state/time coverage.
     void test_non_dyadic_normalisation_with_padded_parameters_and_clock() {
-        const ExactBoxType first_domain{{ExactDouble(0.1), ExactDouble(0.3)}};
+        const ExactBoxType first_domain{
+            {ExactDouble(0.1), ExactDouble(0.3)}
+        };
         const ExactBoxType second_domain{
             {ExactDouble(0.2), ExactDouble(0.4)},
             {ExactDouble(0.0), ExactDouble(0.0)}

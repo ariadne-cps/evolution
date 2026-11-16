@@ -1284,15 +1284,15 @@ Void HybridEvolverBase::
         HybridEnclosure reconditioned_set = starting_set;
         this->_recondition(reconditioned_set);
         LOGGING_PRINTLN("RECONDITION location=" << location
-            << " t=" << starting_set.time_range()
-            << " parameters=" << starting_set.number_of_parameters()
-            << "->" << reconditioned_set.number_of_parameters()
-            << " radius=" << starting_set.continuous_set().radius()
-            << "->" << reconditioned_set.continuous_set().radius()
-            << " state_error=" << sup_norm(starting_set.state_function().errors())
-            << "->" << sup_norm(reconditioned_set.state_function().errors())
-            << " time_error=" << starting_set.time_function().error()
-            << "->" << reconditioned_set.time_function().error());
+                                                << " t=" << starting_set.time_range()
+                                                << " parameters=" << starting_set.number_of_parameters()
+                                                << "->" << reconditioned_set.number_of_parameters()
+                                                << " radius=" << starting_set.continuous_set().radius()
+                                                << "->" << reconditioned_set.continuous_set().radius()
+                                                << " state_error=" << sup_norm(starting_set.state_function().errors())
+                                                << "->" << sup_norm(reconditioned_set.state_function().errors())
+                                                << " time_error=" << starting_set.time_function().error()
+                                                << "->" << reconditioned_set.time_function().error());
         result.continue_with(reconditioned_set, HybridEvolutionSuccessorKind::RECONDITIONING);
         return;
     }
@@ -1311,11 +1311,11 @@ Void HybridEvolverBase::
                 }
             }
             LOGGING_PRINTLN("SPLIT location=" << location
-                << " t=" << starting_set.time_range()
-                << " pieces=" << result.successors.size()
-                << " radius=" << starting_bounding_box.radius()
-                << " limit=" << this->_configuration_ptr->maximum_enclosure_radius()
-                << " parameters=" << starting_set.number_of_parameters());
+                                              << " t=" << starting_set.time_range()
+                                              << " pieces=" << result.successors.size()
+                                              << " radius=" << starting_bounding_box.radius()
+                                              << " limit=" << this->_configuration_ptr->maximum_enclosure_radius()
+                                              << " parameters=" << starting_set.number_of_parameters());
             return;
         }
     }

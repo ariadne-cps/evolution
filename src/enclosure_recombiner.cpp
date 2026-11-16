@@ -54,6 +54,7 @@ std::uint64_t phase_elapsed_ns(RecombinationClock::time_point start) {
 class ScopedRecombinationTimer {
     std::uint64_t* _elapsed;
     RecombinationClock::time_point _start{};
+
   public:
     explicit ScopedRecombinationTimer(std::uint64_t* elapsed) : _elapsed(elapsed) {
         if (_elapsed)
@@ -173,23 +174,23 @@ EnclosureRecombinationResult ReferenceEnclosureRecombiner::recombine(const List<
     source_indices.reserve(enclosures.size());
     SizeType parameter_count = 0u;
     {
-    ScopedRecombinationTimer timer(profile ? &profile->filter_ns : nullptr);
-    for (SizeType index = 0; index != enclosures.size(); ++index) {
-        auto source = enclosures[index];
-        ARIADNE_PRECONDITION_MSG(source.state_dimension() == state_dimension,
-                                 "Recombination requires matching state dimensions.");
-        // is_empty contracts the copy's parameter domain and only discards
-        // sources whose infeasibility has actually been established.
-        if (definitely(source.is_empty())) {
-            batch.discarded_sources.append(index);
-            continue;
+        ScopedRecombinationTimer timer(profile ? &profile->filter_ns : nullptr);
+        for (SizeType index = 0; index != enclosures.size(); ++index) {
+            auto source = enclosures[index];
+            ARIADNE_PRECONDITION_MSG(source.state_dimension() == state_dimension,
+                                     "Recombination requires matching state dimensions.");
+            // is_empty contracts the copy's parameter domain and only discards
+            // sources whose infeasibility has actually been established.
+            if (definitely(source.is_empty())) {
+                batch.discarded_sources.append(index);
+                continue;
+            }
+            ARIADNE_PRECONDITION_MSG(source.reduced_domain().is_bounded(),
+                                     "Recombination requires bounded parameter domains.");
+            parameter_count = std::max(parameter_count, source.number_of_parameters());
+            sources.append(source);
+            source_indices.append(index);
         }
-        ARIADNE_PRECONDITION_MSG(source.reduced_domain().is_bounded(),
-                                 "Recombination requires bounded parameter domains.");
-        parameter_count = std::max(parameter_count, source.number_of_parameters());
-        sources.append(source);
-        source_indices.append(index);
-    }
     }
     if (sources.empty())
         return batch;
@@ -294,38 +295,38 @@ EnclosureRecombinationResult ReferenceEnclosureRecombiner::recombine(const List<
     // The contractor uses each source's full constraint system and permits
     // different source constraint lists and ordering.
     {
-    ScopedRecombinationTimer timer(profile ? &profile->output_assembly_ns : nullptr);
-    for (SizeType k = 0; k != constraint_count; ++k) {
-        const auto bounds = cast_exact_box(UpperBoxType({combined[component_count + k]}))[0];
-        result._constraints[k] = ValidatedConstraintModel(bounds.lower_bound(), result.constraint(k).function(), bounds.upper_bound());
-    }
-    List<SizeType> residual_components;
-    for (SizeType k = 0; k != component_count; ++k) {
-        if (!same(combined[k], UpperIntervalType(0, 0)))
-            residual_components.append(k);
-    }
-    ExactBoxType residual_domain(residual_components.size());
-    for (SizeType k = 0; k != residual_components.size(); ++k)
-        residual_domain[k] = cast_exact_box(UpperBoxType({combined[residual_components[k]]}))[0];
+        ScopedRecombinationTimer timer(profile ? &profile->output_assembly_ns : nullptr);
+        for (SizeType k = 0; k != constraint_count; ++k) {
+            const auto bounds = cast_exact_box(UpperBoxType({combined[component_count + k]}))[0];
+            result._constraints[k] = ValidatedConstraintModel(bounds.lower_bound(), result.constraint(k).function(), bounds.upper_bound());
+        }
+        List<SizeType> residual_components;
+        for (SizeType k = 0; k != component_count; ++k) {
+            if (!same(combined[k], UpperIntervalType(0, 0)))
+                residual_components.append(k);
+        }
+        ExactBoxType residual_domain(residual_components.size());
+        for (SizeType k = 0; k != residual_components.size(); ++k)
+            residual_domain[k] = cast_exact_box(UpperBoxType({combined[residual_components[k]]}))[0];
 
-    result._domain = product(common_domain, residual_domain);
-    result._reduced_domain = result._domain;
-    result._state_function = embed(result._state_function, residual_domain);
-    result._time_function = embed(result._time_function, residual_domain);
-    result._dwell_time_function = embed(result._dwell_time_function, residual_domain);
-    for (auto& constraint: result._constraints)
-        constraint.function() = embed(constraint.function(), residual_domain);
-    for (SizeType k = 0; k != residual_components.size(); ++k) {
-        const auto correction = factory.create_coordinate(result._domain, parameter_count + k);
-        const auto component = residual_components[k];
-        if (component < state_dimension)
-            result._state_function[component] = result._state_function.get(component) + correction;
-        else if (component == state_dimension)
-            result._time_function = result._time_function + correction;
-        else
-            result._dwell_time_function = result._dwell_time_function + correction;
-    }
-    result._variable_kinds.concatenate(List<EnclosureVariableKind>(residual_components.size(), EnclosureVariableKind::ERROR));
+        result._domain = product(common_domain, residual_domain);
+        result._reduced_domain = result._domain;
+        result._state_function = embed(result._state_function, residual_domain);
+        result._time_function = embed(result._time_function, residual_domain);
+        result._dwell_time_function = embed(result._dwell_time_function, residual_domain);
+        for (auto& constraint: result._constraints)
+            constraint.function() = embed(constraint.function(), residual_domain);
+        for (SizeType k = 0; k != residual_components.size(); ++k) {
+            const auto correction = factory.create_coordinate(result._domain, parameter_count + k);
+            const auto component = residual_components[k];
+            if (component < state_dimension)
+                result._state_function[component] = result._state_function.get(component) + correction;
+            else if (component == state_dimension)
+                result._time_function = result._time_function + correction;
+            else
+                result._dwell_time_function = result._dwell_time_function + correction;
+        }
+        result._variable_kinds.concatenate(List<EnclosureVariableKind>(residual_components.size(), EnclosureVariableKind::ERROR));
     }
     {
         ScopedRecombinationTimer timer(profile ? &profile->output_reduce_ns : nullptr);

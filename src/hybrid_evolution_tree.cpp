@@ -23,7 +23,7 @@
  */
 
 /** @file src/hybrid_evolution_tree.cpp
- *  @brief Parent-first trajectory scheduling and history-based Orbit projection.
+ *  @brief Policy-driven checkpoint scheduling and history-based Orbit projection.
  */
 
 #include "evolution/hybrid_evolution_tree.hpp"
@@ -31,6 +31,7 @@
 #include <algorithm>
 #include <cmath>
 #include <deque>
+#include <iterator>
 #include <limits>
 #include <mutex>
 #include <optional>
@@ -46,13 +47,13 @@
 
 namespace Ariadne {
 
-OnParentCompletionRecombinationTriggerPolicy* OnParentCompletionRecombinationTriggerPolicy::clone() const {
-    return new OnParentCompletionRecombinationTriggerPolicy(*this);
+BeforeAdmissionRecombinationTriggerPolicy* BeforeAdmissionRecombinationTriggerPolicy::clone() const {
+    return new BeforeAdmissionRecombinationTriggerPolicy(*this);
 }
 
-bool OnParentCompletionRecombinationTriggerPolicy::should_evaluate(
-    const HybridEvolutionTree&, NodeId, HybridRecombinationEvaluationPoint point, std::size_t) const {
-    return point == HybridRecombinationEvaluationPoint::PARENT_COMPLETE;
+bool BeforeAdmissionRecombinationTriggerPolicy::should_evaluate(
+    const HybridEvolutionTree&, NodeId, HybridRecombinationEvaluationPoint point, std::size_t, HybridRecombinationQueue) const {
+    return point == HybridRecombinationEvaluationPoint::BEFORE_ADMISSION;
 }
 
 AfterEachStepRecombinationTriggerPolicy* AfterEachStepRecombinationTriggerPolicy::clone() const {
@@ -60,18 +61,8 @@ AfterEachStepRecombinationTriggerPolicy* AfterEachStepRecombinationTriggerPolicy
 }
 
 bool AfterEachStepRecombinationTriggerPolicy::should_evaluate(
-    const HybridEvolutionTree&, NodeId, HybridRecombinationEvaluationPoint point, std::size_t) const {
+    const HybridEvolutionTree&, NodeId, HybridRecombinationEvaluationPoint point, std::size_t, HybridRecombinationQueue) const {
     return point == HybridRecombinationEvaluationPoint::AFTER_STEP;
-}
-
-OnSynchronizationCompletionRecombinationTriggerPolicy*
-    OnSynchronizationCompletionRecombinationTriggerPolicy::clone() const {
-    return new OnSynchronizationCompletionRecombinationTriggerPolicy(*this);
-}
-
-bool OnSynchronizationCompletionRecombinationTriggerPolicy::should_evaluate(
-    const HybridEvolutionTree&, NodeId, HybridRecombinationEvaluationPoint point, std::size_t) const {
-    return point == HybridRecombinationEvaluationPoint::SYNCHRONIZATION_COMPLETE;
 }
 
 EveryNStepsRecombinationTriggerPolicy::EveryNStepsRecombinationTriggerPolicy(std::size_t period)
@@ -86,32 +77,9 @@ EveryNStepsRecombinationTriggerPolicy* EveryNStepsRecombinationTriggerPolicy::cl
 
 bool EveryNStepsRecombinationTriggerPolicy::should_evaluate(
     const HybridEvolutionTree&, NodeId, HybridRecombinationEvaluationPoint point,
-    std::size_t completed_steps) const {
-    if (point == HybridRecombinationEvaluationPoint::AFTER_STEP)
-        return completed_steps % _period == 0u;
-    return (point == HybridRecombinationEvaluationPoint::PARENT_COMPLETE ||
-            point == HybridRecombinationEvaluationPoint::SYNCHRONIZATION_COMPLETE) &&
-           completed_steps % _period != 0u;
-}
-
-NoRecombinationSchedulingPolicy* NoRecombinationSchedulingPolicy::clone() const {
-    return new NoRecombinationSchedulingPolicy(*this);
-}
-
-std::vector<std::vector<HybridEvolutionTree::NodeId>>
-    NoRecombinationSchedulingPolicy::select(const HybridEvolutionTree&, NodeId) const {
-    return {};
-}
-
-SiblingWindowRecombinationSchedulingPolicy::SiblingWindowRecombinationSchedulingPolicy(
-    std::size_t max_group_size, double max_time_spread)
-    : _max_group_size(max_group_size), _max_time_spread(max_time_spread) {
-    if (_max_group_size < 2u || !std::isfinite(_max_time_spread) || _max_time_spread < 0.0)
-        throw std::invalid_argument("Sibling-window recombination requires group size >= 2 and a finite nonnegative time spread");
-}
-
-SiblingWindowRecombinationSchedulingPolicy* SiblingWindowRecombinationSchedulingPolicy::clone() const {
-    return new SiblingWindowRecombinationSchedulingPolicy(*this);
+    std::size_t completed_steps, HybridRecombinationQueue queue) const {
+    return (point == HybridRecombinationEvaluationPoint::BEFORE_ADMISSION && queue == HybridRecombinationQueue::WAITING) ||
+           (point == HybridRecombinationEvaluationPoint::AFTER_STEP && completed_steps % _period == 0u);
 }
 
 namespace {
@@ -131,41 +99,68 @@ double largest_output_radius(const EnclosureRecombinationResult& result) {
     return radius;
 }
 
-// Require the same transition family and identical symbolic auxiliary maps.
-// This check is shared by the built-in policy and the backend's policy validation.
-bool compatible_recombination_children(const HybridEvolutionTree& tree,
-                                       HybridEvolutionTree::NodeId parent,
-                                       HybridEvolutionTree::NodeId first,
-                                       HybridEvolutionTree::NodeId next) {
-    const auto& first_metadata = tree.metadata(first);
-    const auto& next_metadata = tree.metadata(next);
-    if (!first_metadata.origin || !next_metadata.origin)
+// Follow replacement provenance to retain the original successor meaning.
+const HybridEvolutionSuccessor* seed_successor(const HybridEvolutionTree& tree,
+                                               HybridEvolutionCheckpointId checkpoint) {
+    while (!tree.metadata(checkpoint.trajectory).recombined_checkpoints.empty())
+        checkpoint = tree.metadata(checkpoint.trajectory).recombined_checkpoints.front();
+    const auto& metadata = tree.metadata(checkpoint.trajectory);
+    const auto parent = tree.parent(checkpoint.trajectory);
+    if (checkpoint.entry != 0u || !metadata.origin || !parent)
+        return nullptr;
+    return &tree.object(*parent).entries.at(metadata.origin->entry).result.value().successors.at(metadata.origin->successor);
+}
+
+bool compatible_scope(const HybridEvolutionTree& tree, HybridEvolutionCheckpointId first,
+                      HybridEvolutionCheckpointId next, HybridRecombinationScope scope) {
+    if (scope == HybridRecombinationScope::ANY)
+        return true;
+    if (first.entry != 0u || next.entry != 0u ||
+        tree.parent(first.trajectory) != tree.parent(next.trajectory))
         return false;
-    const auto& parent_entries = tree.object(parent).entries;
-    const auto& first_successor = parent_entries.at(first_metadata.origin->entry).result.value().successors.at(first_metadata.origin->successor);
-    const auto& next_successor = parent_entries.at(next_metadata.origin->entry).result.value().successors.at(next_metadata.origin->successor);
-    const auto& a = tree.object(first).entries.front().work;
-    const auto& b = tree.object(next).entries.front().work;
-    return first_successor.kind == HybridEvolutionSuccessorKind::TRANSITION &&
-           next_successor.kind == HybridEvolutionSuccessorKind::TRANSITION &&
-           first_successor.event == next_successor.event &&
-           first_successor.event_kind == next_successor.event_kind &&
-           a.phase == b.phase &&
-           a.enclosure.location() == b.enclosure.location() &&
-           a.enclosure.state_space() == b.enclosure.state_space() &&
-           a.enclosure.auxiliary_space() == b.enclosure.auxiliary_space() &&
-           a.enclosure.previous_events() == b.enclosure.previous_events() &&
-           identical(make_formula(a.enclosure.continuous_set().auxiliary_mapping()),
-                     make_formula(b.enclosure.continuous_set().auxiliary_mapping()));
+    const auto* a = seed_successor(tree, first);
+    const auto* b = seed_successor(tree, next);
+    return a && b && a->kind == b->kind && a->event == b->event && a->event_kind == b->event_kind;
+}
+
+// A continuous family contains a seed and all descendants born by subdivision,
+// but excludes discrete descendants, which wait for that whole family.
+HybridEvolutionTree::NodeId continuous_family(const HybridEvolutionTree& tree,
+                                              HybridEvolutionTree::NodeId node) {
+    while (const auto parent = tree.parent(node)) {
+        const auto& origin = tree.metadata(node).origin;
+        if (!origin || tree.object(*parent).entries.at(origin->entry).result.value().successors.at(origin->successor).kind !=
+                           HybridEvolutionSuccessorKind::SUBDIVISION)
+            break;
+        node = *parent;
+    }
+    return node;
+}
+
+bool family_complete(const HybridEvolutionTree& tree, HybridEvolutionTree::NodeId root) {
+    std::vector<HybridEvolutionTree::NodeId> pending{root};
+    while (!pending.empty()) {
+        const auto node = pending.back();
+        pending.pop_back();
+        if (!tree.metadata(node).complete)
+            return false;
+        for (const auto child: tree.children(node)) {
+            const auto& origin = tree.metadata(child).origin;
+            if (origin && tree.object(node).entries.at(origin->entry).result.value().successors.at(origin->successor).kind ==
+                              HybridEvolutionSuccessorKind::SUBDIVISION)
+                pending.push_back(child);
+        }
+    }
+    return true;
 }
 
 // Same numerical and discrete meaning is required for future work. A
 // validated recombiner combines the clock as part of the continuous set;
 // overlapping time bounds are an additional conservative scheduler filter.
-bool compatible_frontier_checkpoints(const HybridEvolutionTree& tree,
-                                     HybridEvolutionCheckpointId first,
-                                     HybridEvolutionCheckpointId next,
-                                     bool require_time_overlap = true) {
+bool compatible_checkpoints(const HybridEvolutionTree& tree,
+                            HybridEvolutionCheckpointId first,
+                            HybridEvolutionCheckpointId next,
+                            bool require_time_overlap = true) {
     const auto& a = tree.object(first.trajectory).entries.at(first.entry).work;
     const auto& b = tree.object(next.trajectory).entries.at(next.entry).work;
     const auto ta = a.enclosure.time_range();
@@ -185,18 +180,22 @@ bool compatible_frontier_checkpoints(const HybridEvolutionTree& tree,
 
 } // namespace
 
-AllCompatibleCheckpointRecombinationPolicy*
-    AllCompatibleCheckpointRecombinationPolicy::clone() const {
-    return new AllCompatibleCheckpointRecombinationPolicy(*this);
+AllCompatibleRecombinationPolicy::AllCompatibleRecombinationPolicy(HybridRecombinationScope scope)
+    : _scope(scope) {}
+
+AllCompatibleRecombinationPolicy*
+    AllCompatibleRecombinationPolicy::clone() const {
+    return new AllCompatibleRecombinationPolicy(*this);
 }
 
 std::vector<std::vector<HybridEvolutionCheckpointId>>
-    AllCompatibleCheckpointRecombinationPolicy::select(
+    AllCompatibleRecombinationPolicy::select(
         const HybridEvolutionTree& tree, const std::vector<CheckpointId>& pending) const {
     std::vector<std::vector<CheckpointId>> groups;
     for (const auto checkpoint: pending) {
         const auto group = std::find_if(groups.begin(), groups.end(), [&](const auto& candidates) {
-            return compatible_frontier_checkpoints(tree, candidates.front(), checkpoint, false);
+            return compatible_scope(tree, candidates.front(), checkpoint, _scope) &&
+                   compatible_checkpoints(tree, candidates.front(), checkpoint, false);
         });
         if (group == groups.end())
             groups.push_back({checkpoint});
@@ -210,29 +209,72 @@ std::vector<std::vector<HybridEvolutionCheckpointId>>
     return groups;
 }
 
+ParentCheckpointAdmissionPolicy* ParentCheckpointAdmissionPolicy::clone() const {
+    return new ParentCheckpointAdmissionPolicy(*this);
+}
+
+bool ParentCheckpointAdmissionPolicy::admit_successor(
+    const HybridEvolutionWorkItem&, const HybridEvolutionSuccessor& successor, bool derived) const {
+    return !derived || successor.kind != HybridEvolutionSuccessorKind::TRANSITION;
+}
+
+std::vector<HybridEvolutionCheckpointId> ParentCheckpointAdmissionPolicy::select_next(
+    const HybridEvolutionTree& tree, const std::vector<CheckpointId>& waiting, bool) const {
+    std::vector<CheckpointId> selected;
+    std::vector<std::pair<HybridEvolutionTree::NodeId, bool>> families;
+    for (const auto checkpoint: waiting) {
+        bool eligible = true;
+        std::vector<CheckpointId> sources{checkpoint};
+        while (!sources.empty() && eligible) {
+            const auto source = sources.back();
+            sources.pop_back();
+            const auto& provenance = tree.metadata(source.trajectory).recombined_checkpoints;
+            if (!provenance.empty()) {
+                sources.insert(sources.end(), provenance.begin(), provenance.end());
+                continue;
+            }
+            const auto parent = tree.parent(source.trajectory);
+            if (!parent)
+                throw std::logic_error("Waiting descendant has no parent");
+            const auto family = continuous_family(tree, *parent);
+            auto found = std::find_if(families.begin(), families.end(), [&](const auto& item) { return item.first == family; });
+            if (found == families.end()) {
+                families.push_back({family, family_complete(tree, family)});
+                found = std::prev(families.end());
+            }
+            eligible = found->second;
+        }
+        if (eligible)
+            selected.push_back(checkpoint);
+    }
+    return selected;
+}
+
 ImmediateCheckpointAdmissionPolicy* ImmediateCheckpointAdmissionPolicy::clone() const {
     return new ImmediateCheckpointAdmissionPolicy(*this);
 }
 
 bool ImmediateCheckpointAdmissionPolicy::admit_successor(
-    const HybridEvolutionWorkItem&, const HybridEvolutionSuccessor&) const { return true; }
+    const HybridEvolutionWorkItem&, const HybridEvolutionSuccessor&, bool) const { return true; }
 
 std::vector<HybridEvolutionCheckpointId> ImmediateCheckpointAdmissionPolicy::select_next(
-    const HybridEvolutionTree&, const std::vector<CheckpointId>& waiting) const { return waiting; }
+    const HybridEvolutionTree&, const std::vector<CheckpointId>& waiting, bool) const { return waiting; }
 
 LocationCheckpointAdmissionPolicy* LocationCheckpointAdmissionPolicy::clone() const {
     return new LocationCheckpointAdmissionPolicy(*this);
 }
 
 bool LocationCheckpointAdmissionPolicy::admit_successor(
-    const HybridEvolutionWorkItem& producer, const HybridEvolutionSuccessor& successor) const {
+    const HybridEvolutionWorkItem& producer, const HybridEvolutionSuccessor& successor, bool) const {
     return successor.kind != HybridEvolutionSuccessorKind::TRANSITION &&
            successor.work.enclosure.location() == producer.enclosure.location();
 }
 
 std::vector<HybridEvolutionCheckpointId> LocationCheckpointAdmissionPolicy::select_next(
-    const HybridEvolutionTree& tree, const std::vector<CheckpointId>& waiting) const {
+    const HybridEvolutionTree& tree, const std::vector<CheckpointId>& waiting, bool batch_complete) const {
     std::vector<CheckpointId> selected;
+    if (!batch_complete)
+        return selected;
     if (waiting.empty())
         return selected;
     const auto location = tree.object(waiting.front().trajectory).entries.at(waiting.front().entry).work.enclosure.location();
@@ -242,29 +284,29 @@ std::vector<HybridEvolutionCheckpointId> LocationCheckpointAdmissionPolicy::sele
     return selected;
 }
 
-NoFrontierRecombinationPolicy* NoFrontierRecombinationPolicy::clone() const {
-    return new NoFrontierRecombinationPolicy(*this);
+NoRecombinationPolicy* NoRecombinationPolicy::clone() const {
+    return new NoRecombinationPolicy(*this);
 }
 
 std::vector<std::vector<HybridEvolutionCheckpointId>>
-    NoFrontierRecombinationPolicy::select(
+    NoRecombinationPolicy::select(
         const HybridEvolutionTree&, const std::vector<CheckpointId>&) const {
     return {};
 }
 
-FrontierWindowRecombinationPolicy::FrontierWindowRecombinationPolicy(
-    std::size_t max_group_size, double max_time_spread)
-    : _max_group_size(max_group_size), _max_time_spread(max_time_spread) {
+WindowRecombinationPolicy::WindowRecombinationPolicy(
+    std::size_t max_group_size, double max_time_spread, HybridRecombinationScope scope)
+    : _max_group_size(max_group_size), _max_time_spread(max_time_spread), _scope(scope) {
     if (_max_group_size < 2u || !std::isfinite(_max_time_spread) || _max_time_spread < 0.0)
-        throw std::invalid_argument("Frontier-window recombination requires group size >= 2 and finite nonnegative time spread");
+        throw std::invalid_argument("Window recombination requires group size >= 2 and finite nonnegative time spread");
 }
 
-FrontierWindowRecombinationPolicy* FrontierWindowRecombinationPolicy::clone() const {
-    return new FrontierWindowRecombinationPolicy(*this);
+WindowRecombinationPolicy* WindowRecombinationPolicy::clone() const {
+    return new WindowRecombinationPolicy(*this);
 }
 
 std::vector<std::vector<HybridEvolutionCheckpointId>>
-    FrontierWindowRecombinationPolicy::select(
+    WindowRecombinationPolicy::select(
         const HybridEvolutionTree& tree, const std::vector<CheckpointId>& pending) const {
     std::vector<std::vector<CheckpointId>> groups;
     std::vector<bool> used(pending.size(), false);
@@ -279,14 +321,26 @@ std::vector<std::vector<HybridEvolutionCheckpointId>>
             continue;
         std::vector<CheckpointId> group{pending[first]};
         for (std::size_t next = first + 1; next != pending.size() && group.size() < _max_group_size; ++next) {
-            if (used[next] || !compatible_frontier_checkpoints(tree, pending[first], pending[next]))
+            if (used[next])
                 continue;
+            if (_scope == HybridRecombinationScope::SIBLINGS &&
+                tree.parent(pending[first].trajectory) != tree.parent(pending[next].trajectory))
+                continue;
+            if (!compatible_scope(tree, pending[first], pending[next], _scope) ||
+                !compatible_checkpoints(tree, pending[first], pending[next], requires_time_overlap())) {
+                if (_scope == HybridRecombinationScope::SIBLINGS)
+                    break;
+                continue;
+            }
             const auto time = tree.object(pending[next].trajectory).entries.at(pending[next].entry).work.enclosure.time_range();
             const double candidate_lower = time.lower_bound().raw().get_d();
             const double candidate_upper = time.upper_bound().raw().get_d();
             if (!std::isfinite(candidate_lower) || !std::isfinite(candidate_upper) ||
-                std::max(upper, candidate_upper) - std::min(lower, candidate_lower) > _max_time_spread)
+                std::max(upper, candidate_upper) - std::min(lower, candidate_lower) > _max_time_spread) {
+                if (_scope == HybridRecombinationScope::SIBLINGS)
+                    break;
                 continue;
+            }
             lower = std::min(lower, candidate_lower);
             upper = std::max(upper, candidate_upper);
             group.push_back(pending[next]);
@@ -300,28 +354,28 @@ std::vector<std::vector<HybridEvolutionCheckpointId>>
     return groups;
 }
 
-ImmediateFrontierDispatchPolicy* ImmediateFrontierDispatchPolicy::clone() const {
-    return new ImmediateFrontierDispatchPolicy(*this);
+ImmediateCheckpointDispatchPolicy* ImmediateCheckpointDispatchPolicy::clone() const {
+    return new ImmediateCheckpointDispatchPolicy(*this);
 }
 
-bool ImmediateFrontierDispatchPolicy::should_defer(
+bool ImmediateCheckpointDispatchPolicy::should_defer(
     const HybridEvolutionTree&, CheckpointId, const std::vector<CheckpointId>&,
     std::size_t) const {
     return false;
 }
 
-BoundedTimeLagFrontierDispatchPolicy::BoundedTimeLagFrontierDispatchPolicy(
+BoundedTimeLagCheckpointDispatchPolicy::BoundedTimeLagCheckpointDispatchPolicy(
     std::size_t max_deferrals, double max_time_lag)
     : _max_deferrals(max_deferrals), _max_time_lag(max_time_lag) {
     if (!std::isfinite(_max_time_lag) || _max_time_lag < 0.0)
-        throw std::invalid_argument("Frontier dispatch requires a finite nonnegative time lag");
+        throw std::invalid_argument("Checkpoint dispatch requires a finite nonnegative time lag");
 }
 
-BoundedTimeLagFrontierDispatchPolicy* BoundedTimeLagFrontierDispatchPolicy::clone() const {
-    return new BoundedTimeLagFrontierDispatchPolicy(*this);
+BoundedTimeLagCheckpointDispatchPolicy* BoundedTimeLagCheckpointDispatchPolicy::clone() const {
+    return new BoundedTimeLagCheckpointDispatchPolicy(*this);
 }
 
-bool BoundedTimeLagFrontierDispatchPolicy::should_defer(
+bool BoundedTimeLagCheckpointDispatchPolicy::should_defer(
     const HybridEvolutionTree& tree, CheckpointId candidate,
     const std::vector<CheckpointId>& others, std::size_t previous_deferrals) const {
     if (previous_deferrals >= _max_deferrals)
@@ -342,17 +396,17 @@ bool BoundedTimeLagFrontierDispatchPolicy::should_defer(
     return false;
 }
 
-AcceptAllFrontierMergesPolicy* AcceptAllFrontierMergesPolicy::clone() const {
-    return new AcceptAllFrontierMergesPolicy(*this);
+AcceptAllRecombinationsPolicy* AcceptAllRecombinationsPolicy::clone() const {
+    return new AcceptAllRecombinationsPolicy(*this);
 }
 
-bool AcceptAllFrontierMergesPolicy::accept(
+bool AcceptAllRecombinationsPolicy::accept(
     const HybridEvolutionTree&, const std::vector<CheckpointId>&,
     const EnclosureRecombinationResult&) const {
     return true;
 }
 
-RadiusTrendFrontierMergesPolicy::RadiusTrendFrontierMergesPolicy(
+RadiusTrendRecombinationAcceptancePolicy::RadiusTrendRecombinationAcceptancePolicy(
     double max_output_amplification, double max_continuation_growth)
     : _max_output_amplification(max_output_amplification),
       _max_continuation_growth(max_continuation_growth) {
@@ -361,11 +415,11 @@ RadiusTrendFrontierMergesPolicy::RadiusTrendFrontierMergesPolicy(
         throw std::invalid_argument("Radius-trend merge limits must be finite and strictly positive");
 }
 
-RadiusTrendFrontierMergesPolicy* RadiusTrendFrontierMergesPolicy::clone() const {
-    return new RadiusTrendFrontierMergesPolicy(*this);
+RadiusTrendRecombinationAcceptancePolicy* RadiusTrendRecombinationAcceptancePolicy::clone() const {
+    return new RadiusTrendRecombinationAcceptancePolicy(*this);
 }
 
-bool RadiusTrendFrontierMergesPolicy::accept(
+bool RadiusTrendRecombinationAcceptancePolicy::accept(
     const HybridEvolutionTree& tree, const std::vector<CheckpointId>& sources,
     const EnclosureRecombinationResult& result) const {
     if (sources.empty() || result.outputs.empty())
@@ -402,96 +456,16 @@ bool RadiusTrendFrontierMergesPolicy::accept(
     return true;
 }
 
-std::vector<std::vector<HybridEvolutionTree::NodeId>>
-    SiblingWindowRecombinationSchedulingPolicy::select(const HybridEvolutionTree& tree, NodeId parent) const {
-    std::vector<std::vector<NodeId>> groups;
-    std::vector<NodeId> group;
-    double group_start = 0.0;
-    double group_end = 0.0;
-    const auto flush = [&] {
-        if (group.size() >= 2u)
-            groups.push_back(group);
-        group.clear();
-    };
-    for (const auto child: tree.children(parent)) {
-        const auto& metadata = tree.metadata(child);
-        if (metadata.retired_for_recombination || metadata.complete || !metadata.origin ||
-            tree.object(child).entries.size() != 1u ||
-            tree.object(child).entries.front().result) {
-            flush();
-            continue;
-        }
-        const auto& enclosure = tree.object(child).entries.front().work.enclosure;
-        const auto time = enclosure.time_range();
-        const double start = time.lower_bound().raw().get_d();
-        const double end = time.upper_bound().raw().get_d();
-        if (!std::isfinite(start) || !std::isfinite(end) || end - start > _max_time_spread) {
-            flush();
-            continue;
-        }
-        if (!group.empty() &&
-            (group.size() == _max_group_size ||
-             !compatible_recombination_children(tree, parent, group.front(), child) ||
-             std::max(group_end, end) - std::min(group_start, start) > _max_time_spread))
-            flush();
-        if (group.empty()) {
-            group_start = start;
-            group_end = end;
-        } else {
-            group_start = std::min(group_start, start);
-            group_end = std::max(group_end, end);
-        }
-        group.push_back(child);
-    }
-    flush();
-    return groups;
-}
-
-AllCompatibleSiblingRecombinationSchedulingPolicy*
-    AllCompatibleSiblingRecombinationSchedulingPolicy::clone() const {
-    return new AllCompatibleSiblingRecombinationSchedulingPolicy(*this);
-}
-
-std::vector<std::vector<HybridEvolutionTree::NodeId>>
-    AllCompatibleSiblingRecombinationSchedulingPolicy::select(
-        const HybridEvolutionTree& tree, NodeId parent) const {
-    std::vector<std::vector<NodeId>> groups;
-    for (const auto child: tree.children(parent)) {
-        const auto& metadata = tree.metadata(child);
-        if (metadata.retired_for_recombination || metadata.complete || !metadata.origin ||
-            tree.object(child).entries.size() != 1u ||
-            tree.object(child).entries.front().result)
-            continue;
-
-        bool grouped = false;
-        for (auto& group: groups) {
-            if (compatible_recombination_children(tree, parent, group.front(), child)) {
-                group.push_back(child);
-                grouped = true;
-                break;
-            }
-        }
-        if (!grouped)
-            groups.push_back({child});
-    }
-    groups.erase(std::remove_if(groups.begin(), groups.end(),
-                                [](const auto& group) { return group.size() < 2u; }),
-                 groups.end());
-    return groups;
-}
-
 /** @brief Run state, kept out of the installed backend class's representation. */
 class TreeHybridEvolutionBackend::Impl {
   public:
     HybridEvolutionTree history;
     HybridEvolutionStatistics statistics;
-    std::unique_ptr<const HybridRecombinationSchedulingPolicy> policy;
-    std::unique_ptr<const HybridFrontierRecombinationPolicy> frontier_policy;
-    std::unique_ptr<const HybridFrontierDispatchPolicy> frontier_dispatch;
-    std::unique_ptr<const HybridFrontierMergeAcceptancePolicy> frontier_acceptance;
+    std::unique_ptr<const HybridRecombinationGroupingPolicy> grouping_policy;
+    std::unique_ptr<const HybridCheckpointDispatchPolicy> dispatch_policy;
+    std::unique_ptr<const HybridRecombinationAcceptancePolicy> acceptance_policy;
     std::unique_ptr<const HybridCheckpointAdmissionPolicy> admission;
     std::unique_ptr<const HybridRecombinationTriggerPolicy> trigger;
-    bool use_frontier = false;
     std::size_t global_steps = 0u;
     std::unique_ptr<const EnclosureRecombinerInterface> recombiner;
     EnclosureRecombinationContext context;
@@ -500,35 +474,21 @@ class TreeHybridEvolutionBackend::Impl {
     Bool complete = false;
     Bool released = false;
 
-    /** @brief Create a trajectory seed without an implicit Orbit contribution. */
+    /** @brief Initialize checkpoint history and independent scheduling policies. */
     explicit Impl(const HybridEnclosure& initial,
-                  const HybridRecombinationSchedulingPolicy& grouping,
-                  const HybridRecombinationTriggerPolicy& timing,
-                  const EnclosureRecombinerInterface& method,
-                  const EnclosureRecombinationContext& limits)
-        : policy(grouping.clone()), trigger(timing.clone()),
-          recombiner(method.clone()), context(limits) {
-        HybridEvolutionTrajectory trajectory;
-        trajectory.entries.push_back({
-            {initial, HybridEvolutionPhase::PROCESS_STARTING_EVENTS},
-            std::nullopt,
-            std::nullopt
-        });
-        history.create_root(std::move(trajectory), HybridEvolutionTrajectoryMetadata{});
-    }
-
-    /** @brief Initialize a globally scheduled frontier with independent policy state. */
-    explicit Impl(const HybridEnclosure& initial,
-                  const HybridFrontierRecombinationPolicy& grouping,
+                  const HybridCheckpointAdmissionPolicy& admission_policy,
+                  const HybridRecombinationGroupingPolicy& grouping,
                   const HybridRecombinationTriggerPolicy& timing,
                   const EnclosureRecombinerInterface& method,
                   const EnclosureRecombinationContext& limits,
-                  const HybridFrontierDispatchPolicy& dispatch,
-                  const HybridFrontierMergeAcceptancePolicy& acceptance)
-        : frontier_policy(grouping.clone()), frontier_dispatch(dispatch.clone()),
-          frontier_acceptance(acceptance.clone()),
-          admission(std::make_unique<ImmediateCheckpointAdmissionPolicy>()), trigger(timing.clone()),
-          use_frontier(true), recombiner(method.clone()), context(limits) {
+                  const HybridCheckpointDispatchPolicy& dispatch,
+                  const HybridRecombinationAcceptancePolicy& acceptance)
+        : grouping_policy(grouping.clone()), dispatch_policy(dispatch.clone()),
+          acceptance_policy(acceptance.clone()),
+          admission(admission_policy.clone()), trigger(timing.clone()),
+          recombiner(method.clone()), context(limits) {
+        if (grouping.enables_recombination() && !acceptance.supports_queue(admission->recombination_queue()))
+            throw std::invalid_argument("Merge acceptance policy does not support the admission policy pending queue");
         HybridEvolutionTrajectory trajectory;
         trajectory.entries.push_back({
             {initial, HybridEvolutionPhase::PROCESS_STARTING_EVENTS},
@@ -575,96 +535,6 @@ class TreeHybridEvolutionBackend::Impl {
         }
     }
 
-    /** @brief Replace accepted sibling groups at safe work-publication boundaries.
-     *  No child has started evolving before its parent completes; even during
-     *  per-step evaluation, only unevolved child checkpoints are selected.
-     */
-    Void schedule_recombination(HybridEvolutionTree::NodeId parent,
-                                std::vector<HybridEvolutionTree::NodeId>& waiting_children) {
-        LOGGING_SCOPE_CREATE;
-        if (!policy->enables_recombination())
-            return;
-        const auto groups = policy->select(history, parent);
-        // Validate all proposed groups before modifying the genealogy.
-        std::vector<HybridEvolutionTree::NodeId> selected;
-        for (const auto& group: groups) {
-            if (group.size() < 2u)
-                throw std::logic_error("Recombination policy selected a group smaller than two");
-            for (const auto source: group) {
-                if (!history.contains(source) || history.parent(source) != parent ||
-                    history.metadata(source).retired_for_recombination ||
-                    history.metadata(source).complete ||
-                    history.object(source).entries.size() != 1u ||
-                    history.object(source).entries.front().result ||
-                    std::find(selected.begin(), selected.end(), source) != selected.end())
-                    throw std::logic_error("Recombination policy selected invalid or overlapping children");
-                if (source != group.front() &&
-                    !compatible_recombination_children(history, parent, group.front(), source))
-                    throw std::logic_error("Recombination policy selected incompatible siblings");
-                selected.push_back(source);
-            }
-        }
-        for (const auto& group: groups) {
-            List<Enclosure> sources;
-            for (const auto source: group)
-                sources.append(history.object(source).entries.front().work.enclosure.continuous_set());
-            const auto result = recombiner->recombine(sources, context);
-            // An unsuccessful numerical proposal leaves all children runnable.
-            if (result.outputs.empty() || result.outputs.size() >= group.size() ||
-                !result.discarded_sources.empty() || !result.radius_limit_satisfied) {
-                LOGGING_PRINTLN_AT(4, "RECOMBINE rejected parent-first"
-                                          << " sources=" << group.size()
-                                          << " outputs=" << result.outputs.size()
-                                          << " discarded=" << result.discarded_sources.size()
-                                          << " radius_ok=" << result.radius_limit_satisfied);
-                continue;
-            }
-            std::vector<bool> represented(group.size(), false);
-            bool complete_coverage = true;
-            for (const auto& output: result.outputs) {
-                if (output.source_indices.empty())
-                    complete_coverage = false;
-                for (const auto index: output.source_indices) {
-                    if (index >= group.size()) {
-                        complete_coverage = false;
-                    } else {
-                        represented[index] = true;
-                    }
-                }
-            }
-            if (!std::all_of(represented.begin(), represented.end(), [](bool covered) { return covered; }) ||
-                !complete_coverage) {
-                LOGGING_PRINTLN_AT(4, "RECOMBINE rejected parent-first: incomplete provenance"
-                                          << " sources=" << group.size() << " outputs=" << result.outputs.size());
-                continue;
-            }
-            LOGGING_PRINTLN("RECOMBINE parent-first"
-                            << " location=" << history.object(group.front()).entries.front().work.enclosure.location()
-                            << " t=" << history.object(group.front()).entries.front().work.enclosure.time_range()
-                            << " sources=" << group.size() << " outputs=" << result.outputs.size()
-                            << " max_source_radius=" << largest_source_radius(sources)
-                            << " max_output_radius=" << largest_output_radius(result));
-            // Commit all replacements before retiring the original sources.
-            // Invalid or ineffective results leave every original child runnable.
-            for (const auto& output: result.outputs) {
-                const auto representative = group[output.source_indices.front()];
-                auto replacement = history.object(representative).entries.front().work;
-                replacement.enclosure.replace_continuous_set(output.enclosure);
-                HybridEvolutionTrajectory trajectory;
-                trajectory.entries.push_back({replacement, std::nullopt, std::nullopt});
-                HybridEvolutionTrajectoryMetadata metadata;
-                for (const auto index: output.source_indices)
-                    metadata.recombined_sources.push_back(group[index]);
-                const auto created = history.add_child(parent, std::move(trajectory), std::move(metadata));
-                // Accepted replacements remain blocked like their sources.
-                // Only completion of this scheduling group can admit them.
-                waiting_children.push_back(created);
-            }
-            for (const auto source: group)
-                history.metadata(source).retired_for_recombination = true;
-        }
-    }
-
     /** @brief Find the closest existing common ancestor for a multi-branch replacement. */
     HybridEvolutionTree::NodeId common_ancestor(
         const std::vector<HybridEvolutionCheckpointId>& sources) const {
@@ -686,16 +556,16 @@ class TreeHybridEvolutionBackend::Impl {
             if (shared)
                 return candidate;
         }
-        throw std::logic_error("Frontier checkpoints have no common genealogy root");
+        throw std::logic_error("Checkpoints have no common genealogy root");
     }
 
     /** @brief Recombine compatible pending checkpoints from any part of the tree.
      *  A processed entry is never replaced; all selected source IDs remain in
      *  append-only history with their original result-less checkpoint records.
      */
-    Void schedule_frontier_recombination(std::deque<HybridEvolutionCheckpointId>& ready) {
+    Void schedule_recombination(std::deque<HybridEvolutionCheckpointId>& ready) {
         LOGGING_SCOPE_CREATE;
-        if (!frontier_policy->enables_recombination())
+        if (!grouping_policy->enables_recombination())
             return;
         std::vector<HybridEvolutionCheckpointId> pending;
         for (const auto checkpoint: ready) {
@@ -708,20 +578,20 @@ class TreeHybridEvolutionBackend::Impl {
         }
         if (pending.size() < 2u)
             return;
-        const auto groups = frontier_policy->select(history, pending);
+        const auto groups = grouping_policy->select(history, pending);
         std::vector<HybridEvolutionCheckpointId> selected;
         for (const auto& group: groups) {
             if (group.size() < 2u)
-                throw std::logic_error("Frontier policy selected fewer than two checkpoints");
+                throw std::logic_error("Grouping policy selected fewer than two checkpoints");
             for (const auto checkpoint: group) {
                 if (!history.contains(checkpoint.trajectory) ||
                     std::find(pending.begin(), pending.end(), checkpoint) == pending.end() ||
                     std::find(selected.begin(), selected.end(), checkpoint) != selected.end())
-                    throw std::logic_error("Frontier policy selected unknown or overlapping checkpoint");
+                    throw std::logic_error("Grouping policy selected unknown or overlapping checkpoint");
                 if (checkpoint != group.front() &&
-                    !compatible_frontier_checkpoints(history, group.front(), checkpoint,
-                                                     frontier_policy->requires_time_overlap()))
-                    throw std::logic_error("Frontier policy selected incompatible checkpoints");
+                    !compatible_checkpoints(history, group.front(), checkpoint,
+                                            grouping_policy->requires_time_overlap()))
+                    throw std::logic_error("Grouping policy selected incompatible checkpoints");
                 selected.push_back(checkpoint);
             }
         }
@@ -754,7 +624,7 @@ class TreeHybridEvolutionBackend::Impl {
             const auto result = recombiner->recombine(sources, context);
             if (result.outputs.empty() || result.outputs.size() >= group.size() ||
                 !result.discarded_sources.empty() || !result.radius_limit_satisfied) {
-                LOGGING_PRINTLN_AT(4, "RECOMBINE rejected frontier"
+                LOGGING_PRINTLN_AT(4, "RECOMBINE rejected"
                                           << " sources=" << group.size()
                                           << " outputs=" << result.outputs.size()
                                           << " discarded=" << result.discarded_sources.size()
@@ -776,17 +646,17 @@ class TreeHybridEvolutionBackend::Impl {
             }
             if (!full_coverage ||
                 !std::all_of(represented.begin(), represented.end(), [](bool covered) { return covered; })) {
-                LOGGING_PRINTLN_AT(4, "RECOMBINE rejected frontier: incomplete provenance"
+                LOGGING_PRINTLN_AT(4, "RECOMBINE rejected: incomplete provenance"
                                           << " sources=" << group.size() << " outputs=" << result.outputs.size());
                 continue;
             }
-            if (!frontier_acceptance->accept(history, group, result)) {
-                LOGGING_PRINTLN_AT(4, "RECOMBINE rejected frontier: quality gate"
+            if (!acceptance_policy->accept(history, group, result)) {
+                LOGGING_PRINTLN_AT(4, "RECOMBINE rejected: quality gate"
                                           << " sources=" << group.size() << " outputs=" << result.outputs.size());
                 continue;
             }
             const auto& first = history.object(group.front().trajectory).entries.at(group.front().entry).work.enclosure;
-            LOGGING_PRINTLN("RECOMBINE frontier"
+            LOGGING_PRINTLN("RECOMBINE"
                             << " location=" << first.location()
                             << " t=" << first.time_range()
                             << " sources=" << group.size() << " outputs=" << result.outputs.size()
@@ -825,42 +695,21 @@ class TreeHybridEvolutionBackend::Impl {
      *  @details The same scheduler handles zero or several worker threads.
      *  Every ready checkpoint has one DynamicWorkload token; the token
      *  takes a checkpoint from the protected queue before beginning numerical
-     *  work. In parent-first mode, discrete children are registered in an
-     *  explicit waiting group, separate from the genealogy, until the last
-     *  in-flight or queued continuation of their parent has published its
-     *  result. In frontier mode, only ready (not in-flight)
-     *  checkpoints can be grouped or retired for recombination.
+     *  work. All admission policies share ready, waiting and in-flight state.
+     *  Only unprocessed pending checkpoints can be grouped or retired; a
+     *  numerical callback never holds the publication lock.
      */
     Void run_scheduled(const StepFunction& advance) {
         struct Token {};
-        struct ActiveGroup {
-            HybridEvolutionTree::NodeId node;
-            // Counts admissible + in-flight checkpoints, not waiting children.
-            std::size_t outstanding = 1u;
-            Bool whole_trajectory = true;
-            std::size_t completed_steps = 0u;
-        };
-        struct WaitingGroup {
-            HybridEvolutionTree::NodeId node;
-            // Ordered discrete descendants, including accepted replacements.
-            std::vector<HybridEvolutionTree::NodeId> children;
-        };
         using Workload = DynamicWorkload<Token>;
         const auto root = history.root().value();
         std::mutex schedule_mutex;
         std::deque<HybridEvolutionCheckpointId> ready{
             {root, 0u}
         };
-        std::deque<HybridEvolutionCheckpointId> held_frontier;
+        std::deque<HybridEvolutionCheckpointId> waiting;
         std::size_t in_flight = 0u;
         std::vector<std::pair<HybridEvolutionCheckpointId, std::size_t>> deferrals;
-        std::vector<ActiveGroup> active;
-        std::vector<WaitingGroup> waiting;
-        if (!use_frontier) {
-            active.push_back({root, 1u, true, 0u});
-            waiting.push_back({root, {}});
-        }
-
         Workload workload(
             [](const Token&, SharedPointer<ProgressIndicator>) {},
             [&](Workload::Access& producer, const Token&) {
@@ -882,7 +731,7 @@ class TreeHybridEvolutionBackend::Impl {
                         if (trajectory.entries.at(candidate.entry).result)
                             throw std::logic_error("Checkpoint cannot be executed twice");
 
-                        if (use_frontier) {
+                        if (dispatch_policy->enables_deferral()) {
                             const auto deferred = std::find_if(deferrals.begin(), deferrals.end(),
                                                                [&](const auto& entry) { return entry.first == candidate; });
                             const auto previous = deferred == deferrals.end() ? 0u : deferred->second;
@@ -896,7 +745,7 @@ class TreeHybridEvolutionBackend::Impl {
                                     alternatives.push_back(other);
                             }
                             if (!alternatives.empty() &&
-                                frontier_dispatch->should_defer(history, candidate, alternatives, previous)) {
+                                dispatch_policy->should_defer(history, candidate, alternatives, previous)) {
                                 if (deferred == deferrals.end())
                                     deferrals.push_back({candidate, 1u});
                                 else
@@ -932,11 +781,11 @@ class TreeHybridEvolutionBackend::Impl {
                     return std::find(trajectory.retired_entries.begin(), trajectory.retired_entries.end(),
                                      id.entry) != trajectory.retired_entries.end();
                 };
-                const auto evaluate_frontier = [&] {
+                const auto evaluate_recombination = [&] {
                     const bool ready_queue = admission->recombination_queue() == HybridRecombinationQueue::READY;
-                    auto& candidates = ready_queue ? ready : held_frontier;
+                    auto& candidates = ready_queue ? ready : waiting;
                     const auto previous_size = candidates.size();
-                    schedule_frontier_recombination(candidates);
+                    schedule_recombination(candidates);
                     // Recombined replacements append new ready checkpoints;
                     // existing retired tokens may still be in the workload.
                     if (ready_queue) {
@@ -948,13 +797,13 @@ class TreeHybridEvolutionBackend::Impl {
 
                 count(result);
                 --in_flight;
-                if (use_frontier) {
+                {
                     const auto publish_successor = [&](HybridEvolutionCheckpointId next,
                                                        const HybridEvolutionSuccessor& successor) {
-                        if (admission->admit_successor(*work, successor))
+                        if (admission->admit_successor(*work, successor, next.trajectory != checkpoint.trajectory))
                             enqueue(next);
                         else
-                            held_frontier.push_back(next);
+                            waiting.push_back(next);
                     };
                     for (const auto& successor: result.successors) {
                         if (successor.kind == HybridEvolutionSuccessorKind::SUBDIVISION)
@@ -995,30 +844,39 @@ class TreeHybridEvolutionBackend::Impl {
                     if (metadata.pending_entries == 0u)
                         throw std::logic_error("Invalid checkpoint completion count");
                     --metadata.pending_entries;
-                    const bool finished = metadata.pending_entries == 0u;
-                    if (finished)
+                    if (metadata.pending_entries == 0u)
                         metadata.complete = true;
                     ++global_steps;
-                    if (frontier_policy->enables_recombination() &&
+                    bool evaluated = false;
+                    if (grouping_policy->enables_recombination() &&
                         trigger->should_evaluate(history, checkpoint.trajectory,
-                                                 HybridRecombinationEvaluationPoint::AFTER_STEP, global_steps))
-                        evaluate_frontier();
-                    if (finished && frontier_policy->enables_recombination() &&
+                                                 HybridRecombinationEvaluationPoint::AFTER_STEP, global_steps, admission->recombination_queue())) {
+                        evaluate_recombination();
+                        evaluated = true;
+                    }
+                    const bool batch_complete = ready.empty() && in_flight == 0u;
+                    const auto select_admitted = [&] {
+                        std::vector<HybridEvolutionCheckpointId> pending;
+                        for (const auto id: waiting)
+                            if (!is_retired(id))
+                                pending.push_back(id);
+                        return admission->select_next(history, pending, batch_complete);
+                    };
+                    // Parent admission may release one completed family while
+                    // other families are still ready or running. Location
+                    // admission returns no eligible work until the batch drains.
+                    auto admitted = select_admitted();
+                    if (grouping_policy->enables_recombination() && !evaluated &&
+                        (admission->recombination_queue() == HybridRecombinationQueue::READY || !admitted.empty()) &&
                         trigger->should_evaluate(history, checkpoint.trajectory,
-                                                 HybridRecombinationEvaluationPoint::PARENT_COMPLETE, global_steps))
-                        evaluate_frontier();
-                    // Retired tokens may still exist, but are not numerical
-                    // producers. Close the batch only after every claimed work
-                    // item has published all of its successors.
-                    if (ready.empty() && in_flight == 0u) {
-                        if (frontier_policy->enables_recombination() &&
-                            trigger->should_evaluate(history, checkpoint.trajectory,
-                                                     HybridRecombinationEvaluationPoint::SYNCHRONIZATION_COMPLETE, global_steps))
-                            evaluate_frontier();
-                        held_frontier.erase(std::remove_if(held_frontier.begin(), held_frontier.end(), is_retired),
-                                            held_frontier.end());
-                        const std::vector<HybridEvolutionCheckpointId> pending(held_frontier.begin(), held_frontier.end());
-                        const auto admitted = admission->select_next(history, pending);
+                                                 HybridRecombinationEvaluationPoint::BEFORE_ADMISSION, global_steps, admission->recombination_queue())) {
+                        evaluate_recombination();
+                        admitted = select_admitted();
+                    }
+                    {
+                        waiting.erase(std::remove_if(waiting.begin(), waiting.end(), is_retired),
+                                      waiting.end());
+                        const std::vector<HybridEvolutionCheckpointId> pending(waiting.begin(), waiting.end());
                         std::vector<HybridEvolutionCheckpointId> unique;
                         for (const auto next: admitted) {
                             if (std::find(pending.begin(), pending.end(), next) == pending.end() ||
@@ -1026,73 +884,11 @@ class TreeHybridEvolutionBackend::Impl {
                                 throw std::logic_error("Admission policy selected unknown or duplicate waiting work");
                             unique.push_back(next);
                         }
-                        if (!pending.empty() && admitted.empty())
+                        if (batch_complete && !pending.empty() && admitted.empty())
                             throw std::logic_error("Admission policy left waiting work without a runnable batch");
                         for (const auto next: admitted) {
-                            held_frontier.erase(std::find(held_frontier.begin(), held_frontier.end(), next));
+                            waiting.erase(std::find(waiting.begin(), waiting.end(), next));
                             enqueue(next);
-                        }
-                    }
-                } else {
-                    auto stage = std::find_if(active.begin(), active.end(),
-                                              [&](const auto& item) { return item.node == checkpoint.trajectory; });
-                    auto held = std::find_if(waiting.begin(), waiting.end(),
-                                             [&](const auto& item) { return item.node == checkpoint.trajectory; });
-                    if (stage == active.end() || held == waiting.end() || stage->outstanding == 0u)
-                        throw std::logic_error("Checkpoint has no active scheduling group");
-                    for (const auto& successor: result.successors)
-                        if (successor.kind == HybridEvolutionSuccessorKind::SUBDIVISION)
-                            stage->whole_trajectory = false;
-                    for (std::size_t ordinal = 0; ordinal != result.successors.size(); ++ordinal) {
-                        const auto& successor = result.successors[ordinal];
-                        const HybridEvolutionEntryOrigin origin{checkpoint.entry, ordinal};
-                        if (derives_trajectory(successor, result.successors.size(), stage->whole_trajectory)) {
-                            HybridEvolutionTrajectory child;
-                            child.entries.push_back({successor.work, std::nullopt, std::nullopt});
-                            HybridEvolutionTrajectoryMetadata metadata;
-                            metadata.origin = origin;
-                            const auto created = history.add_child(
-                                checkpoint.trajectory, std::move(child), std::move(metadata));
-                            // The waiting queue, rather than a genealogy scan,
-                            // owns the scheduler's list of blocked successors.
-                            held->children.push_back(created);
-                            if (successor.event_kind != EventKind::PERMISSIVE)
-                                stage->whole_trajectory = false;
-                        } else {
-                            auto& entries = history.object(checkpoint.trajectory).entries;
-                            const auto index = entries.size();
-                            entries.push_back({successor.work, origin, std::nullopt});
-                            ++stage->outstanding;
-                            enqueue({checkpoint.trajectory, index});
-                        }
-                    }
-                    history.object(checkpoint.trajectory).entries.at(checkpoint.entry).result.emplace(std::move(result));
-                    ++stage->completed_steps;
-                    if (policy->enables_recombination() &&
-                        trigger->should_evaluate(history, checkpoint.trajectory,
-                                                 HybridRecombinationEvaluationPoint::AFTER_STEP, stage->completed_steps))
-                        schedule_recombination(checkpoint.trajectory, held->children);
-                    if (--stage->outstanding == 0u) {
-                        // All producers of this parent's discrete children
-                        // have published, including those spawned by splits.
-                        history.metadata(checkpoint.trajectory).complete = true;
-                        if (policy->enables_recombination() &&
-                            trigger->should_evaluate(history, checkpoint.trajectory,
-                                                     HybridRecombinationEvaluationPoint::PARENT_COMPLETE,
-                                                     history.object(checkpoint.trajectory).entries.size()))
-                            schedule_recombination(checkpoint.trajectory, held->children);
-                        // Last publisher closes the active group and drains its
-                        // waiting queue atomically. Retired sources stay only
-                        // in the genealogy, never in the ready queue.
-                        const auto ready_children = std::move(held->children);
-                        waiting.erase(held);
-                        active.erase(stage);
-                        for (const auto child: ready_children) {
-                            if (history.metadata(child).retired_for_recombination)
-                                continue;
-                            active.push_back({child, 1u, true, 0u});
-                            waiting.push_back({child, {}});
-                            enqueue({child, 0u});
                         }
                     }
                 }
@@ -1132,27 +928,11 @@ class TreeHybridEvolutionBackend::Impl {
 
 TreeHybridEvolutionBackend::TreeHybridEvolutionBackend(
     const HybridEnclosure& initial, const HybridCheckpointAdmissionPolicy& admission,
-    const HybridFrontierRecombinationPolicy& grouping,
+    const HybridRecombinationGroupingPolicy& grouping,
     const HybridRecombinationTriggerPolicy& timing, const EnclosureRecombinerInterface& method,
-    const EnclosureRecombinationContext& limits, const HybridFrontierDispatchPolicy& dispatch,
-    const HybridFrontierMergeAcceptancePolicy& acceptance)
-    : TreeHybridEvolutionBackend(initial, grouping, timing, method, limits, dispatch, acceptance) {
-    _impl->admission.reset(admission.clone());
-}
-
-TreeHybridEvolutionBackend::TreeHybridEvolutionBackend(
-    const HybridEnclosure& initial, const HybridRecombinationSchedulingPolicy& grouping,
-    const HybridRecombinationTriggerPolicy& timing, const EnclosureRecombinerInterface& method,
-    const EnclosureRecombinationContext& limits)
-    : _impl(std::make_unique<Impl>(initial, grouping, timing, method, limits)) {}
-
-TreeHybridEvolutionBackend::TreeHybridEvolutionBackend(
-    const HybridEnclosure& initial, const HybridFrontierRecombinationPolicy& grouping,
-    const HybridRecombinationTriggerPolicy& timing, const EnclosureRecombinerInterface& method,
-    const EnclosureRecombinationContext& limits,
-    const HybridFrontierDispatchPolicy& dispatch,
-    const HybridFrontierMergeAcceptancePolicy& acceptance)
-    : _impl(std::make_unique<Impl>(initial, grouping, timing, method, limits, dispatch, acceptance)) {}
+    const EnclosureRecombinationContext& limits, const HybridCheckpointDispatchPolicy& dispatch,
+    const HybridRecombinationAcceptancePolicy& acceptance)
+    : _impl(std::make_unique<Impl>(initial, admission, grouping, timing, method, limits, dispatch, acceptance)) {}
 
 TreeHybridEvolutionBackend::~TreeHybridEvolutionBackend() = default;
 
@@ -1166,8 +946,7 @@ Void TreeHybridEvolutionBackend::run(const StepFunction& advance) {
     if (_impl->started) {
         throw std::logic_error("A hybrid evolution backend can only run once");
     }
-    if ((_impl->use_frontier ? _impl->frontier_policy->enables_recombination()
-                             : _impl->policy->enables_recombination()) &&
+    if (_impl->grouping_policy->enables_recombination() &&
         _impl->semantics != Semantics::UPPER)
         throw std::invalid_argument("Recombination is only sound for upper semantics");
     _impl->started = true;
@@ -1185,8 +964,7 @@ Orbit<HybridEnclosure> TreeHybridEvolutionBackend::release_orbit() {
     Orbit<HybridEnclosure> result(_impl->history.object(root).entries.front().work.enclosure);
     _impl->project_trajectory(root, result);
     for (const auto node: _impl->history.descendants(root)) {
-        if (!_impl->history.metadata(node).retired_for_recombination)
-            _impl->project_trajectory(node, result);
+        _impl->project_trajectory(node, result);
     }
     _impl->released = true;
     return result;
@@ -1196,52 +974,24 @@ const HybridEvolutionTree& TreeHybridEvolutionBackend::tree() const noexcept {
     return _impl->history;
 }
 
-TreeHybridEvolutionBackendFactory::TreeHybridEvolutionBackendFactory()
-    : TreeHybridEvolutionBackendFactory(NoRecombinationSchedulingPolicy{}) {}
-
 TreeHybridEvolutionBackendFactory::TreeHybridEvolutionBackendFactory(
-    const HybridCheckpointAdmissionPolicy& admission, const HybridFrontierRecombinationPolicy& grouping,
+    const HybridCheckpointAdmissionPolicy& admission, const HybridRecombinationGroupingPolicy& grouping,
     const HybridRecombinationTriggerPolicy& timing, const EnclosureRecombinerInterface& method,
-    const EnclosureRecombinationContext& limits, const HybridFrontierDispatchPolicy& dispatch,
-    const HybridFrontierMergeAcceptancePolicy& acceptance)
-    : TreeHybridEvolutionBackendFactory(grouping, timing, method, limits, dispatch, acceptance) {
-    _admission.reset(admission.clone());
+    const EnclosureRecombinationContext& limits, const HybridCheckpointDispatchPolicy& dispatch,
+    const HybridRecombinationAcceptancePolicy& acceptance)
+    : _admission(admission.clone()), _grouping(grouping.clone()), _dispatch(dispatch.clone()),
+      _acceptance(acceptance.clone()), _trigger(timing.clone()), _recombiner(method.clone()), _context(limits) {
+    if (grouping.enables_recombination() && !acceptance.supports_queue(admission.recombination_queue()))
+        throw std::invalid_argument("Merge acceptance policy does not support the admission policy pending queue");
 }
-
-TreeHybridEvolutionBackendFactory::TreeHybridEvolutionBackendFactory(
-    const HybridRecombinationSchedulingPolicy& grouping,
-    const HybridRecombinationTriggerPolicy& timing,
-    const EnclosureRecombinerInterface& method,
-    const EnclosureRecombinationContext& limits)
-    : _grouping(grouping.clone()), _trigger(timing.clone()),
-      _recombiner(method.clone()), _context(limits) {}
-
-TreeHybridEvolutionBackendFactory::TreeHybridEvolutionBackendFactory(
-    const HybridFrontierRecombinationPolicy& grouping,
-    const HybridRecombinationTriggerPolicy& timing,
-    const EnclosureRecombinerInterface& method,
-    const EnclosureRecombinationContext& limits,
-    const HybridFrontierDispatchPolicy& dispatch,
-    const HybridFrontierMergeAcceptancePolicy& acceptance)
-    : _frontier_grouping(grouping.clone()), _frontier_dispatch(dispatch.clone()),
-      _frontier_acceptance(acceptance.clone()), _trigger(timing.clone()),
-      _recombiner(method.clone()), _context(limits) {}
 
 TreeHybridEvolutionBackendFactory* TreeHybridEvolutionBackendFactory::clone() const {
     return new TreeHybridEvolutionBackendFactory(*this);
 }
 
 std::unique_ptr<HybridEvolutionBackendInterface> TreeHybridEvolutionBackendFactory::create(const HybridEnclosure& initial, const Real&) const {
-    if (_admission)
-        return std::make_unique<TreeHybridEvolutionBackend>(
-            initial, *_admission, *_frontier_grouping, *_trigger, *_recombiner, _context,
-            *_frontier_dispatch, *_frontier_acceptance);
-    if (_frontier_grouping)
-        return std::make_unique<TreeHybridEvolutionBackend>(
-            initial, *_frontier_grouping, *_trigger, *_recombiner, _context,
-            *_frontier_dispatch, *_frontier_acceptance);
     return std::make_unique<TreeHybridEvolutionBackend>(
-        initial, *_grouping, *_trigger, *_recombiner, _context);
+        initial, *_admission, *_grouping, *_trigger, *_recombiner, _context, *_dispatch, *_acceptance);
 }
 
 } // namespace Ariadne

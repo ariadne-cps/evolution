@@ -1,517 +1,261 @@
-# Evolution tree design proposal
-
-Status: flat and concurrent trajectory-tree backends and continuous enclosure
-recombination are implemented. The tree backend supports parent-first admission,
-an immediate global frontier, and single-location admission batches, with
-independent recombination policies. Backtracking and per-work numerical
-alternatives remain proposals.
-
-## Starting functions
-
-1. Each node represents one trajectory containing an ordered list of sets.
-2. Parent-child relations distinguish trajectories born from another trajectory.
-3. Each node records whether its own trajectory is complete or still needs
-   evolution.
-
-The tree describes genealogy; the list inside a node describes progression of
-that trajectory. These requirements replace the previous checkpoint-per-node
-proposal. A new set does not by itself create a new tree node.
-
-The generic structure belongs in
-`ariadne-cps/tree/doc/derivation_tree_design.md`. Entry semantics, trajectory birth,
-completion criteria and scheduling belong to Evolution.
-
-## Trajectory object and metadata
-
-```text
-Trajectory
-    ordered list of EvolutionEntry
-
-EvolutionEntry
-    computational checkpoint, or explicitly grouped numerical pieces
-    Orbit contributions tagged reach / intermediate / final
-    shared reference to const NumericalConfiguration
-    information about the step producing the entry, when applicable
-
-TrajectoryMetadata
-    completion: NEEDS_EVOLUTION or COMPLETE
-    origin entry in the parent trajectory, except at the root
-    reason for birth
-    event / branch information, when applicable
-    optional application-specific labels
-```
-
-The generic owner supplies stable node identity, parent and children; those
-links are not duplicated in Evolution metadata. A node ID can identify its
-trajectory initially. A separate trajectory-ID namespace is unnecessary merely
-to inspect genealogy; introduce one later only with an explicit relationship to
-node identity.
-
-Entries follow the logical progression of the trajectory, not a sort by time-
-interval endpoints. A discrete step may preserve continuous time, and validated
-time intervals may overlap. An entry must distinguish the checkpoint used for
-further computation from the sets contributed to the Orbit; these are not
-necessarily the same enclosure. The backend proposal below records both.
-
-Keep configuration with the entry to which it applies. Unchanged configurations
-can be shared immutably. Later changes must not alter earlier entries. Examples
-include integration step limits, local error targets, parameter-count limits
-and numerical discretization/reconditioning choices.
-
-## Continuing versus creating a trajectory
-
-| Situation | Effect |
-| --- | --- |
-| Pure continuous step | Append the resulting entry to the current node |
-| Fully resolved transition with one continuation and unchanged trajectory identity | Append the transition result to that same node |
-| A distinct trajectory is generated | Create a child with its own ordered list |
-| A parent continues after a child's birth | Append to the parent; retain the child's original source reference |
-| Another distinct trajectory is generated later | Add another child referring to its own source entry |
-
-For one permissive/unresolved event, the no-jump continuation stays in the
-original node and a distinct jump trajectory is a child. Creating that child
-does not complete the parent. An internal tree node may still need evolution;
-active trajectories therefore cannot be identified just by taking tree leaves.
-
-A child starts with its own initial set, for example the reset image of the
-relevant source portion. It need not copy the parent's entire list. Earlier
-provenance is available through the parent and origin reference, and the child's
-first set need not equal its parent's source set.
-
-Record the particular parent entry responsible for birth, in addition to the
-reason/event. Parent identity alone is insufficient because its list can keep
-growing. An entry index is sufficient for an append-only initial history.
-Backtracking may truncate and regrow history, but may not insert entries between
-existing entries or move nodes. References to truncated history need explicit
-invalidation, for example through a history generation; an index alone must not
-silently resolve to a replacement entry at the same position.
-
-## Completion is local to a trajectory
-
-`NEEDS_EVOLUTION` means more work remains for the trajectory stored in that node.
-`COMPLETE` means that local evolution has finished under the current termination
-criteria: it will generate no more sets or child trajectories in normal forward
-processing. This can follow an evolution horizon, exhausted/empty continuation,
-or another explicit stopping condition.
-
-Completion does not mean that descendants are complete. A complete parent can
-have children that have not yet been evolved. Its list remains available as
-history. Explicit future backtracking may reopen work, but that requires a
-separate validity policy rather than silently appending to a completed history.
-
-Do not publish completion until all results and generated children from that
-trajectory's local work have been committed. Otherwise the child count observed
-at completion would be premature. Worker/scheduler state, such as whether a
-trajectory is currently running, is distinct from trajectory completion.
-
-## Finish a parent before descending
-
-The proposed initial scheduling policy favors completing an ancestor trajectory
-before evolving the trajectories generated from it:
-
-1. Select a node that needs evolution.
-2. Continue its trajectory, appending entries and recording generated children.
-3. When local work is finished, mark the node complete.
-4. Inspect all children it generated; their count and origins are now known.
-5. Decide whether to keep those child trajectories or propose recombination into
-   one or more successor trajectories.
-6. Descend to the resulting trajectories that still need evolution.
-
-This constrains parent-versus-descendant processing; it does not yet choose a
-global breadth-first or depth-first order among unrelated subtrees. The generic
-tree stores the necessary information without implementing this scheduler.
-
-This completion boundary is useful because children can be collected before
-their own evolution is scheduled. It makes sibling-group recombination a first
-policy to investigate, without requiring an initial algorithm for merging
-already evolved arbitrary branches.
-
-## Example: repeated guard crossings
-
-```text
-A: [A0, A1, A2, A3, ...]     COMPLETE
-    +-- B: [B0]   origin A1, event e; NEEDS_EVOLUTION
-    +-- C: [C0]   origin A2, event e; NEEDS_EVOLUTION
-    +-- D: [D0]   origin A3, event e; NEEDS_EVOLUTION
-```
-
-A generated B, C and D while continuing its own list. Once A is complete, the
-scheduler knows all three children before descending. It can inspect candidate
-groups such as {B,C,D} or {B,C} and {D}, and decide whether a sound replacement
-by one or more trajectories is useful.
-
-As clarified, different portions crossing a guard during different integration
-steps remain distinct trajectories, potentially in a common recombinable family.
-Common parent, reason/event and source entries provide initial provenance; they
-do not establish mathematical compatibility by themselves. A precise family
-key and recombination criterion remain later design work.
-
-## Recombination constraints and deferred operations
-
-Parent completion establishes that the generated group is known; it does not
-prove that its children overlap or may be recombined. A future policy must check
-location, clocks, discrete context, numerical-alternative compatibility and
-sound coverage of all selected source sets. Bounding-box overlap or common
-ancestry is insufficient.
-
-Recombination can produce one or more replacement nodes/trajectories. Preserve
-which original children contributed to each replacement, rather than deleting
-their origin information. Distinguish the collection originally generated by
-the complete parent from the active collection after recombination. Structural
-placement of replacements and absorbed-node handling are not finalized here.
-
-The earlier enumeration of `SPLIT`, `UNBUNDLE`, `RECOMBINE` and
-`ALTERNATIVE_CONFIGURATIONS` remains context, but its checkpoint-per-node
-interpretation is superseded. Before adding those operations, specify how
-subset and numerical-alternative branches relate to the trajectory list. Do
-not flatten parallel pieces into an apparently sequential history. Additional
-internal representation or explicit relations may be needed.
-
-Stable IDs remain required: appending entries or adding children does not
-renumber existing nodes. Backtracking can still invalidate results derived from
-edited entries. Persistence, concurrent publication, general multi-input
-dependency graphs and reclamation are outside the initial scope.
-
-## Initial operations and verification
-
-The wrapper needs creation of an initial trajectory, ordered append, creation
-of a derived trajectory at an identified source entry, completion marking/query,
-and access to lists and genealogy. The generic owner does not decide when a
-trajectory is born or complete.
-
-Test that continuous steps extend one list without increasing node count;
-configuration history is retained; children identify the right parent and
-source entry; a parent can continue after generating children; completion is
-local and published after all generated children; and a complete parent can
-have unevolved children. A scheduler test should confirm that descendants are
-deferred until their ancestor is complete and the child-group decision has
-been made. Recombination selection/construction is subsequent work.
-
-## Hybrid evolver backends
-
-### Implemented first stage
-
-`include/evolution/hybrid_evolution_backend.hpp` defines work phases, successor
-provenance, explicit Orbit contributions, local stop reasons and the backend and
-factory interfaces. `FlatHybridEvolutionBackendFactory` is the default.
-`HybridEvolverBase::set_evolution_backend_factory()` clones factory settings;
-each call to `orbit()` creates independent run state, invokes the same numerical
-callback, and obtains the conventional Orbit through `release_orbit()`.
-
-The numerical callback returns `HybridEvolutionStepResult`. The five previously
-coupled methods now write only to that local result; they neither dispatch work
-nor publish to a shared Orbit. The flat backend reuses `DynamicWorkload`, commits
-all contributions under one lock before scheduling successors, and rejects
-release before successful completion or a second release. Exceptions propagate
-through the executor after its outstanding work joins.
-
-Work items currently contain the enclosure (including its existing enclosure
-configuration) and processing phase. The evolver's integration/solver settings
-continue to use the existing uniform configuration for this first stage;
-per-work immutable numerical settings and alternatives are not implemented.
-Successors record event, event kind, optional crossing kind and source-coverage
-evidence. Whole-source resolution is never inferred from the successor count.
-
-`tests/test_hybrid_evolution_backend.cpp` verifies output/checkpoint separation,
-publication before successor dispatch in serial and concurrent modes, lifecycle
-and failure handling, and transition/subdivision provenance. An independent LIFO
-backend in that test is selected through the public factory setter and compares
-all three output collections with the default backend for urgent and permissive
-systems, including repeated calls after the original factory is destroyed.
-The existing hybrid evolution tests continue to exercise the numerical behavior.
-
-### Implemented serial trajectory-tree backend
-
-`TreeHybridEvolutionBackendFactory` selects the tree backend through the same
-factory setter and callback/result contract. The ordinary `orbit()` return type
-is unchanged. A concrete `TreeHybridEvolutionBackend` can also be run directly;
-`tree()` provides const inspection before/after execution and after Orbit
-release. The standard `orbit()` call owns its backend only for the duration of
-the run; returning the detailed history from that API remains separate work.
-
-Evolution directly pins Tree at `e1372f9c7d5f1a6f1db11dc74b58053e1d8ad9e7`.
-Its CMake target is established before transitive Tree consumers, so all compiled
-consumers and the installed header bundle use that public API. Compared with
-the older transitive Tree revision, BinaryTreeNode changes are documentation
-only. Foundation, Threading and Build pins agree with the existing dependencies.
-
-The representation is:
-
-```text
-DerivationTree<HybridEvolutionTrajectory, HybridEvolutionTrajectoryMetadata>
-    trajectory.entries: ordered vector of HybridEvolutionEntry
-        work: input checkpoint and processing phase
-        origin: optional same-trajectory (entry index, successor ordinal)
-        result: optional complete HybridEvolutionStepResult
-    metadata.complete: local trajectory completion
-    metadata.origin: optional parent (entry index, successor ordinal)
-```
-
-The source result retains successor reason/event information, so an origin can
-resolve it without duplicating parent links or event fields. New entries are
-appended. A missing entry result denotes an unprocessed/failed computation.
-Subdivision pieces have a common predecessor and distinct successor ordinals;
-they remain parallel pieces, not successive time steps just because their
-records are adjacent. Their continuations and reconditioned representations
-retain the same-node predecessor link. This does not yet assign independent
-subset/alternative ID namespaces.
-
-The scheduler drains every local piece of the current trajectory before marking
-that node complete and releasing its children. Unrelated ready trajectories are
-processed breadth first. Children generated at different source entries remain
-distinct trajectories, including when they share parent/event provenance. The default policy does not
-recombine. The completed-parent boundary also permits an opt-in,
-upper-semantics sibling-window recombination policy.
-
-A reset normally derives a child. It continues the same node only when it is
-the sole successor, is urgent/impact, carries a FULL_SOURCE certificate, and
-the trajectory has not been divided by subdivision or prior urgent branches.
-Once portions have separated, even the last fully crossing piece becomes a
-child: it must remain distinct from pieces crossing at earlier steps, and all
-these children must be known before their evolution begins.
-The numerical kernel currently certifies strictly active immediate urgent
-transitions by proving the invariant-valid source lies wholly inside the guard.
-Other cases remain UNRESOLVED, including permissive events and flow crossings
-without an explicit coverage proof. Transversality or an empty other branch
-alone is insufficient. The flat backend ignores this genealogy classification
-and preserves the same numerical output contributions.
-
-No global Orbit accumulator duplicates the tree history. Statistics count
-published contributions; `release_orbit()` gathers their explicit reach,
-intermediate and final roles after the complete run. It never turns a leaf or
-an empty completed trajectory into an implicit final set. Output collections
-may have a different traversal order from flat execution, but preserve the
-same enclosures without recombination. History remains inspectable after the
-one permitted Orbit release.
-
-A callback exception leaves incomplete metadata and unprocessed entries; it
-propagates and prohibits Orbit release or another run. The backend is serial,
-including when ThreadManager is configured for parallel work. Editing history,
-pruning/reopening a run, numerical alternatives and parallel tree publication
-are not exposed by this initial implementation.
-
-`tests/test_hybrid_evolution_tree.cpp` covers parent-first dispatch, distinct
-children from repeated event births, explicit origins, whole-source versus
-unresolved/permissive identity, parallel split/reconditioned pieces, exhausted
-empty trajectories, failure histories and exact flat/tree output comparisons
-for upper and lower semantics.
-
-The remaining subsections retain the architectural rationale and deferred
-operations; the implemented stages above define the current API.
-
-### Coupling before the refactoring
-
-The reference implementation examined is Evolution commit
-`f34ff6e7e72abe2c2527bf7bc308cb4893010de9`.
-`HybridEvolverBase` at that revision owns both the execution mechanism and result
-publication:
-
-- `orbit()` constructs a `DynamicWorkload` and a `SynchronisedOrbit`.
-- A work item is `Pair<HybridEnclosure, Bool>`. The Boolean requests starting
-  event/termination processing; it is true for the original input as well as
-  after a reset, so it is not a trajectory identity or a completion flag.
-- `_process_working_set`, `_process_jumped_set`, `_process_starting_events`,
-  `_evolution_step` and `_apply_evolution_step` pass the workload and Orbit
-  accumulator through numerical processing.
-- Successors are submitted with `workload.append`, and results separately with
-  `adjoin_reach`, `adjoin_intermediate` and `adjoin_final`.
-
-Changing just the queue element to a tree node ID would leave the evolver
-responsible for scheduling and flattening. It would also lose information
-needed to distinguish continuation, transition and subdivision.
-
-### Proposed boundary
-
-Keep `HybridEvolverInterface::orbit(...) -> Orbit<HybridEnclosure>` unchanged.
-Introduce a run-owned `HybridEvolutionBackendInterface` with a flat backend and
-a tree backend. The evolver stores a factory/prototype selecting the backend;
-each `orbit()` call creates independent mutable execution state. Backend state
-must not be shared accidentally between calls on a const evolver.
-
-The numerical evolver computes one local outcome. The backend owns pending work,
-selection of the next work, history, completion publication, and production of
-the conventional Orbit. It may later use a recombination policy at a defined
-completion boundary. Numerical guards, resets, invariant restrictions,
-termination predicates and upper/lower semantics remain in the evolver.
-
-Conceptually, both implementations use the same calls:
+# Evolution tree design
+
+The hybrid evolver separates numerical propagation from execution and result
+storage. Flat and Tree implement the same step/result contract. Tree has one
+checkpoint scheduler with configurable admission, grouping, evaluation timing,
+dispatch, numerical recombination and acceptance. All modes use the same
+DynamicWorkload for sequential and concurrent execution.
+
+The generic append/prune genealogy belongs to
+`ariadne-cps/tree/doc/derivation_tree_design.md`. Hybrid trajectory semantics and
+all scheduling decisions belong to Evolution.
+
+## Numerical work and Orbit contributions
+
+`HybridEvolutionWorkItem` contains a HybridEnclosure and a processing phase:
+PROCESS_STARTING_EVENTS or EVOLVE_CONTINUOUSLY. The enclosure retains its own
+numerical configuration. The evolver's callback returns a complete
+`HybridEvolutionStepResult` containing:
+
+- explicitly classified reach, intermediate and final contributions;
+- successors classified as continuation, transition, subdivision or reconditioning;
+- transition event, kind, crossing information and whole-source resolution evidence;
+- a local stop reason.
+
+An intermediate contribution does not schedule work implicitly. A final
+contribution can coexist with successors. Exhausting work does not invent a
+final contribution. The backend publishes a successful result before any of its
+successors executes. A failed callback leaves incomplete history and prohibits
+Orbit release; outstanding workers are joined before propagating failure.
+
+`HybridEvolverBase::set_evolution_backend_factory()` clones immutable factory
+settings. Each orbit() call creates independent run state, supplies semantics,
+runs the same numerical callback and releases a conventional Orbit. Numerical
+propagation and termination rules are independent of the selected backend.
+
+## Flat backend
+
+`FlatHybridEvolutionBackendFactory{}` is the evolver default. It has no
+backend-specific configuration. All successors enter DynamicWorkload
+immediately; contributions are accumulated directly into Orbit under a result
+lock. It records no genealogy and performs no recombination.
+
+Both backends use ThreadManager's concurrency setting: zero executes directly,
+positive concurrency uses available workers. Concurrency is not duplicated in
+backend configuration.
+
+## Trajectory history
+
+`HybridEvolutionTree` is
+`DerivationTree<HybridEvolutionTrajectory, HybridEvolutionTrajectoryMetadata>`.
+Each node owns an ordered vector of entries. An entry stores a work item, its
+optional same-trajectory predecessor and its optional committed result.
+`HybridEvolutionCheckpointId` identifies a node and entry index.
+
+Pure continuous continuations and reconditioning append entries in the same
+node. A sole urgent/impact transition continues that node only with certified
+FULL_SOURCE resolution and whole-trajectory eligibility. Permissive/unresolved
+transitions and distinct alternatives create child trajectories. Every
+subdivision creates explicit child trajectories, under every admission policy;
+scheduling no longer changes how splitting is represented.
+
+Node metadata records the origin entry/successor, local completion, pending
+entry count, whole-trajectory eligibility, recombined checkpoint provenance and
+an optional recombination time barrier. A complete node can have incomplete
+descendants. Completion is published only after its results and children.
+
+There is one retirement representation: the trajectory's retired_entries.
+Processed entries retain their original results; replaced pending entries retain
+provenance and have no fabricated result. There is one replacement-provenance
+representation: recombined_checkpoints, including for sibling-only merges.
+Replacements are attached below their nearest common ancestor. Their position
+in the genealogy does not override admission dependencies.
+
+## One checkpoint scheduler
+
+Every policy shares:
+
+- ready: eligible checkpoints, each backed by a workload token;
+- waiting: unprocessed checkpoints withheld from execution;
+- in-flight count: claimed numerical computations that have not published.
+
+There is no second parent-first execution branch or separate per-parent
+ready/waiting data structure. The scheduler claims and snapshots work under its
+lock, performs numerical evolution without the lock, then publishes results,
+creates successor records and applies admission under the same lock.
+Recombination currently runs under that publication lock as well. Numerical
+propagation can run in parallel; concurrent merge construction is not implemented.
+
+A batch is complete only when ready is empty and the in-flight count is zero.
+Retired workload tokens can outlive their checkpoints and become harmless
+no-ops. A policy cannot select unknown, retired or duplicate pending work; it
+must admit a nonempty selection if the batch is complete and waiting remains.
+
+### Admission
+
+`HybridCheckpointAdmissionPolicy` separates admission from genealogy and dispatch.
+It decides whether a successor is immediately ready, selects eligible waiting
+IDs after publication and chooses the queue used for recombination. select_next
+receives batch_complete and can return no work at intermediate publications.
+
+| Policy | Immediately ready | Waiting release | Merge queue |
+| --- | --- | --- | --- |
+| ParentCheckpointAdmissionPolicy | Continuations, reconditioning, subdivisions and certified same-node transitions | When the producing continuous family has finished | WAITING |
+| ImmediateCheckpointAdmissionPolicy | Every successor | No ordinary waiting | READY |
+| LocationCheckpointAdmissionPolicy | Continuous successors in the current location | At the batch barrier, all waiting IDs in the first waiting location | WAITING |
+
+Parent admission is the default. A continuous family includes a trajectory and
+all descendants born by subdivision, excluding its discrete descendants.
+Discrete successors wait for all pieces of that family. Independent completed
+families can release descendants while other families still run, so parent
+admission does not impose a global level barrier. For a recombined replacement,
+all source-family dependencies are followed through checkpoint provenance;
+attachment below a completed common ancestor cannot release it prematurely.
+
+Location admission runs one location at a time. Every transition waits,
+including self-loops and certified transitions preserving trajectory identity.
+At a barrier all compatible waiting checkpoints can be recombined across
+parents, then all checkpoints of the first waiting location become ready.
+Waiting for other locations can persist through multiple batches and absorb
+later compatible arrivals. There is no physical-time synchronisation or clock
+shift. Arrival order decides the next location, not a configurable priority.
+
+### Grouping
+
+`HybridRecombinationGroupingPolicy` is the single grouping interface. It receives
+explicit pending checkpoint IDs rather than deriving eligibility from topology.
+
+- NoRecombinationPolicy disables numerical recombination.
+- AllCompatibleRecombinationPolicy groups all compatible pending checkpoints,
+  without time-spread or cardinality limits. Disjoint physical time intervals
+  are allowed; the numerical recombiner covers their clock values.
+- WindowRecombinationPolicy(max_group_size, max_time_spread, scope) bounds group
+  cardinality and the hull of time ranges. ANY allows nonadjacent checkpoints
+  but requires overlap with the group anchor. SIBLINGS selects consecutive
+  compatible sibling seeds and permits disjoint times within the time span.
+
+AllCompatible and Window share HybridRecombinationScope: ANY or SIBLINGS.
+SIBLINGS requires the same immediate genealogy parent and successor meaning
+(kind, event and event kind). Replacement provenance preserves that meaning
+when an early merge is considered again. ANY imposes no parent restriction.
+No implementation currently limits distance between set centres.
+
+The backend independently requires equal locations, processing phases, state
+and auxiliary spaces, exact previous-event histories and structurally identical
+symbolic auxiliary maps. Neither common ancestry nor geometric overlap proves
+compatibility or the numerical covering contract.
+
+### Evaluation timing
+
+`HybridRecombinationTriggerPolicy` receives a publication/admission boundary,
+the pending queue and the global committed-step count. The count has the same
+meaning under every admission policy.
+
+- BeforeAdmissionRecombinationTriggerPolicy is the default: before releasing
+  eligible waiting work, or after each publication for immediate ready admission.
+  It replaces separate parent-completion and location-synchronisation triggers.
+- AfterEachStepRecombinationTriggerPolicy inspects the selected queue after
+  every committed numerical result, allowing early waiting merges.
+- EveryNStepsRecombinationTriggerPolicy(n) inspects every n global steps and
+  flushes waiting work before admission. Immediate admission does not turn the
+  flush into an inspection on every step.
+
+At most one evaluation is made per publication. After recombination, eligibility
+is recalculated before admitting replacements. Early waiting replacements stay
+waiting until their admission conditions hold.
+
+### Dispatch and acceptance
+
+`HybridCheckpointDispatchPolicy` orders ready work independently of admission.
+ImmediateCheckpointDispatchPolicy preserves FIFO. BoundedTimeLagCheckpointDispatchPolicy
+moves a candidate to the tail while an earlier-time checkpoint of a different
+trajectory is ready within max_time_lag, at most max_deferrals times. This
+preserves the checkpoint and its physical time and does not wait indefinitely
+for partners. Under location admission it only affects order inside that location;
+it does not change when waiting sets become merge candidates.
+
+`HybridRecombinationAcceptancePolicy` assesses a numerically valid result.
+AcceptAllRecombinationsPolicy accepts every sound effective reduction.
+RadiusTrendRecombinationAcceptancePolicy additionally requires a previously
+executed continuous continuation with positive time progress, bounded observed
+radius growth and bounded output amplification. It is an empirical quality gate,
+not a contraction proof. It supports READY only: choosing it with enabled
+WAITING recombination is rejected by both backend and factory. With no-op
+grouping the unused acceptance gate has no effect.
+
+## Numerical construction and acceptance contract
+
+Only UPPER semantics permits enabled recombination. A proposal must have at
+least one output, strictly fewer outputs than inputs, no discarded sources,
+complete source-index provenance and a satisfied radius request. Failure or
+quality rejection leaves all original work runnable. The backend relies on the
+recombiner's validated upper-covering contract; it does not infer coverage from
+outer projection overlap or source-index bookkeeping alone.
+
+EnclosureRecombinationContext supplies an optional maximum output radius
+explicitly. It is not automatically copied from maximum_enclosure_radius in the
+evolver. ReferenceEnclosureRecombiner constructs at most one output and does not
+partition it to fit a requested radius. Without a recombination radius limit,
+the evolver can subsequently subdivide a large replacement.
+
+READY replacements inherit a time-progress barrier preventing immediate
+split/recombine cycles at the same physical time. WAITING replacements can absorb
+later arrivals without advancing time, since they cannot execute or resplit
+before admission. All merged clock ranges must remain finite.
+
+## Configuration examples and migration
+
+One constructor is shared by the concrete backend and its factory. Its arguments
+are admission, grouping, trigger, recombiner, context, dispatch and acceptance;
+the concrete backend additionally takes the initial enclosure first. Policies
+are cloned. Defaults select parent admission and no recombination.
 
 ```cpp
-auto backend = backend_factory.create(initial);
-backend->run([&](const HybridEvolutionWorkItem& item) {
-    return _advance(item, termination, semantics);
-});
-return backend->release_orbit();
+// Parent admission, conventional Orbit, no recombination.
+evolver.set_evolution_backend_factory(TreeHybridEvolutionBackendFactory{});
+
+// One active location; merge all compatible waiting checkpoints at its barrier.
+evolver.set_evolution_backend_factory(TreeHybridEvolutionBackendFactory(
+    LocationCheckpointAdmissionPolicy{}, AllCompatibleRecombinationPolicy{}));
+
+// Immediate admission with periodic time-window grouping of ready checkpoints.
+evolver.set_evolution_backend_factory(TreeHybridEvolutionBackendFactory(
+    ImmediateCheckpointAdmissionPolicy{}, WindowRecombinationPolicy(8u, 0.125),
+    EveryNStepsRecombinationTriggerPolicy(8u)));
+
+// Parent admission, bounded consecutive sibling groups before release.
+evolver.set_evolution_backend_factory(TreeHybridEvolutionBackendFactory(
+    ParentCheckpointAdmissionPolicy{},
+    WindowRecombinationPolicy(8u, 0.125, HybridRecombinationScope::SIBLINGS)));
 ```
 
-`run` owns dispatch, including any concurrent execution and joining before
-returning. `_advance` must neither enqueue work nor mutate a shared Orbit.
-It can accumulate a step-local result through an internal collector passed to
-the existing numerical helpers. Publishing the result is a backend operation
-after the callback has returned successfully.
+The previous grouping-first constructor overloads and the parallel sibling and
+frontier grouping interfaces are removed. NoRecombinationSchedulingPolicy and
+NoFrontierRecombinationPolicy become NoRecombinationPolicy. SiblingWindow and
+FrontierWindow become WindowRecombinationPolicy with explicit scope; both
+AllCompatible variants become AllCompatibleRecombinationPolicy with scope.
+OnParentCompletion and OnSynchronizationCompletion triggers become
+BeforeAdmissionRecombinationTriggerPolicy with the corresponding admission.
+Dispatch/acceptance types use checkpoint/recombination names rather than a
+historical frontier execution-mode name. Existing default Flat selection and
+orbit() return types are unchanged.
 
-Move step-local results into backend storage where the enclosure/container APIs
-permit it. The abstraction does not require copying a parent's entire history
-when scheduling one work item or creating a child trajectory.
+## Verification and deferred work
 
-Use a runtime interface at this boundary, rather than templating
-`HybridEvolverBase`, its derived evolvers and its public interface on the
-backend. Dispatch occurs per work item, not in scalar numerical operations.
-The generic `DerivationTree<Object, Metadata>` remains unchanged, with its two
-template parameters and no hybrid scheduling logic.
+Tests compare sorted complete descriptions and exact collection counts against
+Flat without recombination, for urgent/permissive transitions, splitting,
+invariants and termination limits. Enabled recombination tests cover numerical
+injection, rejection without work loss, provenance, cross-parent grouping,
+resplitting progress, early waiting merges, parent dependencies after a merge,
+independent family release, location batches and simultaneous numerical workers.
+Periodic triggers and admission boundaries are tested separately.
 
-### Work item and step result
-
-An initial common work item contains:
-
-```text
-HybridEvolutionWorkItem
-    enclosure to process
-    phase: PROCESS_STARTING_EVENTS or EVOLVE_CONTINUOUSLY
-    shared immutable numerical configuration
-```
-
-Scheduling tickets and tree node/entry IDs belong to the backend. The numerical
-callback does not need to know which concrete container owns its work item.
-An entry-processing phase is independent of the reason a trajectory was born.
-
-A step result must contain:
-
-```text
-HybridEvolutionStepResult
-    Orbit contributions, explicitly tagged REACH / INTERMEDIATE / FINAL
-    successors, each with enclosure, processing phase and configuration
-    successor provenance: continuation, transition, subdivision,
-        reconditioning, or numerical alternative
-    event/crossing/resolution information where applicable
-    local stop reason if no continuation remains
-```
-
-Keep associations between contributions and successor pieces where a guard
-creates several pieces. A local result is a record of one computation, not a
-claim that every collection in it is one sequential trajectory.
-
-Do not infer trajectory birth merely from the number of successors. A numerical
-subdivision and competing transitions have different meanings even when both
-produce two sets. A permissive transition retains the no-jump continuation and
-derives a jump trajectory. A resolved single transition can continue the same
-trajectory only when that classification is justified for the whole affected
-set. `CrossingKind::TRANSVERSE` alone is not that justification. Different source
-portions crossing in different steps remain distinct derived trajectories in a
-potentially common recombinable family.
-
-Orbit contributions and successors must remain separate. In the current
-`_apply_evolution_step`, `evolve_sets` can have urgent-guard/time constraints
-which are intentionally absent from `next_working_sets`. An intermediate set
-therefore cannot simply be reused as the next computational checkpoint.
-Similarly, a reach set is a swept set, not an endpoint. Starting events can
-publish a pre-reset reach set and a post-reset intermediate set together.
-
-### Completion and scheduling
-
-The flat backend initially reproduces the existing workload behavior and
-accumulates the tagged contributions directly into an ordinary Orbit. The tree
-backend records results in trajectory entries and can keep newly derived
-children blocked while their parent is still generating continuations.
-
-Returning from one `_advance` invocation completes one work item, not necessarily
-its trajectory. A trajectory becomes COMPLETE only after all its continuations,
-including numerical pieces belonging to it, have been exhausted, all in-flight
-work has returned, and all its generated children and contributions have been
-published. Only then may the backend inspect the complete child group, apply a
-future recombination decision, and release children for evolution.
-
-Track computational status (ready/running/blocked/retired) separately from
-trajectory completion. Numerical subdivision may require several pending pieces
-inside one trajectory; those pieces must not be appended as if they were
-successive time steps. If subdivisions/alternatives are enabled, trajectory
-entries must explicitly represent grouped pieces and their predecessor links.
-Detailed subset/alternative identity rules remain separate design work and are
-not solved by silently turning every work item into a trajectory node.
-
-The backend may reuse DynamicWorkload as its executor. It must submit only work
-which its own policy has made eligible: merely choosing a queue order cannot
-prevent a concurrent executor from starting a child too early. State publication
-and ready-work selection require synchronization. Numerical processing happens
-outside that synchronization, with worker-owned work snapshots; no mutable
-DerivationTree references or children spans are held by workers across commits.
-Begin the tree backend serially before enabling parallel commit/dispatch.
-
-An empty executor queue is not a complete run if the backend still has blocked
-or in-flight work. Completion of a run requires all applicable work to be
-finished and no deferred child-release/recombination decision to remain.
-Exceptions must join outstanding work and propagate rather than return a
-partially computed Orbit as a complete result.
-
-### Orbit compatibility
-
-Recombination is not a prerequisite for returning an Orbit from the tree backend.
-Every trajectory can be evolved independently and its tagged contributions
-projected into the conventional collections. With recombination absent, the flat
-and tree backends must produce exactly equal cardinalities separately for reach,
-intermediate and final, preserving multiplicity as well as the original initial
-enclosure. Tree-node count, completion and genealogy do not replace these output
-roles. The scheduling order may differ; the classified multiset of enclosure
-contributions must agree.
-
-The regression in `tests/test_hybrid_evolution_tree.cpp` checks these three
-cardinalities explicitly, compares each full collection without removing
-duplicates, and checks both initial enclosures against the original input. It
-covers urgent/permissive events, upper/lower semantics, continuous and discrete
-limits, initially active jumps, terminating events, subdivision and invariant
-restrictions including excluded inputs.
-
-Preserve all four existing roles: `initial()`, `reach()`, `intermediate()` and
-`final()`. The initial enclosure is the original input, not a recombined root or
-the collection of all trajectory seeds.
-
-Tree leaves are not final sets, and COMPLETE does not imply a final contribution.
-For example, an empty continuation completes local evolution without adding a
-final set. Conversely, the existing time-straddling logic may emit a final slice
-while retaining further work. Preserve explicit classifications made by the
-evolver; neither topology nor a generic terminal flag can reconstruct them.
-
-For the tree backend, materialize Orbit from valid tagged contributions at the
-end. Avoid an append-only global Orbit as a second authoritative representation:
-pruning/backtracking would otherwise leave obsolete contributions in it. Logical
-retirement of pending recombination sources prevents further evolution, but does
-not by itself invalidate previously validated history. Actual backtracking must
-invalidate contributions derived from the truncated history as well as work
-tickets; pruning generic nodes alone does neither.
-
-Without recombination or different numerical choices, flat/tree results should
-match the same classified enclosure contributions, disregarding scheduling order
-where concurrent ordering was already unspecified. With recombination enabled,
-the public result contract is preserved, but enclosure counts and partitions
-may legitimately differ. Soundness must be established for the requested
-semantics: an enclosing hull may be acceptable for an upper approximation but
-is not a generic sound recombination for lower semantics.
-
-`release_orbit()` moves the flat accumulator or gathers the tree's valid results.
-Keeping a queryable tree after `orbit()` returns would need a separate detailed
-result/session API; changing the existing return type is not required for this
-first refactoring.
-
-### Configuration and recombination ownership
-
-Keep numerical configuration with the work/entry it governs, sharing immutable
-snapshots when unchanged. Future alternatives must read the item's configuration,
-not mutate the evolver's shared global configuration. Integrator/solver state
-must follow the same rule; assigning a configuration pointer to a work item is
-insufficient if helpers still read mutable evolver state. Initially all work may
-use one per-run snapshot, preserving current numerical behavior.
-
-The backend identifies candidate groups through provenance and controls when a
-decision may run. A domain-specific policy must validate and construct any
-recombined enclosure; the generic Tree container does not make this numerical
-decision. Parent completion alone is not a recombination certificate.
-
-Replacements are newly added trajectories with explicit source provenance.
-Pending absorbed sources may be logically retired in Evolution metadata.
-There is no reparenting or insertion between existing generic nodes.
-`DerivationTree::prune(id)` removes every strict descendant, so it cannot erase
-an arbitrary selected subset of sibling sources; do not assume that operation
-exists. Preserve provenance before invalidating any referenced history.
+The backend supports forward evolution. Backtracking, numerical-configuration
+alternatives, explicit recombinable-family keys, centre-distance grouping,
+radius-oriented partitioning and concurrent merge construction remain future
+work. General insertion/moving of genealogy nodes is outside the generic tree's
+append/prune contract. The normal evolver return value remains a conventional
+Orbit; exposing history alongside it is a separate API decision.
 
 ### Continuous enclosure recombination
 
@@ -524,8 +268,9 @@ nonlinear-reference algorithm and produces at most one output. Grouping and
 partitioning strategies can supply other concrete implementations later.
 
 Each call receives an `EnclosureRecombinationContext`. Its optional maximum
-enclosure radius is a finite, nonnegative value from the current evolution
-configuration, rather than a second mutable radius stored in the strategy.
+enclosure radius is a finite, nonnegative per-run value supplied explicitly
+when configuring the backend. It is not automatically copied from the evolver's
+maximum_enclosure_radius and is not mutable strategy state.
 An omitted value means unrestricted recombination. The result contains:
 
 - `outputs`: records containing an enclosure and its original `source_indices`;
@@ -546,8 +291,8 @@ outputs and reports all input indices as discarded. The existing free operation
 `recombine(const List<Enclosure>&)` remains a single-output convenience wrapper
 around the reference implementation, retaining its nonempty-list precondition
 and returning a typed empty enclosure when no output survives. These operations
-do not change trajectory identity or modify a backend. The tree backend now has an opt-in,
-upper-semantics sibling-window scheduling policy described below. The existing
+do not change trajectory identity or modify a backend. The tree backend uses
+the independent grouping, admission and trigger policies described above. The existing
 C++ benchmark still recombines post-reset checkpoint enclosures externally,
 so its measurements do not quantify the integrated scheduler overhead.
 
@@ -892,572 +637,3 @@ bounds, and the cost and enclosure growth of continued evolution. Volumes alone
 are unsuitable for urgent post-reset sets, which lie on a guard surface. Neither
 small runtime nor a reduced enclosure count is sufficient if uncertainty growth
 makes subsequent evolution more expensive or less informative.
-
-### Incremental migration and verification
-
-1. Replace the anonymous Boolean with a named processing phase and introduce
-   the step-local result. Route all current result/queue writes through this
-   record, initially retaining the existing executor and numerical choices.
-2. Move execution and accumulation into the flat backend. Adapt the five coupled
-   methods and make `_log_summary` read backend counters rather than an Orbit
-   accumulator. Keep `orbit()` overloads and default behavior unchanged.
-3. Add the serial tree backend with the same callback/result contract, append
-   history, explicit trajectory birth and completion, and parent-first dispatch.
-   Initially disable recombination so numerical behavior can be compared.
-4. Specify subset/alternative records before claiming support for those tree
-   cases; add completion accounting for all pieces. Introduce recombination at
-   the completed-parent boundary only after its semantic checks are specified.
-5. Add parallel tree dispatch and backtracking only with synchronized publication,
-   stale-ticket rejection, configuration isolation and invalidation of derived
-   contributions. These are not prerequisites for the initial backend boundary.
-
-Verify the flat backend against existing orbit tests, then both backends on the
-same systems with recombination disabled. Cover immediate/permissive/urgent
-events, competing jumps, repeated guard crossings across steps, empty exhausted
-continuations, invariant rejection, final-time slices, discrete termination,
-reconditioning and subdivision. Check classified coverage as well as counts;
-use deterministic serial runs where exact collection comparison is appropriate.
-Scheduler tests must show that a child is recorded before its parent completes
-but is not dispatched until the completed child group has been handled, and that
-one completed split piece cannot prematurely complete its trajectory.
-
-### Experimental source selection and quality flags (2026-11)
-
-For a fixed integration step and fixed absolute birth-time window, use
-time-distributed selection of **existing** enclosures at cardinalities
-2, 4 and 8, including both extreme eligible checkpoints. This retains
-the original source set constraints but represents a strict subset
-of the full window unless all eligible enclosures are selected.
-Report generated, eligible and selected counts separately.
-
-The benchmark's output-projection containment checks are sufficient
-statements about computed validated **outer intervals**, not about
-constrained-set inclusion. Inconclusive outcomes are expected even
-when sound recombination succeeds. A guard quality flag checks whether
-the entire output outer approximation respects the original urgent
-equality or permissive inequality; its violation-bound diagnostic
-captures possible excess due to wrapping. These provide verifiable
-quality indicators without replacing a future rigorous inclusion
-procedure on constrained models.
-
-
-### Implemented configurable recombination scheduling
-
-The tree backend separates three independent, cloneable strategies:
-
-- **When:** `OnParentCompletionRecombinationTriggerPolicy` (default),
-  `AfterEachStepRecombinationTriggerPolicy`, or
-  `EveryNStepsRecombinationTriggerPolicy(n)` (including a final check for
-  remaining pending children). Trigger decisions run after complete publication
-  of each numerical work result, or after publishing parent completion.
-- **Which:** `NoRecombinationSchedulingPolicy` (default, with zero
-  recombiner invocations), or
-  `SiblingWindowRecombinationSchedulingPolicy(max_group_size,max_time_spread)`.
-  Custom grouping policies implement `HybridRecombinationSchedulingPolicy`.
-- **How:** `EnclosureRecombinerInterface` supplies the numerical covering
-  algorithm. `ReferenceEnclosureRecombiner` is the default. Optional
-  `EnclosureRecombinationContext` supplies a per-run radius limit.
-
-For example, select window grouping after every step:
-
-```cpp
-evolver.set_evolution_backend_factory(TreeHybridEvolutionBackendFactory(
-    SiblingWindowRecombinationSchedulingPolicy(8u, 0.125),
-    AfterEachStepRecombinationTriggerPolicy{}));
-```
-
-`TreeHybridEvolutionBackendFactory()` preserves parent-first execution
-without recombination. The numeric strategy and all policies are copied by
-the backend/factory, so temporary policy objects are safe. A callback
-can inspect completed steps before the parent is complete, but **no child
-trajectory starts evolving until its parent is complete**. The scheduler
-never recombines already evolved child checkpoints or alters prior parent
-contributions. The existing `Semantics::UPPER` precondition remains.
-
-Custom numerical strategies may return multiple outputs. The backend accepts
-them only when they reduce the number of trajectories, cover every selected
-source according to the numerical interface's provenance contract, and satisfy
-the requested radius. Otherwise it preserves the original pending sources.
-Each replacement stores its own source-node IDs and the original source
-nodes remain as retired genealogy. Sound coverage of outputs remains the
-responsibility of the injected numerical recombiner's contract.
-
-
-The window policy greedily forms disjoint groups of **consecutive sibling
-children**, at each trigger-selected evaluation point and before any child
-starts evolving. Groups must share transition event and kind, target location,
-state and auxiliary spaces, processing phase, previous-event history, and
-symbolic auxiliary mapping. All their birth-time intervals must fit within
-the configured maximum span. Only groups of at least two (and at most the
-configured maximum count) are proposed. It does not use bounding-box overlap
-as a mathematical certificate.
-
-The backend validates the groups again, recombines their continuous enclosures
-with the configured `EnclosureRecombinerInterface`, checks complete source
-provenance, and only then substitutes one or more unevolved replacement
-trajectories. The absorbed
-children remain as retired nodes with their original source-entry provenance;
-the replacement records their stable node IDs and retains discrete context.
-Previously published parent contributions remain unchanged. Invalid or incomplete
-recombination outputs cause the original children to continue independently,
-rather than losing work.
-
-Recombination is strictly **UPPER**-semantics only; requesting it under LOWER
-semantics throws before numerical work. The flat backend and the default no-op
-tree backend are unaffected. The current policy intentionally does not
-recombine non-siblings or already-evolved descendants, and it does not yet
-consider output radius or measured continuation cost when deciding whether a
-sound replacement is profitable.
-
-
-### Global checkpoint frontier for continuous and discrete recombination (2026-11-15)
-
-The trajectory tree is the **append-only genealogy**, not the unit of
-scheduling or the sole source of recombination candidates. An opt-in
-`TreeHybridEvolutionBackendFactory(FrontierWindowRecombinationPolicy(...))`
-constructs a globally interleaved checkpoint frontier while preserving the
-existing parent-first constructor, tests and no-op defaults.
-
-A checkpoint has a stable `HybridEvolutionCheckpointId{trajectory, entry}`.
-Under frontier scheduling, **subdivision creates separate child trajectories**,
-and continuous continuations/reconditioning append checkpoints to the same
-trajectory. All new pending checkpoints go into a single serial FIFO ready
-queue, so split branches can evolve independently and later become candidates
-for recombination. Permissive/urgent post-reset checkpoints enter the same
-frontier, with their originating source entry and transition evidence retained
-in the history. This mode is deliberately serial and does not add concurrent
-tree mutation.
-
-The frontier grouping policy is independent of the existing sibling policy:
-`NoFrontierRecombinationPolicy` never recombines, and
-`FrontierWindowRecombinationPolicy(max_group_size, max_time_spread)` greedily
-selects compatible pending checkpoints **across trajectories and ancestors**.
-It is not limited to siblings or to checkpoints at a parent's completion. The
-backend rechecks membership and disjoint selection, physical location, state
-and auxiliary spaces, event history, processing phase, symbolic auxiliary
-mapping, and overlapping current time ranges before calling the configured
-`EnclosureRecombinerInterface`. The window policy further limits the overall
-time span. This is a conservative compatibility filter, not a claim that any
-two checkpoints whose physical ranges overlap ought to be merged.
-
-The existing trigger choices apply to the global frontier: per-step, every N
-globally completed steps, or when a trajectory's local pending work completes.
-Every N steps also checks remaining sources at completion boundaries. Timing,
-group selection, numerical algorithm, and numerical radius context remain
-separately configurable. The reference recombiner constructs a validated outer
-covering in UPPER semantics; LOWER semantics is rejected if grouping is enabled.
-A user-defined grouping policy may incorporate local contractivity estimates,
-radius growth, cost models or waiting criteria without changing the numerical
-recombination algorithm.
-
-After a successful covering recombination, the original pending entries are
-marked as retired, **not deleted**; all already processed results remain
-untouched. Replacement trajectories are placed under the nearest common
-ancestor of their sources and record exact entry-level provenance in
-`recombined_checkpoints`. A replacement can itself become a future input.
-The `Orbit` projection ignores unprocessed retired entries, while retaining
-all successfully processed historical contributions. If the recombiner cannot
-provide complete source provenance, satisfy radius constraints or reduce the
-pending count, all source checkpoints remain independently runnable.
-
-Example opt-in continuous/discrete frontier scheduler:
-
-```cpp
-evolver.set_evolution_backend_factory(TreeHybridEvolutionBackendFactory(
-    FrontierWindowRecombinationPolicy(8u, 0.125),
-    AfterEachStepRecombinationTriggerPolicy{}));
-```
-
-This change **does not** guarantee that a suitable checkpoint pair is
-available at a particular moment: time synchronization and FIFO work ordering
-affect when compatible pending sources coexist. It also does not yet implement
-a specialized contractivity estimator or delayed-dispatch control; those are
-possible future grouping/scheduling strategies. Synthetic regressions cover
-continuous recombination *after* independent split-branch steps, both
-permissive and urgent post-reset merging across separate trajectories, and
-no-op frontier execution. Provenance and upper-only gating are checked.
-
-
-### Frontier integration test matrix (2026-11-15)
-
-In addition to scheduler-only synthetic tests, `test_hybrid_evolution_tree`
-compares complete `Orbit<HybridEnclosure>` collections for the flat backend
-and the global frontier with `NoFrontierRecombinationPolicy`. The comparison
-uses cardinality and sorted full enclosure descriptions for reach,
-intermediate and final collections, plus the initial enclosure; changing the
-internal trajectory ordering must not alter the numerical work or results.
-
-The real-evolver integration cases include:
-
-- urgent and permissive crossings accumulated over multiple continuous steps,
-  for upper and lower semantics;
-- subdivision enabled on a wide source set before/near an urgent guard;
-- zero-time termination and a short nonzero time horizon;
-- an invariant restricting the admissible part of a wide source enclosure.
-
-These tests deliberately use frontier **no-op** to establish parity independently
-of numerical recombination. Separate synthetic tests verify recombination
-mechanics, cross-trajectory provenance and trigger behavior. Further real
-upper-approximation inclusion and performance tests are still necessary before
-the global frontier is considered a general drop-in replacement for the flat
-backend.
-
-During review, the frontier runner was corrected not to retain a reference
-to a node's metadata across calls that can grow the derivation tree.
-
-### End-to-end frontier recombination integration tests (2026-11-15)
-
-The numerical covering guarantee is established by the
-`EnclosureRecombinerInterface` contract and its dedicated tests. The
-frontier integration tests deliberately focus instead on **scheduler
-correctness while actual evolution and recombination are enabled**.
-
-A test-only backend wrapper audits the completed trajectory tree during
-`release_orbit()`, preserving the production `TreeHybridEvolutionBackend`
-and `ReferenceEnclosureRecombiner`. The audit counts processed/retired/
-outstanding checkpoints, generated splitting/transition successors, accepted
-replacement trajectories and exact entry-level source provenance.
-
-The integration matrix now contains:
-
-1. **Numerically generated continuous splitting:** run a genuine
-   `GeneralHybridEvolver` with subdivision enabled and one bounded
-   reference recombination. Require an actual numerical invocation, at least
-   one replacement trajectory, source retirements, complete genealogy and
-   no outstanding work after Orbit release.
-2. **Radius-based rejection:** use the identical real system and candidate
-   policy but request zero output radius. Require the numerical attempt to
-   occur, no source retirement or replacement, and exactly equal classified
-   Orbit collections compared to the no-recombination frontier.
-3. **Hybrid urgent/permissive crossings:** use a real two-mode automaton with
-   multiple continuous steps and explicit guard/reset while recombination
-   remains enabled. Require event successors, completed frontier work and
-   valid target-event history; permissive transitions additionally retain
-   a non-jumping source possibility. This test does **not** presume that every
-   crossing yields compatible simultaneous checkpoints or forces a merge.
-
-For deterministic test bounds the first-compatible-window grouping fixture
-permits a **single** numerical proposal; this avoids a misleading resplit/
-recombine oscillation when reconstituting an enclosure wider than the
-evolver's configured subdivision radius. Production grouping policies and
-the reference recombiner are not modified by the test fixture.
-
-Tests of numerical set inclusion are intentionally not duplicated here;
-the scheduler's required behaviors are work conservation, phase/event
-compatibility, genealogy, dispatch and preservation of previously computed
-contributions.
-
-### Prevention of non-progressing split/recombine cycles and integration regressions
-
-A frontier recombination replacement records a conservative
-`recombination_time_barrier`, equal to the largest upper bound of the
-physical times represented by its contributing checkpoints. The barrier is
-inherited by all new descendant trajectories, including those created by
-further numerical splitting and post-reset transitions. When a group contains
-any lineage descending from a previous recombination, **every such source**
-must have a current lower physical time strictly greater than its inherited
-barrier before the scheduler will attempt another recombination. This
-prevents an immediately subdivided merged enclosure from being recombined
-at the same time; the check occurs before invoking the numerical strategy
-and is independent of grouping policy. A strictly progressed replacement
-receives a new barrier.
-
-This is intentionally conservative: it may suppress a useful merge when
-validated time intervals still overlap the previous barrier, even though
-some trajectories have advanced. It does not prohibit subdivision or
-continued evolution, and is not a substitute for a numerical cost policy.
-
-Focused tests verify a synthetic split/recombine/resplit cycle has exactly
-one merge at unchanged physical time; one genuine
-`GeneralHybridEvolver` continuous-subdivision case merges only after each
-selected piece has advanced to positive physical time; and two real
-two-location systems force post-reset recombination after multiple
-continuous steps, respectively for urgent and permissive events. The
-test-only candidate policy filters for actual post-reset event history
-and permits one proposal, while the production scheduler still performs
-the compatibility, provenance, radius and upper-semantics checks.
-
-The original parent-first backend and default flat backend remain unchanged.
-
-
-### Pluggable bounded frontier waiting and radius-trend quality gate (2026-11-15)
-
-The opt-in global checkpoint frontier now separates four independently cloned
-decisions: **trigger** (when to inspect), **dispatch** (which ready checkpoint
-to execute now), **grouping** (which pending checkpoint group to propose) and
-**acceptance** (whether a numerically sound reduction is worth committing).
-The actual numerical enclosure covering algorithm remains independent.
-
-Dispatch is controlled by `HybridFrontierDispatchPolicy`.
-`ImmediateFrontierDispatchPolicy` preserves the pre-existing FIFO schedule.
-`BoundedTimeLagFrontierDispatchPolicy(max_deferrals,max_time_lag)` rotates a
-candidate to the queue's tail only if another pending trajectory has earlier
-physical time within the requested lag. It carries per-checkpoint deferral
-counters; once a checkpoint reaches its maximum deferrals it must execute.
-The dispatcher filters retired/completed work before consulting the policy,
-ensuring that old recombination sources cannot cause phantom waits. Waiting
-does not alter the physical time stored in an enclosure or implicitly perform
-any numerical synchronization; it only lets slower trajectories generate
-compatible partners before the faster work is dispatched.
-
-Acceptance is controlled by `HybridFrontierMergeAcceptancePolicy`.
-`AcceptAllFrontierMergesPolicy` retains the existing default behavior.
-`RadiusTrendFrontierMergesPolicy(max_output_amplification,max_continuation_growth)`
-estimates local contraction from **successive computed continuous
-checkpoints** in the same trajectory, requiring a genuine CONTINUATION
-result and strictly increasing physical time, not merely a subdivision,
-reconditioning or discrete reset. It rejects a proposed merge if any
-source's current radius exceeds its previous radius multiplied by the
-configured continuation-growth factor, or an output radius exceeds the
-largest source radius multiplied by the output-amplification factor.
-The numerical covering contract, provenance, and requested absolute
-radius limit are validated separately *before* this quality gate.
-These are **heuristics based on observed enclosure radii**, not a
-mathematical proof that the underlying vector field is contractive.
-
-Example, opt into both:
-
-```cpp
-evolver.set_evolution_backend_factory(TreeHybridEvolutionBackendFactory(
-    FrontierWindowRecombinationPolicy(8u, 0.125),
-    AfterEachStepRecombinationTriggerPolicy{},
-    ReferenceEnclosureRecombiner{},
-    EnclosureRecombinationContext{},
-    BoundedTimeLagFrontierDispatchPolicy(8u, 0.25),
-    RadiusTrendFrontierMergesPolicy(2.0, 1.0)));
-```
-
-Constructor overloads remain source-compatible; both optional policies
-default to `ImmediateFrontierDispatchPolicy` and
-`AcceptAllFrontierMergesPolicy`, so no behavior changes for existing
-callers. The flat backend remains the global default.
-
-Regression tests demonstrate that bounded waiting can recover a merge
-partner generated by a slower branch that immediate FIFO would miss;
-unmatched checkpoints still finish even after a deferral; and the
-radius-trend policy independently accepts a nonexpansive continuation
-and rejects an uneconomical same-source-radius merge. Actual numerical
-`GeneralHybridEvolver` post-reset and continuous-subdivision scenarios
-remain covered by the earlier integration tests.
-
-
-### Exhaustive compatible-sibling grouping without a recombination radius cap (2026-11-15)
-
-For applications that **initially subdivide by**
-`maximum_enclosure_radius`, then finish the source trajectory before
-processing discrete successors, the parent-first tree backend offers the
-opt-in `AllCompatibleSiblingRecombinationSchedulingPolicy`.
-
-This policy takes every **unprocessed, direct discrete child of one
-completed parent** and partitions those children by the existing strict
-discrete compatibility predicate. It does not require adjacency in the
-genealogy, cap the number of sources, or impose a birth-time window.
-Each compatibility class with at least two members is passed **once**
-to the numerical `ReferenceEnclosureRecombiner`; each singleton is
-dispatched unchanged. Different transition events or kinds, destination
-locations, phase, event histories, state/auxiliary spaces and auxiliary
-mappings are never mixed.
-
-To allow the numerical evolver to split the covering result again, **do
-not specify an `EnclosureRecombinationContext` radius limit**. The
-usual `evolver.configuration().set_maximum_enclosure_radius(12.0)`
-and `set_enable_subdivisions(true)` still control splitting at
-the beginning of each subsequent continuous evolution step. Merging
-may therefore produce a larger enclosure; it is not guaranteed to
-improve performance, and re-splitting may erase the reduction.
-
-For the parent-first hybrid case, including SPRE22:
-
-```cpp
-evolver.configuration().set_maximum_enclosure_radius(12.0);
-evolver.configuration().set_enable_subdivisions(true);
-evolver.set_evolution_backend_factory(TreeHybridEvolutionBackendFactory(
-    AllCompatibleSiblingRecombinationSchedulingPolicy{},
-    OnParentCompletionRecombinationTriggerPolicy{}));
-```
-
-Parent completion is **not a general location-wide barrier**: this
-configuration handles all compatible direct children of each completed
-parent trajectory and only then dispatches those children. It does not
-merge checkpoint descendants that are not siblings or wait for every
-trajectory in a location across unrelated parents. It operates only with
-`Semantics::UPPER` when recombination is enabled.
-
-The regression suite checks (1) a three-child group and a two-child
-group interleaved with an incompatible singleton, including exact
-source provenance and unchanged singleton execution, and (2) a
-three-to-one recombination followed by splitting its replacement into
-two ordinary continuation pieces. The numeric covering algorithm
-and global flat default are unchanged.
-
-### Compact structural-event logging (2026-11-15)
-
-Structural changes to evolved sets use `LOGGING_PRINTLN`, just like the
-ordinary `#r=... #i=... #f=...` progress summary:
-
-- `SPLIT`: location, time interval, number of nonempty successor pieces,
-  parent bounding-box radius, configured maximum radius and parameter count.
-- `RECONDITION`: location, time interval, parameter count and enclosure
-  radius before/after, state-function error bound before/after and
-  time-function error before/after.
-- `RECOMBINE parent-first` and `RECOMBINE frontier`: location, source
-  time interval, number of source checkpoints and replacement outputs,
-  maximum input radius and maximum output radius. These messages are
-  emitted only for accepted, provenance-complete reductions.
-
-The recombination scheduling functions create a logging scope so accepted
-merge diagnostics have the same effective relative depth as the per-step
-summary during normal evolver calls. Rejected numerical proposals and
-quality-gate rejections use `LOGGING_PRINTLN_AT(4, ...)` relative to
-their scheduling scope; they are more verbose than accepted merges.
-
-The 29 complete enclosure and function-patch dumps in
-`hybrid_evolver.cpp` use `LOGGING_PRINTLN_AT(1, ...)`, one relative
-level below their respective scopes. At verbosity 0, these scoped
-diagnostics are suppressed. Printing full domains and `ScaledFunctionPatch`
-objects is never required for the normal progress and event messages.
-Numerical radius statistics for recombination are calculated lazily,
-only when the logging level enables their messages.
-
-### Concurrent checkpoint admission and dynamic parent completion barriers (2026-11-15)
-
-The tree backend uses **one shared scheduling and publication loop**
-built on `DynamicWorkload`, regardless of the worker count. With
-`ThreadManager::instance().concurrency() == 0`, the workload consumes
-one item at a time using its sequential queue. Positive concurrency permits
-multiple simultaneous consumers, but neither the state machine nor the
-parent-first/frontier policy interpretation changes. The older dedicated
-serial loops `process_trajectory` and `run_frontier` were removed.
-The zero-concurrency regression tests still check deterministic execution.
-
-The unified scheduler owns **three distinct collections**:
-- `ready`: FIFO of admissible checkpoint IDs; each entry has a
-  corresponding `DynamicWorkload` token, whose worker claims it under
-  the scheduling mutex.
-- `waiting`: groups keyed by parent trajectory ID, each containing the
-  ordered IDs of discrete successor trajectories **not yet admissible**,
-  including replacements created by early or final sibling recombination.
-  These are not workload tokens and cannot be claimed by a worker.
-- `active`: groups keyed by the same parent IDs, with an
-  `outstanding` count of admitted and executing checkpoints, plus
-  whole-source provenance state and the number of committed steps.
-
-The genealogical `history` is append-only provenance, not a scheduling
-queue. A worker snapshots its checkpoint and global counters under the
-mutex, performs numerical evolution **outside the lock**, then commits
-its result, successors, statistics, and scheduling decisions under the
-same mutex. `waiting` is authoritative for admission; policies retain
-their existing read-only genealogy queries to select compatible siblings.
-
-**Parent-first admission**: a per-parent `outstanding` count covers the
-parent's ready and executing checkpoints, but not discrete children held
-pending recombination. A continuation or subdivision increments the count
-while being published; publication of the finished checkpoint decrements
-it. The worker publishing the last result (count becomes zero) marks the
-parent complete, invokes the parent-completion trigger, recombines any
-compatible held children, then **drains that parent's `waiting`
-group**, transferring only nonretired children to `ready` and registering
-new `active` and empty `waiting` groups for them. Closed groups are
-removed from the scheduler's maps; the provenance tree still contains
-both retired source nodes and accepted replacement nodes. There is no
-fixed thread barrier or location-wide completion test.
-The parent/child relationship determines the dynamic barrier; other
-independent parents may proceed simultaneously.
-
-**Frontier admission**: checkpoints of distinct trajectories, including
-split branches and reset successors, are immediately eligible; the global
-trigger, window grouping, bounded time-lag dispatch, radius-trend
-acceptance and inherited merge-time barrier retain their semantics.
-Grouping inspects only ready checkpoint identities, never work already
-dispatched to a numerical worker. Recombination replacements add ready
-workload tokens; tokens belonging to retired checkpoints safely become
-no-ops if they have not yet been claimed.
-
-All genealogy and scheduler mutations are serialized during publication.
-The numerical `advance` operation is not run under the scheduler lock.
-Completion detection includes work currently executing, preventing the
-last publisher from releasing a parent's children prematurely. A
-numerical exception leaves the backend incomplete, so
-`release_orbit()` remains unavailable. Under concurrency the order of
-step completion, and therefore the sequence of window/trigger evaluations,
-can vary: the scheduler promises dependency safety and accepted numerical
-coverage, not bitwise determinism of recombination choices. In
-particular, no worker may retire a checkpoint that has already been
-claimed for execution.
-
-The added concurrent regressions force two independent pieces to execute
-simultaneously. They check both parent-first's last-publisher barrier
-and accepted post-barrier recombination, and frontier's concurrent split
-dispatch with complete final provenance. The global flat backend remains unchanged; tree evolution now follows
-the same implementation with zero, one or several workers.
-
-A focused regression exercises `AfterEachStepRecombinationTriggerPolicy`
-with two successive compatible successor groups: each is reduced early,
-but both replacements remain blocked until the last parent continuation
-has committed. The ordinary `NoRecombinationSchedulingPolicy`, window,
-periodic, and frontier tests still execute via this one scheduler.
-The group key is **the parent trajectory**, not the location. Extending
-the policy to a location/generation barrier would require a different
-grouping key and explicit closure semantics for reentrant transitions;
-the two-queue architecture does not silently equate those concepts.
-
-### Single-location admission batches
-
-`HybridCheckpointAdmissionPolicy` separates admission from genealogy, dispatch,
-candidate selection and numerical recombination. The existing global frontier
-uses `ImmediateCheckpointAdmissionPolicy`. The opt-in
-`LocationCheckpointAdmissionPolicy` runs exactly one location at a time:
-
-1. Continuous continuations, reconditioning and subdivision successors remain
-   ready in the active location, regardless of trajectory or immediate parent.
-2. Every discrete successor enters the held checkpoint queue, including a
-   fully resolved transition appended to the same trajectory and a self-loop.
-3. A batch closes only when its live ready queue is empty **and** its numerical
-   in-flight count is zero. The last publisher has already committed every
-   successor before this check. Genealogical node completion is not the barrier.
-4. `OnSynchronizationCompletionRecombinationTriggerPolicy` evaluates the entire
-   held queue. `AllCompatibleCheckpointRecombinationPolicy` forms compatibility
-   classes across parents and ancestors, without an adjacency, cardinality or
-   birth-time window restriction. Different destination locations, event histories,
-   processing phases, spaces or auxiliary mappings are never mixed.
-5. After validated replacements are committed, admission selects the first
-   remaining waiting location in publication order and admits all its checkpoints.
-   Rerouted or rejected sources remain waiting until their location is admitted.
-
-Unlike the existing frontier-window strategy, the all-compatible checkpoint
-policy explicitly permits disjoint time ranges: the numerical recombiner covers
-state and both clocks jointly. `requires_time_overlap()` defaults to true for
-existing/custom frontier policies, preserving the earlier backend filter, and
-the new all-compatible policy opts out. It still retains the structural,
-provenance, upper-semantics and radius checks. The no-progress barrier remains
-active for ready-queue merging, where a replacement could otherwise immediately
-resplit and merge again. Held replacements cannot execute or resplit before
-admission, so they may absorb later compatible arrivals without advancing time.
-Physical time is never shifted simply to make checkpoints compatible.
-
-The admission policy chooses whether triggers inspect ready or held checkpoints.
-Early evaluation, if explicitly requested, does not release held replacements.
-The scheduler admits the next batch only at the completion boundary. Self-loops
-and later returns to the same location therefore open later batches, rather
-than extending a completed batch indefinitely. Location ordering is FIFO by
-publication, and may vary with parallel completion order. This is not a barrier
-over every future visit to a location.
-
-```cpp
-evolver.set_evolution_backend_factory(TreeHybridEvolutionBackendFactory(
-    LocationCheckpointAdmissionPolicy{}));
-auto orbit = evolver.orbit(initial, termination, Semantics::UPPER);
-```
-
-This overload defaults to all-compatible pending grouping, synchronization-
-completion evaluation, the reference recombiner, unrestricted recombination
-radius, immediate dispatch and ordinary acceptance. Each remains injectable.
-The regular evolver radius still controls later numerical subdivision. Passing
-`NoFrontierRecombinationPolicy{}` after the admission policy tests or uses the
-same location-batch execution without changing the numerical collection.
-
-One `DynamicWorkload` remains active across all batches. Held checkpoints have
-no workload token until admission; replacements created by a held-queue merge
-also remain token-free. The scheduler tracks claimed numerical work explicitly,
-so an empty queue while other workers execute cannot prematurely close a batch.
-Existing parent-first and immediate-frontier constructors retain their behavior.

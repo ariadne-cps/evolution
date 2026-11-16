@@ -19,9 +19,11 @@ Hybrid evolution separates numerical step results from execution and Orbit
 accumulation. The default `FlatHybridEvolutionBackendFactory` retains the current
 workload scheduling; `HybridEvolverBase::set_evolution_backend_factory()` selects
 another factory without changing the `orbit()` overloads or return type.
-`TreeHybridEvolutionBackendFactory` selects serial parent-first processing with
-trajectory histories and genealogy backed by `DerivationTree`. Each call creates
-independent run state. See the [backend and trajectory-tree
+`TreeHybridEvolutionBackendFactory` records trajectory histories and genealogy
+backed by `DerivationTree`. Its single checkpoint scheduler supports parent,
+immediate and location admission with independent recombination policies.
+Both backends support sequential and concurrent execution through ThreadManager.
+Each call creates independent run state. See the [backend and trajectory-tree
 design](doc/evolution_tree_design.md) for the current API and deferred operations.
 
 ## Dependencies
@@ -81,7 +83,7 @@ discrete successors, select phased admission:
 
 ```cpp
 evolver.set_evolution_backend_factory(TreeHybridEvolutionBackendFactory(
-    LocationCheckpointAdmissionPolicy{}));
+    LocationCheckpointAdmissionPolicy{}, AllCompatibleRecombinationPolicy{}));
 auto orbit = evolver.orbit(initial, termination, Semantics::UPPER);
 ```
 
@@ -91,9 +93,15 @@ empty. Compatible waiting sets are then recombined across trajectory parents;
 the next waiting location is admitted as one batch. Different destinations or
 event histories remain separate, and self-loops enter a later batch. The policy
 does not synchronise physical time or modify the genealogy to determine admission.
-Pass `NoFrontierRecombinationPolicy{}` as the second factory argument to retain
-this scheduling without numerical recombination. Existing default backends and
-their constructors are unchanged.
+Omit the second argument (or pass `NoRecombinationPolicy{}`) to retain this
+admission without numerical recombination. All Tree configurations use the same
+constructor: admission, grouping, trigger, recombiner, context, dispatch and
+acceptance. Defaults select parent admission without recombination. Grouping-first
+constructor overloads have been replaced by explicit admission; sibling restrictions
+are expressed with `HybridRecombinationScope::SIBLINGS` in the common grouping policies.
+The default trigger evaluates before admission, so location admission merges at
+its barrier, parent admission before releasing eligible descendants, and immediate
+admission after each publication. See the design document for migration examples.
 
 ## Recombination benchmark
 

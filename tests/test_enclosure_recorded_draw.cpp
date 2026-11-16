@@ -23,6 +23,7 @@
 #include <vector>
 
 #include "../src/enclosure_recorded_draw.hpp"
+#include "logging/test_runner.hpp"
 #include "ariadne-testing.hpp"
 
 using namespace Ariadne;
@@ -68,5 +69,5 @@ class TestEnclosureRecordedDraw : public Ariadne::Testing::ContextFixture {
 int main(int argc, char** argv) {
     ARIADNE_TESTING_SUITE("test_enclosure_recorded_draw");
     ARIADNE_TESTING_ADD_TEST(TestEnclosureRecordedDraw, test_batch_order_and_bounded_replay);
-    return ARIADNE_TESTING_RUN_TESTS_WITH_ARGS(argc, argv);
+    return Ariadne::Testing::run_logging_suite(ariadne_test_suite, argc, argv);
 }

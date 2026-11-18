@@ -187,6 +187,51 @@ class TestEnclosure : public Ariadne::Testing::ContextFixture {
         ARIADNE_TESTING_PROVE(is_indeterminate(encl.satisfies(-sqr(x0))));
     }
 
+    // The reference behavior contracts three times, even if a pass does not
+    // shrink the parameter domain. A fixed-point early exit must give exactly
+    // the same reduced domain and emptiness decision for feasible inputs.
+    Void test_is_empty_fixed_domain_matches_three_reductions() {
+        const ExactBoxType dom({{-1.0_x, 1.0_x}, {-1.0_x, 1.0_x}});
+        EnclosureConfiguration configuration(TaylorFunctionFactory(ThresholdSweeper<FloatDP>(dp, 1e-8)));
+        const auto x = EffectiveScalarMultivariateFunction::coordinate(2u, 0u);
+        const auto y = EffectiveScalarMultivariateFunction::coordinate(2u, 1u);
+
+        const auto verify = [&](const Enclosure& source) {
+            auto reference = source;
+            for (SizeType pass = 0u; pass != 3u; ++pass)
+                reference.reduce();
+
+            auto actual = source;
+            ARIADNE_TESTING_PROVE(!definitely(actual.is_empty()));
+            ARIADNE_TESTING_PROVE(same(actual.reduced_domain(), reference.reduced_domain()));
+            // Calling is_empty again on a previously contracted enclosure
+            // must neither widen nor unexpectedly shrink its reduced domain.
+            ARIADNE_TESTING_PROVE(!definitely(actual.is_empty()));
+            ARIADNE_TESTING_PROVE(same(actual.reduced_domain(), reference.reduced_domain()));
+        };
+
+        Enclosure redundant(dom, configuration);
+        redundant.new_positive_state_constraint(x + Real(2));
+        verify(redundant);
+
+        Enclosure coupled(dom, configuration);
+        coupled.new_zero_state_constraint(x + y);
+        coupled.new_positive_state_constraint(x - Real(1 / 2_q));
+        verify(coupled);
+
+        // The benchmark passes already reduced sources into recombination.
+        auto precontracted = coupled;
+        precontracted.reduce();
+        verify(precontracted);
+
+        // Infeasibility must remain definite, not an inconclusive test.
+        Enclosure impossible(dom, configuration);
+        impossible.new_zero_parameter_constraint(
+            EffectiveScalarMultivariateFunction::constant(2u, Real(1)));
+        ARIADNE_TESTING_PROVE(definitely(impossible.is_empty()));
+        ARIADNE_TESTING_PROVE(definitely(impossible.reduced_domain().is_empty()));
+    }
+
     Void test_split() {
         ExactBoxType dom1({
             {0.0_x, 2.0_x},
@@ -314,6 +359,7 @@ int main(int argc, char* argv[]) {
     ARIADNE_TESTING_ADD_TEST(TestEnclosure, test_kuhn_reconditioning_encloses_original);
     ARIADNE_TESTING_ADD_TEST(TestEnclosure, test_auxiliary_map);
     ARIADNE_TESTING_ADD_TEST(TestEnclosure, test_constraints);
+    ARIADNE_TESTING_ADD_TEST(TestEnclosure, test_is_empty_fixed_domain_matches_three_reductions);
     ARIADNE_TESTING_ADD_TEST(TestEnclosure, test_split);
     ARIADNE_TESTING_ADD_TEST(TestEnclosure, test_labelled_construction);
     ARIADNE_TESTING_ADD_TEST(TestEnclosure, test_labelled_product);

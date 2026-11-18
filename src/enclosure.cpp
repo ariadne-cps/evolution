@@ -708,10 +708,17 @@ ValidatedLowerKleenean Enclosure::is_empty() const {
     }
     // Constraint models can be appended by constructors and reconditioning.
     // Contract every constrained enclosure rather than relying on a stale flag.
+    // Repeating reduction can tighten coupled constraints, but once a pass
+    // leaves the exact parameter box unchanged, further identical passes
+    // cannot contract it. Avoid rebuilding the solver for those passes.
     if (this->number_of_parameters() > 0u) {
-        this->reduce();
-        this->reduce();
-        this->reduce();
+        for (SizeType pass = 0u; pass != 3u; ++pass) {
+            const ExactBoxType previous_domain = this->_reduced_domain;
+            this->reduce();
+            if (this->_reduced_domain.is_empty() ||
+                same(previous_domain, this->_reduced_domain))
+                break;
+        }
     }
     // Contraction may make the parameter domain empty. Avoid evaluating models
     // on that empty box before returning the established infeasibility.

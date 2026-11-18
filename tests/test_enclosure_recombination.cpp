@@ -165,6 +165,40 @@ class TestEnclosureRecombination : public Testing::ContextFixture {
                               profile.output_reduce_ns == 0u);
     }
 
+    void test_optional_per_source_profile_preserves_results() {
+        Enclosure first(domain, EffectiveVectorMultivariateFunction{s, sqr(s)}, config);
+        Enclosure second(domain, EffectiveVectorMultivariateFunction{s, sqr(s) + Real(1 / 4_q)}, config);
+        // Exercise graph propagation rather than just the unconstrained
+        // image-bound shortcut; both inputs have a genuine source predicate.
+        first.new_positive_state_constraint(s + Real(2));
+        second.new_positive_state_constraint(s + Real(2));
+        auto empty = first;
+        empty.new_zero_parameter_constraint(EffectiveScalarMultivariateFunction::constant(1u, Real(1)));
+        ReferenceEnclosureRecombiner reference;
+        const auto original = reference.recombine({first, empty, second});
+        EnclosureRecombinationProfile aggregated;
+        std::vector<EnclosureRecombinationSourceProfile> individual(5u);
+        const auto profiled = reference.recombine({first, empty, second}, {}, &aggregated, &individual);
+        ARIADNE_TESTING_EXPECT_EQUAL(profiled.outputs.size(), original.outputs.size());
+        ARIADNE_TESTING_EXPECT_EQUAL(profiled.discarded_sources, original.discarded_sources);
+        ARIADNE_TESTING_EXPECT_EQUAL(profiled.outputs.front().source_indices, original.outputs.front().source_indices);
+        ARIADNE_TESTING_EXPECT_EQUAL(description(profiled.outputs.front().enclosure),
+                                     description(original.outputs.front().enclosure));
+        ARIADNE_TESTING_EXPECT_EQUAL(individual.size(), 3u);
+        for (SizeType i = 0u; i != individual.size(); ++i)
+            ARIADNE_TESTING_EXPECT_EQUAL(individual[i].source_index, i);
+        ARIADNE_TESTING_PROVE(individual[1].discarded);
+        ARIADNE_TESTING_PROVE(!individual[0].discarded && !individual[2].discarded);
+        ARIADNE_TESTING_PROVE(individual[0].input_parameters > 0u);
+        ARIADNE_TESTING_PROVE(individual[0].graph_dimension > 0u);
+        ARIADNE_TESTING_PROVE(individual[0].graph_constraints > 0u);
+        ARIADNE_TESTING_PROVE(individual[0].graph_setup_ns > 0u);
+        ARIADNE_TESTING_PROVE(aggregated.graph_setup_ns > 0u);
+        const auto none = reference.recombine({}, {}, nullptr, &individual);
+        ARIADNE_TESTING_EXPECT_EQUAL(none.outputs.size(), 0u);
+        ARIADNE_TESTING_EXPECT_EQUAL(individual.size(), 0u);
+    }
+
     void test_radius_request_is_reported_without_losing_coverage() {
         Enclosure first(domain, EffectiveVectorMultivariateFunction{s, sqr(s)}, config);
         Enclosure second(domain, EffectiveVectorMultivariateFunction{s, sqr(s) + Real(1 / 4_q)}, config);
@@ -617,6 +651,7 @@ int main(int argc, char* argv[]) {
     ARIADNE_TESTING_ADD_TEST(TestEnclosureRecombination, test_handle_dispatch_clone_lifetime_and_context);
     ARIADNE_TESTING_ADD_TEST(TestEnclosureRecombination, test_reference_batch_provenance_and_empty_inputs);
     ARIADNE_TESTING_ADD_TEST(TestEnclosureRecombination, test_optional_profile_preserves_recombination_results);
+    ARIADNE_TESTING_ADD_TEST(TestEnclosureRecombination, test_optional_per_source_profile_preserves_results);
     ARIADNE_TESTING_ADD_TEST(TestEnclosureRecombination, test_radius_request_is_reported_without_losing_coverage);
     ARIADNE_TESTING_ADD_TEST(TestEnclosureRecombination, test_nonlinear_reference_and_full_source_coverage);
     ARIADNE_TESTING_ADD_TEST(TestEnclosureRecombination, test_disjoint_constraints_are_united_and_domains_contracted);

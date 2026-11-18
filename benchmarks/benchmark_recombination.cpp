@@ -65,6 +65,8 @@ struct Options {
     bool sweep = false;
     bool profile_recombine = false;
     bool scaling_recombine = false;
+    bool profile_sources = false;
+    std::string source_csv = "recombination-source-profile.csv";
     std::vector<unsigned> scaling_counts = {2u, 4u, 8u, 16u, 32u, 64u, 128u, 256u, 512u, 1024u};
     std::vector<double> steps = {1.0 / 16.0, 1.0 / 64.0, 1.0 / 256.0};
     std::vector<unsigned> groups = {2u, 4u, 8u};
@@ -197,6 +199,22 @@ List<ArgumentParser> argument_parsers(Options& options) {
                                                    return [&options, counts = std::move(counts)] {
                                                        options.scaling_counts = counts;
                                                    };
+                                               }));
+    parsers.append(make_valued_argument_parser("", "profile-sources",
+                                               "Record per-source recombination timings and propagation counters: 1 enables (default: 0)",
+                                               [&options](const String& value) -> VoidFunction {
+                                                   const auto enabled = Bench::parse_unsigned<unsigned>(value);
+                                                   if (enabled > 1u)
+                                                       throw std::invalid_argument("profile-sources must be 0 or 1");
+                                                   return [&options, enabled] { options.profile_sources = enabled == 1u; };
+                                               }));
+    parsers.append(make_valued_argument_parser("", "source-csv",
+                                               "Per-source diagnostic CSV filename (default: recombination-source-profile.csv)",
+                                               [&options](const String& value) -> VoidFunction {
+                                                   const std::string filename(value);
+                                                   if (filename.empty())
+                                                       throw std::invalid_argument("source-csv cannot be empty");
+                                                   return [&options, filename] { options.source_csv = filename; };
                                                }));
     parsers.append(make_valued_argument_parser("", "profile-recombine",
                                                "Time reference recombination subphases: 1 enables (default: 0)",
@@ -959,6 +977,29 @@ int run_recombination_scaling(const Scenario (&scenarios)[2], const Options& opt
            "recombine_graph_setup_ns,recombine_graph_reduce_ns,"
            "recombine_output_assembly_ns,recombine_output_reduce_ns,error\n";
 
+    // Separate source-level diagnostics prevent per-source rows from changing
+    // the existing aggregate scaling CSV format.
+    std::ofstream source_csv;
+    if (options.profile_sources) {
+        const std::filesystem::path source_path(options.source_csv);
+        if (source_path == path)
+            throw std::invalid_argument("--source-csv must differ from --csv");
+        if (source_path.has_parent_path())
+            std::filesystem::create_directories(source_path.parent_path());
+        source_csv.open(source_path, std::ios::out | std::ios::trunc);
+        if (!source_csv)
+            throw std::runtime_error("cannot open source profiling CSV: " + options.source_csv);
+        source_csv << std::setprecision(17)
+                   << "scenario,inputs,source_index,selected_pool_index,discarded,input_parameters,input_constraints,"
+                      "graph_dimension,graph_constraints,graph_active_components,samples,"
+                      "filter_mean_ns,normalise_mean_ns,image_setup_mean_ns,image_bounds_mean_ns,"
+                      "graph_setup_mean_ns,graph_reduce_mean_ns,"
+                      "hull_rounds_mean,hull_contractor_calls_mean,hull_effective_mean,"
+                      "shaving_rounds_mean,shaving_coordinate_attempts_mean,"
+                      "shaving_function_evaluations_mean,shaving_effective_mean,"
+                      "monotone_rounds_mean,monotone_effective_mean\n";
+    }
+
     Bench::Report report("Reference enclosure recombination cardinality scaling (nanoseconds)",
                          cli.summary_fields());
     report.set_parameter_header("Only the recombine call is timed; dataset generation, "
@@ -997,12 +1038,15 @@ int run_recombination_scaling(const Scenario (&scenarios)[2], const Options& opt
         for (const unsigned count: counts) {
             List<Enclosure> inputs;
             inputs.reserve(count);
+            std::vector<SizeType> selected_indices;
+            selected_indices.reserve(count);
             for (SizeType i = 0u; i != count; ++i) {
                 // Window subsets span the same time interval. Adjacent prefixes
                 // keep the reference source fixed while increasing time spread.
                 const SizeType index = options.time_window
                                            ? i * (pool.size() - 1u) / (count - 1u) : i;
                 inputs.append(pool[index]);
+                selected_indices.push_back(index);
             }
             Bench::Runner runner(cli);
             Bench::Samples times;
@@ -1011,13 +1055,19 @@ int run_recombination_scaling(const Scenario (&scenarios)[2], const Options& opt
             measured.reserve(options.samples);
             EnclosureRecombinationResult last;
             EnclosureRecombinationProfile internal_profile;
+            std::vector<EnclosureRecombinationSourceProfile> source_profiles;
+            // Six phase times and nine contractor counters per source, averaged
+            // over measured rounds only. No output is written inside timing.
+            constexpr std::size_t source_measure_count = 15u;
+            std::vector<std::array<double, source_measure_count>> source_sums(count);
             double elapsed = 0.0;
             unsigned round = 0u;
             const std::string label = std::string(scenario.name) + "-recombine-" + std::to_string(count);
             const auto completed = runner.run(label.c_str(), options.samples, [] {}, [&] {
                 const auto start = Bench::Clock::now();
                 last = recombiner.recombine(inputs, {},
-                                            options.profile_recombine ? &internal_profile : nullptr);
+                                            options.profile_recombine ? &internal_profile : nullptr,
+                                            options.profile_sources ? &source_profiles : nullptr);
                 elapsed = Bench::elapsed_ns(start, Bench::Clock::now());
             }, [&] {
                 if (last.outputs.size() != 1u || !last.discarded_sources.empty() ||
@@ -1033,6 +1083,29 @@ int run_recombination_scaling(const Scenario (&scenarios)[2], const Options& opt
                         const auto values = profile_values(internal_profile);
                         for (std::size_t i = 0u; i != values.size(); ++i)
                             phases[i].add(values[i]);
+                    }
+                    if (options.profile_sources) {
+                        if (source_profiles.size() != count)
+                            throw std::runtime_error("incorrect per-source profile count");
+                        for (SizeType i = 0u; i != count; ++i) {
+                            const auto& p = source_profiles[i];
+                            if (p.source_index != i)
+                                throw std::runtime_error("incorrect per-source profile index");
+                            const std::array<double, source_measure_count> values = {
+                                static_cast<double>(p.filter_ns), static_cast<double>(p.normalise_ns),
+                                static_cast<double>(p.image_setup_ns), static_cast<double>(p.image_bounds_ns),
+                                static_cast<double>(p.graph_setup_ns), static_cast<double>(p.graph_reduce_ns),
+                                static_cast<double>(p.hull_rounds), static_cast<double>(p.hull_contractor_calls),
+                                static_cast<double>(p.hull_effective), static_cast<double>(p.shaving_rounds),
+                                static_cast<double>(p.shaving_coordinate_attempts),
+                                static_cast<double>(p.shaving_function_evaluations),
+                                static_cast<double>(p.shaving_effective),
+                                static_cast<double>(p.monotone_rounds),
+                                static_cast<double>(p.monotone_effective)
+                            };
+                            for (std::size_t j = 0u; j != values.size(); ++j)
+                                source_sums[i][j] += values[j];
+                        }
                     }
                 }
                 ++round;
@@ -1081,6 +1154,22 @@ int run_recombination_scaling(const Scenario (&scenarios)[2], const Options& opt
             csv.flush();
             if (!csv)
                 throw std::runtime_error("cannot write CSV file: " + filename);
+            if (options.profile_sources) {
+                for (SizeType i = 0u; i != count; ++i) {
+                    const auto& p = source_profiles[i];
+                    source_csv << scenario.name << ',' << count << ',' << p.source_index << ','
+                               << selected_indices[i] << ',' << (p.discarded ? 1 : 0) << ','
+                               << p.input_parameters << ',' << p.input_constraints << ','
+                               << p.graph_dimension << ',' << p.graph_constraints << ','
+                               << p.graph_active_components << ',' << options.samples;
+                    for (double sum: source_sums[i])
+                        source_csv << ',' << sum / options.samples;
+                    source_csv << '\n';
+                }
+                source_csv.flush();
+                if (!source_csv)
+                    throw std::runtime_error("cannot write source profiling CSV: " + options.source_csv);
+            }
             std::cout << "  inputs=" << count << " recombine-mean-ms=" << summary.mean / 1.0e6
                       << " median-ms=" << median / 1.0e6
                       << " parameters=" << output.number_of_parameters()
@@ -1089,6 +1178,8 @@ int run_recombination_scaling(const Scenario (&scenarios)[2], const Options& opt
     }
     report.print();
     std::cout << "Scaling CSV: " << path.string() << '\n';
+    if (options.profile_sources)
+        std::cout << "Per-source profiling CSV: " << options.source_csv << '\n';
     return 0;
 }
 
@@ -1210,6 +1301,8 @@ int main(int argc, const char* argv[]) {
             {"urgent-crossing",     EventKind::URGENT, 3.0, 4.0},
             {"permissive-jump", EventKind::PERMISSIVE, 1.0, 2.0}
         };
+        if (options.profile_sources && !options.scaling_recombine)
+            throw std::invalid_argument("--profile-sources requires --scaling-recombine 1");
         if (options.scaling_recombine)
             return run_recombination_scaling(scenarios, options, cli);
         if (options.sweep)

@@ -30,6 +30,7 @@
 #define ARIADNE_ENCLOSURE_RECOMBINER_HPP
 
 #include <cstdint>
+#include <vector>
 
 #include "evolution/enclosure_recombiner_interface.hpp"
 #include "utility/handle.hpp"
@@ -66,6 +67,37 @@ struct EnclosureRecombinationProfile {
     std::uint64_t output_reduce_ns = 0;   //!< Contract the final recombined enclosure.
 };
 
+/** @brief Optional diagnostics for one input of reference recombination.
+ *  @details Indexed by the original input list, including filtered sources.
+ *  Timings are in nanoseconds and require explicit opt-in; none of these
+ *  counters changes the validated contraction algorithm. Graph fields remain
+ *  zero if the graph was not constructed. The first source is the reference.
+ */
+struct EnclosureRecombinationSourceProfile {
+    SizeType source_index = 0u;               //!< Position in the original input list.
+    bool discarded = false;                   //!< Filtered before numerical recombination.
+    SizeType input_parameters = 0u;           //!< Original source parameter count.
+    SizeType input_constraints = 0u;          //!< Original source constraint count.
+    SizeType graph_dimension = 0u;            //!< Parameter and active-image graph variables.
+    SizeType graph_constraints = 0u;          //!< Prepared graph predicates, including image equalities.
+    SizeType graph_active_components = 0u;    //!< Image components assigned graph variables.
+    std::uint64_t filter_ns = 0u;
+    std::uint64_t normalise_ns = 0u;
+    std::uint64_t image_setup_ns = 0u;
+    std::uint64_t image_bounds_ns = 0u;
+    std::uint64_t graph_setup_ns = 0u;
+    std::uint64_t graph_reduce_ns = 0u;
+    SizeType hull_rounds = 0u;
+    SizeType hull_contractor_calls = 0u;
+    SizeType hull_effective = 0u;
+    SizeType shaving_rounds = 0u;
+    SizeType shaving_coordinate_attempts = 0u;
+    SizeType shaving_function_evaluations = 0u;
+    SizeType shaving_effective = 0u;
+    SizeType monotone_rounds = 0u;
+    SizeType monotone_effective = 0u;
+};
+
 /** @brief Recombine all surviving sources around the first source's nonlinear map.
  *  @details Contracts each source independently and encloses state/clock residuals
  *  in extra parameters. Reference predicates are relaxed over the source union.
@@ -93,6 +125,15 @@ class ReferenceEnclosureRecombiner : public EnclosureRecombinerInterface {
     EnclosureRecombinationResult recombine(const List<Enclosure>& enclosures,
                                            const EnclosureRecombinationContext& context,
                                            EnclosureRecombinationProfile* profile) const;
+    /** @brief Additionally collect optional per-source timings, graph shape and contractor counts.
+     *  @details Clears and repopulates source_profiles in original input order,
+     *  retaining entries for discarded inputs. Null disables the instrumentation.
+     *  Aggregated phase timings may be requested independently.
+     */
+    EnclosureRecombinationResult recombine(const List<Enclosure>& enclosures,
+                                           const EnclosureRecombinationContext& context,
+                                           EnclosureRecombinationProfile* profile,
+                                           std::vector<EnclosureRecombinationSourceProfile>* source_profiles) const;
     /** @brief Write the strategy name. */
     OutputStream& _write(OutputStream& os) const override;
 };

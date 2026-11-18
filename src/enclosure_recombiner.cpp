@@ -75,10 +75,12 @@ class ScopedRecombinationTimer {
 // Keeping each source's own constraints here avoids intersecting alternatives.
 UpperBoxType constrained_image_bounds(const Enclosure& source,
                                       const ValidatedVectorMultivariateFunctionPatch& image,
-                                      EnclosureRecombinationProfile* profile) {
+                                      EnclosureRecombinationProfile* profile,
+                                      EnclosureRecombinationSourceProfile* source_profile) {
     const auto parameter_domain = source.reduced_domain();
     UpperBoxType bounds = [&] {
         ScopedRecombinationTimer timer(profile ? &profile->image_bounds_ns : nullptr);
+        ScopedRecombinationTimer source_timer(source_profile ? &source_profile->image_bounds_ns : nullptr);
         UpperBoxType image_bounds = apply(image, parameter_domain);
         // A source predicate g in C also bounds any image f by C+range(f-g).
         // In particular, this retains equalities shared with the reference even
@@ -97,7 +99,7 @@ UpperBoxType constrained_image_bounds(const Enclosure& source,
     if (source.number_of_constraints() == 0u || parameter_domain.size() == 0u)
         return bounds;
 
-    const auto graph_setup_start = profile ? RecombinationClock::now() : RecombinationClock::time_point{};
+    const auto graph_setup_start = (profile || source_profile) ? RecombinationClock::now() : RecombinationClock::time_point{};
     // Singleton image bounds are already certified by the range calculation.
     // Adding a fixed graph variable cannot tighten that image,
     // but would enlarge every embedded model and the solver's shaving loops.
@@ -106,9 +108,13 @@ UpperBoxType constrained_image_bounds(const Enclosure& source,
         if (bounds[k].lower_bound().raw() != bounds[k].upper_bound().raw())
             active_components.append(k);
     }
+    if (source_profile)
+        source_profile->graph_active_components = active_components.size();
     if (active_components.empty()) {
         if (profile)
             profile->graph_setup_ns += phase_elapsed_ns(graph_setup_start);
+        if (source_profile)
+            source_profile->graph_setup_ns += phase_elapsed_ns(graph_setup_start);
         return bounds;
     }
     ExactBoxType image_domain(active_components.size());
@@ -116,6 +122,10 @@ UpperBoxType constrained_image_bounds(const Enclosure& source,
     for (SizeType k = 0; k != active_components.size(); ++k)
         image_domain[k] = exact_bounds[active_components[k]];
     const auto graph_domain = product(parameter_domain, image_domain);
+    if (source_profile) {
+        source_profile->graph_dimension = graph_domain.size();
+        source_profile->graph_constraints = source.number_of_constraints() + image.result_size();
+    }
     const auto& factory = source.configuration().function_factory();
     const auto parameter_count = parameter_domain.size();
     const auto constraint_count = source.number_of_constraints();
@@ -155,11 +165,25 @@ UpperBoxType constrained_image_bounds(const Enclosure& source,
     }
     if (profile)
         profile->graph_setup_ns += phase_elapsed_ns(graph_setup_start);
+    if (source_profile)
+        source_profile->graph_setup_ns += phase_elapsed_ns(graph_setup_start);
     Bool graph_is_empty;
+    ConstraintPropagationStatistics statistics;
     {
         ScopedRecombinationTimer timer(profile ? &profile->graph_reduce_ns : nullptr);
-        ConstraintPropagationStatistics statistics;
+        ScopedRecombinationTimer source_timer(source_profile ? &source_profile->graph_reduce_ns : nullptr);
         graph_is_empty = contractor.propagate(feasible_graph, prepared, false, statistics);
+    }
+    if (source_profile) {
+        source_profile->hull_rounds = statistics.hull_rounds;
+        source_profile->hull_contractor_calls = statistics.hull_contractor_calls;
+        source_profile->hull_effective = statistics.hull_effective;
+        source_profile->shaving_rounds = statistics.shaving_rounds;
+        source_profile->shaving_coordinate_attempts = statistics.shaving_coordinate_attempts;
+        source_profile->shaving_function_evaluations = statistics.shaving_function_evaluations;
+        source_profile->shaving_effective = statistics.shaving_effective;
+        source_profile->monotone_rounds = statistics.monotone_rounds;
+        source_profile->monotone_effective = statistics.monotone_effective;
     }
     if (graph_is_empty || definitely(feasible_graph.is_empty())) {
         bounds[0] = UpperIntervalType(1, -1);
@@ -202,8 +226,21 @@ EnclosureRecombinationResult ReferenceEnclosureRecombiner::recombine(const List<
 EnclosureRecombinationResult ReferenceEnclosureRecombiner::recombine(const List<Enclosure>& enclosures,
                                                                      const EnclosureRecombinationContext& context,
                                                                      EnclosureRecombinationProfile* profile) const {
+    return recombine(enclosures, context, profile, nullptr);
+}
+
+EnclosureRecombinationResult ReferenceEnclosureRecombiner::recombine(
+    const List<Enclosure>& enclosures, const EnclosureRecombinationContext& context,
+    EnclosureRecombinationProfile* profile,
+    std::vector<EnclosureRecombinationSourceProfile>* source_profiles) const {
     if (profile)
         *profile = {};
+    if (source_profiles) {
+        source_profiles->clear();
+        source_profiles->resize(enclosures.size());
+        for (SizeType index = 0u; index != enclosures.size(); ++index)
+            (*source_profiles)[index].source_index = index;
+    }
     EnclosureRecombinationResult batch;
     if (enclosures.empty())
         return batch;
@@ -220,12 +257,20 @@ EnclosureRecombinationResult ReferenceEnclosureRecombiner::recombine(const List<
     {
         ScopedRecombinationTimer timer(profile ? &profile->filter_ns : nullptr);
         for (SizeType index = 0; index != enclosures.size(); ++index) {
+            auto* individual = source_profiles ? &(*source_profiles)[index] : nullptr;
+            ScopedRecombinationTimer source_timer(individual ? &individual->filter_ns : nullptr);
             auto source = enclosures[index];
+            if (individual) {
+                individual->input_parameters = source.number_of_parameters();
+                individual->input_constraints = source.number_of_constraints();
+            }
             ARIADNE_PRECONDITION_MSG(source.state_dimension() == state_dimension,
                                      "Recombination requires matching state dimensions.");
             // is_empty contracts the copy's parameter domain and only discards
             // sources whose infeasibility has actually been established.
             if (definitely(source.is_empty())) {
+                if (individual)
+                    individual->discarded = true;
                 batch.discarded_sources.append(index);
                 continue;
             }
@@ -262,8 +307,10 @@ EnclosureRecombinationResult ReferenceEnclosureRecombiner::recombine(const List<
     }
     const auto& factory = reference.configuration().function_factory();
     const ExactBoxType common_domain(parameter_count, ExactIntervalType(0, 1));
-    const auto normalise = [&](const Enclosure& source) {
+    const auto normalise = [&](const Enclosure& source,
+                               EnclosureRecombinationSourceProfile* individual) {
         ScopedRecombinationTimer timer(profile ? &profile->normalise_ns : nullptr);
+        ScopedRecombinationTimer source_timer(individual ? &individual->normalise_ns : nullptr);
         const auto reduced = source.reduced_domain();
         auto parameters = factory.create_zeros(reduced.size(), common_domain);
         for (SizeType k = 0; k != reduced.size(); ++k) {
@@ -298,7 +345,8 @@ EnclosureRecombinationResult ReferenceEnclosureRecombiner::recombine(const List<
         return transformed;
     };
 
-    Enclosure result = normalise(sources.front());
+    Enclosure result = normalise(sources.front(),
+                                source_profiles ? &(*source_profiles)[source_indices.front()] : nullptr);
     const auto reference_map = join(join(result.state_function(), result.time_function()), result.dwell_time_function());
     const auto component_count = reference_map.result_size();
     const auto constraint_count = result.number_of_constraints();
@@ -307,9 +355,11 @@ EnclosureRecombinationResult ReferenceEnclosureRecombiner::recombine(const List<
     for (SizeType index = 0; index != sources.size(); ++index) {
         // Retain only the reference and the current transformed source, rather
         // than a second full collection of normalised function models.
-        const auto source = index == 0u ? result : normalise(sources[index]);
+        auto* individual = source_profiles ? &(*source_profiles)[source_indices[index]] : nullptr;
+        const auto source = index == 0u ? result : normalise(sources[index], individual);
         const auto image = [&] {
             ScopedRecombinationTimer timer(profile ? &profile->image_setup_ns : nullptr);
+            ScopedRecombinationTimer source_timer(individual ? &individual->image_setup_ns : nullptr);
             const auto source_map = join(join(source.state_function(), source.time_function()), source.dwell_time_function());
             auto residual_image = factory.create_zeros(component_count + constraint_count, common_domain);
             for (SizeType k = 0; k != component_count; ++k)
@@ -318,7 +368,7 @@ EnclosureRecombinationResult ReferenceEnclosureRecombiner::recombine(const List<
                 residual_image.set(component_count + k, result.constraint(k).function());
             return residual_image;
         }();
-        const auto bounds = constrained_image_bounds(source, image, profile);
+        const auto bounds = constrained_image_bounds(source, image, profile, individual);
         if (definitely(bounds.is_empty()))
             continue;
         combined = first ? bounds : hull(combined, bounds);

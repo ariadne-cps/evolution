@@ -352,6 +352,33 @@ measures recombination latency, **not** the end-to-end benefit of merging.
 Profiling adds overhead: compare profiled and unprofiled runs separately.
 The original benchmark modes are unchanged, and the default CSV name for
 scaling is `recombination-scaling.csv`. This mode is not in CTest.
+### Per-source recombination diagnostics
+
+The cardinality benchmark can additionally collect diagnostics for **every
+original source index** (including filtered inputs), while leaving the ordinary
+reference algorithm and aggregate timing CSV unchanged:
+
+```bash
+./build-release/benchmarks/benchmark_recombination \
+  --scaling-recombine 1 --step 0.015625 \
+  --scaling-counts 16,20,24,28,32 --samples 5 --warmups 1 \
+  --profile-recombine 1 --profile-sources 1 \
+  --source-csv build-release/recombination-sources.csv \
+  --csv build-release/recombination-scaling.csv
+```
+
+The source CSV has one row per source **per cardinality** with the original
+input index and selected pool index, input parameter/constraint counts, graph
+dimension/constraint/active-image counts, and per-source means of filtering,
+normalisation, image construction/ranging, graph preparation and reduction.
+The prepared constraint solver's hull/shaving/monotonicity counters are averaged
+over measured rounds. These diagnostics are only collected when explicitly
+requested. The per-source timings omit shared result assembly and final
+contraction, so they must not be summed into an exact total. As with the
+aggregate profiler, profiling adds overhead and must not be mistaken for an
+unprofiled latency measurement. Use the source indices to identify difficult
+enclosures before changing contractor algorithms.
+
 ### Opt-in profiling inside reference recombination
 
 Use `--profile-recombine 1` to measure internal stages in addition to the

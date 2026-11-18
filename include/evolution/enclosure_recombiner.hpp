@@ -99,7 +99,8 @@ struct EnclosureRecombinationSourceProfile {
 };
 
 /** @brief Execution strategy for independent source image calculations.
- *  @details PARALLEL is opt-in; SEQUENTIAL remains the default reference.
+ *  @details PARALLEL is the default and uses workers when concurrency is positive;
+ *  SEQUENTIAL remains an explicit deterministic reference strategy.
  */
 enum class EnclosureRecombinationExecution { SEQUENTIAL, PARALLEL };
 
@@ -116,14 +117,14 @@ class ReferenceEnclosureRecombiner : public EnclosureRecombinerInterface {
     EnclosureRecombinationExecution _execution;
 
   public:
-    /** @brief Configure sequential (default) or opt-in parallel source processing.
+    /** @brief Configure parallel (default) or explicit sequential source processing.
      *  @details Parallel evaluation uses ThreadManager to independently filter
      *  input copies and propagate source graphs, then reconstructs survivors,
      *  provenance and hull bounds in original input order. It falls back to the
      *  sequential path when concurrency is zero.
      */
     explicit ReferenceEnclosureRecombiner(
-        EnclosureRecombinationExecution execution = EnclosureRecombinationExecution::SEQUENTIAL)
+        EnclosureRecombinationExecution execution = EnclosureRecombinationExecution::PARALLEL)
         : _execution(execution) {}
     /** @brief Create an independently owned reference recombiner. */
     ReferenceEnclosureRecombiner* clone() const override;

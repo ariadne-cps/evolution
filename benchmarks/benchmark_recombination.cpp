@@ -65,7 +65,7 @@ struct Options {
     bool sweep = false;
     bool profile_recombine = false;
     bool scaling_recombine = false;
-    bool parallel_recombine = false;
+    bool parallel_recombine = true;
     bool profile_sources = false;
     std::string source_csv = "recombination-source-profile.csv";
     std::vector<unsigned> scaling_counts = {2u, 4u, 8u, 16u, 32u, 64u, 128u, 256u, 512u, 1024u};
@@ -186,7 +186,7 @@ List<ArgumentParser> argument_parsers(Options& options) {
                                                    return [&options, enabled] { options.sweep = enabled == 1u; };
                                                }));
     parsers.append(make_valued_argument_parser("", "parallel-recombine",
-                                               "Enable opt-in source-parallel numerical recombination: 1 enables (default: 0)",
+                                               "Recombination execution strategy: 1 parallel (default), 0 sequential",
                                                [&options](const String& value) -> VoidFunction {
                                                    const auto enabled = Bench::parse_unsigned<unsigned>(value);
                                                    if (enabled > 1u)

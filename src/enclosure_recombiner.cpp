@@ -29,6 +29,7 @@
 #include "evolution/enclosure_recombiner.hpp"
 
 #include <algorithm>
+#include <atomic>
 #include <chrono>
 #include <cmath>
 #include <memory>
@@ -270,27 +271,38 @@ EnclosureRecombinationResult ReferenceEnclosureRecombiner::recombine(
                 const SizeType count = std::min(batch_size, enclosures.size() - offset);
                 std::vector<std::optional<Enclosure>> survivors(count);
                 {
+                    // One task per available worker, not one task per source.
+                    // Dynamic indices balance expensive contractor calls without
+                    // changing either ownership or output reconstruction order.
+                    const SizeType task_count = std::min<SizeType>(
+                        count, std::max<SizeType>(1u, ThreadManager::instance().concurrency()));
+                    std::atomic<SizeType> next_slot{0u};
                     TaskGroup<ThreadManager> tasks(ThreadManager::instance());
-                    for (SizeType slot = 0u; slot < count; ++slot)
-                        tasks.fork([&, slot] {
-                            const SizeType index = offset + slot;
-                            auto* individual = source_profiles ? &(*source_profiles)[index] : nullptr;
-                            ScopedRecombinationTimer source_timer(individual ? &individual->filter_ns : nullptr);
-                            auto source = enclosures[index];
-                            if (individual) {
-                                individual->input_parameters = source.number_of_parameters();
-                                individual->input_constraints = source.number_of_constraints();
+                    for (SizeType task = 0u; task < task_count; ++task)
+                        tasks.fork([&] {
+                            while (true) {
+                                const SizeType slot = next_slot.fetch_add(1u, std::memory_order_relaxed);
+                                if (slot >= count)
+                                    break;
+                                const SizeType index = offset + slot;
+                                auto* individual = source_profiles ? &(*source_profiles)[index] : nullptr;
+                                ScopedRecombinationTimer source_timer(individual ? &individual->filter_ns : nullptr);
+                                auto source = enclosures[index];
+                                if (individual) {
+                                    individual->input_parameters = source.number_of_parameters();
+                                    individual->input_constraints = source.number_of_constraints();
+                                }
+                                ARIADNE_PRECONDITION_MSG(source.state_dimension() == state_dimension,
+                                                         "Recombination requires matching state dimensions.");
+                                if (definitely(source.is_empty())) {
+                                    if (individual)
+                                        individual->discarded = true;
+                                    continue;
+                                }
+                                ARIADNE_PRECONDITION_MSG(source.reduced_domain().is_bounded(),
+                                                         "Recombination requires bounded parameter domains.");
+                                survivors[slot].emplace(std::move(source));
                             }
-                            ARIADNE_PRECONDITION_MSG(source.state_dimension() == state_dimension,
-                                                     "Recombination requires matching state dimensions.");
-                            if (definitely(source.is_empty())) {
-                                if (individual)
-                                    individual->discarded = true;
-                                return;
-                            }
-                            ARIADNE_PRECONDITION_MSG(source.reduced_domain().is_bounded(),
-                                                     "Recombination requires bounded parameter domains.");
-                            survivors[slot].emplace(std::move(source));
                         });
                     tasks.join();
                 }
@@ -303,7 +315,7 @@ EnclosureRecombinationResult ReferenceEnclosureRecombiner::recombine(
                         continue;
                     }
                     parameter_count = std::max(parameter_count, survivors[slot]->number_of_parameters());
-                    sources.append(*survivors[slot]);
+                    sources.push_back(std::move(*survivors[slot]));
                     source_indices.append(index);
                 }
             }
@@ -331,7 +343,7 @@ EnclosureRecombinationResult ReferenceEnclosureRecombiner::recombine(
                 ARIADNE_PRECONDITION_MSG(source.reduced_domain().is_bounded(),
                                          "Recombination requires bounded parameter domains.");
                 parameter_count = std::max(parameter_count, source.number_of_parameters());
-                sources.append(source);
+                sources.push_back(std::move(source));
                 source_indices.append(index);
             }
         }
@@ -447,11 +459,19 @@ EnclosureRecombinationResult ReferenceEnclosureRecombiner::recombine(
             if (profile)
                 local_phases.resize(count);
             {
+                const SizeType task_count = std::min<SizeType>(
+                    count, std::max<SizeType>(1u, ThreadManager::instance().concurrency()));
+                std::atomic<SizeType> next_slot{0u};
                 TaskGroup<ThreadManager> tasks(ThreadManager::instance());
-                for (SizeType slot = 0u; slot < count; ++slot)
-                    tasks.fork([&, slot] {
-                        bounds[slot].emplace(calculate_bounds(
-                            offset + slot, profile ? &local_phases[slot] : nullptr));
+                for (SizeType task = 0u; task < task_count; ++task)
+                    tasks.fork([&] {
+                        while (true) {
+                            const SizeType slot = next_slot.fetch_add(1u, std::memory_order_relaxed);
+                            if (slot >= count)
+                                break;
+                            bounds[slot].emplace(calculate_bounds(
+                                offset + slot, profile ? &local_phases[slot] : nullptr));
+                        }
                     });
                 tasks.join();
             }

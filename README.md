@@ -352,30 +352,34 @@ measures recombination latency, **not** the end-to-end benefit of merging.
 Profiling adds overhead: compare profiled and unprofiled runs separately.
 The original benchmark modes are unchanged, and the default CSV name for
 scaling is `recombination-scaling.csv`. This mode is not in CTest.
-### Opt-in parallel source recombination
+### Default parallel source recombination
 
-The reference recombiner now supports an opt-in
-`EnclosureRecombinationExecution::PARALLEL` strategy. Its normal constructor
-continues to use the original sequential strategy. The parallel path is
-experimental: both source emptiness filtering and independent source-image
-graph propagation are scheduled through the existing ThreadManager and
-TaskGroup, in batches of at most 64 sources. The filtering workers contract
-private copies of the inputs, and the calling thread reconstructs surviving
-sources, discarded indices and maximum parameter dimension in original input
-order. During image propagation the reference model is read-only; each task
-owns its normalised model, graph, contractor, partial bounds and profiling
-counters. The final hull is accumulated in original input order after joining
-tasks. Final output reduction remains sequential. With concurrency zero or
-fewer than four input sources, filtering falls back to the original serial path;
-image propagation falls back to serial with fewer than four surviving sources.
+`ReferenceEnclosureRecombiner{}` now defaults to
+`EnclosureRecombinationExecution::PARALLEL`; explicitly construct
+`ReferenceEnclosureRecombiner(EnclosureRecombinationExecution::SEQUENTIAL)`
+to retain the original serial strategy. The parallel path is still subject
+to regression and performance validation: both source emptiness filtering
+and independent source-image graph propagation use ThreadManager/TaskGroup,
+in batches of at most 64 sources. For each batch, at most one task per
+configured worker is enqueued, with dynamic assignment of source indices to
+balance irregular contractor costs and reduce scheduling overhead.
+The filtering workers contract private copies of the inputs; the caller
+moves the survivors into its ordered input list and reconstructs discarded
+indices and provenance in original input order. During image propagation the
+reference model is read-only; each task owns its normalised model, graph,
+contractor, partial bounds and profiling counters. The final hull is
+accumulated in original input order after joining tasks. Final output
+reduction remains sequential. At concurrency zero the full serial path
+is used automatically. With fewer than four inputs, filtering is serial;
+with fewer than four surviving sources, image propagation is serial.
 
-The scaling benchmark exposes this through `--parallel-recombine 1`.
+The scaling benchmark defaults to `--parallel-recombine 1`; use `--parallel-recombine 0` to compare the explicit serial strategy.
 For example, run separate processes with identical settings (including
 dataset-generation step and instrumentation):
 
 ```bash
 ./build-release/benchmarks/benchmark_recombination \
-  --scaling-recombine 1 --parallel-recombine 0 --concurrency 0 \
+  --scaling-recombine 1 --parallel-recombine 0 --concurrency 4 \
   --step 0.015625 --scaling-counts 8,16,32 --samples 5 --warmups 1 \
   --csv build-release/recombination-sequential.csv
 

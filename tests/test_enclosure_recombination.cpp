@@ -221,11 +221,11 @@ class TestEnclosureRecombination : public Testing::ContextFixture {
         empty.new_zero_parameter_constraint(EffectiveScalarMultivariateFunction::constant(1u, Real(1)));
         inputs[2] = empty;
 
-        const ReferenceEnclosureRecombiner serial;
+        const ReferenceEnclosureRecombiner serial(EnclosureRecombinationExecution::SEQUENTIAL);
         const ReferenceEnclosureRecombiner parallel(EnclosureRecombinationExecution::PARALLEL);
         const auto expected = serial.recombine(inputs);
         ARIADNE_TESTING_EXPECT_EQUAL(expected.outputs.size(), 1u);
-        for (const std::size_t concurrency: {0u, 1u, 2u, 4u}) {
+        for (const std::size_t concurrency: {0u, 1u, 2u, 4u, 8u}) {
             ThreadManager::instance().set_concurrency(concurrency);
             EnclosureRecombinationProfile profile;
             std::vector<EnclosureRecombinationSourceProfile> individual;
@@ -272,14 +272,21 @@ class TestEnclosureRecombination : public Testing::ContextFixture {
             inputs.append(survives ? valid : impossible);
         }
 
-        const ReferenceEnclosureRecombiner serial;
-        const ReferenceEnclosureRecombiner parallel(EnclosureRecombinationExecution::PARALLEL);
+        const ReferenceEnclosureRecombiner serial(EnclosureRecombinationExecution::SEQUENTIAL);
+        // The default constructor must use the parallel path, while serial
+        // reference mode remains explicitly available.
+        const ReferenceEnclosureRecombiner parallel;
+        std::ostringstream default_strategy, serial_strategy;
+        default_strategy << parallel;
+        serial_strategy << serial;
+        ARIADNE_TESTING_EXPECT_EQUAL(default_strategy.str(), String("ParallelReferenceEnclosureRecombiner()"));
+        ARIADNE_TESTING_EXPECT_EQUAL(serial_strategy.str(), String("ReferenceEnclosureRecombiner()"));
         const auto expected = serial.recombine(inputs);
         ARIADNE_TESTING_EXPECT_EQUAL(expected.outputs.size(), 1u);
         ARIADNE_TESTING_EXPECT_EQUAL(expected.outputs.front().source_indices, surviving_indices);
         ARIADNE_TESTING_EXPECT_EQUAL(expected.discarded_sources.size(), inputs.size() - surviving_indices.size());
 
-        for (const std::size_t concurrency: {1u, 4u}) {
+        for (const std::size_t concurrency: {0u, 1u, 4u, 8u}) {
             ThreadManager::instance().set_concurrency(concurrency);
             EnclosureRecombinationProfile profile;
             std::vector<EnclosureRecombinationSourceProfile> individual;

@@ -396,6 +396,17 @@ ones. A singleton surviving source is returned without reparameterisation.
 Require initialised models, matching state dimensions,
 bounded reduced domains and structurally identical symbolic auxiliary mappings.
 The first surviving source supplies the numerical configuration and reference.
+The default ReferenceEnclosureRecombiner strategy parallelizes independent
+source emptiness checks and image/contractor calculations when the global
+ThreadManager has positive concurrency and there are at least four relevant
+sources. It schedules at most one task per configured worker in each bounded
+64-source batch and dynamically assigns source indices to those tasks.
+Source-local models and profiles are written by one task only; surviving
+sources and residual hulls are assembled in input order by the caller after
+joining. The serial strategy can be requested explicitly, and the parallel
+strategy falls back to serial at zero concurrency or insufficient source
+cardinality. This changes only scheduling and model transfer, not the
+validated residual/image bounds or the inclusion witness.
 
 Map a common unit parameter box onto each source's reduced domain with explicit
 affine maps. Pad unused coordinates when parameter counts differ. This defines

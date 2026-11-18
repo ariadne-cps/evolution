@@ -352,6 +352,45 @@ measures recombination latency, **not** the end-to-end benefit of merging.
 Profiling adds overhead: compare profiled and unprofiled runs separately.
 The original benchmark modes are unchanged, and the default CSV name for
 scaling is `recombination-scaling.csv`. This mode is not in CTest.
+### Opt-in parallel source recombination
+
+The reference recombiner now supports an opt-in
+`EnclosureRecombinationExecution::PARALLEL` strategy. Its normal constructor
+continues to use the original sequential strategy. The parallel path is
+experimental: independent source images and validated graph propagation are
+scheduled through the existing ThreadManager and TaskGroup, with at most 64
+source images kept simultaneously. The reference model is read-only while
+tasks are running; each task owns its normalised model, graph, contractor,
+partial bounds and profiling counters. The final hull is accumulated in the
+original source order after joining tasks. Input filtering and final output
+reduction remain sequential. With concurrency zero, or fewer than four
+surviving sources, the sequential path is used automatically.
+
+The scaling benchmark exposes this through `--parallel-recombine 1`.
+For example, run separate processes with identical settings (including
+dataset-generation step and instrumentation):
+
+```bash
+./build-release/benchmarks/benchmark_recombination \
+  --scaling-recombine 1 --parallel-recombine 0 --concurrency 0 \
+  --step 0.015625 --scaling-counts 8,16,32 --samples 5 --warmups 1 \
+  --csv build-release/recombination-sequential.csv
+
+./build-release/benchmarks/benchmark_recombination \
+  --scaling-recombine 1 --parallel-recombine 1 --concurrency 4 \
+  --step 0.015625 --scaling-counts 8,16,32 --samples 5 --warmups 1 \
+  --csv build-release/recombination-parallel.csv
+```
+
+The aggregate CSV includes execution mode and configured concurrency.
+Both the phase profiler and per-source profiler remain opt-in; their
+per-source timers can overlap across workers, so the summed phase times
+are **CPU work**, not elapsed wall time, in parallel mode. Do not compare
+those phase sums directly with total wall-clock latency. An equivalence
+regression compares serial and parallel output models, provenance and
+discarded inputs for concurrency 0, 1, 2 and 4. This is not a substitute
+for release-mode performance measurements or thread-sanitizer testing.
+
 ### Per-source recombination diagnostics
 
 The cardinality benchmark can additionally collect diagnostics for **every

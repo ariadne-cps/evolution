@@ -30,6 +30,8 @@
 #include <sstream>
 #include <utility>
 
+#include "threading/thread_manager.hpp"
+
 #include "algebra/sweeper.hpp"
 #include "evolution/enclosure_recombiner.hpp"
 #include "function/taylor_function.hpp"
@@ -198,6 +200,54 @@ class TestEnclosureRecombination : public Testing::ContextFixture {
         const auto none = reference.recombine({}, {}, nullptr, &individual);
         ARIADNE_TESTING_EXPECT_EQUAL(none.outputs.size(), 0u);
         ARIADNE_TESTING_EXPECT_EQUAL(individual.size(), 0u);
+    }
+
+    void test_parallel_source_recombination_matches_reference() {
+        struct ConcurrencyScope {
+            std::size_t previous = ThreadManager::instance().concurrency();
+            ~ConcurrencyScope() { ThreadManager::instance().set_concurrency(previous); }
+        } restore;
+        const auto state_x = EffectiveScalarMultivariateFunction::coordinate(2u, 0u);
+        List<Enclosure> inputs;
+        for (SizeType i = 0u; i != 8u; ++i) {
+            auto enclosure = Enclosure(domain,
+                                       EffectiveVectorMultivariateFunction{
+                                           s, sqr(s) + Real(1 / 8_q) * Real(static_cast<int>(i))},
+                                       config);
+            enclosure.new_positive_state_constraint(state_x + Real(2));
+            inputs.append(enclosure);
+        }
+        auto empty = inputs[2];
+        empty.new_zero_parameter_constraint(EffectiveScalarMultivariateFunction::constant(1u, Real(1)));
+        inputs[2] = empty;
+
+        const ReferenceEnclosureRecombiner serial;
+        const ReferenceEnclosureRecombiner parallel(EnclosureRecombinationExecution::PARALLEL);
+        const auto expected = serial.recombine(inputs);
+        ARIADNE_TESTING_EXPECT_EQUAL(expected.outputs.size(), 1u);
+        for (const std::size_t concurrency: {0u, 1u, 2u, 4u}) {
+            ThreadManager::instance().set_concurrency(concurrency);
+            EnclosureRecombinationProfile profile;
+            std::vector<EnclosureRecombinationSourceProfile> individual;
+            const auto actual = parallel.recombine(inputs, {}, &profile, &individual);
+            ARIADNE_TESTING_EXPECT_EQUAL(actual.outputs.size(), expected.outputs.size());
+            ARIADNE_TESTING_EXPECT_EQUAL(actual.discarded_sources, expected.discarded_sources);
+            ARIADNE_TESTING_EXPECT_EQUAL(actual.outputs.front().source_indices,
+                                         expected.outputs.front().source_indices);
+            ARIADNE_TESTING_EXPECT_EQUAL(actual.radius_limit_satisfied, expected.radius_limit_satisfied);
+            ARIADNE_TESTING_EXPECT_EQUAL(description(actual.outputs.front().enclosure),
+                                         description(expected.outputs.front().enclosure));
+            ARIADNE_TESTING_EXPECT_EQUAL(individual.size(), inputs.size());
+            ARIADNE_TESTING_PROVE(individual[2].discarded);
+            ARIADNE_TESTING_PROVE(profile.graph_setup_ns > 0u);
+            ARIADNE_TESTING_PROVE(profile.graph_reduce_ns > 0u);
+        }
+        ARIADNE_TESTING_EXPECT_EQUAL(serial.recombine({}).outputs.size(), 0u);
+        ARIADNE_TESTING_EXPECT_EQUAL(parallel.recombine({}).outputs.size(), 0u);
+        const auto reference_one = serial.recombine({inputs[0]});
+        const auto parallel_one = parallel.recombine({inputs[0]});
+        ARIADNE_TESTING_EXPECT_EQUAL(description(reference_one.outputs.front().enclosure),
+                                     description(parallel_one.outputs.front().enclosure));
     }
 
     void test_radius_request_is_reported_without_losing_coverage() {
@@ -653,6 +703,7 @@ int main(int argc, char* argv[]) {
     ARIADNE_TESTING_ADD_TEST(TestEnclosureRecombination, test_reference_batch_provenance_and_empty_inputs);
     ARIADNE_TESTING_ADD_TEST(TestEnclosureRecombination, test_optional_profile_preserves_recombination_results);
     ARIADNE_TESTING_ADD_TEST(TestEnclosureRecombination, test_optional_per_source_profile_preserves_results);
+    ARIADNE_TESTING_ADD_TEST(TestEnclosureRecombination, test_parallel_source_recombination_matches_reference);
     ARIADNE_TESTING_ADD_TEST(TestEnclosureRecombination, test_radius_request_is_reported_without_losing_coverage);
     ARIADNE_TESTING_ADD_TEST(TestEnclosureRecombination, test_nonlinear_reference_and_full_source_coverage);
     ARIADNE_TESTING_ADD_TEST(TestEnclosureRecombination, test_disjoint_constraints_are_united_and_domains_contracted);

@@ -32,6 +32,7 @@
 #include <chrono>
 #include <cmath>
 #include <memory>
+#include <optional>
 #include <utility>
 #include <vector>
 
@@ -42,6 +43,7 @@
 #include "utility/macros.hpp"
 
 #include "constraint-solving/constraint_solver.hpp"
+#include "threading/task_group.hpp"
 
 namespace Ariadne {
 namespace {
@@ -215,7 +217,9 @@ ReferenceEnclosureRecombiner* ReferenceEnclosureRecombiner::clone() const {
 }
 
 OutputStream& ReferenceEnclosureRecombiner::_write(OutputStream& os) const {
-    return os << "ReferenceEnclosureRecombiner()";
+    return os << (_execution == EnclosureRecombinationExecution::PARALLEL
+                      ? "ParallelReferenceEnclosureRecombiner()"
+                      : "ReferenceEnclosureRecombiner()");
 }
 
 EnclosureRecombinationResult ReferenceEnclosureRecombiner::recombine(const List<Enclosure>& enclosures,
@@ -308,8 +312,9 @@ EnclosureRecombinationResult ReferenceEnclosureRecombiner::recombine(
     const auto& factory = reference.configuration().function_factory();
     const ExactBoxType common_domain(parameter_count, ExactIntervalType(0, 1));
     const auto normalise = [&](const Enclosure& source,
-                               EnclosureRecombinationSourceProfile* individual) {
-        ScopedRecombinationTimer timer(profile ? &profile->normalise_ns : nullptr);
+                               EnclosureRecombinationSourceProfile* individual,
+                               EnclosureRecombinationProfile* phase_profile) {
+        ScopedRecombinationTimer timer(phase_profile ? &phase_profile->normalise_ns : nullptr);
         ScopedRecombinationTimer source_timer(individual ? &individual->normalise_ns : nullptr);
         const auto reduced = source.reduced_domain();
         auto parameters = factory.create_zeros(reduced.size(), common_domain);
@@ -346,19 +351,18 @@ EnclosureRecombinationResult ReferenceEnclosureRecombiner::recombine(
     };
 
     Enclosure result = normalise(sources.front(),
-                                 source_profiles ? &(*source_profiles)[source_indices.front()] : nullptr);
+                                 source_profiles ? &(*source_profiles)[source_indices.front()] : nullptr,
+                                 profile);
     const auto reference_map = join(join(result.state_function(), result.time_function()), result.dwell_time_function());
     const auto component_count = reference_map.result_size();
     const auto constraint_count = result.number_of_constraints();
-    UpperBoxType combined(component_count + constraint_count);
-    Bool first = true;
-    for (SizeType index = 0; index != sources.size(); ++index) {
-        // Retain only the reference and the current transformed source, rather
-        // than a second full collection of normalised function models.
+    // Every source has its own normalisation, graph and contractor. Shared
+    // reference models are read-only until all source tasks have joined.
+    const auto calculate_bounds = [&](SizeType index, EnclosureRecombinationProfile* phase_profile) {
         auto* individual = source_profiles ? &(*source_profiles)[source_indices[index]] : nullptr;
-        const auto source = index == 0u ? result : normalise(sources[index], individual);
+        const auto source = index == 0u ? result : normalise(sources[index], individual, phase_profile);
         const auto image = [&] {
-            ScopedRecombinationTimer timer(profile ? &profile->image_setup_ns : nullptr);
+            ScopedRecombinationTimer timer(phase_profile ? &phase_profile->image_setup_ns : nullptr);
             ScopedRecombinationTimer source_timer(individual ? &individual->image_setup_ns : nullptr);
             const auto source_map = join(join(source.state_function(), source.time_function()), source.dwell_time_function());
             auto residual_image = factory.create_zeros(component_count + constraint_count, common_domain);
@@ -368,15 +372,58 @@ EnclosureRecombinationResult ReferenceEnclosureRecombiner::recombine(
                 residual_image.set(component_count + k, result.constraint(k).function());
             return residual_image;
         }();
-        const auto bounds = constrained_image_bounds(source, image, profile, individual);
+        return constrained_image_bounds(source, image, phase_profile, individual);
+    };
+    UpperBoxType combined(component_count + constraint_count);
+    Bool first = true;
+    const auto accumulate = [&](const UpperBoxType& bounds) {
         if (definitely(bounds.is_empty()))
-            continue;
+            return;
         combined = first ? bounds : hull(combined, bounds);
         first = false;
+    };
+
+    if (_execution == EnclosureRecombinationExecution::PARALLEL &&
+        ThreadManager::instance().concurrency() > 0u && sources.size() >= 4u) {
+        // Bound temporary model storage even for thousands of inputs. TaskGroup
+        // cooperatively joins nested work (the tree backend may already run
+        // this recombiner from a worker while holding its publication lock).
+        constexpr SizeType batch_size = 64u;
+        for (SizeType offset = 0u; offset < sources.size(); offset += batch_size) {
+            const SizeType count = std::min(batch_size, sources.size() - offset);
+            std::vector<std::optional<UpperBoxType>> bounds(count);
+            std::vector<EnclosureRecombinationProfile> local_phases;
+            if (profile)
+                local_phases.resize(count);
+            {
+                TaskGroup<ThreadManager> tasks(ThreadManager::instance());
+                for (SizeType slot = 0u; slot < count; ++slot)
+                    tasks.fork([&, slot] {
+                        bounds[slot].emplace(calculate_bounds(
+                            offset + slot, profile ? &local_phases[slot] : nullptr));
+                    });
+                tasks.join();
+            }
+            // Never share aggregate counters or the hull accumulator between
+            // workers. Both reductions proceed in original source order.
+            for (SizeType slot = 0u; slot < count; ++slot) {
+                if (profile) {
+                    const auto& local = local_phases[slot];
+                    profile->normalise_ns += local.normalise_ns;
+                    profile->image_setup_ns += local.image_setup_ns;
+                    profile->image_bounds_ns += local.image_bounds_ns;
+                    profile->graph_setup_ns += local.graph_setup_ns;
+                    profile->graph_reduce_ns += local.graph_reduce_ns;
+                }
+                accumulate(*bounds[slot]);
+            }
+        }
+    } else {
+        for (SizeType index = 0u; index < sources.size(); ++index)
+            accumulate(calculate_bounds(index, profile));
     }
-    if (first) {
+    if (first)
         return discard_survivors();
-    }
 
     // Constructive witness for each feasible normalised source parameter u:
     // let r = source_map(u) - reference_map(u). Every component of r lies

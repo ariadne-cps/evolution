@@ -98,6 +98,11 @@ struct EnclosureRecombinationSourceProfile {
     SizeType monotone_effective = 0u;
 };
 
+/** @brief Execution strategy for independent source image calculations.
+ *  @details PARALLEL is opt-in; SEQUENTIAL remains the default reference.
+ */
+enum class EnclosureRecombinationExecution { SEQUENTIAL, PARALLEL };
+
 /** @brief Recombine all surviving sources around the first source's nonlinear map.
  *  @details Contracts each source independently and encloses state/clock residuals
  *  in extra parameters. Reference predicates are relaxed over the source union.
@@ -107,7 +112,18 @@ struct EnclosureRecombinationSourceProfile {
  *  hull/shaving propagation; each source graph retains that source's predicates and bounds.
  */
 class ReferenceEnclosureRecombiner : public EnclosureRecombinerInterface {
+  private:
+    EnclosureRecombinationExecution _execution;
+
   public:
+    /** @brief Configure sequential (default) or opt-in parallel source processing.
+     *  @details Parallel evaluation uses ThreadManager and joins all tasks before
+     *  accumulating source bounds in their original order. It falls back to the
+     *  sequential path when concurrency is zero.
+     */
+    explicit ReferenceEnclosureRecombiner(
+        EnclosureRecombinationExecution execution = EnclosureRecombinationExecution::SEQUENTIAL)
+        : _execution(execution) {}
     /** @brief Create an independently owned reference recombiner. */
     ReferenceEnclosureRecombiner* clone() const override;
     /** @brief Construct the reference upper enclosure and record source provenance.

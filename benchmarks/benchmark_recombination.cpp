@@ -65,6 +65,7 @@ struct Options {
     bool sweep = false;
     bool profile_recombine = false;
     bool scaling_recombine = false;
+    bool parallel_recombine = false;
     bool profile_sources = false;
     std::string source_csv = "recombination-source-profile.csv";
     std::vector<unsigned> scaling_counts = {2u, 4u, 8u, 16u, 32u, 64u, 128u, 256u, 512u, 1024u};
@@ -183,6 +184,14 @@ List<ArgumentParser> argument_parsers(Options& options) {
                                                    if (enabled > 1u)
                                                        throw std::invalid_argument("sweep must be 0 or 1");
                                                    return [&options, enabled] { options.sweep = enabled == 1u; };
+                                               }));
+    parsers.append(make_valued_argument_parser("", "parallel-recombine",
+                                               "Enable opt-in source-parallel numerical recombination: 1 enables (default: 0)",
+                                               [&options](const String& value) -> VoidFunction {
+                                                   const auto enabled = Bench::parse_unsigned<unsigned>(value);
+                                                   if (enabled > 1u)
+                                                       throw std::invalid_argument("parallel-recombine must be 0 or 1");
+                                                   return [&options, enabled] { options.parallel_recombine = enabled == 1u; };
                                                }));
     parsers.append(make_valued_argument_parser("", "scaling-recombine",
                                                "Measure recombination-only scaling: 1 enables (default: 0)",
@@ -973,7 +982,7 @@ int run_recombination_scaling(const Scenario (&scenarios)[2], const Options& opt
     csv << "scenario,status,step,accuracy,selection_mode,window_start,window_end,"
            "generated,eligible,pool_size,inputs,samples,warmups,"
            "recombination_mean_ns,recombination_median_ns,recombination_min_ns,recombination_max_ns,"
-           "output_parameters,output_constraints,"
+           "output_parameters,output_constraints,parallel_recombine,concurrency,"
            "recombine_filter_ns,recombine_normalise_ns,recombine_image_setup_ns,recombine_image_bounds_ns,"
            "recombine_graph_setup_ns,recombine_graph_reduce_ns,"
            "recombine_output_assembly_ns,recombine_output_reduce_ns,error\n";
@@ -1037,7 +1046,9 @@ int run_recombination_scaling(const Scenario (&scenarios)[2], const Options& opt
                   << " eligible=" << eligible << " pool=" << pool.size()
                   << (options.time_window ? " window-distributed" : " adjacent-prefix") << '\n';
 
-        ReferenceEnclosureRecombiner recombiner;
+        ReferenceEnclosureRecombiner recombiner(
+            options.parallel_recombine ? EnclosureRecombinationExecution::PARALLEL
+                                       : EnclosureRecombinationExecution::SEQUENTIAL);
         for (const unsigned count: counts) {
             List<Enclosure> inputs;
             inputs.reserve(count);
@@ -1146,7 +1157,8 @@ int run_recombination_scaling(const Scenario (&scenarios)[2], const Options& opt
             csv << ',';
             csv_number(csv, measured.back());
             csv << ',' << output.number_of_parameters() << ','
-                << output.number_of_constraints();
+                << output.number_of_constraints() << ',' << (options.parallel_recombine ? 1 : 0)
+                << ',' << ThreadManager::instance().concurrency();
             for (std::size_t i = 0u; i != recombination_phase_count; ++i) {
                 csv << ',';
                 if (options.profile_recombine)
@@ -1172,7 +1184,10 @@ int run_recombination_scaling(const Scenario (&scenarios)[2], const Options& opt
                 if (!source_csv)
                     throw std::runtime_error("cannot write source profiling CSV: " + options.source_csv);
             }
-            std::cout << "  inputs=" << count << " recombine-mean-ms=" << summary.mean / 1.0e6
+            std::cout << "  inputs=" << count
+                      << " mode=" << (options.parallel_recombine ? "parallel" : "sequential")
+                      << " concurrency=" << ThreadManager::instance().concurrency()
+                      << " recombine-mean-ms=" << summary.mean / 1.0e6
                       << " median-ms=" << median / 1.0e6
                       << " parameters=" << output.number_of_parameters()
                       << " constraints=" << output.number_of_constraints() << '\n';
@@ -1305,6 +1320,8 @@ int main(int argc, const char* argv[]) {
         };
         if (options.profile_sources && !options.scaling_recombine)
             throw std::invalid_argument("--profile-sources requires --scaling-recombine 1");
+        if (options.parallel_recombine && !options.scaling_recombine)
+            throw std::invalid_argument("--parallel-recombine currently requires --scaling-recombine 1");
         if (options.scaling_recombine)
             return run_recombination_scaling(scenarios, options, cli);
         if (options.sweep)

@@ -64,6 +64,8 @@ struct Options {
     unsigned samples = 3u;
     bool sweep = false;
     bool profile_recombine = false;
+    bool scaling_recombine = false;
+    std::vector<unsigned> scaling_counts = {2u, 4u, 8u, 16u, 32u, 64u, 128u, 256u, 512u, 1024u};
     std::vector<double> steps = {1.0 / 16.0, 1.0 / 64.0, 1.0 / 256.0};
     std::vector<unsigned> groups = {2u, 4u, 8u};
     std::string csv = "recombination-sweep.csv";
@@ -179,6 +181,22 @@ List<ArgumentParser> argument_parsers(Options& options) {
                                                    if (enabled > 1u)
                                                        throw std::invalid_argument("sweep must be 0 or 1");
                                                    return [&options, enabled] { options.sweep = enabled == 1u; };
+                                               }));
+    parsers.append(make_valued_argument_parser("", "scaling-recombine",
+                                               "Measure recombination-only scaling: 1 enables (default: 0)",
+                                               [&options](const String& value) -> VoidFunction {
+                                                   const auto enabled = Bench::parse_unsigned<unsigned>(value);
+                                                   if (enabled > 1u)
+                                                       throw std::invalid_argument("scaling-recombine must be 0 or 1");
+                                                   return [&options, enabled] { options.scaling_recombine = enabled == 1u; };
+                                               }));
+    parsers.append(make_valued_argument_parser("", "scaling-counts",
+                                               "Recombination-only source counts (default: 2,4,...,1024)",
+                                               [&options](const String& value) -> VoidFunction {
+                                                   auto counts = Bench::parse_unique_unsigned_list(value, 2u);
+                                                   return [&options, counts = std::move(counts)] {
+                                                       options.scaling_counts = counts;
+                                                   };
                                                }));
     parsers.append(make_valued_argument_parser("", "profile-recombine",
                                                "Time reference recombination subphases: 1 enables (default: 0)",
@@ -911,6 +929,169 @@ void csv_failure(std::ostream& stream, const Options& options,
     stream << csv_escape(message) << '\n';
 }
 
+// Measure reference recombination alone on varying subsets of the same real,
+// post-reset input pool. All input preparation and result checks are untimed.
+int run_recombination_scaling(const Scenario (&scenarios)[2], const Options& options,
+                              const Bench::CommandLine& cli) {
+    if (options.sweep || options.distributed_count || !options.distributed_counts.empty() ||
+        !options.window_widths.empty())
+        throw std::invalid_argument("--scaling-recombine is incompatible with --sweep, "
+                                    "--distributed-count(s) and --window-widths");
+    auto counts = options.scaling_counts;
+    if (counts.empty())
+        throw std::invalid_argument("--scaling-counts must not be empty");
+    std::sort(counts.begin(), counts.end());
+    const auto maximum_count = counts.back();
+    const std::string filename = options.csv == "recombination-sweep.csv"
+                                     ? "recombination-scaling.csv" : options.csv;
+    const std::filesystem::path path(filename);
+    if (path.has_parent_path())
+        std::filesystem::create_directories(path.parent_path());
+    std::ofstream csv(path, std::ios::out | std::ios::trunc);
+    if (!csv)
+        throw std::runtime_error("cannot open CSV file: " + filename);
+    csv << std::setprecision(17);
+    csv << "scenario,status,step,accuracy,selection_mode,window_start,window_end,"
+           "generated,eligible,pool_size,inputs,samples,warmups,"
+           "recombination_mean_ns,recombination_median_ns,recombination_min_ns,recombination_max_ns,"
+           "output_parameters,output_constraints,"
+           "recombine_filter_ns,recombine_normalise_ns,recombine_image_setup_ns,recombine_image_bounds_ns,"
+           "recombine_graph_setup_ns,recombine_graph_reduce_ns,"
+           "recombine_output_assembly_ns,recombine_output_reduce_ns,error\n";
+
+    Bench::Report report("Reference enclosure recombination cardinality scaling (nanoseconds)",
+                         cli.summary_fields());
+    report.set_parameter_header("Only the recombine call is timed; dataset generation, "
+                                "input reduction, provenance checks and reporting are excluded. "
+                                "Optional internal phase times are not exhaustive.");
+    report.set_dimension_columns({
+        {"Scenario"}, {"Inputs", 0u, Bench::TableAlignment::Right}, {"Phase"}
+    });
+    report.set_table_options(Bench::TableOptions::ruled());
+
+    for (const auto& scenario: scenarios) {
+        const DiscreteLocation source(1), target(2);
+        const DiscreteEvent jump("jump");
+        const RealVariable x("x"), y("y");
+        auto generation_options = options;
+        generation_options.group_size = maximum_count;
+        generation_options.distributed_count.reset();
+        SizeType generated = 0u, eligible = 0u;
+        auto pool = generate(scenario, generation_options, source, target, jump, x, y,
+                             false, generated, eligible);
+        if (pool.size() < maximum_count) {
+            std::ostringstream error;
+            error << scenario.name << ": requested " << maximum_count
+                  << " distinct enclosures but only " << pool.size()
+                  << " are available (generated=" << generated << ", eligible=" << eligible
+                  << "); reduce --step or enlarge --time-window";
+            throw std::runtime_error(error.str());
+        }
+        for (const auto& enclosure: pool)
+            enclosure.reduce();
+        std::cout << "SCALING " << scenario.name << " generated=" << generated
+                  << " eligible=" << eligible << " pool=" << pool.size()
+                  << (options.time_window ? " window-distributed" : " adjacent-prefix") << '\n';
+
+        ReferenceEnclosureRecombiner recombiner;
+        for (const unsigned count: counts) {
+            List<Enclosure> inputs;
+            inputs.reserve(count);
+            for (SizeType i = 0u; i != count; ++i) {
+                // Window subsets span the same time interval. Adjacent prefixes
+                // keep the reference source fixed while increasing time spread.
+                const SizeType index = options.time_window
+                                           ? i * (pool.size() - 1u) / (count - 1u) : i;
+                inputs.append(pool[index]);
+            }
+            Bench::Runner runner(cli);
+            Bench::Samples times;
+            std::array<Bench::Samples, recombination_phase_count> phases;
+            std::vector<double> measured;
+            measured.reserve(options.samples);
+            EnclosureRecombinationResult last;
+            EnclosureRecombinationProfile internal_profile;
+            double elapsed = 0.0;
+            unsigned round = 0u;
+            const std::string label = std::string(scenario.name) + "-recombine-" + std::to_string(count);
+            const auto completed = runner.run(label.c_str(), options.samples, [] {}, [&] {
+                const auto start = Bench::Clock::now();
+                last = recombiner.recombine(inputs, {},
+                                            options.profile_recombine ? &internal_profile : nullptr);
+                elapsed = Bench::elapsed_ns(start, Bench::Clock::now());
+            }, [&] {
+                if (last.outputs.size() != 1u || !last.discarded_sources.empty() ||
+                    last.outputs.front().source_indices.size() != count)
+                    throw std::runtime_error("unexpected scaling recombination outputs or discarded sources");
+                for (SizeType i = 0u; i != count; ++i)
+                    if (last.outputs.front().source_indices[i] != i)
+                        throw std::runtime_error("incorrect scaling source provenance");
+                if (round >= cli.warmups()) {
+                    times.add(elapsed);
+                    measured.push_back(elapsed);
+                    if (options.profile_recombine) {
+                        const auto values = profile_values(internal_profile);
+                        for (std::size_t i = 0u; i != values.size(); ++i)
+                            phases[i].add(values[i]);
+                    }
+                }
+                ++round;
+            });
+            if (completed.size() != options.samples || times.size() != options.samples ||
+                measured.size() != options.samples)
+                throw std::runtime_error("incorrect recombination scaling sample count");
+
+            const auto summary = Bench::summarize(times);
+            std::sort(measured.begin(), measured.end());
+            const auto middle = measured.size() / 2u;
+            const double median = measured.size() % 2u
+                                      ? measured[middle]
+                                      : (measured[middle - 1u] + measured[middle]) / 2.0;
+            const auto& output = last.outputs.front().enclosure;
+            const std::string count_text = std::to_string(count);
+            report.add_row({scenario.name, count_text, "recombine"}, summary);
+            if (options.profile_recombine)
+                for (std::size_t i = 0u; i != recombination_phase_count; ++i)
+                    report.add_row({scenario.name, count_text, recombination_phase_names[i]},
+                                   Bench::summarize(phases[i]));
+
+            csv << scenario.name << ",ok," << options.step << ',' << options.accuracy << ','
+                << (options.time_window ? "window-distributed" : "adjacent-prefix") << ',';
+            if (options.time_window)
+                csv << options.time_window->first << ',' << options.time_window->second;
+            else
+                csv << ',';
+            csv << ',' << generated << ',' << eligible << ',' << pool.size() << ','
+                << count << ',' << options.samples << ',' << cli.warmups() << ',';
+            csv_number(csv, summary.mean);
+            csv << ',';
+            csv_number(csv, median);
+            csv << ',';
+            csv_number(csv, measured.front());
+            csv << ',';
+            csv_number(csv, measured.back());
+            csv << ',' << output.number_of_parameters() << ','
+                << output.number_of_constraints();
+            for (std::size_t i = 0u; i != recombination_phase_count; ++i) {
+                csv << ',';
+                if (options.profile_recombine)
+                    csv_number(csv, Bench::summarize(phases[i]).mean);
+            }
+            csv << ",\"\"\n";
+            csv.flush();
+            if (!csv)
+                throw std::runtime_error("cannot write CSV file: " + filename);
+            std::cout << "  inputs=" << count << " recombine-mean-ms=" << summary.mean / 1.0e6
+                      << " median-ms=" << median / 1.0e6
+                      << " parameters=" << output.number_of_parameters()
+                      << " constraints=" << output.number_of_constraints() << '\n';
+        }
+    }
+    report.print();
+    std::cout << "Scaling CSV: " << path.string() << '\n';
+    return 0;
+}
+
 int run_sweep(const Scenario (&scenarios)[2], const Options& options,
               const Bench::CommandLine& cli) {
     if (!options.window_widths.empty() && !options.time_window)
@@ -1029,6 +1210,8 @@ int main(int argc, const char* argv[]) {
             {"urgent-crossing",     EventKind::URGENT, 3.0, 4.0},
             {"permissive-jump", EventKind::PERMISSIVE, 1.0, 2.0}
         };
+        if (options.scaling_recombine)
+            return run_recombination_scaling(scenarios, options, cli);
         if (options.sweep)
             return run_sweep(scenarios, options, cli);
         if (!options.window_widths.empty() || !options.distributed_counts.empty())

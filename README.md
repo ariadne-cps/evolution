@@ -321,6 +321,37 @@ general proof that the recombined **constrained set** contains the
 union of the source constrained sets. Such a proof requires verified
 joint feasibility/inclusion reasoning, not interval-hull comparisons.
 
+### Recombination-only cardinality scaling
+
+The existing `benchmark_recombination` executable also supports
+`--scaling-recombine 1`, which measures **only the reference recombination**
+on increasing numbers of real post-reset enclosures. One source pool is
+generated per scenario outside timing, and reused for all counts; no sources
+are duplicated to manufacture a larger dataset.
+
+```bash
+./build-release/benchmarks/benchmark_recombination \
+  --scaling-recombine 1 --step 0.015625 \
+  --scaling-counts 2,4,8 --samples 5 --warmups 1 \
+  --profile-recombine 1 --csv build-release/recombination-scaling.csv
+```
+
+For 1024 inputs, supply `--scaling-counts 2,4,8,16,32,64,128,256,512,1024`
+and a sufficiently fine `--step` to produce at least 1024 **distinct**
+checkpoints. The benchmark fails explicitly if the source pool is too small.
+Generating that pool can itself be expensive, but is not included in timing.
+
+With `--time-window START,END`, each cardinality selects time-distributed
+sources spanning the same fixed physical window. Otherwise it uses adjacent
+prefixes of the pool, so the reference stays fixed but time spread grows
+with cardinality. The CSV contains source counts, mean/median/min/max
+recombination nanoseconds, output parameter/constraint counts and optionally
+the same eight internal phase means. Output/provenance checks and source
+reduction happen outside timing; there is no continuation, so this mode
+measures recombination latency, **not** the end-to-end benefit of merging.
+Profiling adds overhead: compare profiled and unprofiled runs separately.
+The original benchmark modes are unchanged, and the default CSV name for
+scaling is `recombination-scaling.csv`. This mode is not in CTest.
 ### Opt-in profiling inside reference recombination
 
 Use `--profile-recombine 1` to measure internal stages in addition to the

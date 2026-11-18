@@ -52,6 +52,28 @@ class TestEnclosureRecordedDraw : public Ariadne::Testing::ContextFixture {
   public:
     using ContextFixture::ContextFixture;
 
+    void test_progress_across_batch_boundaries() {
+        RecordedDrawProgress progress(600u);
+        ProgressIndicator indicator;
+        progress.update(indicator);
+        ARIADNE_TESTING_EXPECT_EQUAL(indicator.percentage(), 0u);
+
+        for (SizeType i = 0u; i < 256u; ++i)
+            progress.complete_one();
+        progress.update(indicator);
+        ARIADNE_TESTING_EXPECT_EQUAL(indicator.percentage(), 43u);
+
+        for (SizeType i = 256u; i < 512u; ++i)
+            progress.complete_one();
+        progress.update(indicator);
+        ARIADNE_TESTING_EXPECT_EQUAL(indicator.percentage(), 85u);
+
+        for (SizeType i = 512u; i < 600u; ++i)
+            progress.complete_one();
+        progress.update(indicator);
+        ARIADNE_TESTING_EXPECT_EQUAL(indicator.percentage(), 100u);
+    }
+
     void test_batch_order_and_bounded_replay() {
         // Cross two 256-element batch boundaries and include an incomplete tail.
         std::vector<std::size_t> enclosures;
@@ -70,6 +92,7 @@ class TestEnclosureRecordedDraw : public Ariadne::Testing::ContextFixture {
 
 int main(int argc, char** argv) {
     ARIADNE_TESTING_SUITE("test_enclosure_recorded_draw");
+    ARIADNE_TESTING_ADD_TEST(TestEnclosureRecordedDraw, test_progress_across_batch_boundaries);
     ARIADNE_TESTING_ADD_TEST(TestEnclosureRecordedDraw, test_batch_order_and_bounded_replay);
     return Ariadne::Testing::run_logging_suite(ariadne_test_suite, argc, argv);
 }

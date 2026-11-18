@@ -170,8 +170,9 @@ class TestEnclosureRecombination : public Testing::ContextFixture {
         Enclosure second(domain, EffectiveVectorMultivariateFunction{s, sqr(s) + Real(1 / 4_q)}, config);
         // Exercise graph propagation rather than just the unconstrained
         // image-bound shortcut; both inputs have a genuine source predicate.
-        first.new_positive_state_constraint(s + Real(2));
-        second.new_positive_state_constraint(s + Real(2));
+        const auto state_x = EffectiveScalarMultivariateFunction::coordinate(2u, 0u);
+        first.new_positive_state_constraint(state_x + Real(2));
+        second.new_positive_state_constraint(state_x + Real(2));
         auto empty = first;
         empty.new_zero_parameter_constraint(EffectiveScalarMultivariateFunction::constant(1u, Real(1)));
         ReferenceEnclosureRecombiner reference;

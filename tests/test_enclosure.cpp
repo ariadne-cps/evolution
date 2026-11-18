@@ -191,7 +191,10 @@ class TestEnclosure : public Ariadne::Testing::ContextFixture {
     // shrink the parameter domain. A fixed-point early exit must give exactly
     // the same reduced domain and emptiness decision for feasible inputs.
     Void test_is_empty_fixed_domain_matches_three_reductions() {
-        const ExactBoxType dom({{-1.0_x, 1.0_x}, {-1.0_x, 1.0_x}});
+        const ExactBoxType dom({
+            {-1.0_x, 1.0_x},
+            {-1.0_x, 1.0_x}
+        });
         EnclosureConfiguration configuration(TaylorFunctionFactory(ThresholdSweeper<FloatDP>(dp, 1e-8)));
         const auto x = EffectiveScalarMultivariateFunction::coordinate(2u, 0u);
         const auto y = EffectiveScalarMultivariateFunction::coordinate(2u, 1u);

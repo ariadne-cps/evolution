@@ -961,7 +961,8 @@ int run_recombination_scaling(const Scenario (&scenarios)[2], const Options& opt
     std::sort(counts.begin(), counts.end());
     const auto maximum_count = counts.back();
     const std::string filename = options.csv == "recombination-sweep.csv"
-                                     ? "recombination-scaling.csv" : options.csv;
+                                   ? "recombination-scaling.csv"
+                                   : options.csv;
     const std::filesystem::path path(filename);
     if (path.has_parent_path())
         std::filesystem::create_directories(path.parent_path());
@@ -1006,7 +1007,9 @@ int run_recombination_scaling(const Scenario (&scenarios)[2], const Options& opt
                                 "input reduction, provenance checks and reporting are excluded. "
                                 "Optional internal phase times are not exhaustive.");
     report.set_dimension_columns({
-        {"Scenario"}, {"Inputs", 0u, Bench::TableAlignment::Right}, {"Phase"}
+        {"Scenario"},
+        {"Inputs", 0u, Bench::TableAlignment::Right},
+        {"Phase"}
     });
     report.set_table_options(Bench::TableOptions::ruled());
 
@@ -1044,7 +1047,8 @@ int run_recombination_scaling(const Scenario (&scenarios)[2], const Options& opt
                 // Window subsets span the same time interval. Adjacent prefixes
                 // keep the reference source fixed while increasing time spread.
                 const SizeType index = options.time_window
-                                           ? i * (pool.size() - 1u) / (count - 1u) : i;
+                                         ? i * (pool.size() - 1u) / (count - 1u)
+                                         : i;
                 inputs.append(pool[index]);
                 selected_indices.push_back(index);
             }
@@ -1068,8 +1072,7 @@ int run_recombination_scaling(const Scenario (&scenarios)[2], const Options& opt
                 last = recombiner.recombine(inputs, {},
                                             options.profile_recombine ? &internal_profile : nullptr,
                                             options.profile_sources ? &source_profiles : nullptr);
-                elapsed = Bench::elapsed_ns(start, Bench::Clock::now());
-            }, [&] {
+                elapsed = Bench::elapsed_ns(start, Bench::Clock::now()); }, [&] {
                 if (last.outputs.size() != 1u || !last.discarded_sources.empty() ||
                     last.outputs.front().source_indices.size() != count)
                     throw std::runtime_error("unexpected scaling recombination outputs or discarded sources");
@@ -1108,8 +1111,7 @@ int run_recombination_scaling(const Scenario (&scenarios)[2], const Options& opt
                         }
                     }
                 }
-                ++round;
-            });
+                ++round; });
             if (completed.size() != options.samples || times.size() != options.samples ||
                 measured.size() != options.samples)
                 throw std::runtime_error("incorrect recombination scaling sample count");
@@ -1118,8 +1120,8 @@ int run_recombination_scaling(const Scenario (&scenarios)[2], const Options& opt
             std::sort(measured.begin(), measured.end());
             const auto middle = measured.size() / 2u;
             const double median = measured.size() % 2u
-                                      ? measured[middle]
-                                      : (measured[middle - 1u] + measured[middle]) / 2.0;
+                                    ? measured[middle]
+                                    : (measured[middle - 1u] + measured[middle]) / 2.0;
             const auto& output = last.outputs.front().enclosure;
             const std::string count_text = std::to_string(count);
             report.add_row({scenario.name, count_text, "recombine"}, summary);

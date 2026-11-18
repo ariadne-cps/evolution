@@ -74,13 +74,13 @@ struct EnclosureRecombinationProfile {
  *  zero if the graph was not constructed. The first source is the reference.
  */
 struct EnclosureRecombinationSourceProfile {
-    SizeType source_index = 0u;               //!< Position in the original input list.
-    bool discarded = false;                   //!< Filtered before numerical recombination.
-    SizeType input_parameters = 0u;           //!< Original source parameter count.
-    SizeType input_constraints = 0u;          //!< Original source constraint count.
-    SizeType graph_dimension = 0u;            //!< Parameter and active-image graph variables.
-    SizeType graph_constraints = 0u;          //!< Prepared graph predicates, including image equalities.
-    SizeType graph_active_components = 0u;    //!< Image components assigned graph variables.
+    SizeType source_index = 0u;            //!< Position in the original input list.
+    bool discarded = false;                //!< Filtered before numerical recombination.
+    SizeType input_parameters = 0u;        //!< Original source parameter count.
+    SizeType input_constraints = 0u;       //!< Original source constraint count.
+    SizeType graph_dimension = 0u;         //!< Parameter and active-image graph variables.
+    SizeType graph_constraints = 0u;       //!< Prepared graph predicates, including image equalities.
+    SizeType graph_active_components = 0u; //!< Image components assigned graph variables.
     std::uint64_t filter_ns = 0u;
     std::uint64_t normalise_ns = 0u;
     std::uint64_t image_setup_ns = 0u;

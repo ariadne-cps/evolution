@@ -346,7 +346,7 @@ EnclosureRecombinationResult ReferenceEnclosureRecombiner::recombine(
     };
 
     Enclosure result = normalise(sources.front(),
-                                source_profiles ? &(*source_profiles)[source_indices.front()] : nullptr);
+                                 source_profiles ? &(*source_profiles)[source_indices.front()] : nullptr);
     const auto reference_map = join(join(result.state_function(), result.time_function()), result.dwell_time_function());
     const auto component_count = reference_map.result_size();
     const auto constraint_count = result.number_of_constraints();

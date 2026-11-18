@@ -117,8 +117,9 @@ class ReferenceEnclosureRecombiner : public EnclosureRecombinerInterface {
 
   public:
     /** @brief Configure sequential (default) or opt-in parallel source processing.
-     *  @details Parallel evaluation uses ThreadManager and joins all tasks before
-     *  accumulating source bounds in their original order. It falls back to the
+     *  @details Parallel evaluation uses ThreadManager to independently filter
+     *  input copies and propagate source graphs, then reconstructs survivors,
+     *  provenance and hull bounds in original input order. It falls back to the
      *  sequential path when concurrency is zero.
      */
     explicit ReferenceEnclosureRecombiner(

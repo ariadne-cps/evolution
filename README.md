@@ -357,14 +357,17 @@ scaling is `recombination-scaling.csv`. This mode is not in CTest.
 The reference recombiner now supports an opt-in
 `EnclosureRecombinationExecution::PARALLEL` strategy. Its normal constructor
 continues to use the original sequential strategy. The parallel path is
-experimental: independent source images and validated graph propagation are
-scheduled through the existing ThreadManager and TaskGroup, with at most 64
-source images kept simultaneously. The reference model is read-only while
-tasks are running; each task owns its normalised model, graph, contractor,
-partial bounds and profiling counters. The final hull is accumulated in the
-original source order after joining tasks. Input filtering and final output
-reduction remain sequential. With concurrency zero, or fewer than four
-surviving sources, the sequential path is used automatically.
+experimental: both source emptiness filtering and independent source-image
+graph propagation are scheduled through the existing ThreadManager and
+TaskGroup, in batches of at most 64 sources. The filtering workers contract
+private copies of the inputs, and the calling thread reconstructs surviving
+sources, discarded indices and maximum parameter dimension in original input
+order. During image propagation the reference model is read-only; each task
+owns its normalised model, graph, contractor, partial bounds and profiling
+counters. The final hull is accumulated in original input order after joining
+tasks. Final output reduction remains sequential. With concurrency zero or
+fewer than four input sources, filtering falls back to the original serial path;
+image propagation falls back to serial with fewer than four surviving sources.
 
 The scaling benchmark exposes this through `--parallel-recombine 1`.
 For example, run separate processes with identical settings (including
@@ -383,12 +386,16 @@ dataset-generation step and instrumentation):
 ```
 
 The aggregate CSV includes execution mode and configured concurrency.
-Both the phase profiler and per-source profiler remain opt-in; their
-per-source timers can overlap across workers, so the summed phase times
-are **CPU work**, not elapsed wall time, in parallel mode. Do not compare
-those phase sums directly with total wall-clock latency. An equivalence
-regression compares serial and parallel output models, provenance and
-discarded inputs for concurrency 0, 1, 2 and 4. This is not a substitute
+Both the phase profiler and per-source profiler remain opt-in. In
+parallel mode the aggregate `filter_ns` counter measures elapsed wall-clock
+time for the full parallel filter, including scheduling and joins; the
+normalisation and graph phase counters sum per-task durations and can
+overlap across workers. Per-source timers also overlap, so they must not
+be summed into an exact wall-clock duration. An equivalence regression
+compares serial and parallel output models, provenance and discarded
+inputs for concurrency 0, 1, 2 and 4; a second regression exercises
+130 inputs spanning three filter batches with discarded and surviving
+sources on both sides of the batch boundaries. This is not a substitute
 for release-mode performance measurements or thread-sanitizer testing.
 
 ### Per-source recombination diagnostics

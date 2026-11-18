@@ -250,6 +250,58 @@ class TestEnclosureRecombination : public Testing::ContextFixture {
                                      description(parallel_one.outputs.front().enclosure));
     }
 
+    void test_parallel_filter_across_batch_boundaries() {
+        struct ConcurrencyScope {
+            std::size_t previous = ThreadManager::instance().concurrency();
+            ~ConcurrencyScope() { ThreadManager::instance().set_concurrency(previous); }
+        } restore;
+
+        const auto state_x = EffectiveScalarMultivariateFunction::coordinate(2u, 0u);
+        Enclosure valid(domain, EffectiveVectorMultivariateFunction{s, sqr(s)}, config);
+        valid.new_positive_state_constraint(state_x + Real(2));
+        auto impossible = valid;
+        impossible.new_zero_parameter_constraint(EffectiveScalarMultivariateFunction::constant(1u, Real(1)));
+
+        // Three batches of 64/64/2 sources. In particular, valid inputs
+        // straddle both boundaries and empty inputs occur at both ends.
+        const List<SizeType> surviving_indices = {0u, 32u, 63u, 64u, 127u, 128u};
+        List<Enclosure> inputs;
+        for (SizeType i = 0u; i != 130u; ++i) {
+            const bool survives = i == 0u || i == 32u || i == 63u ||
+                                  i == 64u || i == 127u || i == 128u;
+            inputs.append(survives ? valid : impossible);
+        }
+
+        const ReferenceEnclosureRecombiner serial;
+        const ReferenceEnclosureRecombiner parallel(EnclosureRecombinationExecution::PARALLEL);
+        const auto expected = serial.recombine(inputs);
+        ARIADNE_TESTING_EXPECT_EQUAL(expected.outputs.size(), 1u);
+        ARIADNE_TESTING_EXPECT_EQUAL(expected.outputs.front().source_indices, surviving_indices);
+        ARIADNE_TESTING_EXPECT_EQUAL(expected.discarded_sources.size(), inputs.size() - surviving_indices.size());
+
+        for (const std::size_t concurrency: {1u, 4u}) {
+            ThreadManager::instance().set_concurrency(concurrency);
+            EnclosureRecombinationProfile profile;
+            std::vector<EnclosureRecombinationSourceProfile> individual;
+            const auto actual = parallel.recombine(inputs, {}, &profile, &individual);
+            ARIADNE_TESTING_EXPECT_EQUAL(actual.outputs.size(), expected.outputs.size());
+            ARIADNE_TESTING_EXPECT_EQUAL(actual.discarded_sources, expected.discarded_sources);
+            ARIADNE_TESTING_EXPECT_EQUAL(actual.outputs.front().source_indices,
+                                         expected.outputs.front().source_indices);
+            ARIADNE_TESTING_EXPECT_EQUAL(actual.radius_limit_satisfied, expected.radius_limit_satisfied);
+            ARIADNE_TESTING_EXPECT_EQUAL(description(actual.outputs.front().enclosure),
+                                         description(expected.outputs.front().enclosure));
+            ARIADNE_TESTING_EXPECT_EQUAL(individual.size(), inputs.size());
+            for (SizeType i = 0u; i != individual.size(); ++i) {
+                ARIADNE_TESTING_EXPECT_EQUAL(individual[i].source_index, i);
+                const bool survives = i == 0u || i == 32u || i == 63u ||
+                                      i == 64u || i == 127u || i == 128u;
+                ARIADNE_TESTING_EXPECT_EQUAL(individual[i].discarded, !survives);
+            }
+            ARIADNE_TESTING_PROVE(profile.filter_ns > 0u);
+        }
+    }
+
     void test_radius_request_is_reported_without_losing_coverage() {
         Enclosure first(domain, EffectiveVectorMultivariateFunction{s, sqr(s)}, config);
         Enclosure second(domain, EffectiveVectorMultivariateFunction{s, sqr(s) + Real(1 / 4_q)}, config);
@@ -704,6 +756,7 @@ int main(int argc, char* argv[]) {
     ARIADNE_TESTING_ADD_TEST(TestEnclosureRecombination, test_optional_profile_preserves_recombination_results);
     ARIADNE_TESTING_ADD_TEST(TestEnclosureRecombination, test_optional_per_source_profile_preserves_results);
     ARIADNE_TESTING_ADD_TEST(TestEnclosureRecombination, test_parallel_source_recombination_matches_reference);
+    ARIADNE_TESTING_ADD_TEST(TestEnclosureRecombination, test_parallel_filter_across_batch_boundaries);
     ARIADNE_TESTING_ADD_TEST(TestEnclosureRecombination, test_radius_request_is_reported_without_losing_coverage);
     ARIADNE_TESTING_ADD_TEST(TestEnclosureRecombination, test_nonlinear_reference_and_full_source_coverage);
     ARIADNE_TESTING_ADD_TEST(TestEnclosureRecombination, test_disjoint_constraints_are_united_and_domains_contracted);

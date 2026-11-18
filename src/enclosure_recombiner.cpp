@@ -260,29 +260,80 @@ EnclosureRecombinationResult ReferenceEnclosureRecombiner::recombine(
     SizeType parameter_count = 0u;
     {
         ScopedRecombinationTimer timer(profile ? &profile->filter_ns : nullptr);
-        for (SizeType index = 0; index != enclosures.size(); ++index) {
-            auto* individual = source_profiles ? &(*source_profiles)[index] : nullptr;
-            ScopedRecombinationTimer source_timer(individual ? &individual->filter_ns : nullptr);
-            auto source = enclosures[index];
-            if (individual) {
-                individual->input_parameters = source.number_of_parameters();
-                individual->input_constraints = source.number_of_constraints();
+        if (_execution == EnclosureRecombinationExecution::PARALLEL &&
+            ThreadManager::instance().concurrency() > 0u && enclosures.size() >= 4u) {
+            // Empty tests only contract a private copy of each input. Do not
+            // append to shared collections or update parameter_count in workers.
+            // Keeping batches bounded avoids retaining thousands of copies.
+            constexpr SizeType batch_size = 64u;
+            for (SizeType offset = 0u; offset < enclosures.size(); offset += batch_size) {
+                const SizeType count = std::min(batch_size, enclosures.size() - offset);
+                std::vector<std::optional<Enclosure>> survivors(count);
+                {
+                    TaskGroup<ThreadManager> tasks(ThreadManager::instance());
+                    for (SizeType slot = 0u; slot < count; ++slot)
+                        tasks.fork([&, slot] {
+                            const SizeType index = offset + slot;
+                            auto* individual = source_profiles ? &(*source_profiles)[index] : nullptr;
+                            ScopedRecombinationTimer source_timer(individual ? &individual->filter_ns : nullptr);
+                            auto source = enclosures[index];
+                            if (individual) {
+                                individual->input_parameters = source.number_of_parameters();
+                                individual->input_constraints = source.number_of_constraints();
+                            }
+                            ARIADNE_PRECONDITION_MSG(source.state_dimension() == state_dimension,
+                                                     "Recombination requires matching state dimensions.");
+                            if (definitely(source.is_empty())) {
+                                if (individual)
+                                    individual->discarded = true;
+                                return;
+                            }
+                            ARIADNE_PRECONDITION_MSG(source.reduced_domain().is_bounded(),
+                                                     "Recombination requires bounded parameter domains.");
+                            survivors[slot].emplace(std::move(source));
+                        });
+                    tasks.join();
+                }
+                // Publish in input order. A missing optional means the input
+                // was proven empty; worker exceptions are propagated by join().
+                for (SizeType slot = 0u; slot < count; ++slot) {
+                    const SizeType index = offset + slot;
+                    if (!survivors[slot]) {
+                        batch.discarded_sources.append(index);
+                        continue;
+                    }
+                    parameter_count = std::max(parameter_count, survivors[slot]->number_of_parameters());
+                    sources.append(*survivors[slot]);
+                    source_indices.append(index);
+                }
             }
-            ARIADNE_PRECONDITION_MSG(source.state_dimension() == state_dimension,
-                                     "Recombination requires matching state dimensions.");
-            // is_empty contracts the copy's parameter domain and only discards
-            // sources whose infeasibility has actually been established.
-            if (definitely(source.is_empty())) {
-                if (individual)
-                    individual->discarded = true;
-                batch.discarded_sources.append(index);
-                continue;
+        } else {
+            // Preserve the original serial reference path exactly, including
+            // its input checks, filtering order and provenance.
+            for (SizeType index = 0; index != enclosures.size(); ++index) {
+                auto* individual = source_profiles ? &(*source_profiles)[index] : nullptr;
+                ScopedRecombinationTimer source_timer(individual ? &individual->filter_ns : nullptr);
+                auto source = enclosures[index];
+                if (individual) {
+                    individual->input_parameters = source.number_of_parameters();
+                    individual->input_constraints = source.number_of_constraints();
+                }
+                ARIADNE_PRECONDITION_MSG(source.state_dimension() == state_dimension,
+                                         "Recombination requires matching state dimensions.");
+                // is_empty contracts the copy's parameter domain and only discards
+                // sources whose infeasibility has actually been established.
+                if (definitely(source.is_empty())) {
+                    if (individual)
+                        individual->discarded = true;
+                    batch.discarded_sources.append(index);
+                    continue;
+                }
+                ARIADNE_PRECONDITION_MSG(source.reduced_domain().is_bounded(),
+                                         "Recombination requires bounded parameter domains.");
+                parameter_count = std::max(parameter_count, source.number_of_parameters());
+                sources.append(source);
+                source_indices.append(index);
             }
-            ARIADNE_PRECONDITION_MSG(source.reduced_domain().is_bounded(),
-                                     "Recombination requires bounded parameter domains.");
-            parameter_count = std::max(parameter_count, source.number_of_parameters());
-            sources.append(source);
-            source_indices.append(index);
         }
     }
     if (sources.empty())

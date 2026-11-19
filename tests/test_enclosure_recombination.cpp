@@ -225,7 +225,10 @@ class TestEnclosureRecombination : public Testing::ContextFixture {
         const ReferenceEnclosureRecombiner parallel(EnclosureRecombinationExecution::PARALLEL);
         const auto expected = serial.recombine(inputs);
         ARIADNE_TESTING_EXPECT_EQUAL(expected.outputs.size(), 1u);
+        const auto maximum_concurrency = ThreadManager::instance().maximum_concurrency();
         for (const std::size_t concurrency: {0u, 1u, 2u, 4u, 8u}) {
+            if (concurrency > maximum_concurrency)
+                continue;
             ThreadManager::instance().set_concurrency(concurrency);
             EnclosureRecombinationProfile profile;
             std::vector<EnclosureRecombinationSourceProfile> individual;
@@ -286,7 +289,10 @@ class TestEnclosureRecombination : public Testing::ContextFixture {
         ARIADNE_TESTING_EXPECT_EQUAL(expected.outputs.front().source_indices, surviving_indices);
         ARIADNE_TESTING_EXPECT_EQUAL(expected.discarded_sources.size(), inputs.size() - surviving_indices.size());
 
-        for (const std::size_t concurrency: {0u, 1u, 4u, 8u}) {
+        const auto maximum_concurrency = ThreadManager::instance().maximum_concurrency();
+        for (const std::size_t concurrency: {0u, 1u, 2u, 4u, 8u}) {
+            if (concurrency > maximum_concurrency)
+                continue;
             ThreadManager::instance().set_concurrency(concurrency);
             EnclosureRecombinationProfile profile;
             std::vector<EnclosureRecombinationSourceProfile> individual;

@@ -45,7 +45,7 @@ def test_continuous_recombination():
     assert isinstance(batch.outputs[0].enclosure, a.Enclosure)
     assert batch.discarded_sources == []
     assert batch.radius_limit_satisfied
-    assert str(handle) == "ReferenceEnclosureRecombiner()"
+    assert str(handle) == "ParallelReferenceEnclosureRecombiner()"
     assert a.EnclosureRecombinationContext().maximum_enclosure_radius is None
     small = a.EnclosureRecombinationContext(0.01)
     assert small.maximum_enclosure_radius == 0.01

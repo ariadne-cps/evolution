@@ -41,10 +41,10 @@
 #include "function/formula.tpl.hpp"
 #include "function/function.hpp"
 #include "function/procedure.hpp"
+#include "threading/task_group.hpp"
 #include "utility/macros.hpp"
 
 #include "constraint-solving/constraint_solver.hpp"
-#include "threading/task_group.hpp"
 
 namespace Ariadne {
 namespace {

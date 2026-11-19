@@ -102,7 +102,8 @@ struct EnclosureRecombinationSourceProfile {
  *  @details PARALLEL is the default and uses workers when concurrency is positive;
  *  SEQUENTIAL remains an explicit deterministic reference strategy.
  */
-enum class EnclosureRecombinationExecution { SEQUENTIAL, PARALLEL };
+enum class EnclosureRecombinationExecution { SEQUENTIAL,
+                                             PARALLEL };
 
 /** @brief Recombine all surviving sources around the first source's nonlinear map.
  *  @details Contracts each source independently and encloses state/clock residuals

@@ -30,12 +30,11 @@
 #include <sstream>
 #include <utility>
 
-#include "threading/thread_manager.hpp"
-
 #include "algebra/sweeper.hpp"
 #include "evolution/enclosure_recombiner.hpp"
 #include "function/taylor_function.hpp"
 #include "logging/test_runner.hpp"
+#include "threading/thread_manager.hpp"
 
 #include "ariadne-testing.hpp"
 

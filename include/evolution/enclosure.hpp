@@ -190,9 +190,9 @@ class Enclosure
 
     //! \brief A list detailing the kind of variable each of the domain parameters represents.
     const List<EnclosureVariableKind>& variable_kinds() const;
-    //! \brief Append independent trajectory-constant coordinates without adding state variables.
+    //! \brief Append independent coordinates of the declared kind without adding state variables.
     //! Existing maps, constraints and reduced domains retain their dependencies.
-    Void adjoin_constant_parameters(const ExactBoxType& parameters);
+    Void adjoin_parameters(const ExactBoxType& parameters, EnclosureVariableKind kind);
     //! \brief Substitutes the expression \f$x_j=v(x_1,\ldots,x_{j-1},x_{j+1}\ldots,x_n)\f$ into the function and constraints.
     //! Requires that \f$v(D_1,\ldots,D_{j-1},D_{j+1}\ldots,D_n) \subset D_j\f$ where \f$D\f$ is the domain.
     Void substitute(SizeType j, ValidatedScalarMultivariateFunctionPatch v);

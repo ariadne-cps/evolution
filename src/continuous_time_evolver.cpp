@@ -245,7 +245,7 @@ auto ContinuousTimeEvolver::orbit(const EnclosureType& initial_set, const TimeTy
         if (semantics == Semantics::LOWER) {
             throw std::invalid_argument("Parameterised continuous evolution currently requires UPPER semantics");
         }
-        initial.adjoin_constant_parameters(this->system().constant_parameter_domain());
+        initial.adjoin_parameters(this->system().constant_parameter_domain(), EnclosureVariableKind::PARAMETER);
     }
     auto result = std::make_shared<SynchronisedOrbit>(initial);
     WorkloadType workload([time](const TimedEnclosureType& timed_enclosure, SharedPointer<ProgressIndicator> indicator) {
@@ -375,8 +375,7 @@ Void ContinuousTimeEvolver::
     LOGGING_PRINTLN("current_set_bounds = " << current_set_bounds)
 
     StepSizeType step_size;
-    EnclosureType reach_set = current_set;
-    EnclosureType next_set = current_set;
+    EvolutionDetail::AppliedIntegrationStep applied{{}, current_set, false};
     SharedPointer<PreconditionedTaylorSeriesState> next_preconditioned_state;
 
     const SizeType parameter_count = _system->parameter_space().dimension();
@@ -397,8 +396,8 @@ Void ContinuousTimeEvolver::
             dynamic, current_set_bounds, current_time, bounded_step,
             parameter_domain, bounding_box));
         step_size = common_step.time_step();
-        EvolutionDetail::apply_integration_step(
-            reach_set, next_set, common_step, join(current_set.state_function(), parameters));
+        applied = EvolutionDetail::apply_integration_step(
+            current_set, common_step, join(current_set.state_function(), parameters), semantics);
     } else if (preconditioned_integrator != nullptr) {
         if (preconditioned_integrator->diagnostics() && result->reach_size() == 1u && preconditioned_integrator->preconditioning() == TaylorSeriesPreconditioning::QR) {
             PreconditionedGradedTaylorSeriesIntegrator identity_probe =
@@ -475,8 +474,8 @@ Void ContinuousTimeEvolver::
             step_size, local_step.flowpipe_mapping().range(), final_mapping.range(),
             {}, {local_step.flowpipe_mapping()}, final_mapping, current_time,
             local_step.flowpipe_mapping().argument_size() - 1u, false, ExactBoxType(0u), current_time);
-        EvolutionDetail::apply_integration_step(reach_set, next_set, common_step,
-                                                EvolutionDetail::IntegrationStepCoordinates::PARAMETERS);
+        applied = EvolutionDetail::apply_integration_step(current_set, common_step,
+                                                          EvolutionDetail::IntegrationStepCoordinates::PARAMETERS, semantics);
         next_preconditioned_state =
             std::make_shared<PreconditionedTaylorSeriesState>(
                 local_step.final_state());
@@ -512,13 +511,16 @@ Void ContinuousTimeEvolver::
         const auto common_step = step_integrator.step(ValidatedIntegrationRequest(
             dynamic, current_set_bounds, suggest(maximum_step_size), current_time));
         step_size = common_step.time_step();
-        EvolutionDetail::apply_integration_step(reach_set, next_set, common_step,
-                                                EvolutionDetail::IntegrationStepCoordinates::STATE);
+        applied = EvolutionDetail::apply_integration_step(current_set, common_step,
+                                                          EvolutionDetail::IntegrationStepCoordinates::STATE, semantics);
     }
 
     TimeStepType next_time = current_time + TimeStepType(step_size);
 
-    result->adjoin_reach(reach_set);
+    for (const auto& reach: applied.reach) {
+        result->adjoin_reach(EnclosureType(reach, current_set.state_space(), current_set.auxiliary_space()));
+    }
+    EnclosureType next_set(applied.evolved, current_set.state_space(), current_set.auxiliary_space());
     result->adjoin_intermediate(next_set);
     if (next_preconditioned_state) {
         workload.append({next_time, next_set, std::move(next_preconditioned_state)});

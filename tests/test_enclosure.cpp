@@ -72,7 +72,7 @@ class TestEnclosure : public Ariadne::Testing::ContextFixture {
         set.reduce();
         const auto reduced = set.reduced_domain();
         const auto constraints = set.constraint_bounds();
-        set.adjoin_constant_parameters(parameters);
+        set.adjoin_parameters(parameters, EnclosureVariableKind::PARAMETER);
         ARIADNE_TESTING_EXPECT_EQUAL(set.state_dimension(), 1u);
         ARIADNE_TESTING_EXPECT_EQUAL(set.parameter_domain(), product(domain, parameters));
         ARIADNE_TESTING_EXPECT_EQUAL(set.reduced_domain(), product(reduced, parameters));

@@ -371,7 +371,7 @@ Void Enclosure::set_time_function(const ValidatedScalarMultivariateFunctionPatch
     this->_time_function = restriction(time, this->parameter_domain());
 }
 
-Void Enclosure::adjoin_constant_parameters(const ExactBoxType& parameters) {
+Void Enclosure::adjoin_parameters(const ExactBoxType& parameters, EnclosureVariableKind kind) {
     if (parameters.dimension() == 0u) {
         return;
     }
@@ -385,7 +385,7 @@ Void Enclosure::adjoin_constant_parameters(const ExactBoxType& parameters) {
         constraint.set_function(embed(constraint.function(), parameters));
     }
     extended._variable_kinds.concatenate(
-        List<EnclosureVariableKind>(parameters.dimension(), EnclosureVariableKind::PARAMETER));
+        List<EnclosureVariableKind>(parameters.dimension(), kind));
     *this = std::move(extended);
 }
 

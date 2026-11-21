@@ -26,10 +26,20 @@ Ordinary and hybrid flows use `ValidatedIntegrationRequest` and consume
 the reach and endpoint certificates independently, preserving constraints,
 auxiliary outputs, existing parameter coordinates, absolute time and dwell time.
 The preconditioned solver retains its carried state and separately computed
-endpoint. This bridge accepts one reach patch with local or absolute time and
-an independent endpoint map. A validated argument map can bind the numerical
-state and fixed parameters to existing enclosure coordinates. Unsupported
-representations are rejected explicitly.
+endpoint. The bridge returns one enclosure per reach patch, retaining each
+patch's local or absolute time interval, and a separate endpoint enclosure.
+A validated argument map binds the numerical state and fixed parameters to
+existing enclosure coordinates. Reach and endpoint can add different input
+coordinates with different domains.
+
+Structured certificates are required by default. Missing reach or endpoint
+maps can use the corresponding certified box only with the explicit
+`ALLOW_BOX_ENCLOSURES` policy under `Semantics::UPPER`. These are outer Cartesian
+enclosures with independent uncertainty coordinates; the result records the
+loss of structure. Any available structured component is retained. Box
+application preserves the original feasible parameter coordinates and time
+maps, and never claims an inner reachability or correlated trajectory model.
+The ordinary evolution paths continue to require structured certificates.
 The inclusion loop still awaits migration into `ContinuousTimeEvolver`, including
 removal of its competitive approximation scheduler.
 

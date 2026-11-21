@@ -6,6 +6,7 @@
 #include "../src/continuous_integration.hpp"
 #include "evolution/enclosure.hpp"
 #include "function/function.hpp"
+#include "function/symbolic_function.hpp"
 #include "function/taylor_function.hpp"
 #include "function/taylor_model.hpp"
 #include "integration/validated_step_integrator.hpp"
@@ -26,6 +27,168 @@ class TestContinuousIntegration : public Ariadne::Testing::ContextFixture {
     TaylorPicardIntegrator integrator{StepMaximumError(1e-6)};
     EnclosureConfiguration config{integrator.function_factory()};
 
+    Void test_multipatch_reach_keeps_local_intervals_and_independent_inputs() {
+        Enclosure source(domain, config);
+        const auto s = EffectiveScalarMultivariateFunction::coordinate(1u, 0u);
+        source.new_positive_state_constraint(s);
+        source.set_time_function(config.function_factory().create_constant(domain, 2));
+        const auto& factory = config.function_factory();
+        const auto patch = [&](const ExactIntervalType& time, const ExactIntervalType& input) {
+            const auto d = product(product(domain, time), input);
+            return ValidatedVectorMultivariateFunctionPatch(1u,
+                                                            factory.create_coordinate(d, 0u) + factory.create_coordinate(d, 2u) *
+                                                                                                   (factory.create_coordinate(d, 1u) - Real(2)));
+        };
+        const auto first = patch(ExactIntervalType(2.0_x, 2.0625_x), ExactIntervalType(-0.5_x, 0.5_x));
+        const auto second = patch(ExactIntervalType(2.0625_x, 2.125_x), ExactIntervalType(-1.0_x, 1.0_x));
+        const auto endpoint_domain = product(domain, ExactIntervalType(-0.125_x, 0.125_x));
+        const auto endpoint = ValidatedVectorMultivariateFunctionPatch(1u,
+                                                                       factory.create_coordinate(endpoint_domain, 0u) + factory.create_coordinate(endpoint_domain, 1u));
+        const UpperBoxType bound({
+            {-2.0_x, 2.0_x}
+        });
+        // Deliberately unsorted, with different reach/endpoint input domains.
+        const ValidatedIntegrationStep step(h, bound, bound, {}, {second, first}, endpoint,
+                                            StepSizeType(2u), 1u, true);
+        const auto applied = apply_integration_step(source, step, IntegrationStepCoordinates::PARAMETERS, Semantics::UPPER);
+        ARIADNE_TESTING_EXPECT_EQUAL(applied.reach.size(), 2u);
+        ARIADNE_TESTING_PROVE(!applied.used_box_enclosure);
+        for (SizeType i = 0u; i != applied.reach.size(); ++i) {
+            const auto& reach = applied.reach[i];
+            const ExactIntervalType expected_time = i == 0u
+                                                      ? ExactIntervalType(0.0625_x, 0.125_x)
+                                                      : ExactIntervalType(0.0_x, 0.0625_x);
+            ARIADNE_TESTING_EXPECT_EQUAL(reach.parameter_domain()[2u], expected_time);
+            ARIADNE_TESTING_EXPECT_EQUAL(reach.variable_kinds()[1u], EnclosureVariableKind::INPUT);
+            ARIADNE_TESTING_EXPECT_EQUAL(reach.variable_kinds()[2u], EnclosureVariableKind::TEMPORAL);
+            ARIADNE_TESTING_EXPECT_EQUAL(reach.number_of_constraints(), source.number_of_constraints());
+            const ExactDouble tau = i == 0u ? 0.09375_x : 0.03125_x;
+            const Vector<FloatDPBounds> point({FloatDPBounds(0.25_x, dp), FloatDPBounds(0.5_x, dp), FloatDPBounds(tau, dp)});
+            ARIADNE_TESTING_PROVE(refines(FloatDPBounds(0.25_x, dp) + FloatDPBounds(0.5_x, dp) * FloatDPBounds(tau, dp),
+                                          reach.state_function()(point)[0u]));
+            ARIADNE_TESTING_PROVE(refines(FloatDPBounds(2, dp) + FloatDPBounds(tau, dp), reach.time_function()(point)));
+            ARIADNE_TESTING_PROVE(refines(FloatDPBounds(tau, dp), reach.dwell_time_function()(point)));
+        }
+        ARIADNE_TESTING_EXPECT_EQUAL(applied.reach[0u].parameter_domain()[1u], ExactIntervalType(-1.0_x, 1.0_x));
+        ARIADNE_TESTING_EXPECT_EQUAL(applied.reach[1u].parameter_domain()[1u], ExactIntervalType(-0.5_x, 0.5_x));
+        ARIADNE_TESTING_EXPECT_EQUAL(applied.evolved.parameter_domain(), endpoint_domain);
+        const Vector<FloatDPBounds> endpoint_point({FloatDPBounds(0, dp), FloatDPBounds(0.125_x, dp)});
+        ARIADNE_TESTING_PROVE(refines(FloatDPBounds(0.125_x, dp), applied.evolved.state_function()(endpoint_point)[0u]));
+        ARIADNE_TESTING_PROVE(refines(FloatDPBounds(2.125_x, dp), applied.evolved.time_function()(endpoint_point)));
+
+        const ValidatedIntegrationStep boxed_endpoint(h, bound, bound, {}, {second, first}, std::nullopt,
+                                                      StepSizeType(2u), 1u, true);
+        const auto mixed = apply_integration_step(source, boxed_endpoint, IntegrationStepCoordinates::PARAMETERS,
+                                                  Semantics::UPPER, IntegrationStepRepresentation::ALLOW_BOX_ENCLOSURES);
+        ARIADNE_TESTING_PROVE(mixed.used_box_enclosure);
+        ARIADNE_TESTING_EXPECT_EQUAL(mixed.reach.size(), 2u);
+        ARIADNE_TESTING_EXPECT_EQUAL(mixed.reach[0u].parameter_domain(), applied.reach[0u].parameter_domain());
+        ARIADNE_TESTING_EXPECT_EQUAL(mixed.evolved.variable_kinds()[1u], EnclosureVariableKind::ERROR);
+        const ValidatedIntegrationStep boxed_reach(h, bound, bound, {}, {}, endpoint, StepSizeType(2u));
+        const auto other = apply_integration_step(source, boxed_reach, IntegrationStepCoordinates::PARAMETERS,
+                                                  Semantics::UPPER, IntegrationStepRepresentation::ALLOW_BOX_ENCLOSURES);
+        ARIADNE_TESTING_EXPECT_EQUAL(other.evolved.parameter_domain(), endpoint_domain);
+        ARIADNE_TESTING_EXPECT_EQUAL(other.evolved.variable_kinds()[1u], EnclosureVariableKind::INPUT);
+        ARIADNE_TESTING_PROVE(refines(FloatDPBounds(0.125_x, dp), other.evolved.state_function()(endpoint_point)[0u]));
+    }
+
+    Void test_box_only_inclusion_continuation_uses_outer_enclosures() {
+        const auto u = EffectiveScalarMultivariateFunction::coordinate(2u, 1u);
+        const ValidatedInputFieldBoxAdapterDP field(
+            EffectiveVectorMultivariateFunction({u}), domain, domain);
+        const ExactBoxType initial({
+            {-0.125_x, 0.125_x}
+        });
+        Enclosure source(initial, config);
+        const FirstOrderMultifunctionIntegrator numerical;
+        const MultiflowStepIntegratorAdapter solver(numerical);
+        const UpperBoxType bound(domain);
+        const StepSizeType h1(0.03125_x), h2(0.015625_x);
+        const auto first = solver.step(ValidatedIntegrationRequest(field, initial, h1, bound));
+        const auto first_applied = apply_integration_step(source, first, IntegrationStepCoordinates::STATE,
+                                                          Semantics::UPPER, IntegrationStepRepresentation::ALLOW_BOX_ENCLOSURES);
+        const auto second = solver.step(ValidatedIntegrationRequest(field, first, h2, bound));
+        const auto applied = apply_integration_step(first_applied.evolved, second, IntegrationStepCoordinates::STATE,
+                                                    Semantics::UPPER, IntegrationStepRepresentation::ALLOW_BOX_ENCLOSURES);
+        ARIADNE_TESTING_PROVE(first_applied.used_box_enclosure && applied.used_box_enclosure);
+        ARIADNE_TESTING_EXPECT_EQUAL(applied.evolved.state_dimension(), 1u);
+        ARIADNE_TESTING_EXPECT_EQUAL(applied.evolved.number_of_parameters(), 3u);
+        const auto final = cast_exact_box(applied.evolved.bounding_box());
+        ARIADNE_TESTING_PROVE(subset(ExactBoxType({
+                                         {-0.171875_x, 0.171875_x}
+        }),
+                                     final));
+        ARIADNE_TESTING_PROVE(subset(final, ExactBoxType({
+                                                {-0.1728515625_x, 0.1728515625_x}
+        })));
+        const Vector<FloatDPBounds> point({FloatDPBounds(0, dp), FloatDPBounds(0, dp), FloatDPBounds(0, dp)});
+        ARIADNE_TESTING_PROVE(refines(FloatDPBounds(0.046875_x, dp), applied.evolved.time_function()(point)));
+        ARIADNE_TESTING_PROVE(!second.has_evolve_model());
+        ARIADNE_TESTING_PROVE(!second.has_reach_models());
+        ARIADNE_TESTING_EXPECT_EQUAL(source.number_of_parameters(), 1u);
+    }
+
+    Void test_structured_inclusion_continuation_appends_inputs_independently() {
+        const auto u = EffectiveFormula::coordinate(1u);
+        const EffectiveVectorMultivariateFunction function = EffectiveVectorMultivariateFormulaFunction(
+            2u, Vector<EffectiveFormula>{u});
+        const ValidatedInputFieldBoxAdapterDP field(function, domain, domain);
+        const ExactBoxType initial({
+            {-0.125_x, 0.125_x}
+        });
+        Enclosure source(initial, config);
+        TaylorSeriesIntegrator base(ThresholdSweeper<FloatDP>(dp, 1e-10), lipschitz_tolerance = 0.5_x, order = 8);
+        const SelectedParametricMultifunctionIntegrator selected(
+            base, InputApproximation(ZeroApproximation()), InputApproximation(ConstantApproximation()));
+        const StructuredInclusionStepIntegratorAdapter solver(selected);
+        const StepSizeType h1(0.03125_x), h2(0.015625_x);
+        const UpperBoxType bound(domain);
+        const auto first = solver.step(ValidatedIntegrationRequest(field, initial, h1, bound));
+        const auto first_applied = apply_integration_step(source, first, IntegrationStepCoordinates::PARAMETERS, Semantics::UPPER);
+        const auto second = solver.step(ValidatedIntegrationRequest(field, first, h2, bound));
+        const auto applied = apply_integration_step(first_applied.evolved, second, IntegrationStepCoordinates::PARAMETERS, Semantics::UPPER);
+        ARIADNE_TESTING_PROVE(!applied.used_box_enclosure);
+        ARIADNE_TESTING_EXPECT_EQUAL(applied.evolved.parameter_domain(), second.evolve_model().domain());
+        ARIADNE_TESTING_PROVE(applied.evolved.number_of_parameters() > first_applied.evolved.number_of_parameters());
+        ARIADNE_TESTING_EXPECT_EQUAL(applied.reach[0u].parameter_domain()[applied.reach[0u].number_of_parameters() - 1u],
+                                     ExactIntervalType(0.0_x, 0.015625_x));
+        const auto final = cast_exact_box(applied.evolved.bounding_box());
+        ARIADNE_TESTING_PROVE(subset(ExactBoxType({
+                                         {-0.171875_x, 0.171875_x}
+        }),
+                                     final));
+        ARIADNE_TESTING_PROVE(subset(final, ExactBoxType({
+                                                {-0.1728515625_x, 0.1728515625_x}
+        })));
+    }
+
+    Void test_box_enclosures_retain_fixed_parameters_and_constraints() {
+        Enclosure source(domain, config);
+        const auto s = EffectiveScalarMultivariateFunction::coordinate(1u, 0u);
+        source.new_positive_state_constraint(s);
+        const ExactBoxType parameters({
+            {-0.5_x, 0.5_x}
+        });
+        source.adjoin_parameters(parameters, EnclosureVariableKind::PARAMETER);
+        const auto p = config.function_factory().create_coordinate(source.parameter_domain(), 1u);
+        const auto arguments = join(source.state_function(), p);
+        const UpperBoxType bound({
+            {-2.0_x, 2.0_x}
+        });
+        const ValidatedIntegrationStep step(h, bound, bound, {}, {}, std::nullopt,
+                                            StepSizeType(0u), std::nullopt, true, parameters);
+        const auto applied = apply_integration_step(source, step, arguments, Semantics::UPPER,
+                                                    IntegrationStepRepresentation::ALLOW_BOX_ENCLOSURES);
+        ARIADNE_TESTING_EXPECT_EQUAL(applied.evolved.variable_kinds()[1u], EnclosureVariableKind::PARAMETER);
+        ARIADNE_TESTING_EXPECT_EQUAL(applied.evolved.variable_kinds()[2u], EnclosureVariableKind::ERROR);
+        ARIADNE_TESTING_EXPECT_EQUAL(applied.evolved.parameter_domain()[1u], parameters[0u]);
+        ARIADNE_TESTING_EXPECT_EQUAL(applied.evolved.number_of_constraints(), 1u);
+        ARIADNE_TESTING_EXPECT_EQUAL(applied.reach[0u].number_of_constraints(), 1u);
+        ARIADNE_TESTING_EXPECT_THROWS(std::invalid_argument,
+                                      apply_integration_step(source, step, IntegrationStepCoordinates::PARAMETERS, Semantics::UPPER,
+                                                             IntegrationStepRepresentation::ALLOW_BOX_ENCLOSURES));
+    }
+
     Void test_local_step_preserves_correlations_and_absolute_time() {
         const auto s = EffectiveScalarMultivariateFunction::coordinate(1u, 0u);
         Enclosure source(domain, EffectiveVectorMultivariateFunction({s, -s}),
@@ -37,9 +200,10 @@ class TestContinuousIntegration : public Ariadne::Testing::ContextFixture {
         const FlowStepIntegratorAdapter solver(integrator);
         const auto step = solver.step(ValidatedIntegrationRequest(field,
                                                                   cast_exact_box(source.bounding_box()), suggest(h), StepSizeType(2u)));
-        auto reach = source;
-        auto evolved = source;
-        apply_integration_step(reach, evolved, step, IntegrationStepCoordinates::STATE);
+        const auto applied = apply_integration_step(source, step, IntegrationStepCoordinates::STATE, Semantics::UPPER);
+        ARIADNE_TESTING_EXPECT_EQUAL(applied.reach.size(), 1u);
+        const auto& reach = applied.reach[0u];
+        const auto& evolved = applied.evolved;
         ARIADNE_TESTING_EXPECT_EQUAL(evolved.parameter_domain(), domain);
         ARIADNE_TESTING_EXPECT_EQUAL(evolved.number_of_constraints(), source.number_of_constraints());
         ARIADNE_TESTING_PROVE(reach.number_of_constraints() >= source.number_of_constraints());
@@ -64,9 +228,9 @@ class TestContinuousIntegration : public Ariadne::Testing::ContextFixture {
         endpoint[0u].set_error(FloatDPError(0.125_x, dp));
         const ValidatedIntegrationStep step(h, tube.range(), endpoint.range(), {},
                                             {tube}, endpoint, StepSizeType(2u), 1u, false, ExactBoxType(0u), StepSizeType(2u));
-        auto reach = source;
-        auto evolved = source;
-        apply_integration_step(reach, evolved, step, IntegrationStepCoordinates::PARAMETERS);
+        const auto applied = apply_integration_step(source, step, IntegrationStepCoordinates::PARAMETERS, Semantics::UPPER);
+        const auto& reach = applied.reach[0u];
+        const auto& evolved = applied.evolved;
         const Vector<FloatDPBounds> endpoint_point({FloatDPBounds(0, dp)});
         ARIADNE_TESTING_PROVE(refines(FloatDPBounds(-0.125_x, 0.125_x, dp), evolved.state_function()(endpoint_point)[0u]));
         ARIADNE_TESTING_EXPECT_EQUAL(reach.number_of_parameters(), 2u);
@@ -76,21 +240,15 @@ class TestContinuousIntegration : public Ariadne::Testing::ContextFixture {
         ARIADNE_TESTING_PROVE(refines(FloatDPBounds(h, dp), evolved.dwell_time_function()(point)));
     }
 
-    Void test_unsupported_certificates_do_not_change_enclosures() {
-        Enclosure reach(domain, config), evolved(domain, config);
+    Void test_missing_certificates_require_explicit_box_policy() {
+        Enclosure source(domain, config);
         const ValidatedIntegrationStep box_only(h, UpperBoxType(domain), UpperBoxType(domain));
         ARIADNE_TESTING_EXPECT_THROWS(std::invalid_argument,
-                                      apply_integration_step(reach, evolved, box_only, IntegrationStepCoordinates::STATE));
-        const auto d1 = product(domain, IntervalDomainType(StepSizeType(0u), hlf(h)));
-        const auto d2 = product(domain, IntervalDomainType(hlf(h), h));
-        const auto& factory = config.function_factory();
-        const ValidatedIntegrationStep split(h, UpperBoxType(domain), UpperBoxType(domain), {},
-                                             {factory.create_projection(d1, range(0u, 1u)), factory.create_projection(d2, range(0u, 1u))},
-                                             factory.create_identity(domain), StepSizeType(0u), 1u);
+                                      apply_integration_step(source, box_only, IntegrationStepCoordinates::STATE, Semantics::UPPER));
         ARIADNE_TESTING_EXPECT_THROWS(std::invalid_argument,
-                                      apply_integration_step(reach, evolved, split, IntegrationStepCoordinates::PARAMETERS));
-        ARIADNE_TESTING_EXPECT_EQUAL(reach.parameter_domain(), domain);
-        ARIADNE_TESTING_EXPECT_EQUAL(evolved.parameter_domain(), domain);
+                                      apply_integration_step(source, box_only, IntegrationStepCoordinates::STATE, Semantics::LOWER,
+                                                             IntegrationStepRepresentation::ALLOW_BOX_ENCLOSURES));
+        ARIADNE_TESTING_EXPECT_EQUAL(source.parameter_domain(), domain);
     }
 
     Void test_argument_maps_reject_missing_or_out_of_domain_parameters() {
@@ -98,7 +256,7 @@ class TestContinuousIntegration : public Ariadne::Testing::ContextFixture {
         const ExactBoxType parameters({
             {0.5_x, 0.75_x}
         });
-        source.adjoin_constant_parameters(parameters);
+        source.adjoin_parameters(parameters, EnclosureVariableKind::PARAMETER);
         const auto t = EffectiveScalarMultivariateFunction::coordinate(3u, 1u);
         const auto p = EffectiveScalarMultivariateFunction::coordinate(3u, 2u);
         const EffectiveVectorMultivariateFunction field = {t + p};
@@ -108,18 +266,15 @@ class TestContinuousIntegration : public Ariadne::Testing::ContextFixture {
             field, domain, StepSizeType(0u), h, parameters, UpperBoxType({
                                                                 {-2.0_x, 2.0_x}
         })));
-        auto reach = source;
-        auto evolved = source;
+        const auto before = cast_exact_box(source.state_function().range());
         ARIADNE_TESTING_EXPECT_THROWS(std::invalid_argument,
-                                      apply_integration_step(reach, evolved, step, source.state_function()));
+                                      apply_integration_step(source, step, source.state_function(), Semantics::UPPER));
         const auto fixed = config.function_factory().create_coordinate(source.parameter_domain(), 1u);
         const auto outside = join(source.state_function(), fixed + Real(1));
         ARIADNE_TESTING_EXPECT_THROWS(std::invalid_argument,
-                                      apply_integration_step(reach, evolved, step, outside));
-        ARIADNE_TESTING_EXPECT_EQUAL(reach.parameter_domain(), source.parameter_domain());
-        ARIADNE_TESTING_EXPECT_EQUAL(evolved.parameter_domain(), source.parameter_domain());
-        ARIADNE_TESTING_EXPECT_EQUAL(cast_exact_box(reach.state_function().range()), cast_exact_box(source.state_function().range()));
-        ARIADNE_TESTING_EXPECT_EQUAL(cast_exact_box(evolved.state_function().range()), cast_exact_box(source.state_function().range()));
+                                      apply_integration_step(source, step, outside, Semantics::UPPER));
+        ARIADNE_TESTING_EXPECT_EQUAL(cast_exact_box(source.state_function().range()), before);
+        ARIADNE_TESTING_EXPECT_EQUAL(source.parameter_domain(), product(domain, parameters));
     }
 
     Void test_explicit_time_state_step_rebases_reach_without_losing_correlations() {
@@ -141,9 +296,10 @@ class TestContinuousIntegration : public Ariadne::Testing::ContextFixture {
             field, cast_exact_box(source.bounding_box()), t0, h, ExactBoxType(0u), bound));
         ARIADNE_TESTING_PROVE(step.has_explicit_time());
         ARIADNE_TESTING_EXPECT_EQUAL(step.reach_time_offset(), StepSizeType(0u));
-        auto reach = source;
-        auto evolved = source;
-        apply_integration_step(reach, evolved, step, IntegrationStepCoordinates::STATE);
+        const auto applied = apply_integration_step(source, step, IntegrationStepCoordinates::STATE, Semantics::UPPER);
+        ARIADNE_TESTING_EXPECT_EQUAL(applied.reach.size(), 1u);
+        const auto& reach = applied.reach[0u];
+        const auto& evolved = applied.evolved;
         ARIADNE_TESTING_EXPECT_EQUAL(evolved.parameter_domain(), domain);
         const auto invariant = evolved.state_function()[0u] + evolved.state_function()[1u];
         const ExactDouble tolerance = 0x1p-20_x;
@@ -186,12 +342,11 @@ class TestContinuousIntegration : public Ariadne::Testing::ContextFixture {
         ARIADNE_TESTING_EXPECT_EQUAL(second.reach_time_index().value(), 2u);
         ARIADNE_TESTING_EXPECT_EQUAL(first.constant_parameter_domain(), parameters);
         ARIADNE_TESTING_EXPECT_EQUAL(second.constant_parameter_domain(), parameters);
-        auto first_reach = source;
-        auto first_evolved = source;
-        apply_integration_step(first_reach, first_evolved, first, IntegrationStepCoordinates::PARAMETERS);
-        auto second_reach = first_evolved;
-        auto second_evolved = first_evolved;
-        apply_integration_step(second_reach, second_evolved, second, IntegrationStepCoordinates::PARAMETERS);
+        const auto first_applied = apply_integration_step(source, first, IntegrationStepCoordinates::PARAMETERS, Semantics::UPPER);
+        const auto& first_evolved = first_applied.evolved;
+        const auto second_applied = apply_integration_step(first_evolved, second, IntegrationStepCoordinates::PARAMETERS, Semantics::UPPER);
+        const auto& second_reach = second_applied.reach[0u];
+        const auto& second_evolved = second_applied.evolved;
         ARIADNE_TESTING_EXPECT_EQUAL(first_evolved.parameter_domain(), parameter_domain);
         ARIADNE_TESTING_EXPECT_EQUAL(second_evolved.parameter_domain(), parameter_domain);
         ARIADNE_TESTING_EXPECT_EQUAL(second_evolved.number_of_parameters(), 2u);
@@ -208,9 +363,13 @@ class TestContinuousIntegration : public Ariadne::Testing::ContextFixture {
 
 int main(int argc, char** argv) {
     ARIADNE_TESTING_SUITE("test_continuous_integration");
+    ARIADNE_TESTING_ADD_TEST(TestContinuousIntegration, test_multipatch_reach_keeps_local_intervals_and_independent_inputs);
+    ARIADNE_TESTING_ADD_TEST(TestContinuousIntegration, test_box_only_inclusion_continuation_uses_outer_enclosures);
+    ARIADNE_TESTING_ADD_TEST(TestContinuousIntegration, test_structured_inclusion_continuation_appends_inputs_independently);
+    ARIADNE_TESTING_ADD_TEST(TestContinuousIntegration, test_box_enclosures_retain_fixed_parameters_and_constraints);
     ARIADNE_TESTING_ADD_TEST(TestContinuousIntegration, test_local_step_preserves_correlations_and_absolute_time);
     ARIADNE_TESTING_ADD_TEST(TestContinuousIntegration, test_parameterized_step_uses_the_independent_endpoint_certificate);
-    ARIADNE_TESTING_ADD_TEST(TestContinuousIntegration, test_unsupported_certificates_do_not_change_enclosures);
+    ARIADNE_TESTING_ADD_TEST(TestContinuousIntegration, test_missing_certificates_require_explicit_box_policy);
     ARIADNE_TESTING_ADD_TEST(TestContinuousIntegration, test_argument_maps_reject_missing_or_out_of_domain_parameters);
     ARIADNE_TESTING_ADD_TEST(TestContinuousIntegration, test_explicit_time_state_step_rebases_reach_without_losing_correlations);
     ARIADNE_TESTING_ADD_TEST(TestContinuousIntegration, test_explicit_time_parameters_are_preserved_across_two_steps);

@@ -29,17 +29,22 @@ class TestOrdinaryDynamicsContract : public Ariadne::Testing::ContextFixture {
   public:
     using ContextFixture::ContextFixture;
 
-    Void test_equation_consumers_reject_unsupported_arguments() {
+    Void test_equation_consumers_enforce_numerical_capabilities() {
         RealVariable x("x"), t("t"), p("p");
         const OrdinaryDifferentialAlgebraicEquation timed({dot(x) = t - x}, RealVariablesBox{}, t);
         const OrdinaryDifferentialAlgebraicEquation parameterised({dot(x) = p - x}, RealVariablesBox({0 <= p <= 1}));
         TaylorPicardIntegrator integrator(step_maximum_error = 1e-5);
-        for (const auto& equation: {timed, parameterised}) {
-            ARIADNE_TESTING_EXPECT_EQUAL(equation.dimension(), 1u);
-            ARIADNE_TESTING_EXPECT_EQUAL(equation.function().argument_size(), 2u);
-            ARIADNE_TESTING_EXPECT_THROWS(std::invalid_argument, ContinuousTimeEvolver(equation, integrator));
-            ARIADNE_TESTING_EXPECT_THROWS(std::invalid_argument, (void)VectorFieldSimulator(equation));
-        }
+        // The validated continuous solver now handles explicit time. Constant
+        // parameters still need enclosure coordinates that persist across steps.
+        ARIADNE_TESTING_EXPECT_EQUAL(timed.dimension(), 1u);
+        ARIADNE_TESTING_EXPECT_EQUAL(timed.function().argument_size(), 2u);
+        ARIADNE_TESTING_EXPECT_EQUAL(parameterised.function().argument_size(), 2u);
+        ContinuousTimeEvolver timed_evolver(timed, integrator);
+        ARIADNE_TESTING_PROVE(timed_evolver.system().has_explicit_time());
+        ARIADNE_TESTING_EXPECT_THROWS(
+            std::invalid_argument, ContinuousTimeEvolver(parameterised, integrator));
+        ARIADNE_TESTING_EXPECT_THROWS(std::invalid_argument, (void)VectorFieldSimulator(timed));
+        ARIADNE_TESTING_EXPECT_THROWS(std::invalid_argument, (void)VectorFieldSimulator(parameterised));
     }
 
     Void test_inclusion_consumer_rejects_unsupported_arguments() {
@@ -76,7 +81,7 @@ class TestOrdinaryDynamicsContract : public Ariadne::Testing::ContextFixture {
 
 int main(int argc, char** argv) {
     ARIADNE_TESTING_SUITE("test_ordinary_dynamics_contract");
-    ARIADNE_TESTING_ADD_TEST(TestOrdinaryDynamicsContract, test_equation_consumers_reject_unsupported_arguments);
+    ARIADNE_TESTING_ADD_TEST(TestOrdinaryDynamicsContract, test_equation_consumers_enforce_numerical_capabilities);
     ARIADNE_TESTING_ADD_TEST(TestOrdinaryDynamicsContract, test_inclusion_consumer_rejects_unsupported_arguments);
     ARIADNE_TESTING_ADD_TEST(TestOrdinaryDynamicsContract, test_interval_inclusion_is_not_treated_as_an_input_function);
     return Ariadne::Testing::run_logging_suite(ariadne_test_suite, argc, argv);

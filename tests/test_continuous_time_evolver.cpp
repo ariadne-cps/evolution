@@ -64,6 +64,25 @@ class TestContinuousTimeEvolver : public Ariadne::Testing::ContextFixture {
     using Ariadne::Testing::ContextFixture::ContextFixture;
 
   public:
+    Void test_non_autonomous_two_step_orbit() {
+        // The same numerical time coordinate must advance across consecutive
+        // steps: x'=t, x(0)=0 has x(1/8)=1/128.
+        RealVariable x("x"), t("t");
+        const OrdinaryDifferentialAlgebraicEquation equation(
+            {dot(x) = t}, RealVariablesBox{}, t);
+        TaylorPicardIntegrator integrator(step_maximum_error = 1e-6);
+        ContinuousTimeEvolver evolver(equation, integrator);
+        evolver.configuration().set_enable_reconditioning(false);
+        evolver.configuration().set_maximum_step_size(0.0625);
+        const auto result = evolver.orbit(RealVariablesBox({x == 0}),
+                                          Real(0.125_x), Semantics::UPPER);
+        ARIADNE_TESTING_PROVE(result.reach().size() >= 2u);
+        ARIADNE_TESTING_PROVE(result.final().size() > 0u);
+        const auto final_box = result.final().bounding_box().euclidean_set();
+        ARIADNE_TESTING_PROVE(refines(FloatDPBounds(0.0078125_x, dp), final_box[0u]));
+        ARIADNE_TESTING_PROVE(subset(final_box, RealBox({{0.007_dec, 0.009_dec}})));
+    }
+
     Void test_binary64_step_limits() {
         using EvolutionDetail::limit_step_to_remaining_time;
         const Dyadic quarter(0.25_x), half(0.5_x);
@@ -327,6 +346,7 @@ int main(int argc, const char* argv[]) {
     ARIADNE_TESTING_ADD_TEST(TestContinuousTimeEvolver, test_carried_expansion_diagnostics_checkpoints);
     ARIADNE_TESTING_ADD_TEST(TestContinuousTimeEvolver, test_constrained_initial_subdivision_and_tiny_horizon);
     ARIADNE_TESTING_ADD_TEST(TestContinuousTimeEvolver, test_binary64_step_limits);
+    ARIADNE_TESTING_ADD_TEST(TestContinuousTimeEvolver, test_non_autonomous_two_step_orbit);
     ARIADNE_TESTING_ADD_TEST(TestContinuousTimeEvolver, test_lower_termination_diagnostics);
     return Ariadne::Testing::run_logging_suite(ariadne_test_suite, argc, argv);
 }

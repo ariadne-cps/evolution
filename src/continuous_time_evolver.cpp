@@ -153,8 +153,12 @@ Dyadic limit_step_to_remaining_time(const Dyadic& configured, const Dyadic& rema
 
 ContinuousTimeEvolver::ContinuousTimeEvolver(const SystemType& system, const IntegratorInterface& i)
     : _system(system.clone()), _integrator(i.clone()), _configuration(new ConfigurationType()) {
-    if (system.has_explicit_time() || system.parameter_space().dimension() != 0u) {
-        throw std::invalid_argument("ContinuousTimeEvolver requires an autonomous ODAE without constant parameters");
+    if (system.parameter_space().dimension() != 0u) {
+        throw std::invalid_argument("ContinuousTimeEvolver does not yet support trajectory-constant ODAE parameters");
+    }
+    if (system.has_explicit_time() &&
+        dynamic_cast<const PreconditionedGradedTaylorSeriesIntegrator*>(&i) != nullptr) {
+        throw std::invalid_argument("Preconditioned continuous evolution does not yet support explicit-time ODAE");
     }
 }
 
@@ -314,7 +318,24 @@ Void ContinuousTimeEvolver::
     EnclosureType next_set = current_set;
     SharedPointer<PreconditionedTaylorSeriesState> next_preconditioned_state;
 
-    if (preconditioned_integrator != nullptr) {
+    if (_system->has_explicit_time()) {
+        // Bound the nonautonomous equation over its physical time interval.
+        // In particular, the bound is a certified enclosure, not an
+        // unverified estimate constructed from the initial-state box.
+        EulerBounder bounder;
+        StepSizeType bounded_step;
+        UpperBoxType bounding_box;
+        std::tie(bounded_step, bounding_box) = bounder.compute(
+            dynamic, current_set_bounds, current_time, ExactBoxType(0u),
+            suggest(maximum_step_size));
+        const FlowStepIntegratorAdapter step_integrator(*integrator);
+        const auto common_step = step_integrator.step(ValidatedIntegrationRequest(
+            dynamic, current_set_bounds, current_time, bounded_step,
+            ExactBoxType(0u), bounding_box));
+        step_size = common_step.time_step();
+        EvolutionDetail::apply_integration_step(
+            reach_set, next_set, common_step, EvolutionDetail::IntegrationStepCoordinates::STATE);
+    } else if (preconditioned_integrator != nullptr) {
         if (preconditioned_integrator->diagnostics() && result->reach_size() == 1u && preconditioned_integrator->preconditioning() == TaylorSeriesPreconditioning::QR) {
             PreconditionedGradedTaylorSeriesIntegrator identity_probe =
                 *preconditioned_integrator;

@@ -44,7 +44,9 @@ class TestContinuousIntegration : public Ariadne::Testing::ContextFixture {
         ARIADNE_TESTING_EXPECT_EQUAL(evolved.number_of_constraints(), source.number_of_constraints());
         ARIADNE_TESTING_PROVE(reach.number_of_constraints() >= source.number_of_constraints());
         const auto invariant = evolved.state_function()[0u] + evolved.state_function()[1u];
-        ARIADNE_TESTING_PROVE(definitely(subset(cast_exact_interval(invariant.range()), ExactIntervalType(-0.000001_x, 0.000001_x))));
+        // 2^-20 is exactly representable even when long double exceeds double.
+        const ExactDouble tolerance = 0x1p-20_x;
+        ARIADNE_TESTING_PROVE(definitely(subset(cast_exact_interval(invariant.range()), ExactIntervalType(-tolerance, tolerance))));
         const Vector<FloatDPBounds> point({FloatDPBounds(0.25_x, dp)});
         const auto values = evolved.state_function()(point);
         ARIADNE_TESTING_PROVE(refines(FloatDPBounds(StepSizeType(0.25_x) + step.time_step(), dp), values[0u]));

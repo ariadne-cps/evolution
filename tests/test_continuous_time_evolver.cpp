@@ -82,7 +82,28 @@ class TestContinuousTimeEvolver : public Ariadne::Testing::ContextFixture {
         // The exact rational endpoint must lie in the certified final set.
         ARIADNE_TESTING_PROVE(subset(RealBox({{0.0078125_dec, 0.0078125_dec}}),
                                      final_box));
-        ARIADNE_TESTING_PROVE(subset(final_box, RealBox({{0.007_dec, 0.009_dec}})));
+        const RealBox expected({{0.007_dec, 0.009_dec}});
+        if (not definitely(subset(final_box, expected))) {
+            // Diagnostic only: keep the tight numerical assertion unchanged.
+            // Expose the certified range of each step to distinguish a
+            // widened validated enclosure from a time-coordinate error.
+            std::cerr << "[NonautonomousTwoStepOrbit] final=" << final_box
+                      << " reach_count=" << result.reach().size()
+                      << " intermediate_count=" << result.intermediate().size()
+                      << std::endl;
+            SizeType i = 0u;
+            for (const auto& stage: result.intermediate()) {
+                if (i >= 8u) {
+                    break;
+                }
+                std::cerr << "[NonautonomousTwoStepOrbit] endpoint=" << i
+                          << " box=" << stage.euclidean_set().bounding_box()
+                          << " absolute_time=" << stage.time_function().range()
+                          << std::endl;
+                ++i;
+            }
+        }
+        ARIADNE_TESTING_PROVE(subset(final_box, expected));
     }
 
     Void test_binary64_step_limits() {

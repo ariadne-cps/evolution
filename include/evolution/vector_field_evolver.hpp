@@ -41,14 +41,14 @@
 #include "function/function_interface.hpp"
 #include "integration/integrator_interface.hpp"
 #include "logging/logging.hpp"
-#include "system/vector_field.hpp"
+#include "system/odae.hpp"
 #include "threading/workload.hpp"
 #include "utility/tuple.hpp"
 
 namespace Ariadne {
 
-/** @brief VectorField: validated evolvers for vector fields. */
-class VectorField;
+/** @brief OrdinaryDifferentialAlgebraicEquation: validated evolvers for vector fields. */
+class OrdinaryDifferentialAlgebraicEquation;
 template<class ES>
 class Orbit;
 
@@ -68,13 +68,13 @@ class RealExpressionBoundedConstraintSet;
 //!
 //! The actual evolution steps are performed by the Integrator class.
 class VectorFieldEvolver
-    : public EvolverInterface<VectorField, LabelledEnclosure, typename VectorField::TimeType> {
+    : public EvolverInterface<OrdinaryDifferentialAlgebraicEquation, LabelledEnclosure, typename OrdinaryDifferentialAlgebraicEquation::TimeType> {
   public:
-    typedef EvolverInterface<VectorField, LabelledEnclosure, typename VectorField::TimeType> Interface;
+    typedef EvolverInterface<OrdinaryDifferentialAlgebraicEquation, LabelledEnclosure, typename OrdinaryDifferentialAlgebraicEquation::TimeType> Interface;
     typedef VectorFieldEvolverConfiguration ConfigurationType;
-    typedef VectorField SystemType;
+    typedef OrdinaryDifferentialAlgebraicEquation SystemType;
     typedef IntegratorInterface IntegratorType;
-    typedef typename VectorField::TimeType TimeType;
+    typedef typename OrdinaryDifferentialAlgebraicEquation::TimeType TimeType;
     typedef Dyadic TimeStepType;
     typedef TimeType TerminationType;
     typedef LabelledEnclosure EnclosureType;
@@ -125,7 +125,8 @@ class VectorFieldEvolver
     typedef DynamicWorkload<TimedEnclosureType, const TimeType&, Semantics, SharedPointer<SynchronisedOrbit>> WorkloadType;
 
   public:
-    //! \brief Construct from parameters and an integrator to compute the flow.
+    //! \brief Construct from an autonomous ODAE without constant parameters.
+    //! \throws std::invalid_argument if explicit time or constant parameters are declared.
     VectorFieldEvolver(const SystemType&, const IntegratorInterface&);
 
     //! \brief Make a dynamically-allocated copy.

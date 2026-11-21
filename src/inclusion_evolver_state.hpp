@@ -78,7 +78,7 @@ class InclusionEvolverState {
     Map<InclusionIntegrator, Nat> _approximator_local_optima_count;
 
   public:
-    InclusionEvolverState(const DifferentialInclusion& ivf, const List<InputApproximation>& approximations, const IntegratorInterface& integrator)
+    InclusionEvolverState(const OrdinaryDifferentialAlgebraicInclusion& ivf, const List<InputApproximation>& approximations, const IntegratorInterface& integrator)
         : _step(0u) {
         /** @brief Perform the specified evolution operation. */
         InclusionIntegratorFactory factory(integrator);

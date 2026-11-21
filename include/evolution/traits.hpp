@@ -35,10 +35,10 @@ namespace Ariadne {
 
 /** @brief IteratedMap: compile-time correspondence between systems, evolvers and enclosures. */
 class IteratedMap;
-/** @brief VectorField: compile-time correspondence between systems, evolvers and enclosures. */
-class VectorField;
-/** @brief DifferentialInclusion: compile-time correspondence between systems, evolvers and enclosures. */
-class DifferentialInclusion;
+/** @brief OrdinaryDifferentialAlgebraicEquation: compile-time correspondence between systems, evolvers and enclosures. */
+class OrdinaryDifferentialAlgebraicEquation;
+/** @brief OrdinaryDifferentialAlgebraicInclusion: compile-time correspondence between systems, evolvers and enclosures. */
+class OrdinaryDifferentialAlgebraicInclusion;
 /** @brief HybridAutomatonInterface: compile-time correspondence between systems, evolvers and enclosures. */
 class HybridAutomatonInterface;
 
@@ -66,13 +66,13 @@ struct EvolutionTraits<IteratedMap> {
 };
 
 template<>
-struct EvolutionTraits<VectorField> {
+struct EvolutionTraits<OrdinaryDifferentialAlgebraicEquation> {
     using EvolverType = VectorFieldEvolver;
     using EnclosureType = LabelledEnclosure;
 };
 
 template<>
-struct EvolutionTraits<DifferentialInclusion> {
+struct EvolutionTraits<OrdinaryDifferentialAlgebraicInclusion> {
     using EvolverType = DifferentialInclusionEvolver;
     using EnclosureType = LabelledEnclosure;
 };

@@ -220,7 +220,7 @@ Void evolution_submodule(pybind11::module& module) {
     export_orbit<VectorFieldEvolver::OrbitType>(module, "LabelledEnclosureOrbit");
 
     export_evolver<IteratedMapEvolver, IteratedMap>(module, "IteratedMapEvolver");
-    export_evolver<VectorFieldEvolver, VectorField, const IntegratorInterface&>(module, "VectorFieldEvolver");
+    export_evolver<VectorFieldEvolver, OrdinaryDifferentialAlgebraicEquation, const IntegratorInterface&>(module, "VectorFieldEvolver");
 
     export_vector_field_evolver_configuration(module);
     export_iterated_map_evolver_configuration(module);

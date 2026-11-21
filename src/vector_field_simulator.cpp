@@ -28,6 +28,8 @@
 
 #include "evolution/vector_field_simulator.hpp"
 
+#include <stdexcept>
+
 #include "algebra/algebra.hpp"
 #include "evolution/orbit.hpp"
 #include "function/formula.hpp"
@@ -38,7 +40,7 @@
 #include "symbolic/assignment.hpp"
 #include "symbolic/space.hpp"
 #include "symbolic/valuation.hpp"
-#include "system/vector_field.hpp"
+#include "system/odae.hpp"
 #include "utility/array.hpp"
 #include "utility/container.hpp"
 #include "utility/stlio.hpp"
@@ -148,7 +150,11 @@ List<LabelledPoint<FloatDPApproximation>> create_point_list(BinaryTreePaving& pa
     return result;
 }
 
-VectorFieldSimulator::VectorFieldSimulator(const SystemType& system) : _system(system.clone()), _configuration(new VectorFieldSimulatorConfiguration()) {}
+VectorFieldSimulator::VectorFieldSimulator(const SystemType& system) : _system(system.clone()), _configuration(new VectorFieldSimulatorConfiguration()) {
+    if (system.has_explicit_time() || system.parameter_space().dimension() != 0u) {
+        throw std::invalid_argument("VectorFieldSimulator requires an autonomous ODAE without constant parameters");
+    }
+}
 
 inline FloatDPApproximation evaluate(const EffectiveScalarMultivariateFunction& f, const Vector<FloatDPApproximation>& x) { return f(x); }
 inline Vector<FloatDPApproximation> evaluate(const EffectiveVectorMultivariateFunction& f, const Vector<FloatDPApproximation>& x) { return f(x); }
@@ -220,7 +226,7 @@ void VectorFieldSimulator::_simulate_from_point(Pair<SizeType, ApproximatePointT
     ApproximateTimeType h(_configuration->step_size(), dp);
     ApproximateTimeType tmax(termination, dp);
 
-    const auto& dynamic_function = _system->dynamic_function();
+    const auto& dynamic_function = _system->function();
     const auto& auxiliary_function = _system->auxiliary_function();
 
     const auto state_space = _system->state_space();

@@ -85,7 +85,7 @@ class TestVectorFieldEvolver : public Ariadne::Testing::ContextFixture {
     Void test_constrained_initial_subdivision_and_tiny_horizon() {
         LogVerbosityScope logging(100u);
         RealVariable x("x");
-        VectorField field(List<DottedRealAssignment>{dot(x) = 0});
+        OrdinaryDifferentialAlgebraicEquation field(List<DottedRealAssignment>{dot(x) = 0});
         TaylorPicardIntegrator integrator(step_maximum_error = 1e-6);
         VectorFieldEvolver evolver(field, integrator);
         evolver.configuration().set_enable_reconditioning(false);
@@ -104,7 +104,7 @@ class TestVectorFieldEvolver : public Ariadne::Testing::ContextFixture {
     Void test_components_and_preconditioned_orbits() {
         LogVerbosityScope logging(100u);
         RealVariable x("x"), other("other");
-        VectorField field(List<DottedRealAssignment>{dot(x) = 1});
+        OrdinaryDifferentialAlgebraicEquation field(List<DottedRealAssignment>{dot(x) = 1});
         for (auto mode: {TaylorSeriesPreconditioning::IDENTITY, TaylorSeriesPreconditioning::QR}) {
             PreconditionedGradedTaylorSeriesIntegrator integrator(step_maximum_error = 1e-6);
             integrator.set_preconditioning(mode);
@@ -134,7 +134,7 @@ class TestVectorFieldEvolver : public Ariadne::Testing::ContextFixture {
 
     Void test_carried_expansion_diagnostics_checkpoints() {
         RealVariable x("x");
-        VectorField field(List<DottedRealAssignment>{dot(x) = 0});
+        OrdinaryDifferentialAlgebraicEquation field(List<DottedRealAssignment>{dot(x) = 0});
         PreconditionedGradedTaylorSeriesIntegrator integrator(step_maximum_error = 1e-6);
         integrator.set_carried_expansion_diagnostics(true);
         VectorFieldEvolver evolver(field, integrator);
@@ -173,7 +173,7 @@ class TestVectorFieldEvolver : public Ariadne::Testing::ContextFixture {
         Real mu = Dyadic(0.5_x);
         RealVariable x("x"), v("v");
 
-        VectorField vanderpol({dot(x) = v, dot(v) = mu * (1 - x * x) * v - x});
+        OrdinaryDifferentialAlgebraicEquation vanderpol({dot(x) = v, dot(v) = mu * (1 - x * x) * v - x});
         ARIADNE_TESTING_NOTE(vanderpol);
 
         Semantics semantics = Semantics::LOWER;
@@ -237,7 +237,7 @@ class TestVectorFieldEvolver : public Ariadne::Testing::ContextFixture {
         TaylorPicardIntegrator integrator(step_maximum_error = 1e-6_pr, sweeper, lipschitz_tolerance = 0.5_x,
                                           minimum_temporal_order = 0, maximum_temporal_order = 8);
 
-        VectorField fail_vf({dot(x) = 1, dot(y) = y * y * 100});
+        OrdinaryDifferentialAlgebraicEquation fail_vf({dot(x) = 1, dot(y) = y * y * 100});
         VectorFieldEvolver evolver(fail_vf, integrator);
         evolver.configuration().set_maximum_enclosure_radius(enclosure_radius);
         evolver.configuration().set_maximum_step_size(maximum_step_size);
@@ -255,7 +255,7 @@ class TestVectorFieldEvolver : public Ariadne::Testing::ContextFixture {
         RealConstant mu("mu", 1.0_dec);
         RealVariable x("x"), y("y");
 
-        VectorField dynamics({dot(x) = y, dot(y) = mu * y * (1 - sqr(x)) - x});
+        OrdinaryDifferentialAlgebraicEquation dynamics({dot(x) = y, dot(y) = mu * y * (1 - sqr(x)) - x});
 
         StepMaximumError max_err = 1e-8;
 
@@ -284,7 +284,7 @@ class TestVectorFieldEvolver : public Ariadne::Testing::ContextFixture {
     Void test_subdivide_along_evolution() {
         RealVariable x("x"), y("y");
 
-        VectorField dynamics({dot(x) = 1, dot(y) = sqr(x)});
+        OrdinaryDifferentialAlgebraicEquation dynamics({dot(x) = 1, dot(y) = sqr(x)});
 
         StepMaximumError max_err = 1e-8;
 

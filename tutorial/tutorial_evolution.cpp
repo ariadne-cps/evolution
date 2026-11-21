@@ -43,7 +43,7 @@ int main() {
     RealVariable x("x");
     List<DottedRealAssignment> dynamics;
     dynamics.append(dot(x) = -x);
-    VectorField decay(dynamics);
+    OrdinaryDifferentialAlgebraicEquation decay(dynamics);
     VectorFieldSimulator simulator(decay);
     simulator.configuration().set_step_size(0.05);
     simulator.configuration().set_num_subdivisions(0);

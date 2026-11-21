@@ -25,6 +25,7 @@ set(UNIT_TESTS
     test_vector_field_evolver_header
     test_vector_field_simulator
     test_evolution_dependency_boundary
+    test_ordinary_dynamics_contract
 )
 foreach(TEST IN LISTS UNIT_TESTS)
     add_executable(${TEST} ${TEST}.cpp)

@@ -28,6 +28,17 @@ design](doc/evolution_tree_design.md) for the current API and deferred operation
 
 ## Dependencies
 
+The `multifunction` branch uses the ordinary dynamics declarations
+`OrdinaryDifferentialAlgebraicEquation` (`system/odae.hpp`) and
+`OrdinaryDifferentialAlgebraicInclusion` (`system/odai.hpp`).
+`VectorFieldEvolver` and `VectorFieldSimulator` currently accept autonomous
+equations without constant parameters; `DifferentialInclusionEvolver` accepts
+autonomous structured inclusions with free inputs and no constant parameters. Their constructors
+reject explicit time, constant parameters and, for the inclusion evolver,
+interval-Taylor fields or a zero-input domain with `std::invalid_argument`. Support for these forms
+will follow through the shared integration contract and unified continuous
+evolution loop. The existing evolver classes remain distinct at this stage.
+
 Evolution uses the Git submodules [System](https://github.com/ariadne-cps/system), [Integration](https://github.com/ariadne-cps/integration), [Equation Solving](https://github.com/ariadne-cps/equation-solving), [Tree](https://github.com/ariadne-cps/tree), and [Build](https://github.com/ariadne-cps/build). The C++ test suites additionally use [Ariadne Testing](https://github.com/ariadne-cps/testing), pinned as the test-only submodule `ss/tst`. Each registered test runs with a fresh fixture, retaining the original mathematical checks and diagnostic variants.
 
 ## Build and test

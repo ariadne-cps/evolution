@@ -29,6 +29,7 @@
 #include "evolution/vector_field_evolver.hpp"
 
 #include <array>
+#include <stdexcept>
 
 #include "algebra/vector.hpp"
 #include "evolution/enclosure.hpp"
@@ -42,7 +43,7 @@
 #include "logging/logging.hpp"
 #include "symbolic/assignment.hpp"
 #include "symbolic/space.hpp"
-#include "system/vector_field.hpp"
+#include "system/odae.hpp"
 #include "utility/array.hpp"
 #include "utility/container.hpp"
 #include "utility/macros.hpp"
@@ -150,6 +151,9 @@ Dyadic limit_step_to_remaining_time(const Dyadic& configured, const Dyadic& rema
 
 VectorFieldEvolver::VectorFieldEvolver(const SystemType& system, const IntegratorInterface& i)
     : _system(system.clone()), _integrator(i.clone()), _configuration(new ConfigurationType()) {
+    if (system.has_explicit_time() || system.parameter_space().dimension() != 0u) {
+        throw std::invalid_argument("VectorFieldEvolver requires an autonomous ODAE without constant parameters");
+    }
 }
 
 auto VectorFieldEvolver::enclosure(const ExactBoxType& box) const -> EnclosureType {
@@ -162,13 +166,13 @@ auto VectorFieldEvolver::function_factory() const -> const FunctionFactoryType& 
 
 auto VectorFieldEvolver::orbit(const RealVariablesBox& initial_set, const TimeType& time, Semantics semantics) const -> Orbit<EnclosureType> {
     auto enclosure = EnclosureType(initial_set, this->system().state_space(), EnclosureConfiguration(this->function_factory()));
-    enclosure.set_auxiliary(this->system().auxiliary_space(), this->system().auxiliary_mapping());
+    enclosure.set_auxiliary(this->system().auxiliary_space(), this->system().auxiliary_function());
     return orbit(enclosure, time, semantics);
 }
 
 auto VectorFieldEvolver::orbit(const RealExpressionBoundedConstraintSet& initial_set, const TimeType& time, Semantics semantics) const -> Orbit<EnclosureType> {
     auto enclosure = EnclosureType(initial_set.euclidean_set(this->system().state_space()), this->system().state_space(), EnclosureConfiguration(this->function_factory()));
-    enclosure.set_auxiliary(this->system().auxiliary_space(), this->system().auxiliary_mapping());
+    enclosure.set_auxiliary(this->system().auxiliary_space(), this->system().auxiliary_function());
     return orbit(enclosure, time, semantics);
 }
 

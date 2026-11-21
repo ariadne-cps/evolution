@@ -2,6 +2,7 @@ import pyariadne_evolution as a
 
 def test_evolution_bindings():
     names = ("Semantics", "Enclosure", "VectorFieldSimulator",
+             "OrdinaryDifferentialAlgebraicEquation", "OrdinaryDifferentialAlgebraicInclusion",
              "IteratedMapEvolver", "IteratedMapEvolverConfiguration", "VectorFieldEvolver", "HybridTime",
              "HybridEnclosure", "HybridSimulator", "recombine",
              "EnclosureRecombinerInterface", "EnclosureRecombiner",
@@ -10,6 +11,8 @@ def test_evolution_bindings():
     for name in names:
         assert hasattr(a, name), f"Missing evolution binding: {name}"
     assert a.Semantics.UPPER != a.Semantics.LOWER
+    assert not hasattr(a, "VectorField")
+    assert not hasattr(a, "DifferentialInclusion")
 
 
 def test_iterated_map_configuration():
@@ -63,7 +66,34 @@ def test_continuous_recombination():
         raise AssertionError("An empty source list must be rejected")
 
 
+def test_ordinary_equation_consumers():
+    import unittest
+    x, t, p, output = (a.RealVariable(name) for name in ("x", "t", "p", "output"))
+    equation = a.OrdinaryDifferentialAlgebraicEquation(
+        [a.dot(x) << 1], [a.let(output) << (2*x)])
+    integrator = a.TaylorPicardIntegrator(1e-5)
+    evolver = a.VectorFieldEvolver(equation, integrator)
+    initial = a.RealExpressionBoundedConstraintSet([(0 <= x) & (x <= 0)], [])
+    orbit = evolver.orbit(initial, a.Real(1)/16, a.Semantics.UPPER)
+    assert orbit.final().size() > 0
+    assert orbit.final()[0].state_set().dimension() == 1
+    assert orbit.final()[0].state_auxiliary_set().dimension() == 2
+    assert isinstance(a.VectorFieldSimulator(equation), a.VectorFieldSimulator)
+    unsupported = (
+        a.OrdinaryDifferentialAlgebraicEquation(
+            [a.dot(x) << (t - x)], a.RealVariablesBox({}), time=t),
+        a.OrdinaryDifferentialAlgebraicEquation(
+            [a.dot(x) << (p - x)], a.RealVariablesBox({p: (0, 1)})),
+    )
+    for field in unsupported:
+        with unittest.TestCase().assertRaises(ValueError):
+            a.VectorFieldEvolver(field, integrator)
+        with unittest.TestCase().assertRaises(ValueError):
+            a.VectorFieldSimulator(field)
+
+
 if __name__ == "__main__":
     test_evolution_bindings()
     test_iterated_map_configuration()
     test_continuous_recombination()
+    test_ordinary_equation_consumers()

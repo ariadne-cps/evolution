@@ -35,7 +35,7 @@
 #include "logging/logging.hpp"
 #include "numeric/float.decl.hpp"
 #include "numeric/floatdp.hpp"
-#include "system/vector_field.hpp"
+#include "system/odae.hpp"
 #include "threading/using.hpp"
 #include "threading/workload.hpp"
 
@@ -60,8 +60,8 @@ inline OutputStream& operator<<(OutputStream& os, const DiscretisationType& dtyp
     return os;
 }
 
-/** @brief VectorField: numerical simulation of continuous vector-field systems. */
-class VectorField;
+/** @brief OrdinaryDifferentialAlgebraicEquation: numerical simulation of continuous vector-field systems. */
+class OrdinaryDifferentialAlgebraicEquation;
 /** @brief VectorFieldSimulatorConfiguration: numerical simulation of continuous vector-field systems. */
 class VectorFieldSimulatorConfiguration;
 
@@ -85,7 +85,7 @@ class VectorFieldSimulator {
     typedef List<RealPointType> RealListPointType;
     typedef RealVariablesBox RealBoxType;
     typedef Real TerminationType;
-    typedef VectorField SystemType;
+    typedef OrdinaryDifferentialAlgebraicEquation SystemType;
     typedef VectorFieldSimulatorConfiguration ConfigurationType;
     typedef Orbit<ApproximateListPointType> OrbitType;
 
@@ -104,7 +104,8 @@ class VectorFieldSimulator {
     typedef StaticWorkload<Pair<SizeType, ApproximatePointType>, const TerminationType&, SharedPointer<SynchronisedOrbit>> WorkloadType;
 
   public:
-    //! \brief Default constructor.
+    //! \brief Construct from an autonomous ODAE without constant parameters.
+    //! \throws std::invalid_argument if explicit time or constant parameters are declared.
     VectorFieldSimulator(const SystemType& system);
 
     //!@{

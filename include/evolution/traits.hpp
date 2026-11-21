@@ -35,21 +35,21 @@ namespace Ariadne {
 
 /** @brief IteratedMap: compile-time correspondence between systems, evolvers and enclosures. */
 class IteratedMap;
-/** @brief VectorField: compile-time correspondence between systems, evolvers and enclosures. */
-class VectorField;
-/** @brief DifferentialInclusion: compile-time correspondence between systems, evolvers and enclosures. */
-class DifferentialInclusion;
+/** @brief OrdinaryDifferentialAlgebraicEquation: compile-time correspondence between systems, evolvers and enclosures. */
+class OrdinaryDifferentialAlgebraicEquation;
+/** @brief OrdinaryDifferentialAlgebraicInclusion: compile-time correspondence between systems, evolvers and enclosures. */
+class OrdinaryDifferentialAlgebraicInclusion;
 /** @brief HybridAutomatonInterface: compile-time correspondence between systems, evolvers and enclosures. */
 class HybridAutomatonInterface;
 
-/** @brief IteratedMapEvolver: compile-time correspondence between systems, evolvers and enclosures. */
-class IteratedMapEvolver;
-/** @brief VectorFieldEvolver: compile-time correspondence between systems, evolvers and enclosures. */
-class VectorFieldEvolver;
+/** @brief DiscreteTimeEvolver: compile-time correspondence between systems, evolvers and enclosures. */
+class DiscreteTimeEvolver;
+/** @brief ContinuousTimeEvolver: compile-time correspondence between systems, evolvers and enclosures. */
+class ContinuousTimeEvolver;
 /** @brief DifferentialInclusionEvolver: compile-time correspondence between systems, evolvers and enclosures. */
 class DifferentialInclusionEvolver;
-/** @brief HybridEvolverInterface: compile-time correspondence between systems, evolvers and enclosures. */
-class HybridEvolverInterface;
+/** @brief HybridContinuousTimeEvolverInterface: compile-time correspondence between systems, evolvers and enclosures. */
+class HybridContinuousTimeEvolverInterface;
 
 /** @brief LabelledEnclosure: compile-time correspondence between systems, evolvers and enclosures. */
 class LabelledEnclosure;
@@ -61,25 +61,25 @@ struct EvolutionTraits;
 
 template<>
 struct EvolutionTraits<IteratedMap> {
-    using EvolverType = IteratedMapEvolver;
+    using EvolverType = DiscreteTimeEvolver;
     using EnclosureType = LabelledEnclosure;
 };
 
 template<>
-struct EvolutionTraits<VectorField> {
-    using EvolverType = VectorFieldEvolver;
+struct EvolutionTraits<OrdinaryDifferentialAlgebraicEquation> {
+    using EvolverType = ContinuousTimeEvolver;
     using EnclosureType = LabelledEnclosure;
 };
 
 template<>
-struct EvolutionTraits<DifferentialInclusion> {
+struct EvolutionTraits<OrdinaryDifferentialAlgebraicInclusion> {
     using EvolverType = DifferentialInclusionEvolver;
     using EnclosureType = LabelledEnclosure;
 };
 
 template<>
 struct EvolutionTraits<HybridAutomatonInterface> {
-    using EvolverType = HybridEvolverInterface;
+    using EvolverType = HybridContinuousTimeEvolverInterface;
     using EnclosureType = HybridEnclosure;
 };
 

@@ -46,7 +46,7 @@ enum class Semantics : std::uint8_t {
 
 //! \ingroup DynamicsModule
 //! \brief Interface for evolving a dynamic system.
-//! \sa HybridEvolverInterface
+//! \sa HybridContinuousTimeEvolverInterface
 //! \sa ReachabilityAnalyserInterface
 template<class SYS, class ES, class TRM>
 /** @brief EvolverInterface: interfaces and semantics of time evolution. */

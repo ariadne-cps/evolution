@@ -43,7 +43,7 @@ int main() {
     RealVariable x("x");
     List<DottedRealAssignment> dynamics;
     dynamics.append(dot(x) = -x);
-    VectorField decay(dynamics);
+    OrdinaryDifferentialAlgebraicEquation decay(dynamics);
     VectorFieldSimulator simulator(decay);
     simulator.configuration().set_step_size(0.05);
     simulator.configuration().set_num_subdivisions(0);
@@ -60,21 +60,21 @@ int main() {
     // Validated continuous evolution: an enclosure, not a sampled trajectory.
     // The short time horizon keeps the demonstration inexpensive.
     TaylorPicardIntegrator integrator(StepMaximumError(1e-5));
-    VectorFieldEvolver validated(decay, integrator);
+    ContinuousTimeEvolver validated(decay, integrator);
     validated.configuration().set_maximum_step_size(0.05);
     validated.configuration().set_maximum_enclosure_radius(1.0);
     auto validated_orbit = validated.orbit(initial, Real(0.05_dec), Semantics::UPPER);
     if (validated_orbit.final().size() == 0u) {
         throw std::runtime_error("Continuous evolver produced no final enclosure");
     }
-    std::cout << "VectorFieldEvolver: " << validated_orbit.final().size()
+    std::cout << "ContinuousTimeEvolver: " << validated_orbit.final().size()
               << " final enclosure(s)\n";
 
     // Discrete-time system: one step of a contracting iterated map.
     List<PrimedRealAssignment> updates;
     updates.append(next(x) = 0.5_dec * x);
     IteratedMap contraction(updates);
-    IteratedMapEvolver evolver(contraction);
+    DiscreteTimeEvolver evolver(contraction);
     evolver.configuration().set_maximum_enclosure_radius(1.0);
     auto discrete = evolver.orbit(initial, IteratedMap::TimeType(1), Semantics::UPPER);
     if (discrete.final().size() == 0u) {
@@ -113,21 +113,21 @@ int main() {
     List<DottedRealAssignment> hybrid_dynamics;
     hybrid_dynamics.append(dot(x) = -x);
     flow_automaton.new_mode(idle, hybrid_dynamics);
-    GeneralHybridEvolver hybrid_evolver(flow_automaton);
-    hybrid_evolver.set_integrator(TaylorPicardIntegrator(StepMaximumError(1e-5)));
-    hybrid_evolver.configuration().set_maximum_step_size(0.05);
-    hybrid_evolver.configuration().set_maximum_enclosure_radius(1.0);
+    HybridContinuousTimeEvolver hybrid_continuous_time_evolver(flow_automaton);
+    hybrid_continuous_time_evolver.set_integrator(TaylorPicardIntegrator(StepMaximumError(1e-5)));
+    hybrid_continuous_time_evolver.configuration().set_maximum_step_size(0.05);
+    hybrid_continuous_time_evolver.configuration().set_maximum_enclosure_radius(1.0);
     // ExactBoxType uses double-exact bounds: use dyadic values 7/8 and 9/8,
     // not non-dyadic decimal fractions.
     HybridExactBox hybrid_initial(idle, flow_automaton.continuous_state_space(idle),
                                   ExactBoxType{
                                       {0.875_x, 1.125_x}
     });
-    auto hybrid_orbit = hybrid_evolver.orbit(hybrid_initial, HybridTime(Real(1 / 20_q), Integer(1)), Semantics::UPPER);
+    auto hybrid_orbit = hybrid_continuous_time_evolver.orbit(hybrid_initial, HybridTime(Real(1 / 20_q), Integer(1)), Semantics::UPPER);
     if (hybrid_orbit.final().size() == 0u) {
         throw std::runtime_error("Hybrid evolver produced no final enclosure");
     }
-    std::cout << "GeneralHybridEvolver: " << hybrid_orbit.final().size()
+    std::cout << "HybridContinuousTimeEvolver: " << hybrid_orbit.final().size()
               << " final enclosure(s)\n";
 
     // First-order PDE: solve a small two-dimensional constant-coefficient

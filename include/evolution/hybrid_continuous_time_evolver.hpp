@@ -1,5 +1,5 @@
 /***************************************************************************
- *            hybrid_evolver.hpp
+ *            hybrid_continuous_time_evolver.hpp
  *
  *  Copyright  2009-20  Pieter Collins
  *
@@ -22,12 +22,12 @@
  *  along with Ariadne Evolution. If not, see <https://www.gnu.org/licenses/>.
  */
 
-/** @file evolution/hybrid_evolver.hpp
+/** @file evolution/hybrid_continuous_time_evolver.hpp
  *  @brief Hybrid evolution strategies, transitions and timing.
  */
 
-#ifndef ARIADNE_HYBRID_EVOLVER_HPP
-#define ARIADNE_HYBRID_EVOLVER_HPP
+#ifndef ARIADNE_HYBRID_CONTINUOUS_TIME_EVOLVER_HPP
+#define ARIADNE_HYBRID_CONTINUOUS_TIME_EVOLVER_HPP
 
 #include <iostream>
 #include <list>
@@ -35,9 +35,9 @@
 #include <vector>
 
 #include "evolution/configuration_interface.hpp"
+#include "evolution/hybrid_continuous_time_evolver_interface.hpp"
 #include "evolution/hybrid_enclosure.hpp"
 #include "evolution/hybrid_evolution_backend.hpp"
-#include "evolution/hybrid_evolver_interface.hpp"
 #include "evolution/hybrid_orbit.hpp"
 #include "evolution/hybrid_time.hpp"
 #include "hybrid/hybrid_set.hpp"
@@ -58,10 +58,10 @@ using LockGuard = std::lock_guard<T>;
 class IntegratorInterface;
 /** @brief EquationSolverInterface represents hybrid evolution strategies, transitions and timing. */
 class EquationSolverInterface;
-/** @brief HybridEvolverBaseConfiguration represents hybrid evolution strategies, transitions and timing. */
-class HybridEvolverBaseConfiguration;
-/** @brief GeneralHybridEvolverConfiguration represents hybrid evolution strategies, transitions and timing. */
-class GeneralHybridEvolverConfiguration;
+/** @brief HybridContinuousTimeEvolverBaseConfiguration represents hybrid evolution strategies, transitions and timing. */
+class HybridContinuousTimeEvolverBaseConfiguration;
+/** @brief HybridContinuousTimeEvolverConfiguration represents hybrid evolution strategies, transitions and timing. */
+class HybridContinuousTimeEvolverConfiguration;
 
 //! \relates HybridEnclosure
 //! \brief <p/>
@@ -102,13 +102,13 @@ struct TimingData;
 //! However, which operations are needed may depend on the higher-level
 //! operations involved, so these methods should also not go in the
 //! interface.
-class HybridEvolverBase
-    : public HybridEvolverInterface {
-    friend class HybridEvolverBaseConfiguration;
+class HybridContinuousTimeEvolverBase
+    : public HybridContinuousTimeEvolverInterface {
+    friend class HybridContinuousTimeEvolverBaseConfiguration;
 
   public:
-    typedef HybridEvolverInterface Interface;
-    typedef HybridEvolverBaseConfiguration ConfigurationType;
+    typedef HybridContinuousTimeEvolverInterface Interface;
+    typedef HybridContinuousTimeEvolverBaseConfiguration ConfigurationType;
     typedef ValidatedFunctionPatchFactory FunctionFactoryType;
     typedef HybridAutomatonInterface SystemType;
     typedef SystemType::TimeType TimeType;
@@ -120,15 +120,15 @@ class HybridEvolverBase
 
   public:
     //! \brief Default constructor.
-    HybridEvolverBase(const SystemType& system);
+    HybridContinuousTimeEvolverBase(const SystemType& system);
 
     //! \brief Construct from parameters using a default integrator.
-    HybridEvolverBase(
+    HybridContinuousTimeEvolverBase(
         const SystemType& system,
         const FunctionFactoryType& factory);
 
     //! \brief Make a dynamically-allocated copy.
-    HybridEvolverBase* clone() const = 0;
+    HybridContinuousTimeEvolverBase* clone() const = 0;
 
     //! \brief Get the internal system.
     const SystemType& system() const;
@@ -446,7 +446,7 @@ Bool is_activating(EventKind evk);
 
 //! \ingroup HybridDynamicsSubModule
 //! \brief A data type used to store information about a transition of a hybrid system.
-//! \relates HybridEvolverBase
+//! \relates HybridContinuousTimeEvolverBase
 struct TransitionData {
     //! \brief The event label.
     DiscreteEvent event;
@@ -510,7 +510,7 @@ OutputStream& operator<<(OutputStream& os, const CrossingKind& crk);
 
 //! \ingroup HybridDynamicsSubModule
 //! \brief A data type used to store information about the way flow lines cross a guard \f$g(x)=0\f$.
-//! \relates HybridEvolverBase
+//! \relates HybridContinuousTimeEvolverBase
 struct CrossingData {
     CrossingData() : crossing_kind() {}
     CrossingData(CrossingKind crk) : crossing_kind(crk) {}
@@ -582,7 +582,7 @@ OutputStream& operator<<(OutputStream& os, const FinishingKind& crk);
 
 //! \ingroup HybridDynamicsSubModule
 //! \brief A data type used to store information about the kind of time step taken during hybrid evolution.
-//! \relates HybridEvolverBase
+//! \relates HybridContinuousTimeEvolverBase
 struct TimingData {
     TimingData() {}
     StepKind step_kind;           //!< The kind of step taken in the evolution
@@ -605,9 +605,9 @@ struct TimingData {
 /** @brief Apply the requested operation. */
 OutputStream& operator<<(OutputStream& os, const TimingData& timing);
 
-//! \relates HybridEvolverBase
-//! \brief Configuration for HybridEvolverBase, for controlling the accuracy of continuous evolution methods.
-class HybridEvolverBaseConfiguration : public ConfigurationInterface {
+//! \relates HybridContinuousTimeEvolverBase
+//! \brief Configuration for HybridContinuousTimeEvolverBase, for controlling the accuracy of continuous evolution methods.
+class HybridContinuousTimeEvolverBaseConfiguration : public ConfigurationInterface {
   public:
     typedef Nat UnsignedIntType;
     typedef ExactDouble RealType;
@@ -615,10 +615,10 @@ class HybridEvolverBaseConfiguration : public ConfigurationInterface {
 
   protected:
     /** @brief Construct the object. */
-    HybridEvolverBaseConfiguration(HybridEvolverBase& evolver);
+    HybridContinuousTimeEvolverBaseConfiguration(HybridContinuousTimeEvolverBase& evolver);
 
   private:
-    HybridEvolverBase& _evolver;
+    HybridContinuousTimeEvolverBase& _evolver;
 
   private:
     //! \brief The accuracy required for integration.
@@ -676,19 +676,19 @@ class HybridEvolverBaseConfiguration : public ConfigurationInterface {
 //! explicitly, and the number of additional constraints is minimised.
 //!
 //! This class is still under development and may not work properly.
-class GeneralHybridEvolver
-    : public HybridEvolverBase {
+class HybridContinuousTimeEvolver
+    : public HybridContinuousTimeEvolverBase {
   public:
     /** @brief Construct the object. */
-    GeneralHybridEvolver(const SystemType& system);
+    HybridContinuousTimeEvolver(const SystemType& system);
     /** @brief Construct the object. */
-    GeneralHybridEvolver(const GeneralHybridEvolver& other);
+    HybridContinuousTimeEvolver(const HybridContinuousTimeEvolver& other);
     /** @brief Apply the requested operation. */
-    GeneralHybridEvolver& operator=(const GeneralHybridEvolver& other);
-    GeneralHybridEvolver(const SystemType& system,
-                         const FunctionFactoryType& factory);
-    virtual GeneralHybridEvolver* clone() const { return new GeneralHybridEvolver(*this); }
-    virtual OutputStream& _write(OutputStream& os) const { return os << "GeneralHybridEvolver( " << this->configuration() << ")"; }
+    HybridContinuousTimeEvolver& operator=(const HybridContinuousTimeEvolver& other);
+    HybridContinuousTimeEvolver(const SystemType& system,
+                                const FunctionFactoryType& factory);
+    virtual HybridContinuousTimeEvolver* clone() const { return new HybridContinuousTimeEvolver(*this); }
+    virtual OutputStream& _write(OutputStream& os) const { return os << "HybridContinuousTimeEvolver( " << this->configuration() << ")"; }
 
   protected:
     virtual TimingData
@@ -701,40 +701,40 @@ class GeneralHybridEvolver
 
   private:
     /** @brief Perform the specified evolution operation. */
-    Void _copy_configuration_from(const GeneralHybridEvolver& other);
+    Void _copy_configuration_from(const HybridContinuousTimeEvolver& other);
 };
 
-//! \brief Configuration for GeneralHybridEvolver, for controlling the accuracy of continuous evolution methods.
-//! \relates GeneralHybridEvolver
-class GeneralHybridEvolverConfiguration : public HybridEvolverBaseConfiguration {
+//! \brief Configuration for HybridContinuousTimeEvolver, for controlling the accuracy of continuous evolution methods.
+//! \relates HybridContinuousTimeEvolver
+class HybridContinuousTimeEvolverConfiguration : public HybridContinuousTimeEvolverBaseConfiguration {
   public:
     /** @brief Construct the object. */
-    GeneralHybridEvolverConfiguration(GeneralHybridEvolver& evolver);
+    HybridContinuousTimeEvolverConfiguration(HybridContinuousTimeEvolver& evolver);
 
-    virtual ~GeneralHybridEvolverConfiguration() = default;
+    virtual ~HybridContinuousTimeEvolverConfiguration() = default;
 };
 
-//! \brief Factory for GeneralHybridEvolver objects.
+//! \brief Factory for HybridContinuousTimeEvolver objects.
 //! \deprecated Use cloning instead
-//! \relates GeneralHybridEvolver
-class GeneralHybridEvolverFactory
-    : public HybridEvolverFactoryInterface {
+//! \relates HybridContinuousTimeEvolver
+class HybridContinuousTimeEvolverFactory
+    : public HybridContinuousTimeEvolverFactoryInterface {
   private:
     std::shared_ptr<ValidatedFunctionPatchFactory::Interface> _function_factory_ptr;
 
   public:
     /** @brief Construct the object. */
-    GeneralHybridEvolverFactory();
+    HybridContinuousTimeEvolverFactory();
 
     /** @brief Construct the object. */
-    GeneralHybridEvolverFactory(const ValidatedFunctionPatchFactory& factory);
+    HybridContinuousTimeEvolverFactory(const ValidatedFunctionPatchFactory& factory);
 
-    virtual GeneralHybridEvolverFactory* clone() const { return new GeneralHybridEvolverFactory(*this); }
+    virtual HybridContinuousTimeEvolverFactory* clone() const { return new HybridContinuousTimeEvolverFactory(*this); }
 
     //! \brief Create an hybrid evolver around a \a system.
-    virtual GeneralHybridEvolver* create(const HybridAutomatonInterface& system) const;
+    virtual HybridContinuousTimeEvolver* create(const HybridAutomatonInterface& system) const;
 };
 
 } // namespace Ariadne
 
-#endif // ARIADNE_HYBRID_EVOLVER_HPP
+#endif // ARIADNE_HYBRID_CONTINUOUS_TIME_EVOLVER_HPP

@@ -29,6 +29,7 @@
 #include "differential_inclusion_evolver.hpp"
 
 #include <optional>
+#include <stdexcept>
 
 #include "algebra/expansion.inl.hpp"
 #include "enclosure.hpp"
@@ -81,8 +82,9 @@ inline Map<InclusionIntegrator, ApproximateDouble> convert_to_percentages(const 
 
 DifferentialInclusionEvolver::DifferentialInclusionEvolver(const SystemType& system, const IntegratorInterface& integrator, const Reconditioner& reconditioner)
     : _system(system), _integrator(integrator.clone()), _reconditioner(reconditioner), _configuration(new ConfigurationType()) {
-    // DifferentialInclusion's sole value constructor already requires a
-    // nonempty input domain; inputs are immutable after construction.
+    if (!system.has_input_function() || system.number_of_inputs() == 0u || system.has_explicit_time() || system.parameter_space().dimension() != 0u) {
+        throw std::invalid_argument("DifferentialInclusionEvolver requires an autonomous structured ODAI with free inputs and without constant parameters");
+    }
     LOGGING_SCOPE_CREATE;
 }
 

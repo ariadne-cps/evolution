@@ -1,5 +1,5 @@
 /***************************************************************************
- *            hybrid_evolver.cpp
+ *            hybrid_continuous_time_evolver.cpp
  *
  *  Copyright  2009-20  Pieter Collins
  *
@@ -22,24 +22,25 @@
  *  along with Ariadne Evolution. If not, see <https://www.gnu.org/licenses/>.
  */
 
-/** @file src/hybrid_evolver.cpp
+/** @file src/hybrid_continuous_time_evolver.cpp
  *  @brief Implement hybrid evolver evolution operations.
  */
 
-#include "evolution/hybrid_evolver.hpp"
+#include "evolution/hybrid_continuous_time_evolver.hpp"
 
 #include <algorithm>
 #include <typeinfo>
 
 #include "algebra/polynomial.hpp"
 #include "algebra/vector.hpp"
-#include "evolution/hybrid_evolver.hpp"
+#include "evolution/hybrid_continuous_time_evolver.hpp"
 #include "evolution/hybrid_time.hpp"
 #include "evolution/orbit.hpp"
 #include "function/function.hpp"
 #include "function/function_model.hpp"
 #include "function/function_patch.hpp"
 #include "integration/integrator.hpp"
+#include "integration/validated_step_integrator.hpp"
 #include "numeric/numeric.hpp"
 #include "paving/binary_tree_paving.hpp"
 #include "system/hybrid_automaton_interface.hpp"
@@ -57,7 +58,7 @@ namespace Ariadne {
 inline PositiveValidatedUpperNumber abs(PositiveValidatedUpperNumber y) { return y; }
 inline PositiveValidatedUpperNumber mag(PositiveValidatedUpperNumber y) { return y; }
 
-static const FloatDP zero = {0, dp};
+static const FloatDP hybrid_zero = {0, dp};
 
 inline auto operator+(Int n, FloatDPBounds x) -> decltype(FloatDP(n, dp) + x) { return FloatDP(n, dp) + x; }
 
@@ -315,7 +316,7 @@ Void set_auxiliary(const HybridAutomatonInterface& system, HybridEnclosure& encl
 }
 
 Orbit<HybridEnclosure>
-    HybridEvolverBase::
+    HybridContinuousTimeEvolverBase::
         orbit(const HybridExactBoxType& initial_box,
               const HybridTerminationCriterion& termination,
               Semantics semantics) const {
@@ -328,7 +329,7 @@ Orbit<HybridEnclosure>
 }
 
 Orbit<HybridEnclosure>
-    HybridEvolverBase::
+    HybridContinuousTimeEvolverBase::
         orbit(const HybridBoxSet& initial_box,
               const HybridTerminationCriterion& termination,
               Semantics semantics) const {
@@ -341,7 +342,7 @@ Orbit<HybridEnclosure>
 }
 
 Orbit<HybridEnclosure>
-    HybridEvolverBase::
+    HybridContinuousTimeEvolverBase::
         orbit(const HybridBoundedConstraintSet& initial_set,
               const HybridTerminationCriterion& termination,
               Semantics semantics) const {
@@ -354,7 +355,7 @@ Orbit<HybridEnclosure>
 }
 
 Orbit<HybridEnclosure>
-    HybridEvolverBase::
+    HybridContinuousTimeEvolverBase::
         orbit(const HybridEnclosure& initial,
               const HybridTerminationCriterion& termination,
               Semantics semantics) const {
@@ -369,16 +370,16 @@ Orbit<HybridEnclosure>
     return backend->release_orbit();
 }
 
-HybridEvolverBase::HybridEvolverBase(const SystemType& system) {
+HybridContinuousTimeEvolverBase::HybridContinuousTimeEvolverBase(const SystemType& system) {
     this->_create(system, FunctionFactoryType(make_taylor_function_patch_factory()));
 }
 
-HybridEvolverBase::HybridEvolverBase(const SystemType& system,
-                                     const FunctionFactoryType& factory) {
+HybridContinuousTimeEvolverBase::HybridContinuousTimeEvolverBase(const SystemType& system,
+                                                                 const FunctionFactoryType& factory) {
     this->_create(system, factory);
 }
 
-Void HybridEvolverBase::_create(
+Void HybridContinuousTimeEvolverBase::_create(
     const SystemType& system,
     const FunctionFactoryType& factory) {
     this->_sys_ptr = std::shared_ptr<SystemType>(system.clone());
@@ -389,51 +390,51 @@ Void HybridEvolverBase::_create(
     this->ALLOW_UNWIND = false;
 }
 
-const HybridEvolverBase::SystemType&
-    HybridEvolverBase::system() const {
+const HybridContinuousTimeEvolverBase::SystemType&
+    HybridContinuousTimeEvolverBase::system() const {
     return *this->_sys_ptr;
 }
 
-HybridEvolverBase::ConfigurationType&
-    HybridEvolverBase::configuration() {
+HybridContinuousTimeEvolverBase::ConfigurationType&
+    HybridContinuousTimeEvolverBase::configuration() {
     return *this->_configuration_ptr;
 }
 
-const HybridEvolverBase::ConfigurationType&
-    HybridEvolverBase::configuration() const {
+const HybridContinuousTimeEvolverBase::ConfigurationType&
+    HybridContinuousTimeEvolverBase::configuration() const {
     return *this->_configuration_ptr;
 }
 
-Void HybridEvolverBase::set_function_factory(const FunctionFactoryType& factory) {
+Void HybridContinuousTimeEvolverBase::set_function_factory(const FunctionFactoryType& factory) {
     this->_function_factory_ptr = factory.managed_pointer();
 }
 
-const HybridEvolverBase::FunctionFactoryType
-    HybridEvolverBase::function_factory() const {
+const HybridContinuousTimeEvolverBase::FunctionFactoryType
+    HybridContinuousTimeEvolverBase::function_factory() const {
     return FunctionFactoryType(this->_function_factory_ptr);
 }
 
-Void HybridEvolverBase::set_integrator(const IntegratorInterface& integrator) {
+Void HybridContinuousTimeEvolverBase::set_integrator(const IntegratorInterface& integrator) {
     this->_integrator_ptr = std::shared_ptr<IntegratorInterface>(integrator.clone());
 }
 
-Void HybridEvolverBase::set_solver(const EquationSolverInterface& solver) {
+Void HybridContinuousTimeEvolverBase::set_solver(const EquationSolverInterface& solver) {
     this->_solver_ptr = std::shared_ptr<EquationSolverInterface>(solver.clone());
 }
 
-Void HybridEvolverBase::set_evolution_backend_factory(const HybridEvolutionBackendFactoryInterface& factory) {
+Void HybridContinuousTimeEvolverBase::set_evolution_backend_factory(const HybridEvolutionBackendFactoryInterface& factory) {
     _backend_factory_ptr = std::shared_ptr<const HybridEvolutionBackendFactoryInterface>(factory.clone());
 }
 
-HybridEvolverBase::EnclosureType
-    HybridEvolverBase::enclosure(const HybridExactBox& initial_box) const {
+HybridContinuousTimeEvolverBase::EnclosureType
+    HybridContinuousTimeEvolverBase::enclosure(const HybridExactBox& initial_box) const {
     HybridEnclosure result(initial_box, EnclosureConfiguration(this->function_factory()));
     set_auxiliary(this->system(), result);
     return result;
 }
 
-HybridEvolverBase::EnclosureType
-    HybridEvolverBase::enclosure(const HybridBoundedConstraintSet& initial_set) const {
+HybridContinuousTimeEvolverBase::EnclosureType
+    HybridContinuousTimeEvolverBase::enclosure(const HybridBoundedConstraintSet& initial_set) const {
     HybridEnclosure result(initial_set, this->system().continuous_state_space(initial_set.location()), EnclosureConfiguration(this->function_factory()));
     set_auxiliary(this->system(), result);
     return result;
@@ -446,7 +447,7 @@ struct EvolutionStepData {
     Set<DiscreteEvent> events;
 };
 
-Void HybridEvolverBase::
+Void HybridContinuousTimeEvolverBase::
     _log_summary(const HybridEnclosure& starting_set, const HybridEvolutionStatistics& statistics) const {
     UpperBoxType starting_bounding_box = starting_set.state_bounding_box();
     UpperIntervalType starting_time_range = starting_set.time_range();
@@ -472,7 +473,7 @@ Void HybridEvolverBase::
 }
 
 Map<DiscreteEvent, TransitionData>
-    HybridEvolverBase::
+    HybridContinuousTimeEvolverBase::
         _extract_transitions(const DiscreteLocation& location) const {
     LOGGING_SCOPE_CREATE;
     const EffectiveVectorMultivariateFunction& dynamic = this->system().dynamic_function(location);
@@ -511,7 +512,7 @@ Map<DiscreteEvent, TransitionData>
     return transitions;
 }
 
-Void HybridEvolverBase::
+Void HybridContinuousTimeEvolverBase::
     _apply_invariants(HybridEnclosure& initial_set,
                       const Map<DiscreteEvent, TransitionData>& transitions) const {
     LOGGING_SCOPE_CREATE;
@@ -533,7 +534,7 @@ Void HybridEvolverBase::
     }
 }
 
-Void HybridEvolverBase::
+Void HybridContinuousTimeEvolverBase::
     _process_starting_events(const HybridEnclosure& initial_set,
                              const Map<DiscreteEvent, TransitionData>& transitions,
                              HybridEvolutionStepResult& result) const {
@@ -594,7 +595,7 @@ Void HybridEvolverBase::
 }
 
 ValidatedVectorMultivariateFunctionPatch
-    HybridEvolverBase::
+    HybridContinuousTimeEvolverBase::
         _compute_flow(EffectiveVectorMultivariateFunction dynamic,
                       const ExactBoxType& initial_box,
                       const StepSizeType& maximum_step_size) const {
@@ -602,21 +603,13 @@ ValidatedVectorMultivariateFunctionPatch
 
     IntegratorInterface& integrator = *this->_integrator_ptr;
 
-    // Compute flow and actual time step size used
-    //
-    // The Integrator classes compute the flow as a function on a symmetrical
-    // time domain [-h,+h], since this means the time is centred at 0.
-    // We then restrict to the time domain [0,h] since this can make evaluation
-    // more accurate, and the time domain might be used explicitly for the domain
-    // of the resulting set.
-    ValidatedVectorMultivariateFunctionPatch flow_model = integrator.flow_step(dynamic, initial_box, suggest(maximum_step_size));
-    LOGGING_PRINTLN_AT(1, "twosided_flow_model=" << flow_model);
-    ExactBoxType flow_domain = flow_model.domain();
-    // IntegratorInterface permits an actual step larger than its suggestion.
-    // Restrict the validated flow to the configured maximum before using it.
-    StepSizeType step_size = min(static_cast<StepSizeType>(flow_domain[flow_domain.size() - 1u].upper_bound()), maximum_step_size);
-    flow_domain[flow_domain.size() - 1u] = ExactIntervalType(0, step_size);
-    flow_model = restriction(flow_model, flow_domain);
+    // The shared adapter preserves adaptive error control and caps the
+    // certified interval at the requested maximum, even for overshooting solvers.
+    const FlowStepIntegratorAdapter step_integrator(integrator);
+    const auto step = step_integrator.step(ValidatedIntegrationRequest(
+        dynamic, initial_box, suggest(maximum_step_size)));
+    ValidatedVectorMultivariateFunctionPatch flow_model = step.reach_models()[0];
+    const StepSizeType step_size = step.time_step();
     LOGGING_PRINTLN_AT(1, "flow_model=" << flow_model);
     LOGGING_PRINTLN_AT(1, "flow_model: step_size=" << step_size << ", errors=" << std::scientific << flow_model.errors() << ", range=" << std::fixed << flow_model.range());
     LOGGING_PRINTLN_AT(1, "flow_model=" << flow_model);
@@ -624,7 +617,7 @@ ValidatedVectorMultivariateFunctionPatch
 }
 
 Set<DiscreteEvent>
-    HybridEvolverBase::
+    HybridContinuousTimeEvolverBase::
         _compute_active_events(const EffectiveVectorMultivariateFunction& dynamic,
                                const Map<DiscreteEvent, EffectiveScalarMultivariateFunction>& guards,
                                const ValidatedVectorMultivariateFunctionPatch& flow,
@@ -647,7 +640,7 @@ Set<DiscreteEvent>
         // For IMPACT events, also look at flow direction
         UpperIntervalType flow_derivative_range = apply(flow_derivative, reach_set.state_bounding_box());
         LOGGING_PRINTLN_AT(1, "guard_range=" << guard_range << ", flow_derivative_range=" << flow_derivative_range);
-        if (possibly(guard_range.upper_bound() >= zero)) {
+        if (possibly(guard_range.upper_bound() >= hybrid_zero)) {
             // Now make a set containing the complement of the constraint,
             // and test for emptiness. If the set is empty, then the guard is
             // not satisfied anywhere.
@@ -662,7 +655,7 @@ Set<DiscreteEvent>
 }
 
 Map<DiscreteEvent, CrossingData>
-    HybridEvolverBase::
+    HybridContinuousTimeEvolverBase::
         _compute_crossings(const Set<DiscreteEvent>& active_events,
                            const EffectiveVectorMultivariateFunction& dynamic,
                            const Map<DiscreteEvent, EffectiveScalarMultivariateFunction>& guards,
@@ -692,7 +685,7 @@ Map<DiscreteEvent, CrossingData>
         EffectiveScalarMultivariateFunction guard_derivative = lie_derivative(guard, dynamic);
         UpperIntervalType guard_derivative_range = apply(guard_derivative, flow_bounds);
         LOGGING_PRINTLN_AT(2, "guard_derivative_range=" << guard_derivative_range);
-        if (definitely(guard_derivative_range.lower_bound() > zero)) {
+        if (definitely(guard_derivative_range.lower_bound() > hybrid_zero)) {
             // If the derivative $L_{f}g$is strictly positive over the bounding box for the flow,
             // then the guard function is strictly increasing.
             // There is at most one crossing with the guard, and the time of this
@@ -716,7 +709,7 @@ Map<DiscreteEvent, CrossingData>
                 LOGGING_PRINTLN_AT(2, "Unexpected error in computing crossing time for event " << *event_iter << ": " << e.what());
                 throw;
             }
-        } else if (definitely(guard_derivative_range.upper_bound() < zero)) {
+        } else if (definitely(guard_derivative_range.upper_bound() < hybrid_zero)) {
             // If the guard derivative is strictly negative over the bounding box for the flow,
             // then the guard function is strictly decreasing.
             // This means that the event is either initially active, or does not occur.
@@ -731,7 +724,7 @@ Map<DiscreteEvent, CrossingData>
             UpperIntervalType guard_second_derivative_flow_range = compose(guard_second_derivative, flow).range();
             UpperIntervalType guard_second_derivative_range = intersection(guard_second_derivative_bounds_range, guard_second_derivative_flow_range);
             LOGGING_PRINTLN_AT(2, "guard_second_derivative_range=" << guard_second_derivative_range);
-            if (definitely(guard_second_derivative_range.lower_bound() > zero)) {
+            if (definitely(guard_second_derivative_range.lower_bound() > hybrid_zero)) {
                 // If the second derivative is positive, then either
                 //    (i) the event is immediately active
                 //   (ii) the event is never active, or
@@ -744,7 +737,7 @@ Map<DiscreteEvent, CrossingData>
                 // we do know that in (iii), the event occurs when $t>0$ and
                 // $g(\phi(x_0,t))=0$. The crossing time is not computed.
                 crossings[event] = CrossingData(CrossingKind::CONVEX);
-            } else if (definitely(guard_second_derivative_range.upper_bound() < zero)) {
+            } else if (definitely(guard_second_derivative_range.upper_bound() < hybrid_zero)) {
                 // If the second derivative is negative, then the guard
                 // values $g(x(t))$ are concave along flow lines. There are
                 // five main cases:
@@ -855,19 +848,19 @@ Map<DiscreteEvent, CrossingData>
     return crossings;
 }
 
-Void HybridEvolverBase::
+Void HybridContinuousTimeEvolverBase::
     _recondition(HybridEnclosure& set) const {
     set.recondition();
 }
 
-Void HybridEvolverBase::
+Void HybridContinuousTimeEvolverBase::
     _apply_reach_step(HybridEnclosure& set,
                       const ValidatedVectorMultivariateFunctionPatch& flow,
                       const TimingData& timing_data) const {
     set.apply_parameter_reach_step(flow, timing_data.parameter_dependent_evolution_time);
 }
 
-Void HybridEvolverBase::
+Void HybridContinuousTimeEvolverBase::
     _apply_evolve_step(HybridEnclosure& set,
                        const ValidatedVectorMultivariateFunctionPatch& flow,
                        const TimingData& timing_data) const {
@@ -889,7 +882,7 @@ Void HybridEvolverBase::
     }
 }
 
-Void HybridEvolverBase::
+Void HybridContinuousTimeEvolverBase::
     _apply_guard_step(HybridEnclosure& set,
                       const EffectiveVectorMultivariateFunction& dynamic,
                       const ValidatedVectorMultivariateFunctionPatch& flow,
@@ -923,7 +916,7 @@ Void HybridEvolverBase::
                     LOGGING_PRINTLN_AT(1, "crossing_time=" << crossing_data.crossing_time);
                     step_time = unchecked_compose(crossing_data.crossing_time, starting_state);
                     // If the jump step might occur after the final evolution time, then introduce constraint that this does not happen
-                    if (timing_data.step_kind != StepKind::CONSTANT_EVOLUTION_TIME && possibly((step_time - timing_data.parameter_dependent_evolution_time).range().upper_bound() > zero)) {
+                    if (timing_data.step_kind != StepKind::CONSTANT_EVOLUTION_TIME && possibly((step_time - timing_data.parameter_dependent_evolution_time).range().upper_bound() > hybrid_zero)) {
                         jump_set.new_parameter_constraint(step_event, step_time <= timing_data.parameter_dependent_evolution_time);
                     }
                     jump_set.apply_parameter_evolve_step(flow, unchecked_compose(crossing_data.crossing_time, starting_state));
@@ -1004,7 +997,7 @@ Void HybridEvolverBase::
 // In the case of concave crossings, splits the set into two, one part
 // corresponding to points which actually hit the set (and stop on first crossing)
 // the other part corresponding to points which miss the set.
-Void HybridEvolverBase::
+Void HybridContinuousTimeEvolverBase::
     _apply_guard(List<HybridEnclosure>& sets,
                  const ValidatedScalarMultivariateFunctionPatch& elapsed_time_function,
                  const HybridEnclosure& starting_set,
@@ -1061,8 +1054,8 @@ Void HybridEvolverBase::
                 // Test whether the trajectory can hit at any future time
                 // from its starting state. An endpoint already beyond the
                 // maximum may have crossed and returned; it is not a miss.
-                eventually_hitting_set.new_parameter_constraint(event, zero <= critical_time_function);
-                eventually_hitting_set.new_parameter_constraint(event, maximal_guard_function >= zero);
+                eventually_hitting_set.new_parameter_constraint(event, hybrid_zero <= critical_time_function);
+                eventually_hitting_set.new_parameter_constraint(event, maximal_guard_function >= hybrid_zero);
                 LOGGING_PRINTLN_AT(1, "eventually_hitting_set.is_empty()=" << eventually_hitting_set.is_empty());
                 if (definitely(eventually_hitting_set.is_empty())) {
                     // NOTE: Constraint below should always be satisfied
@@ -1073,11 +1066,11 @@ Void HybridEvolverBase::
                 // later return, then we only need to look at the guard at the final value
                 HybridEnclosure returning_set = set;
                 returning_set.new_parameter_constraint(event, elapsed_time_function >= critical_time_function);
-                returning_set.new_parameter_constraint(event, final_guard_function <= zero);
+                returning_set.new_parameter_constraint(event, final_guard_function <= hybrid_zero);
                 ValidatedLowerKleenean returning_set_empty = returning_set.is_empty();
                 LOGGING_PRINTLN_AT(1, "returning_set.is_empty()=" << returning_set_empty);
                 if (definitely(returning_set_empty)) {
-                    set.new_parameter_constraint(event, final_guard_function <= zero);
+                    set.new_parameter_constraint(event, final_guard_function <= hybrid_zero);
                     break;
                 }
 
@@ -1088,12 +1081,12 @@ Void HybridEvolverBase::
                 HybridEnclosure& missing_set = set;
                 HybridEnclosure hitting_set = set;
                 HybridEnclosure past_set = set;
-                missing_set.new_parameter_constraint(event, maximal_guard_function <= zero);
-                hitting_set.new_parameter_constraint(event, maximal_guard_function >= zero);
+                missing_set.new_parameter_constraint(event, maximal_guard_function <= hybrid_zero);
+                hitting_set.new_parameter_constraint(event, maximal_guard_function >= hybrid_zero);
                 hitting_set.new_parameter_constraint(event, elapsed_time_function <= critical_time_function);
-                hitting_set.new_parameter_constraint(event, final_guard_function <= zero);
-                past_set.new_parameter_constraint(event, maximal_guard_function >= zero);
-                past_set.new_parameter_constraint(event, critical_time_function <= zero);
+                hitting_set.new_parameter_constraint(event, final_guard_function <= hybrid_zero);
+                past_set.new_parameter_constraint(event, maximal_guard_function >= hybrid_zero);
+                past_set.new_parameter_constraint(event, critical_time_function <= hybrid_zero);
                 hitting_set.reduce();
                 missing_set.reduce();
                 past_set.reduce();
@@ -1126,12 +1119,12 @@ Void HybridEvolverBase::
                         for (Nat i = 0; i != n; ++i) {
                             FloatDPBounds alpha = FloatDP(i + 1, dp) / n;
                             ValidatedScalarMultivariateFunctionPatch intermediate_guard = compose(guard_function, unchecked_compose(flow, join(starting_state_function, alpha * elapsed_time_function)));
-                            set.new_parameter_constraint(event, intermediate_guard <= zero);
+                            set.new_parameter_constraint(event, intermediate_guard <= hybrid_zero);
                         }
                         break;
                     case Semantics::LOWER:
                         // Can't continue the evolution, so set a trivially-falsified constraint
-                        set.new_parameter_constraint(event, this->function_factory().create_constant(set.parameter_domain(), 1) <= zero);
+                        set.new_parameter_constraint(event, this->function_factory().create_constant(set.parameter_domain(), 1) <= hybrid_zero);
                         break;
                     default:
                         ARIADNE_FAIL_MSG("Unhandled semantics.");
@@ -1154,7 +1147,7 @@ Void HybridEvolverBase::
     }
 }
 
-Void HybridEvolverBase::
+Void HybridContinuousTimeEvolverBase::
     _process_jumped_set(const HybridEnclosure& jumped_set,
                         const TerminationType& termination,
                         HybridEvolutionStepResult& result) const {
@@ -1223,7 +1216,7 @@ Void HybridEvolverBase::
     this->_process_starting_events(initial_set, transitions, result);
 }
 
-HybridEvolutionStepResult HybridEvolverBase::
+HybridEvolutionStepResult HybridContinuousTimeEvolverBase::
     _process_working_set(const HybridEvolutionWorkItem& working_set,
                          const HybridTerminationCriterion& termination,
                          const Semantics& semantics,
@@ -1247,7 +1240,7 @@ HybridEvolutionStepResult HybridEvolverBase::
     return result;
 }
 
-Void HybridEvolverBase::
+Void HybridContinuousTimeEvolverBase::
     _evolution_step(const HybridEnclosure& set,
                     const Real& final_time,
                     const Semantics& semantics,
@@ -1359,7 +1352,7 @@ Void HybridEvolverBase::
     this->_apply_evolution_step(starting_set, flow_model, timing_data, crossings, dynamic, transitions, semantics, result);
 }
 
-Void HybridEvolverBase::
+Void HybridContinuousTimeEvolverBase::
     _apply_evolution_step(const HybridEnclosure& starting_set,
                           const ValidatedVectorMultivariateFunctionPatch& flow,
                           const TimingData& timing_data,
@@ -1588,7 +1581,7 @@ Void HybridEvolverBase::
 }
 
 TimingData
-    HybridEvolverBase::
+    HybridContinuousTimeEvolverBase::
         _estimate_timing(Set<DiscreteEvent>&,
                          Real final_time,
                          const FlowFunctionModel& flow,
@@ -1610,7 +1603,7 @@ TimingData
     return result;
 }
 
-HybridEvolverBaseConfiguration::HybridEvolverBaseConfiguration(HybridEvolverBase& evolver)
+HybridContinuousTimeEvolverBaseConfiguration::HybridContinuousTimeEvolverBaseConfiguration(HybridContinuousTimeEvolverBase& evolver)
     : _evolver(evolver) {
     set_flow_accuracy(1e-5);
     set_maximum_step_size(1.0);
@@ -1620,14 +1613,14 @@ HybridEvolverBaseConfiguration::HybridEvolverBaseConfiguration(HybridEvolverBase
     set_enable_subdivisions(true);
 }
 
-Void HybridEvolverBaseConfiguration::set_flow_accuracy(const ApproximateRealType value) {
+Void HybridContinuousTimeEvolverBaseConfiguration::set_flow_accuracy(const ApproximateRealType value) {
     _evolver._integrator_ptr = std::shared_ptr<GradedTaylorSeriesIntegrator>(new GradedTaylorSeriesIntegrator(StepMaximumError(cast_exact(value))));
     _flow_accuracy = cast_exact(value);
 }
 
 OutputStream&
-    HybridEvolverBaseConfiguration::_write(OutputStream& os) const {
-    os << "HybridEvolverBaseConfiguration"
+    HybridContinuousTimeEvolverBaseConfiguration::_write(OutputStream& os) const {
+    os << "HybridContinuousTimeEvolverBaseConfiguration"
        << "(\n  flow_accuracy=" << flow_accuracy()
        << ",\n  maximum_step_size=" << maximum_step_size()
        << ",\n  maximum_enclosure_radius=" << maximum_enclosure_radius()
@@ -1638,24 +1631,24 @@ OutputStream&
     return os;
 }
 
-GeneralHybridEvolver::GeneralHybridEvolver(const SystemType& system)
-    : HybridEvolverBase(system) {
-    this->_configuration_ptr.reset(new GeneralHybridEvolverConfiguration(*this));
+HybridContinuousTimeEvolver::HybridContinuousTimeEvolver(const SystemType& system)
+    : HybridContinuousTimeEvolverBase(system) {
+    this->_configuration_ptr.reset(new HybridContinuousTimeEvolverConfiguration(*this));
 }
 
-GeneralHybridEvolver::GeneralHybridEvolver(
+HybridContinuousTimeEvolver::HybridContinuousTimeEvolver(
     const SystemType& system,
     const FunctionFactoryType& factory)
-    : HybridEvolverBase(system, factory) {
-    this->_configuration_ptr.reset(new GeneralHybridEvolverConfiguration(*this));
+    : HybridContinuousTimeEvolverBase(system, factory) {
+    this->_configuration_ptr.reset(new HybridContinuousTimeEvolverConfiguration(*this));
 }
 
-GeneralHybridEvolver::GeneralHybridEvolver(const GeneralHybridEvolver& other)
-    : HybridEvolverBase(other.system(), other.function_factory()) {
+HybridContinuousTimeEvolver::HybridContinuousTimeEvolver(const HybridContinuousTimeEvolver& other)
+    : HybridContinuousTimeEvolverBase(other.system(), other.function_factory()) {
     this->_copy_configuration_from(other);
 }
 
-GeneralHybridEvolver& GeneralHybridEvolver::operator=(const GeneralHybridEvolver& other) {
+HybridContinuousTimeEvolver& HybridContinuousTimeEvolver::operator=(const HybridContinuousTimeEvolver& other) {
     if (this != &other) {
         this->_sys_ptr.reset(other.system().clone());
         this->set_function_factory(other.function_factory());
@@ -1664,12 +1657,12 @@ GeneralHybridEvolver& GeneralHybridEvolver::operator=(const GeneralHybridEvolver
     return *this;
 }
 
-Void GeneralHybridEvolver::_copy_configuration_from(const GeneralHybridEvolver& other) {
+Void HybridContinuousTimeEvolver::_copy_configuration_from(const HybridContinuousTimeEvolver& other) {
     // The configuration stores its owning evolver by reference. Rebuild that
     // relationship so copies remain independent and outlive the original.
     auto integrator = std::shared_ptr<IntegratorInterface>(other._integrator_ptr->clone());
     auto solver = std::shared_ptr<EquationSolverInterface>(other._solver_ptr->clone());
-    this->_configuration_ptr.reset(new GeneralHybridEvolverConfiguration(*this));
+    this->_configuration_ptr.reset(new HybridContinuousTimeEvolverConfiguration(*this));
     const auto& source = other.configuration();
     auto& target = this->configuration();
     target.set_flow_accuracy(source.flow_accuracy());
@@ -1685,7 +1678,7 @@ Void GeneralHybridEvolver::_copy_configuration_from(const GeneralHybridEvolver& 
 }
 
 TimingData
-    GeneralHybridEvolver::
+    HybridContinuousTimeEvolver::
         _estimate_timing(Set<DiscreteEvent>&,
                          Real final_time,
                          const FlowFunctionModel& flow,
@@ -1704,14 +1697,14 @@ TimingData
     result.final_time = final_time;
 
     ExactBoxType state_domain = cast_exact_box(initial_set.state_bounding_box());
-    ExactIntervalType time_domain = cast_exact_interval(initial_set.time_range() + ExactIntervalType(zero, step_size));
+    ExactIntervalType time_domain = cast_exact_interval(initial_set.time_range() + ExactIntervalType(hybrid_zero, step_size));
     ExactBoxType statetime_domain = product(state_domain, time_domain);
 
     // ValidatedVectorMultivariateFunctionPatch space_coordinates=this->function_factory().create_identity(space_domain);
     ValidatedScalarMultivariateFunctionPatch time_coordinate = this->function_factory().create_coordinate(statetime_domain, n);
     ValidatedScalarMultivariateFunctionPatch time_identity = this->function_factory().create_coordinate({time_domain}, 0);
 
-    result.evolution_time_domain = ExactIntervalType(zero, step_size);
+    result.evolution_time_domain = ExactIntervalType(hybrid_zero, step_size);
     result.evolution_time_coordinate = this->function_factory().create_coordinate({result.evolution_time_domain}, 0);
 
     ExactBoxType flow_state_domain = ExactBoxType(project(flow.domain(), range(0, n)));
@@ -1733,7 +1726,7 @@ TimingData
     ValidatedScalarMultivariateFunctionPatch temporal_evolution_time = this->function_factory().create_zero(ExactIntervalVectorType(1u, time_domain));
 
     LOGGING_PRINTLN(std::fixed << "remaining_time_range=" << remaining_time_range);
-    if (possibly(remaining_time_range.lower_bound() < zero)) {
+    if (possibly(remaining_time_range.lower_bound() < hybrid_zero)) {
         // Some of the points may already have reached the final time.
         // Don't try anything fancy, just do a simple constant time step.
         if (definitely(remaining_time_range.upper_bound() <= step_size)) {
@@ -1832,7 +1825,7 @@ TimingData
                     LOGGING_PRINTLN_AT(1, "No creep; event " << crossing_iter->first << " completely taken");
                     creep = false;
                     break;
-                } else if (possibly(crossing_time_range.lower_bound() <= zero)) {
+                } else if (possibly(crossing_time_range.lower_bound() <= hybrid_zero)) {
                     // This event is already partially active, so carry on with a full step
                     LOGGING_PRINTLN_AT(1, "No creep; event " << crossing_iter->first << " already partially active");
                     creep = false;
@@ -1877,7 +1870,7 @@ TimingData
         ValidatedScalarMultivariateFunctionPatch zero_function = factory(flow).create_zero();
         ValidatedVectorMultivariateFunctionPatch identity_function = factory(flow).create_identity();
         // TODO: Remove use of cast
-        ValidatedVectorMultivariateFunctionPatch space_projection = flow * static_cast<Dyadic>(zero);
+        ValidatedVectorMultivariateFunctionPatch space_projection = flow * static_cast<Dyadic>(hybrid_zero);
         for (SizeType i = 0; i != n; ++i) {
             space_projection[i] = space_projection[i] + identity_function[i];
         }
@@ -1895,7 +1888,7 @@ TimingData
             LOGGING_PRINTLN_AT(1, "Event " << event << ": " << event_kind << ": " << crossing_kind);
             if (event_kind != EventKind::PERMISSIVE) {
                 UpperIntervalType guard_range = compose(guard_function, flow).range();
-                ARIADNE_ASSERT(decide(guard_range.lower_bound() < zero));
+                ARIADNE_ASSERT(decide(guard_range.lower_bound() < hybrid_zero));
                 UpperIntervalType guard_derivative_range = compose(lie_derivative(guard_function, dynamic), flow).range();
 
                 FloatDPBounds alpha_val = (1 + flow.step_size() * cast_exact(guard_derivative_range.lower_bound()) / cast_exact(guard_range.lower_bound()));
@@ -1980,21 +1973,21 @@ TimingData
     return result;
 }
 
-GeneralHybridEvolverConfiguration::GeneralHybridEvolverConfiguration(GeneralHybridEvolver& evolver)
-    : HybridEvolverBaseConfiguration(evolver) {
+HybridContinuousTimeEvolverConfiguration::HybridContinuousTimeEvolverConfiguration(HybridContinuousTimeEvolver& evolver)
+    : HybridContinuousTimeEvolverBaseConfiguration(evolver) {
 }
 
-GeneralHybridEvolverFactory::GeneralHybridEvolverFactory()
-    : GeneralHybridEvolverFactory(ValidatedFunctionPatchFactory(make_taylor_function_patch_factory())) {
+HybridContinuousTimeEvolverFactory::HybridContinuousTimeEvolverFactory()
+    : HybridContinuousTimeEvolverFactory(ValidatedFunctionPatchFactory(make_taylor_function_patch_factory())) {
 }
 
-GeneralHybridEvolverFactory::GeneralHybridEvolverFactory(const ValidatedFunctionPatchFactory& factory)
+HybridContinuousTimeEvolverFactory::HybridContinuousTimeEvolverFactory(const ValidatedFunctionPatchFactory& factory)
     : _function_factory_ptr(factory.managed_pointer()) {
 }
 
-GeneralHybridEvolver*
-    GeneralHybridEvolverFactory::create(const HybridAutomatonInterface& system) const {
-    return new GeneralHybridEvolver(system, ValidatedFunctionPatchFactory(_function_factory_ptr));
+HybridContinuousTimeEvolver*
+    HybridContinuousTimeEvolverFactory::create(const HybridAutomatonInterface& system) const {
+    return new HybridContinuousTimeEvolver(system, ValidatedFunctionPatchFactory(_function_factory_ptr));
 }
 
 } // namespace Ariadne

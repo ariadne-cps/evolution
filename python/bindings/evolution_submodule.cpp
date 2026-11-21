@@ -28,13 +28,13 @@
 
 #include <vector>
 
+#include "evolution/continuous_time_evolver.hpp"
+#include "evolution/discrete_time_evolver.hpp"
 #include "evolution/enclosure_recombiner.hpp"
 #include "evolution/hybrid_enclosure.hpp"
 #include "evolution/hybrid_simulator.hpp"
 #include "evolution/hybrid_time.hpp"
-#include "evolution/iterated_map_evolver.hpp"
 #include "evolution/orbit.hpp"
-#include "evolution/vector_field_evolver.hpp"
 #include "evolution/vector_field_simulator.hpp"
 #include "pybind11.hpp"
 #include "system/hybrid_automaton.hpp"
@@ -181,21 +181,21 @@ Void export_evolver(pybind11::module& module, const char* name) {
     evolver_class.def("configuration", (ConfigurationType & (Evolver::*)()) & Evolver::configuration, reference_internal);
 }
 
-Void export_vector_field_evolver_configuration(pybind11::module& module) {
-    typedef typename VectorFieldEvolver::ConfigurationType ConfigurationType;
+Void export_continuous_time_evolver_configuration(pybind11::module& module) {
+    typedef typename ContinuousTimeEvolver::ConfigurationType ConfigurationType;
 
-    pybind11::class_<ConfigurationType> vector_field_evolver_configuration_class(module, "VectorFieldEvolverConfiguration");
-    vector_field_evolver_configuration_class.def("set_maximum_step_size", &ConfigurationType::set_maximum_step_size);
-    vector_field_evolver_configuration_class.def("set_maximum_enclosure_radius", &ConfigurationType::set_maximum_enclosure_radius);
-    vector_field_evolver_configuration_class.def("set_maximum_spacial_error", &ConfigurationType::set_maximum_spacial_error);
-    vector_field_evolver_configuration_class.def("set_enable_reconditioning", &ConfigurationType::set_enable_reconditioning);
-    vector_field_evolver_configuration_class.def("set_enable_subdivisions", &ConfigurationType::set_enable_subdivisions);
-    vector_field_evolver_configuration_class.def("__repr__", &__cstr__<ConfigurationType>);
+    pybind11::class_<ConfigurationType> continuous_time_evolver_configuration_class(module, "ContinuousTimeEvolverConfiguration");
+    continuous_time_evolver_configuration_class.def("set_maximum_step_size", &ConfigurationType::set_maximum_step_size);
+    continuous_time_evolver_configuration_class.def("set_maximum_enclosure_radius", &ConfigurationType::set_maximum_enclosure_radius);
+    continuous_time_evolver_configuration_class.def("set_maximum_spacial_error", &ConfigurationType::set_maximum_spacial_error);
+    continuous_time_evolver_configuration_class.def("set_enable_reconditioning", &ConfigurationType::set_enable_reconditioning);
+    continuous_time_evolver_configuration_class.def("set_enable_subdivisions", &ConfigurationType::set_enable_subdivisions);
+    continuous_time_evolver_configuration_class.def("__repr__", &__cstr__<ConfigurationType>);
 }
 
-Void export_iterated_map_evolver_configuration(pybind11::module& module) {
-    typedef IteratedMapEvolver::ConfigurationType ConfigurationType;
-    pybind11::class_<ConfigurationType> configuration_class(module, "IteratedMapEvolverConfiguration");
+Void export_discrete_time_evolver_configuration(pybind11::module& module) {
+    typedef DiscreteTimeEvolver::ConfigurationType ConfigurationType;
+    pybind11::class_<ConfigurationType> configuration_class(module, "DiscreteTimeEvolverConfiguration");
     configuration_class.def("set_maximum_enclosure_radius", &ConfigurationType::set_maximum_enclosure_radius);
     configuration_class.def("set_enable_subdivisions", &ConfigurationType::set_enable_subdivisions);
     configuration_class.def("set_enable_premature_termination", &ConfigurationType::set_enable_premature_termination);
@@ -214,16 +214,16 @@ Void evolution_submodule(pybind11::module& module) {
 
     export_simulator<VectorFieldSimulator>(module, "VectorFieldSimulator");
 
-    export_evolver_interface<IteratedMapEvolver::Interface>(module, "IteratedMapEvolverInterface");
-    export_evolver_interface<VectorFieldEvolver::Interface>(module, "VectorFieldEvolverInterface");
+    export_evolver_interface<DiscreteTimeEvolver::Interface>(module, "DiscreteTimeEvolverInterface");
+    export_evolver_interface<ContinuousTimeEvolver::Interface>(module, "ContinuousTimeEvolverInterface");
 
-    export_orbit<VectorFieldEvolver::OrbitType>(module, "LabelledEnclosureOrbit");
+    export_orbit<ContinuousTimeEvolver::OrbitType>(module, "LabelledEnclosureOrbit");
 
-    export_evolver<IteratedMapEvolver, IteratedMap>(module, "IteratedMapEvolver");
-    export_evolver<VectorFieldEvolver, VectorField, const IntegratorInterface&>(module, "VectorFieldEvolver");
+    export_evolver<DiscreteTimeEvolver, IteratedMap>(module, "DiscreteTimeEvolver");
+    export_evolver<ContinuousTimeEvolver, OrdinaryDifferentialAlgebraicEquation, const IntegratorInterface&>(module, "ContinuousTimeEvolver");
 
-    export_vector_field_evolver_configuration(module);
-    export_iterated_map_evolver_configuration(module);
+    export_continuous_time_evolver_configuration(module);
+    export_discrete_time_evolver_configuration(module);
 
     // Hybrid evolution belongs here, not to a separate hybrid binding layer.
     pybind11::class_<HybridTime>(module, "HybridTime")

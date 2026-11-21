@@ -42,7 +42,7 @@
 #include "integration/integrator_interface.hpp"
 #include "logging/logging.hpp"
 #include "numeric/numeric.hpp"
-#include "system/differential_inclusion.hpp"
+#include "system/odai.hpp"
 #include "utility/attribute.hpp"
 #include "utility/typedefs.hpp"
 
@@ -150,7 +150,7 @@ class DifferentialInclusionEvolverConfiguration;
 class DifferentialInclusionEvolver {
   public:
     typedef DifferentialInclusionEvolverConfiguration ConfigurationType;
-    typedef DifferentialInclusion SystemType;
+    typedef OrdinaryDifferentialAlgebraicInclusion SystemType;
     typedef typename EvolutionTraits<SystemType>::EnclosureType EnclosureType;
     typedef Orbit<EnclosureType> OrbitType;
 
@@ -161,7 +161,9 @@ class DifferentialInclusionEvolver {
     SharedPointer<ConfigurationType> _configuration;
 
   public:
-    /** @brief Construct the object. */
+    /** @brief Construct from an autonomous structured ODAI with free inputs and no constant parameters.
+     *  @throws std::invalid_argument for interval-Taylor fields, no free inputs, explicit time or constant parameters.
+     */
     DifferentialInclusionEvolver(const SystemType& system, const IntegratorInterface& integrator, const Reconditioner& reconditioner);
 
     //!@{

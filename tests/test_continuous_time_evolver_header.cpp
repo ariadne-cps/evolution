@@ -1,5 +1,5 @@
 /***************************************************************************
- *            test_vector_field_evolver_header.cpp
+ *            test_continuous_time_evolver_header.cpp
  *
  *  Copyright  2026  Luca Geretti
  *
@@ -22,21 +22,21 @@
  *  along with Ariadne Evolution. If not, see <https://www.gnu.org/licenses/>.
  */
 
-/** @file tests/test_vector_field_evolver_header.cpp
+/** @file tests/test_continuous_time_evolver_header.cpp
  *  @brief Test vector field evolver header behavior and numerical invariants.
  */
 
 #include <type_traits>
 
-#include "evolution/vector_field_evolver.hpp"
+#include "evolution/continuous_time_evolver.hpp"
 #include "logging/test_runner.hpp"
 
 #include "ariadne-testing.hpp"
 
-static_assert(std::is_base_of_v<Ariadne::VectorFieldEvolver::Interface,
-                                Ariadne::VectorFieldEvolver>);
+static_assert(std::is_base_of_v<Ariadne::ContinuousTimeEvolver::Interface,
+                                Ariadne::ContinuousTimeEvolver>);
 
-class TestVectorFieldEvolverHeader : public Ariadne::Testing::ContextFixture {
+class TestContinuousTimeEvolverHeader : public Ariadne::Testing::ContextFixture {
   public:
     using ContextFixture::ContextFixture;
 
@@ -46,7 +46,7 @@ class TestVectorFieldEvolverHeader : public Ariadne::Testing::ContextFixture {
 };
 
 int main(int argc, char** argv) {
-    ARIADNE_TESTING_SUITE("test_vector_field_evolver_header");
-    ARIADNE_TESTING_ADD_TEST(TestVectorFieldEvolverHeader, test_header_compiles);
+    ARIADNE_TESTING_SUITE("test_continuous_time_evolver_header");
+    ARIADNE_TESTING_ADD_TEST(TestContinuousTimeEvolverHeader, test_header_compiles);
     return Ariadne::Testing::run_logging_suite(ariadne_test_suite, argc, argv);
 }

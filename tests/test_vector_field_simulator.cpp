@@ -61,7 +61,7 @@ class TestVectorFieldSimulator : public Ariadne::Testing::ContextFixture {
   public:
     Void test_linear_flow_and_input_labels() {
         RealVariable x("x"), y("y"), z("z"), missing("missing");
-        VectorField field({dot(x) = 1, dot(y) = 0}, {let(z) = x + 2 * y});
+        OrdinaryDifferentialAlgebraicEquation field({dot(x) = 1, dot(y) = 0}, {let(z) = x + 2 * y});
         VectorFieldSimulator simulator(field);
         simulator.configuration().set_step_size(0.25);
         using PointType = VectorFieldSimulator::ApproximatePointType;
@@ -88,7 +88,7 @@ class TestVectorFieldSimulator : public Ariadne::Testing::ContextFixture {
 
     Void test_configuration_and_sampling() {
         RealVariable x("x"), y("y"), unknown("unknown");
-        VectorField field({dot(x) = 0, dot(y) = 0});
+        OrdinaryDifferentialAlgebraicEquation field({dot(x) = 0, dot(y) = 0});
         VectorFieldSimulator simulator(field);
         auto& config = simulator.configuration();
         ARIADNE_TESTING_EXPECT_EXCEPTION(config.set_step_size(0.0));
@@ -140,7 +140,7 @@ class TestVectorFieldSimulator : public Ariadne::Testing::ContextFixture {
         Real mu = Dyadic(0.5_x);
         RealVariable x("x"), y("y"), z("z");
 
-        VectorField vanderpol({dot(x) = y, dot(y) = mu * (1 - x * x) * y - x}, {let(z) = sqrt(sqr(x) + sqr(y))});
+        OrdinaryDifferentialAlgebraicEquation vanderpol({dot(x) = y, dot(y) = mu * (1 - x * x) * y - x}, {let(z) = sqrt(sqr(x) + sqr(y))});
         ARIADNE_TESTING_NOTE(vanderpol);
 
         RealExpressionBoundedConstraintSet initial_set({-2.0_dec <= x <= -1.5_dec, 0.5_dec <= y <= 1});
@@ -174,7 +174,7 @@ class TestVectorFieldSimulator : public Ariadne::Testing::ContextFixture {
         Real mu = Dyadic(0.5_x);
         RealVariable x("x"), y("y"), z("z");
 
-        VectorField vanderpol({dot(x) = y, dot(y) = mu * (1 - x * x) * y - x}, {let(z) = sqrt(sqr(x) + sqr(y))});
+        OrdinaryDifferentialAlgebraicEquation vanderpol({dot(x) = y, dot(y) = mu * (1 - x * x) * y - x}, {let(z) = sqrt(sqr(x) + sqr(y))});
         ARIADNE_TESTING_NOTE(vanderpol);
 
         RealExpressionBoundedConstraintSet initial_set({-2.0_dec <= x <= -1.5_dec, 0.5_dec <= y <= 1});
@@ -211,7 +211,7 @@ class TestVectorFieldSimulator : public Ariadne::Testing::ContextFixture {
         Real mu = Dyadic(0.5_x);
         RealVariable x("x"), y("y"), z("z");
 
-        VectorField vanderpol({dot(x) = y, dot(y) = mu * (1 - x * x) * y - x}, {let(z) = sqrt(sqr(x) + sqr(y))});
+        OrdinaryDifferentialAlgebraicEquation vanderpol({dot(x) = y, dot(y) = mu * (1 - x * x) * y - x}, {let(z) = sqrt(sqr(x) + sqr(y))});
         ARIADNE_TESTING_NOTE(vanderpol);
 
         RealExpressionBoundedConstraintSet initial_set({-2.0_dec <= x <= -1.5_dec, 0.5_dec <= y <= 1});
@@ -244,7 +244,7 @@ class TestVectorFieldSimulator : public Ariadne::Testing::ContextFixture {
         Real mu = Dyadic(0.5_x);
         RealVariable x("x"), y("y"), z("z");
 
-        VectorField vanderpol({dot(x) = y, dot(y) = mu * (1 - x * x) * y - x}, {let(z) = sqrt(sqr(x) + sqr(y))});
+        OrdinaryDifferentialAlgebraicEquation vanderpol({dot(x) = y, dot(y) = mu * (1 - x * x) * y - x}, {let(z) = sqrt(sqr(x) + sqr(y))});
         ARIADNE_TESTING_NOTE(vanderpol);
 
         RealVariablesBox initial_set({-2.0_dec <= x <= -1.5_dec, 0.5_dec <= y <= 1});

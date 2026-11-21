@@ -28,6 +28,7 @@
 
 #include <limits>
 #include <sstream>
+#include <stdexcept>
 
 #include "../src/inclusion_evolver_state.hpp"
 #include "algebra/algebra.hpp"
@@ -53,7 +54,7 @@ class TestDifferentialInclusionEvolver : public Ariadne::Testing::ContextFixture
   public:
     void test_scheduler_preserves_rigorous_reach_when_affine_wins() {
         RealVariable x("x"), u("u");
-        DifferentialInclusion system({dot(x) = u - x}, RealVariablesBox({-1 <= u <= 1}));
+        OrdinaryDifferentialAlgebraicInclusion system({dot(x) = u - x}, RealVariablesBox({-1 <= u <= 1}));
         TaylorPicardIntegrator integrator(step_maximum_error = 1e-5);
         InclusionEvolverState state(system, {ZeroApproximation(), ConstantApproximation(), AffineApproximation()}, integrator);
         auto available = state.approximators_to_use();
@@ -104,7 +105,7 @@ class TestDifferentialInclusionEvolver : public Ariadne::Testing::ContextFixture
         RealVariablesBox inputs = {0.5_dec <= u <= 1.5_dec};
         Real e = 1 / 32_q;
         RealVariablesBox initial = {-e <= x <= e};
-        DifferentialInclusion inclusion(dynamics, inputs);
+        OrdinaryDifferentialAlgebraicInclusion inclusion(dynamics, inputs);
 
         ThresholdSweeperDP sweeper(DoublePrecision(), 1e-8_pr);
         TaylorPicardIntegrator integrator(
@@ -174,7 +175,7 @@ class TestDifferentialInclusionEvolver : public Ariadne::Testing::ContextFixture
         } policy;
         RealVariable x("x"), u("u");
         TaylorPicardIntegrator integrator(step_maximum_error = 1e-5);
-        DifferentialInclusion system({dot(x) = u - x}, RealVariablesBox({0 <= u <= 1}));
+        OrdinaryDifferentialAlgebraicInclusion system({dot(x) = u - x}, RealVariablesBox({0 <= u <= 1}));
         DifferentialInclusionEvolver evolver(system, integrator, policy);
         evolver.configuration().set_approximations({ConstantApproximation()});
         evolver.configuration().set_maximum_step_size(0.03125_x);
@@ -182,8 +183,10 @@ class TestDifferentialInclusionEvolver : public Ariadne::Testing::ContextFixture
         ARIADNE_TESTING_EXPECT_EQUAL(immutable.configuration().maximum_step_size(), 0.03125_x);
         auto result = evolver.orbit(RealVariablesBox({0 <= x <= 0}), Real(1 / 16_q));
         ARIADNE_TESTING_PROVE(result.final().size() > 0u);
-        // The system rejects a zero-input domain before an evolver exists.
-        ARIADNE_TESTING_EXPECT_EXCEPTION((DifferentialInclusion({dot(x) = -x}, RealVariablesBox{})));
+        // A deterministic ODAI is valid, but this evolver still requires free inputs.
+        const OrdinaryDifferentialAlgebraicInclusion deterministic({dot(x) = -x}, RealVariablesBox{});
+        ARIADNE_TESTING_EXPECT_EQUAL(deterministic.number_of_inputs(), 0u);
+        ARIADNE_TESTING_EXPECT_THROWS(std::invalid_argument, DifferentialInclusionEvolver(deterministic, integrator, policy));
     }
 };
 

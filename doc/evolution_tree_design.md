@@ -28,7 +28,7 @@ final contribution. The backend publishes a successful result before any of its
 successors executes. A failed callback leaves incomplete history and prohibits
 Orbit release; outstanding workers are joined before propagating failure.
 
-`HybridEvolverBase::set_evolution_backend_factory()` clones immutable factory
+`HybridContinuousTimeEvolverBase::set_evolution_backend_factory()` clones immutable factory
 settings. Each orbit() call creates independent run state, supplies semantics,
 runs the same numerical callback and releases a conventional Orbit. Numerical
 propagation and termination rules are independent of the selected backend.

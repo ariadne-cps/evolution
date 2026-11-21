@@ -1,5 +1,5 @@
 /***************************************************************************
- *            vector_field_evolver.cpp
+ *            continuous_time_evolver.cpp
  *
  *  Copyright  2008-20  Alberto Casagrande, Pieter Collins
  *
@@ -22,15 +22,17 @@
  *  along with Ariadne Evolution. If not, see <https://www.gnu.org/licenses/>.
  */
 
-/** @file src/vector_field_evolver.cpp
+/** @file src/continuous_time_evolver.cpp
  *  @brief Implement vector field evolver operations.
  */
 
-#include "evolution/vector_field_evolver.hpp"
+#include "evolution/continuous_time_evolver.hpp"
 
 #include <array>
+#include <stdexcept>
 
 #include "algebra/vector.hpp"
+#include "continuous_integration.hpp"
 #include "evolution/enclosure.hpp"
 #include "evolution/orbit.hpp"
 #include "evolution_time.hpp"
@@ -39,10 +41,11 @@
 #include "function/functional.hpp"
 #include "function/taylor_function.hpp"
 #include "integration/integrator.hpp"
+#include "integration/validated_step_integrator.hpp"
 #include "logging/logging.hpp"
 #include "symbolic/assignment.hpp"
 #include "symbolic/space.hpp"
-#include "system/vector_field.hpp"
+#include "system/odae.hpp"
 #include "utility/array.hpp"
 #include "utility/container.hpp"
 #include "utility/macros.hpp"
@@ -141,38 +144,62 @@ Dyadic limit_step_to_remaining_time(const Dyadic& configured, const Dyadic& rema
     const Dyadic binary64_step(representable);
     if (binary64_step == Dyadic(0u)) {
         throw std::runtime_error(
-            "VectorFieldEvolver: remaining time is too small for a positive binary64 step");
+            "ContinuousTimeEvolver: remaining time is too small for a positive binary64 step");
     }
     return min(configured, binary64_step);
 }
 
 } // namespace EvolutionDetail
 
-VectorFieldEvolver::VectorFieldEvolver(const SystemType& system, const IntegratorInterface& i)
+ContinuousTimeEvolver::ContinuousTimeEvolver(const SystemType& system, const IntegratorInterface& i)
     : _system(system.clone()), _integrator(i.clone()), _configuration(new ConfigurationType()) {
+    if (system.parameter_space().dimension() != 0u) {
+        throw std::invalid_argument("ContinuousTimeEvolver does not yet support trajectory-constant ODAE parameters");
+    }
+    if (system.has_explicit_time() && system.auxiliary_space().size() != 0u) {
+        // Enclosure currently represents auxiliary outputs as state-only
+        // functions. Time-dependent auxiliary outputs must not be evaluated
+        // using a map with the wrong argument space.
+        throw std::invalid_argument(
+            "ContinuousTimeEvolver does not yet support auxiliary outputs for explicit-time ODAE");
+    }
+    if (system.has_explicit_time() &&
+        dynamic_cast<const PreconditionedGradedTaylorSeriesIntegrator*>(&i) != nullptr) {
+        throw std::invalid_argument("Preconditioned continuous evolution does not yet support explicit-time ODAE");
+    }
 }
 
-auto VectorFieldEvolver::enclosure(const ExactBoxType& box) const -> EnclosureType {
+auto ContinuousTimeEvolver::enclosure(const ExactBoxType& box) const -> EnclosureType {
     return EnclosureType(box, this->system().state_space(), EnclosureConfiguration(this->function_factory()));
 }
 
-auto VectorFieldEvolver::function_factory() const -> const FunctionFactoryType& {
+auto ContinuousTimeEvolver::function_factory() const -> const FunctionFactoryType& {
     return std::dynamic_pointer_cast<const IntegratorBase>(this->_integrator)->function_factory();
 }
 
-auto VectorFieldEvolver::orbit(const RealVariablesBox& initial_set, const TimeType& time, Semantics semantics) const -> Orbit<EnclosureType> {
+auto ContinuousTimeEvolver::orbit(const RealVariablesBox& initial_set, const TimeType& time, Semantics semantics) const -> Orbit<EnclosureType> {
     auto enclosure = EnclosureType(initial_set, this->system().state_space(), EnclosureConfiguration(this->function_factory()));
-    enclosure.set_auxiliary(this->system().auxiliary_space(), this->system().auxiliary_mapping());
+    // A time-dependent field without auxiliary outputs still carries a
+    // zero-output auxiliary function with arguments [state,time]. Enclosure
+    // already has a state-arity zero-output mapping, so leave it unchanged.
+    if (this->system().auxiliary_space().size() != 0u) {
+        enclosure.set_auxiliary(this->system().auxiliary_space(), this->system().auxiliary_function());
+    }
     return orbit(enclosure, time, semantics);
 }
 
-auto VectorFieldEvolver::orbit(const RealExpressionBoundedConstraintSet& initial_set, const TimeType& time, Semantics semantics) const -> Orbit<EnclosureType> {
+auto ContinuousTimeEvolver::orbit(const RealExpressionBoundedConstraintSet& initial_set, const TimeType& time, Semantics semantics) const -> Orbit<EnclosureType> {
     auto enclosure = EnclosureType(initial_set.euclidean_set(this->system().state_space()), this->system().state_space(), EnclosureConfiguration(this->function_factory()));
-    enclosure.set_auxiliary(this->system().auxiliary_space(), this->system().auxiliary_mapping());
+    // A time-dependent field without auxiliary outputs still carries a
+    // zero-output auxiliary function with arguments [state,time]. Enclosure
+    // already has a state-arity zero-output mapping, so leave it unchanged.
+    if (this->system().auxiliary_space().size() != 0u) {
+        enclosure.set_auxiliary(this->system().auxiliary_space(), this->system().auxiliary_function());
+    }
     return orbit(enclosure, time, semantics);
 }
 
-auto VectorFieldEvolver::orbit(const EnclosureType& initial_set, const TimeType& time, Semantics semantics) const -> Orbit<EnclosureType> {
+auto ContinuousTimeEvolver::orbit(const EnclosureType& initial_set, const TimeType& time, Semantics semantics) const -> Orbit<EnclosureType> {
     LOGGING_SCOPE_CREATE
     ARIADNE_PRECONDITION(this->system().state_auxiliary_space() == initial_set.state_auxiliary_space())
 
@@ -181,14 +208,14 @@ auto VectorFieldEvolver::orbit(const EnclosureType& initial_set, const TimeType&
         indicator->update_current(timed_enclosure.first.get_d());
         indicator->update_final(time.get_d());
     },
-                          std::bind_front(&VectorFieldEvolver::_process_timed_enclosure, this), time, semantics, result);
+                          std::bind_front(&ContinuousTimeEvolver::_process_timed_enclosure, this), time, semantics, result);
     _append_initial_set(workload, TimeStepType(0u), initial_set);
     workload.process();
 
     return std::move(*result);
 }
 
-Void VectorFieldEvolver::
+Void ContinuousTimeEvolver::
     _append_initial_set(WorkloadType& workload, const TimeStepType& initial_time, const EnclosureType& current_set) const {
     if (possibly(current_set.euclidean_set().bounding_box().radius() > this->_configuration->maximum_enclosure_radius())) {
         LOGGING_PRINTLN_AT(1, "set is too large, splitting")
@@ -204,7 +231,7 @@ Void VectorFieldEvolver::
     }
 }
 
-Void VectorFieldEvolver::
+Void ContinuousTimeEvolver::
     _process_timed_enclosure(WorkloadType::Access& workload,
                              const TimedEnclosureType& current_timed_set,
                              const TimeType& maximum_time,
@@ -237,7 +264,7 @@ Void VectorFieldEvolver::
     }
 }
 
-Void VectorFieldEvolver::
+Void ContinuousTimeEvolver::
     _process_timed_enclosure_step(WorkloadType::Access& workload,
                                   const TimedEnclosureType& working_timed_set_model,
                                   const TimeType& maximum_time,
@@ -308,7 +335,24 @@ Void VectorFieldEvolver::
     EnclosureType next_set = current_set;
     SharedPointer<PreconditionedTaylorSeriesState> next_preconditioned_state;
 
-    if (preconditioned_integrator != nullptr) {
+    if (_system->has_explicit_time()) {
+        // Bound the nonautonomous equation over its physical time interval.
+        // In particular, the bound is a certified enclosure, not an
+        // unverified estimate constructed from the initial-state box.
+        EulerBounder bounder;
+        StepSizeType bounded_step;
+        UpperBoxType bounding_box;
+        make_lpair(bounded_step, bounding_box) = bounder.compute(
+            dynamic, current_set_bounds, current_time, ExactBoxType(0u),
+            suggest(maximum_step_size));
+        const FlowStepIntegratorAdapter step_integrator(*integrator);
+        const auto common_step = step_integrator.step(ValidatedIntegrationRequest(
+            dynamic, current_set_bounds, current_time, bounded_step,
+            ExactBoxType(0u), bounding_box));
+        step_size = common_step.time_step();
+        EvolutionDetail::apply_integration_step(
+            reach_set, next_set, common_step, EvolutionDetail::IntegrationStepCoordinates::STATE);
+    } else if (preconditioned_integrator != nullptr) {
         if (preconditioned_integrator->diagnostics() && result->reach_size() == 1u && preconditioned_integrator->preconditioning() == TaylorSeriesPreconditioning::QR) {
             PreconditionedGradedTaylorSeriesIntegrator identity_probe =
                 *preconditioned_integrator;
@@ -379,13 +423,13 @@ Void VectorFieldEvolver::
 
         step_size = local_step.time_step();
 
-        reach_set.apply_parameterised_full_reach_step(
-            local_step.flowpipe_mapping());
-
-        const ValidatedVectorMultivariateFunctionPatch& final_mapping =
-            local_step.evolved_mapping();
-        next_set.apply_parameterised_fixed_evolve_step(
-            final_mapping, step_size);
+        const ValidatedVectorMultivariateFunctionPatch& final_mapping = local_step.evolved_mapping();
+        const ValidatedIntegrationStep common_step(
+            step_size, local_step.flowpipe_mapping().range(), final_mapping.range(),
+            {}, {local_step.flowpipe_mapping()}, final_mapping, current_time,
+            local_step.flowpipe_mapping().argument_size() - 1u, false, ExactBoxType(0u), current_time);
+        EvolutionDetail::apply_integration_step(reach_set, next_set, common_step,
+                                                EvolutionDetail::IntegrationStepCoordinates::PARAMETERS);
         next_preconditioned_state =
             std::make_shared<PreconditionedTaylorSeriesState>(
                 local_step.final_state());
@@ -417,15 +461,12 @@ Void VectorFieldEvolver::
                       << std::endl;
         }
     } else {
-        FlowStepModelType flow_model =
-            integrator->flow_step(
-                dynamic, current_set_bounds, suggest(maximum_step_size));
-
-        step_size = static_cast<StepSizeType>(
-            flow_model.domain()[flow_model.argument_size() - 1u].upper_bound());
-
-        reach_set.apply_full_reach_step(flow_model);
-        next_set.apply_fixed_evolve_step(flow_model, step_size);
+        const FlowStepIntegratorAdapter step_integrator(*integrator);
+        const auto common_step = step_integrator.step(ValidatedIntegrationRequest(
+            dynamic, current_set_bounds, suggest(maximum_step_size), current_time));
+        step_size = common_step.time_step();
+        EvolutionDetail::apply_integration_step(reach_set, next_set, common_step,
+                                                EvolutionDetail::IntegrationStepCoordinates::STATE);
     }
 
     TimeStepType next_time = current_time + TimeStepType(step_size);
@@ -439,7 +480,7 @@ Void VectorFieldEvolver::
     }
 }
 
-VectorFieldEvolverConfiguration::VectorFieldEvolverConfiguration() {
+ContinuousTimeEvolverConfiguration::ContinuousTimeEvolverConfiguration() {
     set_maximum_step_size(1);
     set_maximum_enclosure_radius(100.0);
     set_maximum_spacial_error(1e-2);
@@ -448,8 +489,8 @@ VectorFieldEvolverConfiguration::VectorFieldEvolverConfiguration() {
 }
 
 OutputStream&
-    VectorFieldEvolverConfiguration::_write(OutputStream& os) const {
-    os << "VectorFieldEvolverConfiguration("
+    ContinuousTimeEvolverConfiguration::_write(OutputStream& os) const {
+    os << "ContinuousTimeEvolverConfiguration("
        << "\n maximum_step_size=" << maximum_step_size()
        << ",\n maximum_enclosure_radius=" << maximum_enclosure_radius()
        << ",\n maximum_spacial_error=" << maximum_spacial_error()

@@ -33,9 +33,9 @@
 #include <sstream>
 #include <stdexcept>
 
+#include "evolution/hybrid_continuous_time_evolver.hpp"
 #include "evolution/hybrid_evolution_backend.hpp"
 #include "evolution/hybrid_evolution_tree.hpp"
-#include "evolution/hybrid_evolver.hpp"
 #include "logging/test_runner.hpp"
 #include "system/hybrid_automata.hpp"
 #include "threading/thread_manager.hpp"
@@ -54,10 +54,10 @@ class ConcurrencyScope {
     ~ConcurrencyScope() { ThreadManager::instance().set_concurrency(_previous); }
 };
 
-class StepProbe : public GeneralHybridEvolver {
+class StepProbe : public HybridContinuousTimeEvolver {
   public:
-    using GeneralHybridEvolver::GeneralHybridEvolver;
-    using HybridEvolverBase::_process_working_set;
+    using HybridContinuousTimeEvolver::HybridContinuousTimeEvolver;
+    using HybridContinuousTimeEvolverBase::_process_working_set;
 };
 
 // Independent LIFO executor: a test consumer of the same numerical callback.
@@ -131,7 +131,7 @@ class TestHybridEvolutionBackend : public Testing::ContextFixture {
         RealVariable x("x");
         HybridAutomaton system;
         system.new_mode(q, {dot(x) = 1});
-        GeneralHybridEvolver evolver(system);
+        HybridContinuousTimeEvolver evolver(system);
         const auto initial = evolver.enclosure(HybridExactBox(q, RealSpace({
                                                                      x
         }),
@@ -191,7 +191,7 @@ class TestHybridEvolutionBackend : public Testing::ContextFixture {
         RealVariable x("x");
         HybridAutomaton system;
         system.new_mode(q, {dot(x) = 1});
-        GeneralHybridEvolver evolver(system);
+        HybridContinuousTimeEvolver evolver(system);
         const auto initial = evolver.enclosure(HybridExactBox(q, RealSpace({
                                                                      x
         }),
@@ -230,7 +230,7 @@ class TestHybridEvolutionBackend : public Testing::ContextFixture {
         RealVariable x("x");
         HybridAutomaton system;
         system.new_mode(q, {dot(x) = 1});
-        GeneralHybridEvolver evolver(system);
+        HybridContinuousTimeEvolver evolver(system);
         auto initial = evolver.enclosure(HybridExactBox(q, RealSpace({
                                                                x
         }),
@@ -258,7 +258,7 @@ class TestHybridEvolutionBackend : public Testing::ContextFixture {
         RealVariable x("x");
         HybridAutomaton system;
         system.new_mode(q, {dot(x) = 1});
-        GeneralHybridEvolver evolver(system);
+        HybridContinuousTimeEvolver evolver(system);
         const auto initial = evolver.enclosure(HybridExactBox(q, RealSpace({
                                                                      x
         }),
@@ -280,7 +280,7 @@ class TestHybridEvolutionBackend : public Testing::ContextFixture {
         RealVariable x("x");
         HybridAutomaton system;
         system.new_mode(q, {dot(x) = 1});
-        GeneralHybridEvolver evolver(system);
+        HybridContinuousTimeEvolver evolver(system);
         const auto initial = evolver.enclosure(HybridExactBox(q, RealSpace({
                                                                      x
         }),
@@ -304,7 +304,7 @@ class TestHybridEvolutionBackend : public Testing::ContextFixture {
         RealVariable x("x");
         HybridAutomaton system;
         system.new_mode(q, {dot(x) = 1});
-        GeneralHybridEvolver evolver(system);
+        HybridContinuousTimeEvolver evolver(system);
         const auto initial = evolver.enclosure(HybridExactBox(q, RealSpace({
                                                                      x
         }),
@@ -331,7 +331,7 @@ class TestHybridEvolutionBackend : public Testing::ContextFixture {
         RealVariable x("x");
         HybridAutomaton system;
         system.new_mode(q, {dot(x) = 1});
-        GeneralHybridEvolver evolver(system);
+        HybridContinuousTimeEvolver evolver(system);
         const auto initial = evolver.enclosure(HybridExactBox(q, RealSpace({
                                                                      x
         }),
@@ -407,7 +407,7 @@ class TestHybridEvolutionBackend : public Testing::ContextFixture {
         RealVariable x("x"), y("y");
         HybridAutomaton system;
         system.new_mode(q, {dot(x) = 1, dot(y) = 0});
-        GeneralHybridEvolver evolver(system);
+        HybridContinuousTimeEvolver evolver(system);
         auto initial = evolver.enclosure(HybridExactBox(q, RealSpace({
                                                                x, y
         }),
@@ -459,7 +459,7 @@ class TestHybridEvolutionBackend : public Testing::ContextFixture {
         RealVariable x("x"), y("y");
         HybridAutomaton system;
         system.new_mode(q, {dot(x) = 1, dot(y) = 0});
-        GeneralHybridEvolver evolver(system);
+        HybridContinuousTimeEvolver evolver(system);
         auto initial = evolver.enclosure(HybridExactBox(q, RealSpace({
                                                                x, y
         }),
@@ -487,7 +487,7 @@ class TestHybridEvolutionBackend : public Testing::ContextFixture {
             system.new_mode(source, {dot(x) = 1, dot(y) = 0});
             system.new_mode(target, {dot(x) = 0, dot(y) = 0});
             system.new_transition(source, event, target, {next(x) = x, next(y) = y}, x >= 0, kind);
-            GeneralHybridEvolver evolver(system);
+            HybridContinuousTimeEvolver evolver(system);
             evolver.configuration().set_maximum_step_size(0.25_x);
             auto initial = evolver.enclosure(HybridExactBox(source, RealSpace({
                                                                         x, y

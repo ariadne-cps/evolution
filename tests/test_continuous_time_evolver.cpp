@@ -1,5 +1,5 @@
 /***************************************************************************
- *            test_vector_field_evolver.cpp
+ *            test_continuous_time_evolver.cpp
  *
  *  Copyright  2006-21  Pieter Collins
  *
@@ -22,7 +22,7 @@
  *  along with Ariadne Evolution. If not, see <https://www.gnu.org/licenses/>.
  */
 
-/** @file tests/test_vector_field_evolver.cpp
+/** @file tests/test_continuous_time_evolver.cpp
  *  @brief Test vector field evolver behavior and numerical invariants.
  */
 
@@ -33,9 +33,9 @@
 #include "algebra/algebra.hpp"
 #include "algebra/matrix.hpp"
 #include "algebra/vector.hpp"
+#include "evolution/continuous_time_evolver.hpp"
 #include "evolution/enclosure.hpp"
 #include "evolution/orbit.hpp"
-#include "evolution/vector_field_evolver.hpp"
 #include "function/constraint.hpp"
 #include "function/function.hpp"
 #include "function/taylor_function.hpp"
@@ -59,11 +59,53 @@ decltype(auto) subset(LabelledBox<IVL1> bx1, LabelledBox<IVL2> bx2) {
     return subset(bx1.euclidean_set(), bx2.euclidean_set());
 }
 
-class TestVectorFieldEvolver : public Ariadne::Testing::ContextFixture {
+class TestContinuousTimeEvolver : public Ariadne::Testing::ContextFixture {
   public:
     using Ariadne::Testing::ContextFixture::ContextFixture;
 
   public:
+    Void test_non_autonomous_two_step_orbit() {
+        // The same numerical time coordinate must advance across consecutive
+        // steps: x'=t, x(0)=0 has x(1/8)=1/128.
+        RealVariable x("x"), t("t");
+        const OrdinaryDifferentialAlgebraicEquation equation(
+            {dot(x) = t}, RealVariablesBox{}, t);
+        TaylorPicardIntegrator integrator(step_maximum_error = 1e-6);
+        ContinuousTimeEvolver evolver(equation, integrator);
+        evolver.configuration().set_enable_reconditioning(false);
+        evolver.configuration().set_maximum_step_size(0.0625);
+        const auto result = evolver.orbit(RealVariablesBox({x == 0}),
+                                          Real(0.125_x), Semantics::UPPER);
+        ARIADNE_TESTING_PROVE(result.reach().size() >= 2u);
+        ARIADNE_TESTING_PROVE(result.final().size() > 0u);
+        const auto final_box = result.final().bounding_box().euclidean_set();
+        // The exact rational endpoint must lie in the certified final set.
+        ARIADNE_TESTING_PROVE(subset(RealBox({{0.0078125_dec, 0.0078125_dec}}),
+                                     final_box));
+        const RealBox expected({{0.007_dec, 0.009_dec}});
+        if (not definitely(subset(final_box, expected))) {
+            // Diagnostic only: keep the tight numerical assertion unchanged.
+            // Expose the certified range of each step to distinguish a
+            // widened validated enclosure from a time-coordinate error.
+            std::cerr << "[NonautonomousTwoStepOrbit] final=" << final_box
+                      << " reach_count=" << result.reach().size()
+                      << " intermediate_count=" << result.intermediate().size()
+                      << std::endl;
+            SizeType i = 0u;
+            for (const auto& stage: result.intermediate()) {
+                if (i >= 8u) {
+                    break;
+                }
+                std::cerr << "[NonautonomousTwoStepOrbit] endpoint=" << i
+                          << " box=" << stage.euclidean_set().bounding_box()
+                          << " absolute_time=" << stage.time_function().range()
+                          << std::endl;
+                ++i;
+            }
+        }
+        ARIADNE_TESTING_PROVE(subset(final_box, expected));
+    }
+
     Void test_binary64_step_limits() {
         using EvolutionDetail::limit_step_to_remaining_time;
         const Dyadic quarter(0.25_x), half(0.5_x);
@@ -85,9 +127,9 @@ class TestVectorFieldEvolver : public Ariadne::Testing::ContextFixture {
     Void test_constrained_initial_subdivision_and_tiny_horizon() {
         LogVerbosityScope logging(100u);
         RealVariable x("x");
-        VectorField field(List<DottedRealAssignment>{dot(x) = 0});
+        OrdinaryDifferentialAlgebraicEquation field(List<DottedRealAssignment>{dot(x) = 0});
         TaylorPicardIntegrator integrator(step_maximum_error = 1e-6);
-        VectorFieldEvolver evolver(field, integrator);
+        ContinuousTimeEvolver evolver(field, integrator);
         evolver.configuration().set_enable_reconditioning(false);
         evolver.configuration().set_maximum_enclosure_radius(0.75);
         for (const auto& constraint: List<ContinuousPredicate>{x <= 0.25_dec, x >= 1.75_dec}) {
@@ -104,19 +146,19 @@ class TestVectorFieldEvolver : public Ariadne::Testing::ContextFixture {
     Void test_components_and_preconditioned_orbits() {
         LogVerbosityScope logging(100u);
         RealVariable x("x"), other("other");
-        VectorField field(List<DottedRealAssignment>{dot(x) = 1});
+        OrdinaryDifferentialAlgebraicEquation field(List<DottedRealAssignment>{dot(x) = 1});
         for (auto mode: {TaylorSeriesPreconditioning::IDENTITY, TaylorSeriesPreconditioning::QR}) {
             PreconditionedGradedTaylorSeriesIntegrator integrator(step_maximum_error = 1e-6);
             integrator.set_preconditioning(mode);
             integrator.set_diagnostics(true);
-            VectorFieldEvolver evolver(field, integrator);
+            ContinuousTimeEvolver evolver(field, integrator);
             evolver.configuration().set_maximum_step_size(0.03125);
             evolver.configuration().set_enable_reconditioning(false);
             auto initial = evolver.enclosure(ExactBoxType({
                 {-0.03125_x, 0.03125_x}
             }));
-            std::unique_ptr<VectorFieldEvolver> clone(evolver.clone());
-            const VectorFieldEvolver& immutable = *clone;
+            std::unique_ptr<ContinuousTimeEvolver> clone(evolver.clone());
+            const ContinuousTimeEvolver& immutable = *clone;
             ARIADNE_TESTING_EXPECT_EQUAL(immutable.configuration().maximum_step_size(), 0.03125_x);
             auto result = immutable.orbit(initial, Real(1), Semantics::UPPER);
             ARIADNE_TESTING_PROVE(result.final().size() > 0u);
@@ -134,10 +176,10 @@ class TestVectorFieldEvolver : public Ariadne::Testing::ContextFixture {
 
     Void test_carried_expansion_diagnostics_checkpoints() {
         RealVariable x("x");
-        VectorField field(List<DottedRealAssignment>{dot(x) = 0});
+        OrdinaryDifferentialAlgebraicEquation field(List<DottedRealAssignment>{dot(x) = 0});
         PreconditionedGradedTaylorSeriesIntegrator integrator(step_maximum_error = 1e-6);
         integrator.set_carried_expansion_diagnostics(true);
-        VectorFieldEvolver evolver(field, integrator);
+        ContinuousTimeEvolver evolver(field, integrator);
         evolver.configuration().set_maximum_step_size(1.0 / 2048.0);
         auto result = evolver.orbit(RealVariablesBox({0.9_dec <= x <= 1.1_dec}), Real(1), Semantics::UPPER);
         ARIADNE_TESTING_EXPECT_EQUAL(result.reach().size(), 2048u);
@@ -148,7 +190,7 @@ class TestVectorFieldEvolver : public Ariadne::Testing::ContextFixture {
     }
 
     Void test_single_trajectory() {
-        typedef VectorFieldEvolver::EnclosureType EnclosureType;
+        typedef ContinuousTimeEvolver::EnclosureType EnclosureType;
 
         // Set up the evolution parameters and grid
         Real time(2.0_dec);
@@ -173,12 +215,12 @@ class TestVectorFieldEvolver : public Ariadne::Testing::ContextFixture {
         Real mu = Dyadic(0.5_x);
         RealVariable x("x"), v("v");
 
-        VectorField vanderpol({dot(x) = v, dot(v) = mu * (1 - x * x) * v - x});
+        OrdinaryDifferentialAlgebraicEquation vanderpol({dot(x) = v, dot(v) = mu * (1 - x * x) * v - x});
         ARIADNE_TESTING_NOTE(vanderpol);
 
         Semantics semantics = Semantics::LOWER;
 
-        VectorFieldEvolver evolver(vanderpol, integrator);
+        ContinuousTimeEvolver evolver(vanderpol, integrator);
         evolver.configuration().set_maximum_enclosure_radius(enclosure_radius);
         evolver.configuration().set_maximum_step_size(step_size);
         ARIADNE_TESTING_NOTE(evolver.configuration());
@@ -218,7 +260,7 @@ class TestVectorFieldEvolver : public Ariadne::Testing::ContextFixture {
 
         fig << line_style(true) << fill_colour(blue) << trajectory.reach();
 
-        fig.write("test_vector_field_evolver-vdp");
+        fig.write("test_continuous_time_evolver-vdp");
     }
 
     Void test_failure() {
@@ -237,8 +279,8 @@ class TestVectorFieldEvolver : public Ariadne::Testing::ContextFixture {
         TaylorPicardIntegrator integrator(step_maximum_error = 1e-6_pr, sweeper, lipschitz_tolerance = 0.5_x,
                                           minimum_temporal_order = 0, maximum_temporal_order = 8);
 
-        VectorField fail_vf({dot(x) = 1, dot(y) = y * y * 100});
-        VectorFieldEvolver evolver(fail_vf, integrator);
+        OrdinaryDifferentialAlgebraicEquation fail_vf({dot(x) = 1, dot(y) = y * y * 100});
+        ContinuousTimeEvolver evolver(fail_vf, integrator);
         evolver.configuration().set_maximum_enclosure_radius(enclosure_radius);
         evolver.configuration().set_maximum_step_size(maximum_step_size);
         //        evolver.configuration().set_minimum_step_size(minimum_step_size);
@@ -255,13 +297,13 @@ class TestVectorFieldEvolver : public Ariadne::Testing::ContextFixture {
         RealConstant mu("mu", 1.0_dec);
         RealVariable x("x"), y("y");
 
-        VectorField dynamics({dot(x) = y, dot(y) = mu * y * (1 - sqr(x)) - x});
+        OrdinaryDifferentialAlgebraicEquation dynamics({dot(x) = y, dot(y) = mu * y * (1 - sqr(x)) - x});
 
         StepMaximumError max_err = 1e-8;
 
         TaylorPicardIntegrator integrator(max_err);
 
-        VectorFieldEvolver evolver(dynamics, integrator);
+        ContinuousTimeEvolver evolver(dynamics, integrator);
         evolver.configuration().set_maximum_enclosure_radius(0.1);
         evolver.configuration().set_maximum_step_size(0.1);
         evolver.configuration().set_maximum_spacial_error(1e-5);
@@ -284,13 +326,13 @@ class TestVectorFieldEvolver : public Ariadne::Testing::ContextFixture {
     Void test_subdivide_along_evolution() {
         RealVariable x("x"), y("y");
 
-        VectorField dynamics({dot(x) = 1, dot(y) = sqr(x)});
+        OrdinaryDifferentialAlgebraicEquation dynamics({dot(x) = 1, dot(y) = sqr(x)});
 
         StepMaximumError max_err = 1e-8;
 
         TaylorPicardIntegrator integrator(max_err);
 
-        VectorFieldEvolver evolver(dynamics, integrator);
+        ContinuousTimeEvolver evolver(dynamics, integrator);
         evolver.configuration().set_maximum_enclosure_radius(0.1);
         evolver.configuration().set_maximum_step_size(0.1);
         evolver.configuration().set_maximum_spacial_error(1e-5);
@@ -309,7 +351,7 @@ class TestVectorFieldEvolver : public Ariadne::Testing::ContextFixture {
 
         LabelledFigure fig(Axes2d(1 <= x <= 5, 2 <= y <= 30));
         fig << orbit_upper.reach();
-        fig.write("test_vector_field_evolver-subdivisions");
+        fig.write("test_continuous_time_evolver-subdivisions");
 
         auto orbit_lower = evolver.orbit(initial_set, evolution_time, Semantics::LOWER);
 
@@ -318,15 +360,16 @@ class TestVectorFieldEvolver : public Ariadne::Testing::ContextFixture {
 };
 
 int main(int argc, const char* argv[]) {
-    ARIADNE_TESTING_SUITE("test_vector_field_evolver");
-    ARIADNE_TESTING_ADD_TEST(TestVectorFieldEvolver, test_single_trajectory);
-    ARIADNE_TESTING_ADD_TEST(TestVectorFieldEvolver, test_failure);
-    ARIADNE_TESTING_ADD_TEST(TestVectorFieldEvolver, test_subdivide_initially);
-    ARIADNE_TESTING_ADD_TEST(TestVectorFieldEvolver, test_subdivide_along_evolution);
-    ARIADNE_TESTING_ADD_TEST(TestVectorFieldEvolver, test_components_and_preconditioned_orbits);
-    ARIADNE_TESTING_ADD_TEST(TestVectorFieldEvolver, test_carried_expansion_diagnostics_checkpoints);
-    ARIADNE_TESTING_ADD_TEST(TestVectorFieldEvolver, test_constrained_initial_subdivision_and_tiny_horizon);
-    ARIADNE_TESTING_ADD_TEST(TestVectorFieldEvolver, test_binary64_step_limits);
-    ARIADNE_TESTING_ADD_TEST(TestVectorFieldEvolver, test_lower_termination_diagnostics);
+    ARIADNE_TESTING_SUITE("test_continuous_time_evolver");
+    ARIADNE_TESTING_ADD_TEST(TestContinuousTimeEvolver, test_single_trajectory);
+    ARIADNE_TESTING_ADD_TEST(TestContinuousTimeEvolver, test_failure);
+    ARIADNE_TESTING_ADD_TEST(TestContinuousTimeEvolver, test_subdivide_initially);
+    ARIADNE_TESTING_ADD_TEST(TestContinuousTimeEvolver, test_subdivide_along_evolution);
+    ARIADNE_TESTING_ADD_TEST(TestContinuousTimeEvolver, test_components_and_preconditioned_orbits);
+    ARIADNE_TESTING_ADD_TEST(TestContinuousTimeEvolver, test_carried_expansion_diagnostics_checkpoints);
+    ARIADNE_TESTING_ADD_TEST(TestContinuousTimeEvolver, test_constrained_initial_subdivision_and_tiny_horizon);
+    ARIADNE_TESTING_ADD_TEST(TestContinuousTimeEvolver, test_binary64_step_limits);
+    ARIADNE_TESTING_ADD_TEST(TestContinuousTimeEvolver, test_non_autonomous_two_step_orbit);
+    ARIADNE_TESTING_ADD_TEST(TestContinuousTimeEvolver, test_lower_termination_diagnostics);
     return Ariadne::Testing::run_logging_suite(ariadne_test_suite, argc, argv);
 }

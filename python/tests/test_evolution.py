@@ -2,7 +2,8 @@ import pyariadne_evolution as a
 
 def test_evolution_bindings():
     names = ("Semantics", "Enclosure", "VectorFieldSimulator",
-             "IteratedMapEvolver", "IteratedMapEvolverConfiguration", "VectorFieldEvolver", "HybridTime",
+             "OrdinaryDifferentialAlgebraicEquation", "OrdinaryDifferentialAlgebraicInclusion",
+             "DiscreteTimeEvolver", "DiscreteTimeEvolverConfiguration", "ContinuousTimeEvolver", "HybridTime",
              "HybridEnclosure", "HybridSimulator", "recombine",
              "EnclosureRecombinerInterface", "EnclosureRecombiner",
              "ReferenceEnclosureRecombiner", "EnclosureRecombinationContext",
@@ -10,12 +11,16 @@ def test_evolution_bindings():
     for name in names:
         assert hasattr(a, name), f"Missing evolution binding: {name}"
     assert a.Semantics.UPPER != a.Semantics.LOWER
+    assert not hasattr(a, "VectorField")
+    assert not hasattr(a, "DifferentialInclusion")
+    for old_name in ("VectorFieldEvolver", "IteratedMapEvolver", "GeneralHybridEvolver"):
+        assert not hasattr(a, old_name)
 
 
 def test_iterated_map_configuration():
-    from pyariadne_evolution import IteratedMap, IteratedMapEvolver, RealVariable, next
+    from pyariadne_evolution import IteratedMap, DiscreteTimeEvolver, RealVariable, next
     x = RealVariable("x")
-    evolver = IteratedMapEvolver(IteratedMap([next(x) << x / 2]))
+    evolver = DiscreteTimeEvolver(IteratedMap([next(x) << x / 2]))
     config = evolver.configuration()
     config.set_maximum_enclosure_radius(1.0)
     config.set_enable_subdivisions(False)
@@ -24,7 +29,7 @@ def test_iterated_map_configuration():
 
 def test_continuous_recombination():
     x = a.RealVariable("x")
-    evolver = a.IteratedMapEvolver(a.IteratedMap([a.next(x) << x / 2]))
+    evolver = a.DiscreteTimeEvolver(a.IteratedMap([a.next(x) << x / 2]))
     evolver.configuration().set_maximum_enclosure_radius(1.0)
     initial = a.RealExpressionBoundedConstraintSet(
         [(a.dec_(0.9) <= x) & (x <= a.dec_(1.1))], [])
@@ -63,7 +68,37 @@ def test_continuous_recombination():
         raise AssertionError("An empty source list must be rejected")
 
 
+def test_ordinary_equation_consumers():
+    import unittest
+    x, t, p, output = (a.RealVariable(name) for name in ("x", "t", "p", "output"))
+    equation = a.OrdinaryDifferentialAlgebraicEquation(
+        [a.dot(x) << 1], [a.let(output) << (2*x)])
+    integrator = a.TaylorPicardIntegrator(1e-5)
+    evolver = a.ContinuousTimeEvolver(equation, integrator)
+    initial = a.RealExpressionBoundedConstraintSet([(0 <= x) & (x <= 0)], [])
+    orbit = evolver.orbit(initial, a.Real(1)/16, a.Semantics.UPPER)
+    assert orbit.final().size() > 0
+    assert orbit.final()[0].state_set().dimension() == 1
+    assert orbit.final()[0].state_auxiliary_set().dimension() == 2
+    assert isinstance(a.VectorFieldSimulator(equation), a.VectorFieldSimulator)
+    timed = a.OrdinaryDifferentialAlgebraicEquation(
+        [a.dot(x) << (t - x)], a.RealVariablesBox({}), time=t)
+    timed_evolver = a.ContinuousTimeEvolver(timed, integrator)
+    timed_evolver.configuration().set_maximum_step_size(0.03125)
+    timed_orbit = timed_evolver.orbit(initial, a.Real(1)/16, a.Semantics.UPPER)
+    assert timed_orbit.final().size() > 0
+    assert timed_orbit.reach().size() >= 2
+    parameterised = a.OrdinaryDifferentialAlgebraicEquation(
+        [a.dot(x) << (p - x)], a.RealVariablesBox({p: (0, 1)}))
+    with unittest.TestCase().assertRaises(ValueError):
+        a.ContinuousTimeEvolver(parameterised, integrator)
+    for field in (timed, parameterised):
+        with unittest.TestCase().assertRaises(ValueError):
+            a.VectorFieldSimulator(field)
+
+
 if __name__ == "__main__":
     test_evolution_bindings()
     test_iterated_map_configuration()
     test_continuous_recombination()
+    test_ordinary_equation_consumers()

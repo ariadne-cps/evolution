@@ -1,5 +1,5 @@
 /***************************************************************************
- *            vector_field_evolver.hpp
+ *            continuous_time_evolver.hpp
  *
  *  Copyright  2007-20  Alberto Casagrande, Pieter Collins
  *
@@ -22,12 +22,12 @@
  *  along with Ariadne Evolution. If not, see <https://www.gnu.org/licenses/>.
  */
 
-/** @file evolution/vector_field_evolver.hpp
+/** @file evolution/continuous_time_evolver.hpp
  *  @brief Validated evolvers for vector fields.
  */
 
-#ifndef ARIADNE_VECTOR_FIELD_EVOLVER_HPP
-#define ARIADNE_VECTOR_FIELD_EVOLVER_HPP
+#ifndef ARIADNE_CONTINUOUS_TIME_EVOLVER_HPP
+#define ARIADNE_CONTINUOUS_TIME_EVOLVER_HPP
 
 #include <iostream>
 #include <list>
@@ -41,14 +41,14 @@
 #include "function/function_interface.hpp"
 #include "integration/integrator_interface.hpp"
 #include "logging/logging.hpp"
-#include "system/vector_field.hpp"
+#include "system/odae.hpp"
 #include "threading/workload.hpp"
 #include "utility/tuple.hpp"
 
 namespace Ariadne {
 
-/** @brief VectorField: validated evolvers for vector fields. */
-class VectorField;
+/** @brief OrdinaryDifferentialAlgebraicEquation: validated evolvers for vector fields. */
+class OrdinaryDifferentialAlgebraicEquation;
 template<class ES>
 class Orbit;
 
@@ -56,8 +56,8 @@ using Mutex = std::mutex;
 template<class T>
 using LockGuard = std::lock_guard<T>;
 
-/** @brief VectorFieldEvolverConfiguration: validated evolvers for vector fields. */
-class VectorFieldEvolverConfiguration;
+/** @brief ContinuousTimeEvolverConfiguration: validated evolvers for vector fields. */
+class ContinuousTimeEvolverConfiguration;
 /** @brief PreconditionedTaylorSeriesState: validated evolvers for vector fields. */
 class PreconditionedTaylorSeriesState;
 
@@ -67,14 +67,14 @@ class RealExpressionBoundedConstraintSet;
 //! \brief A class for computing the evolution of a vector_field system.
 //!
 //! The actual evolution steps are performed by the Integrator class.
-class VectorFieldEvolver
-    : public EvolverInterface<VectorField, LabelledEnclosure, typename VectorField::TimeType> {
+class ContinuousTimeEvolver
+    : public EvolverInterface<OrdinaryDifferentialAlgebraicEquation, LabelledEnclosure, typename OrdinaryDifferentialAlgebraicEquation::TimeType> {
   public:
-    typedef EvolverInterface<VectorField, LabelledEnclosure, typename VectorField::TimeType> Interface;
-    typedef VectorFieldEvolverConfiguration ConfigurationType;
-    typedef VectorField SystemType;
+    typedef EvolverInterface<OrdinaryDifferentialAlgebraicEquation, LabelledEnclosure, typename OrdinaryDifferentialAlgebraicEquation::TimeType> Interface;
+    typedef ContinuousTimeEvolverConfiguration ConfigurationType;
+    typedef OrdinaryDifferentialAlgebraicEquation SystemType;
     typedef IntegratorInterface IntegratorType;
-    typedef typename VectorField::TimeType TimeType;
+    typedef typename OrdinaryDifferentialAlgebraicEquation::TimeType TimeType;
     typedef Dyadic TimeStepType;
     typedef TimeType TerminationType;
     typedef LabelledEnclosure EnclosureType;
@@ -125,11 +125,16 @@ class VectorFieldEvolver
     typedef DynamicWorkload<TimedEnclosureType, const TimeType&, Semantics, SharedPointer<SynchronisedOrbit>> WorkloadType;
 
   public:
-    //! \brief Construct from parameters and an integrator to compute the flow.
-    VectorFieldEvolver(const SystemType&, const IntegratorInterface&);
+    //! \brief Construct from an ODAE without trajectory-constant parameters.
+    //! \details Autonomous and explicit-time ODAEs share the same evolution loop.
+    //! \throws std::invalid_argument if constant parameters are declared, if
+    //! explicit-time auxiliary outputs require an unavailable time-aware
+    //! enclosure mapping, or if the selected preconditioned integrator lacks
+    //! explicit-time support.
+    ContinuousTimeEvolver(const SystemType&, const IntegratorInterface&);
 
     //! \brief Make a dynamically-allocated copy.
-    VectorFieldEvolver* clone() const { return new VectorFieldEvolver(*this); }
+    ContinuousTimeEvolver* clone() const { return new ContinuousTimeEvolver(*this); }
 
     //! \brief Get the internal system.
     virtual const SystemType& system() const { return *_system; }
@@ -175,16 +180,16 @@ class VectorFieldEvolver
     SharedPointer<ConfigurationType> _configuration;
 };
 
-//! \brief Configuration for a VectorFieldEvolver, essentially for controlling the accuracy of continuous evolution methods.
-class VectorFieldEvolverConfiguration : public ConfigurationInterface {
+//! \brief Configuration for a ContinuousTimeEvolver, essentially for controlling the accuracy of continuous evolution methods.
+class ContinuousTimeEvolverConfiguration : public ConfigurationInterface {
   public:
     typedef ExactDouble RealType;
     typedef ApproximateDouble ApproximateRealType;
 
     //! \brief Default constructor gives reasonable values.
-    VectorFieldEvolverConfiguration();
+    ContinuousTimeEvolverConfiguration();
 
-    ~VectorFieldEvolverConfiguration() override = default;
+    ~ContinuousTimeEvolverConfiguration() override = default;
 
   private:
     //! \brief The maximum allowable step size for integration.
@@ -229,4 +234,4 @@ class VectorFieldEvolverConfiguration : public ConfigurationInterface {
 
 } // namespace Ariadne
 
-#endif // ARIADNE_VECTOR_FIELD_EVOLVER_HPP
+#endif // ARIADNE_CONTINUOUS_TIME_EVOLVER_HPP

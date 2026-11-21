@@ -4,7 +4,7 @@
 from pyariadne_evolution import (
     DiscreteEvent, DiscreteLocation, HybridAutomaton, HybridSimulator,
     HybridTime, Integer, Rational, Real, Semantics, RealVariable,
-    IteratedMap, IteratedMapEvolver, RealExpressionBoundedConstraintSet,
+    IteratedMap, DiscreteTimeEvolver, RealExpressionBoundedConstraintSet,
     next, dec_,
 )
 
@@ -14,12 +14,12 @@ def main():
     contraction = IteratedMap([next(x) << x / 2])
     initial = RealExpressionBoundedConstraintSet(
         [(dec_(0.9) <= x) & (x <= dec_(1.1))], [])
-    discrete_evolver = IteratedMapEvolver(contraction)
+    discrete_evolver = DiscreteTimeEvolver(contraction)
     discrete_evolver.configuration().set_maximum_enclosure_radius(1.0)
     orbit = discrete_evolver.orbit(initial, Integer(1), Semantics.UPPER)
     if len(orbit.final()) == 0:
         raise RuntimeError("Discrete evolution produced no final enclosure")
-    print(f"IteratedMapEvolver: {len(orbit.final())} final enclosure(s)")
+    print(f"DiscreteTimeEvolver: {len(orbit.final())} final enclosure(s)")
 
     idle, active = DiscreteLocation(0), DiscreteLocation(1)
     activate = DiscreteEvent("activate")

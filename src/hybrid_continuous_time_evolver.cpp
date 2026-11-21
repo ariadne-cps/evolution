@@ -58,7 +58,7 @@ namespace Ariadne {
 inline PositiveValidatedUpperNumber abs(PositiveValidatedUpperNumber y) { return y; }
 inline PositiveValidatedUpperNumber mag(PositiveValidatedUpperNumber y) { return y; }
 
-static const FloatDP zero = {0, dp};
+static const FloatDP hybrid_zero = {0, dp};
 
 inline auto operator+(Int n, FloatDPBounds x) -> decltype(FloatDP(n, dp) + x) { return FloatDP(n, dp) + x; }
 
@@ -640,7 +640,7 @@ Set<DiscreteEvent>
         // For IMPACT events, also look at flow direction
         UpperIntervalType flow_derivative_range = apply(flow_derivative, reach_set.state_bounding_box());
         LOGGING_PRINTLN_AT(1, "guard_range=" << guard_range << ", flow_derivative_range=" << flow_derivative_range);
-        if (possibly(guard_range.upper_bound() >= zero)) {
+        if (possibly(guard_range.upper_bound() >= hybrid_zero)) {
             // Now make a set containing the complement of the constraint,
             // and test for emptiness. If the set is empty, then the guard is
             // not satisfied anywhere.
@@ -685,7 +685,7 @@ Map<DiscreteEvent, CrossingData>
         EffectiveScalarMultivariateFunction guard_derivative = lie_derivative(guard, dynamic);
         UpperIntervalType guard_derivative_range = apply(guard_derivative, flow_bounds);
         LOGGING_PRINTLN_AT(2, "guard_derivative_range=" << guard_derivative_range);
-        if (definitely(guard_derivative_range.lower_bound() > zero)) {
+        if (definitely(guard_derivative_range.lower_bound() > hybrid_zero)) {
             // If the derivative $L_{f}g$is strictly positive over the bounding box for the flow,
             // then the guard function is strictly increasing.
             // There is at most one crossing with the guard, and the time of this
@@ -709,7 +709,7 @@ Map<DiscreteEvent, CrossingData>
                 LOGGING_PRINTLN_AT(2, "Unexpected error in computing crossing time for event " << *event_iter << ": " << e.what());
                 throw;
             }
-        } else if (definitely(guard_derivative_range.upper_bound() < zero)) {
+        } else if (definitely(guard_derivative_range.upper_bound() < hybrid_zero)) {
             // If the guard derivative is strictly negative over the bounding box for the flow,
             // then the guard function is strictly decreasing.
             // This means that the event is either initially active, or does not occur.
@@ -724,7 +724,7 @@ Map<DiscreteEvent, CrossingData>
             UpperIntervalType guard_second_derivative_flow_range = compose(guard_second_derivative, flow).range();
             UpperIntervalType guard_second_derivative_range = intersection(guard_second_derivative_bounds_range, guard_second_derivative_flow_range);
             LOGGING_PRINTLN_AT(2, "guard_second_derivative_range=" << guard_second_derivative_range);
-            if (definitely(guard_second_derivative_range.lower_bound() > zero)) {
+            if (definitely(guard_second_derivative_range.lower_bound() > hybrid_zero)) {
                 // If the second derivative is positive, then either
                 //    (i) the event is immediately active
                 //   (ii) the event is never active, or
@@ -737,7 +737,7 @@ Map<DiscreteEvent, CrossingData>
                 // we do know that in (iii), the event occurs when $t>0$ and
                 // $g(\phi(x_0,t))=0$. The crossing time is not computed.
                 crossings[event] = CrossingData(CrossingKind::CONVEX);
-            } else if (definitely(guard_second_derivative_range.upper_bound() < zero)) {
+            } else if (definitely(guard_second_derivative_range.upper_bound() < hybrid_zero)) {
                 // If the second derivative is negative, then the guard
                 // values $g(x(t))$ are concave along flow lines. There are
                 // five main cases:
@@ -916,7 +916,7 @@ Void HybridContinuousTimeEvolverBase::
                     LOGGING_PRINTLN_AT(1, "crossing_time=" << crossing_data.crossing_time);
                     step_time = unchecked_compose(crossing_data.crossing_time, starting_state);
                     // If the jump step might occur after the final evolution time, then introduce constraint that this does not happen
-                    if (timing_data.step_kind != StepKind::CONSTANT_EVOLUTION_TIME && possibly((step_time - timing_data.parameter_dependent_evolution_time).range().upper_bound() > zero)) {
+                    if (timing_data.step_kind != StepKind::CONSTANT_EVOLUTION_TIME && possibly((step_time - timing_data.parameter_dependent_evolution_time).range().upper_bound() > hybrid_zero)) {
                         jump_set.new_parameter_constraint(step_event, step_time <= timing_data.parameter_dependent_evolution_time);
                     }
                     jump_set.apply_parameter_evolve_step(flow, unchecked_compose(crossing_data.crossing_time, starting_state));
@@ -1054,8 +1054,8 @@ Void HybridContinuousTimeEvolverBase::
                 // Test whether the trajectory can hit at any future time
                 // from its starting state. An endpoint already beyond the
                 // maximum may have crossed and returned; it is not a miss.
-                eventually_hitting_set.new_parameter_constraint(event, zero <= critical_time_function);
-                eventually_hitting_set.new_parameter_constraint(event, maximal_guard_function >= zero);
+                eventually_hitting_set.new_parameter_constraint(event, hybrid_zero <= critical_time_function);
+                eventually_hitting_set.new_parameter_constraint(event, maximal_guard_function >= hybrid_zero);
                 LOGGING_PRINTLN_AT(1, "eventually_hitting_set.is_empty()=" << eventually_hitting_set.is_empty());
                 if (definitely(eventually_hitting_set.is_empty())) {
                     // NOTE: Constraint below should always be satisfied
@@ -1066,11 +1066,11 @@ Void HybridContinuousTimeEvolverBase::
                 // later return, then we only need to look at the guard at the final value
                 HybridEnclosure returning_set = set;
                 returning_set.new_parameter_constraint(event, elapsed_time_function >= critical_time_function);
-                returning_set.new_parameter_constraint(event, final_guard_function <= zero);
+                returning_set.new_parameter_constraint(event, final_guard_function <= hybrid_zero);
                 ValidatedLowerKleenean returning_set_empty = returning_set.is_empty();
                 LOGGING_PRINTLN_AT(1, "returning_set.is_empty()=" << returning_set_empty);
                 if (definitely(returning_set_empty)) {
-                    set.new_parameter_constraint(event, final_guard_function <= zero);
+                    set.new_parameter_constraint(event, final_guard_function <= hybrid_zero);
                     break;
                 }
 
@@ -1081,12 +1081,12 @@ Void HybridContinuousTimeEvolverBase::
                 HybridEnclosure& missing_set = set;
                 HybridEnclosure hitting_set = set;
                 HybridEnclosure past_set = set;
-                missing_set.new_parameter_constraint(event, maximal_guard_function <= zero);
-                hitting_set.new_parameter_constraint(event, maximal_guard_function >= zero);
+                missing_set.new_parameter_constraint(event, maximal_guard_function <= hybrid_zero);
+                hitting_set.new_parameter_constraint(event, maximal_guard_function >= hybrid_zero);
                 hitting_set.new_parameter_constraint(event, elapsed_time_function <= critical_time_function);
-                hitting_set.new_parameter_constraint(event, final_guard_function <= zero);
-                past_set.new_parameter_constraint(event, maximal_guard_function >= zero);
-                past_set.new_parameter_constraint(event, critical_time_function <= zero);
+                hitting_set.new_parameter_constraint(event, final_guard_function <= hybrid_zero);
+                past_set.new_parameter_constraint(event, maximal_guard_function >= hybrid_zero);
+                past_set.new_parameter_constraint(event, critical_time_function <= hybrid_zero);
                 hitting_set.reduce();
                 missing_set.reduce();
                 past_set.reduce();
@@ -1119,12 +1119,12 @@ Void HybridContinuousTimeEvolverBase::
                         for (Nat i = 0; i != n; ++i) {
                             FloatDPBounds alpha = FloatDP(i + 1, dp) / n;
                             ValidatedScalarMultivariateFunctionPatch intermediate_guard = compose(guard_function, unchecked_compose(flow, join(starting_state_function, alpha * elapsed_time_function)));
-                            set.new_parameter_constraint(event, intermediate_guard <= zero);
+                            set.new_parameter_constraint(event, intermediate_guard <= hybrid_zero);
                         }
                         break;
                     case Semantics::LOWER:
                         // Can't continue the evolution, so set a trivially-falsified constraint
-                        set.new_parameter_constraint(event, this->function_factory().create_constant(set.parameter_domain(), 1) <= zero);
+                        set.new_parameter_constraint(event, this->function_factory().create_constant(set.parameter_domain(), 1) <= hybrid_zero);
                         break;
                     default:
                         ARIADNE_FAIL_MSG("Unhandled semantics.");
@@ -1697,14 +1697,14 @@ TimingData
     result.final_time = final_time;
 
     ExactBoxType state_domain = cast_exact_box(initial_set.state_bounding_box());
-    ExactIntervalType time_domain = cast_exact_interval(initial_set.time_range() + ExactIntervalType(zero, step_size));
+    ExactIntervalType time_domain = cast_exact_interval(initial_set.time_range() + ExactIntervalType(hybrid_zero, step_size));
     ExactBoxType statetime_domain = product(state_domain, time_domain);
 
     // ValidatedVectorMultivariateFunctionPatch space_coordinates=this->function_factory().create_identity(space_domain);
     ValidatedScalarMultivariateFunctionPatch time_coordinate = this->function_factory().create_coordinate(statetime_domain, n);
     ValidatedScalarMultivariateFunctionPatch time_identity = this->function_factory().create_coordinate({time_domain}, 0);
 
-    result.evolution_time_domain = ExactIntervalType(zero, step_size);
+    result.evolution_time_domain = ExactIntervalType(hybrid_zero, step_size);
     result.evolution_time_coordinate = this->function_factory().create_coordinate({result.evolution_time_domain}, 0);
 
     ExactBoxType flow_state_domain = ExactBoxType(project(flow.domain(), range(0, n)));
@@ -1726,7 +1726,7 @@ TimingData
     ValidatedScalarMultivariateFunctionPatch temporal_evolution_time = this->function_factory().create_zero(ExactIntervalVectorType(1u, time_domain));
 
     LOGGING_PRINTLN(std::fixed << "remaining_time_range=" << remaining_time_range);
-    if (possibly(remaining_time_range.lower_bound() < zero)) {
+    if (possibly(remaining_time_range.lower_bound() < hybrid_zero)) {
         // Some of the points may already have reached the final time.
         // Don't try anything fancy, just do a simple constant time step.
         if (definitely(remaining_time_range.upper_bound() <= step_size)) {
@@ -1825,7 +1825,7 @@ TimingData
                     LOGGING_PRINTLN_AT(1, "No creep; event " << crossing_iter->first << " completely taken");
                     creep = false;
                     break;
-                } else if (possibly(crossing_time_range.lower_bound() <= zero)) {
+                } else if (possibly(crossing_time_range.lower_bound() <= hybrid_zero)) {
                     // This event is already partially active, so carry on with a full step
                     LOGGING_PRINTLN_AT(1, "No creep; event " << crossing_iter->first << " already partially active");
                     creep = false;
@@ -1870,7 +1870,7 @@ TimingData
         ValidatedScalarMultivariateFunctionPatch zero_function = factory(flow).create_zero();
         ValidatedVectorMultivariateFunctionPatch identity_function = factory(flow).create_identity();
         // TODO: Remove use of cast
-        ValidatedVectorMultivariateFunctionPatch space_projection = flow * static_cast<Dyadic>(zero);
+        ValidatedVectorMultivariateFunctionPatch space_projection = flow * static_cast<Dyadic>(hybrid_zero);
         for (SizeType i = 0; i != n; ++i) {
             space_projection[i] = space_projection[i] + identity_function[i];
         }
@@ -1888,7 +1888,7 @@ TimingData
             LOGGING_PRINTLN_AT(1, "Event " << event << ": " << event_kind << ": " << crossing_kind);
             if (event_kind != EventKind::PERMISSIVE) {
                 UpperIntervalType guard_range = compose(guard_function, flow).range();
-                ARIADNE_ASSERT(decide(guard_range.lower_bound() < zero));
+                ARIADNE_ASSERT(decide(guard_range.lower_bound() < hybrid_zero));
                 UpperIntervalType guard_derivative_range = compose(lie_derivative(guard_function, dynamic), flow).range();
 
                 FloatDPBounds alpha_val = (1 + flow.step_size() * cast_exact(guard_derivative_range.lower_bound()) / cast_exact(guard_range.lower_bound()));

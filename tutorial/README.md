@@ -5,10 +5,10 @@ evolution capabilities with bounded scenarios:
 
 1. **VectorFieldSimulator** — simulate a stable one-dimensional continuous
    vector field for 0.1 time units.
-2. **VectorFieldEvolver** — compute a validated upper-semantics enclosure
+2. **ContinuousTimeEvolver** — compute a validated upper-semantics enclosure
    for the same field over 0.05 time units.
-3. **IteratedMapEvolver** — take one validated step of a contracting map.
-4. **HybridSimulator and GeneralHybridEvolver** — specify a two-mode
+3. **DiscreteTimeEvolver** — take one validated step of a contracting map.
+4. **HybridSimulator and HybridContinuousTimeEvolver** — specify a two-mode
    discrete-only automaton, create a simulator, then compute a short
    validated orbit for a separate continuous single-mode hybrid system.
 5. **FirstOrderPDE** — construct a validated, owning PDE model using
@@ -17,13 +17,13 @@ evolution capabilities with bounded scenarios:
    expensive section; the initial profile uses unit-frequency sinusoids.
 
 The Python program builds a contracting `IteratedMap`, computes one validated
-upper-semantics iteration using `IteratedMapEvolver`, and constructs the same
+upper-semantics iteration using `DiscreteTimeEvolver`, and constructs the same
 discrete-only `HybridAutomaton` used in C++. Both examples use the installed
-`pyariadne_evolution` extension. `IteratedMapEvolverConfiguration` is exposed so that
+`pyariadne_evolution` extension. `DiscreteTimeEvolverConfiguration` is exposed so that
 its enclosure-radius and subdivision options can be configured.
 
 Python parity remains incomplete: the C++ tutorial also executes
-`VectorFieldSimulator`, `VectorFieldEvolver`, `GeneralHybridEvolver`, and
+`VectorFieldSimulator`, `ContinuousTimeEvolver`, `HybridContinuousTimeEvolver`, and
 the `FirstOrderPDE` solver. These workflows require further Python-side
 model, integrator, or solver bindings and matching executable examples.
 

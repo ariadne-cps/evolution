@@ -1,5 +1,5 @@
 /***************************************************************************
- *            test_iterated_map_evolver.cpp
+ *            test_discrete_time_evolver.cpp
  *
  *  Copyright  2006-20  Pieter Collins
  *
@@ -22,7 +22,7 @@
  *  along with Ariadne Evolution. If not, see <https://www.gnu.org/licenses/>.
  */
 
-/** @file tests/test_iterated_map_evolver.cpp
+/** @file tests/test_discrete_time_evolver.cpp
  *  @brief Test iterated map evolver behavior and numerical invariants.
  */
 
@@ -34,8 +34,8 @@
 #include "algebra/differential.hpp"
 #include "algebra/matrix.hpp"
 #include "algebra/vector.hpp"
+#include "evolution/discrete_time_evolver.hpp"
 #include "evolution/enclosure.hpp"
-#include "evolution/iterated_map_evolver.hpp"
 #include "evolution/orbit.hpp"
 #include "function/constraint.hpp"
 #include "function/formula.hpp"
@@ -56,7 +56,7 @@
 using namespace Ariadne;
 using namespace std;
 
-class TestIteratedMapEvolver : public Ariadne::Testing::ContextFixture {
+class TestDiscreteTimeEvolver : public Ariadne::Testing::ContextFixture {
   public:
     using Ariadne::Testing::ContextFixture::ContextFixture;
 
@@ -64,11 +64,11 @@ class TestIteratedMapEvolver : public Ariadne::Testing::ContextFixture {
     Void test_stopping_policies() {
         RealVariable x("x"), other("other");
         IteratedMap map(List<PrimedRealAssignment>{next(x) = x + 1});
-        IteratedMapEvolver evolver(map);
+        DiscreteTimeEvolver evolver(map);
         auto initial = evolver.enclosure(ExactBoxType({
             {-1.0_x, 1.0_x}
         }));
-        std::unique_ptr<IteratedMapEvolver> clone(evolver.clone());
+        std::unique_ptr<DiscreteTimeEvolver> clone(evolver.clone());
         const auto& const_evolver = *clone;
         ARIADNE_TESTING_EXPECT_EQUAL(const_evolver.configuration().maximum_enclosure_radius(), 100.0);
         ARIADNE_TESTING_EXPECT_EQUAL(clone->system().state_space(), RealSpace({x}));
@@ -147,7 +147,7 @@ class TestIteratedMapEvolver : public Ariadne::Testing::ContextFixture {
         IteratedMap::TimeType time(6);
 
         // Set up the evaluators
-        IteratedMapEvolver evolver(henon);
+        DiscreteTimeEvolver evolver(henon);
         evolver.configuration().set_maximum_enclosure_radius(0.25);
 
         ARIADNE_TESTING_NOTE(evolver.configuration());
@@ -163,11 +163,11 @@ class TestIteratedMapEvolver : public Ariadne::Testing::ContextFixture {
         fig << line_style(true) << fill_colour(cyan) << orbit.reach();
         fig << fill_colour(yellow) << orbit.final();
         fig << fill_colour(blue) << initial_enclosure;
-        fig.write("test_iterated_map_evolver_xy");
+        fig.write("test_discrete_time_evolver_xy");
 
         LabelledFigure fig2(Axes2d(0 <= TimeVariable() <= 10, -10 <= y <= 10));
         fig2 << orbit.reach();
-        fig2.write("test_iterated_map_evolver_ty");
+        fig2.write("test_discrete_time_evolver_ty");
     }
 
     Void test_subdivide() {
@@ -180,7 +180,7 @@ class TestIteratedMapEvolver : public Ariadne::Testing::ContextFixture {
 
         IteratedMap::TimeType time(6);
 
-        IteratedMapEvolver evolver(henon);
+        DiscreteTimeEvolver evolver(henon);
         evolver.configuration().set_maximum_enclosure_radius(0.1);
         evolver.configuration().set_enable_subdivisions(true);
 
@@ -191,14 +191,14 @@ class TestIteratedMapEvolver : public Ariadne::Testing::ContextFixture {
         LabelledFigure fig(Axes2d(-10 <= x <= 10, -10 <= y <= 10));
         fig << line_style(true) << fill_colour(cyan) << orbit.reach();
         fig << fill_colour(yellow) << orbit.final();
-        fig.write("test_iterated_map_evolver_xy_subdivisions");
+        fig.write("test_discrete_time_evolver_xy_subdivisions");
     }
 };
 
 int main(int argc, const char* argv[]) {
-    ARIADNE_TESTING_SUITE("test_iterated_map_evolver");
-    ARIADNE_TESTING_ADD_TEST(TestIteratedMapEvolver, test_stopping_policies);
-    ARIADNE_TESTING_ADD_TEST(TestIteratedMapEvolver, test_evolve);
-    ARIADNE_TESTING_ADD_TEST(TestIteratedMapEvolver, test_subdivide);
+    ARIADNE_TESTING_SUITE("test_discrete_time_evolver");
+    ARIADNE_TESTING_ADD_TEST(TestDiscreteTimeEvolver, test_stopping_policies);
+    ARIADNE_TESTING_ADD_TEST(TestDiscreteTimeEvolver, test_evolve);
+    ARIADNE_TESTING_ADD_TEST(TestDiscreteTimeEvolver, test_subdivide);
     return Ariadne::Testing::run_logging_suite(ariadne_test_suite, argc, argv);
 }

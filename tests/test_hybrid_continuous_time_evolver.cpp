@@ -1,5 +1,5 @@
 /***************************************************************************
- *            test_hybrid_evolver.cpp
+ *            test_hybrid_continuous_time_evolver.cpp
  *
  *  Copyright  2026  Luca Geretti
  *
@@ -22,7 +22,7 @@
  *  along with Ariadne Evolution. If not, see <https://www.gnu.org/licenses/>.
  */
 
-/** @file tests/test_hybrid_evolver.cpp
+/** @file tests/test_hybrid_continuous_time_evolver.cpp
  *  @brief Test hybrid evolver behavior and numerical invariants.
  */
 
@@ -31,7 +31,7 @@
 #include <sstream>
 #include <type_traits>
 
-#include "evolution/hybrid_evolver.hpp"
+#include "evolution/hybrid_continuous_time_evolver.hpp"
 #include "evolution/hybrid_orbit.hpp"
 #include "evolution/hybrid_time.hpp"
 #include "function/function.hpp"
@@ -47,44 +47,44 @@
 using namespace Ariadne;
 
 // Exercise the default timing strategy provided for derived evolvers.
-class FixedTimingEvolver : public GeneralHybridEvolver {
+class FixedTimingEvolver : public HybridContinuousTimeEvolver {
   public:
-    using GeneralHybridEvolver::GeneralHybridEvolver;
+    using HybridContinuousTimeEvolver::HybridContinuousTimeEvolver;
     FixedTimingEvolver* clone() const override { return new FixedTimingEvolver(*this); }
 
   protected:
     TimingData _estimate_timing(Set<DiscreteEvent>& active, Real time, const FlowFunctionModel& flow,
                                 Map<DiscreteEvent, CrossingData>& crossings, const Map<DiscreteEvent, TransitionData>& transitions,
                                 const HybridEnclosure& initial) const override {
-        return HybridEvolverBase::_estimate_timing(active, time, flow, crossings, transitions, initial);
+        return HybridContinuousTimeEvolverBase::_estimate_timing(active, time, flow, crossings, transitions, initial);
     }
 };
 
 // Expose the documented crossing operation for a correlated near-miss test.
-class CrossingProbeEvolver : public GeneralHybridEvolver {
+class CrossingProbeEvolver : public HybridContinuousTimeEvolver {
   public:
-    using GeneralHybridEvolver::GeneralHybridEvolver;
-    using HybridEvolverBase::_compute_crossings;
-    using HybridEvolverBase::_compute_flow;
+    using HybridContinuousTimeEvolver::HybridContinuousTimeEvolver;
+    using HybridContinuousTimeEvolverBase::_compute_crossings;
+    using HybridContinuousTimeEvolverBase::_compute_flow;
 };
 
-class CountingEvolver : public GeneralHybridEvolver {
+class CountingEvolver : public HybridContinuousTimeEvolver {
   public:
-    using GeneralHybridEvolver::GeneralHybridEvolver;
+    using HybridContinuousTimeEvolver::HybridContinuousTimeEvolver;
     mutable SizeType reconditions = 0u;
     CountingEvolver* clone() const override { return new CountingEvolver(*this); }
 
   protected:
     Void _recondition(HybridEnclosure& enclosure) const override {
         ++reconditions;
-        HybridEvolverBase::_recondition(enclosure);
+        HybridContinuousTimeEvolverBase::_recondition(enclosure);
     }
 };
 
 // A deterministic work budget makes a stalled clock a finite test failure.
-class ClockProgressEvolver : public GeneralHybridEvolver {
+class ClockProgressEvolver : public HybridContinuousTimeEvolver {
   public:
-    using GeneralHybridEvolver::GeneralHybridEvolver;
+    using HybridContinuousTimeEvolver::HybridContinuousTimeEvolver;
     mutable SizeType timing_steps = 0u;
     mutable SizeType reconditions = 0u;
     ClockProgressEvolver* clone() const override { return new ClockProgressEvolver(*this); }
@@ -93,32 +93,32 @@ class ClockProgressEvolver : public GeneralHybridEvolver {
     Void _recondition(HybridEnclosure& set) const override {
         if (++reconditions > 64u)
             throw std::runtime_error("clock reconditioning budget exhausted");
-        HybridEvolverBase::_recondition(set);
+        HybridContinuousTimeEvolverBase::_recondition(set);
     }
     TimingData _estimate_timing(Set<DiscreteEvent>& active, Real time, const FlowFunctionModel& flow,
                                 Map<DiscreteEvent, CrossingData>& crossings, const Map<DiscreteEvent, TransitionData>& transitions,
                                 const HybridEnclosure& initial) const override {
         if (++timing_steps > 64u)
             throw std::runtime_error("clock progress budget exhausted");
-        return GeneralHybridEvolver::_estimate_timing(active, time, flow, crossings, transitions, initial);
+        return HybridContinuousTimeEvolver::_estimate_timing(active, time, flow, crossings, transitions, initial);
     }
 };
 
 // Valid timing policies with genuinely varying step lengths. Their common
 // linear flow has an exact solution, independently of the policy chosen.
-class DependentStepEvolver : public GeneralHybridEvolver {
+class DependentStepEvolver : public HybridContinuousTimeEvolver {
     StepKind _kind;
 
   public:
     DependentStepEvolver(const HybridAutomatonInterface& system, StepKind kind)
-        : GeneralHybridEvolver(system), _kind(kind) {}
+        : HybridContinuousTimeEvolver(system), _kind(kind) {}
     DependentStepEvolver* clone() const override { return new DependentStepEvolver(*this); }
 
   protected:
     TimingData _estimate_timing(Set<DiscreteEvent>& active, Real time, const FlowFunctionModel& flow,
                                 Map<DiscreteEvent, CrossingData>& crossings, const Map<DiscreteEvent, TransitionData>& transitions,
                                 const HybridEnclosure& initial) const override {
-        auto result = GeneralHybridEvolver::_estimate_timing(active, time, flow, crossings, transitions, initial);
+        auto result = HybridContinuousTimeEvolver::_estimate_timing(active, time, flow, crossings, transitions, initial);
         if (result.finishing_kind == FinishingKind::BEFORE_FINAL_TIME && result.step_kind == StepKind::CONSTANT_EVOLUTION_TIME) {
             auto variable = function_factory().create_coordinate(initial.parameter_domain(), 0);
             if (_kind == StepKind::SPACE_DEPENDENT_EVOLUTION_TIME)
@@ -189,9 +189,9 @@ class TestHybridEvolver : public Ariadne::Testing::ContextFixture {
     inline static DiscreteEvent e{"e"};
     inline static Real one{1};
     const Dyadic eighth{0.125_x}, quarter{0.25_x};
-    mutable std::unique_ptr<GeneralHybridEvolver> evolver_ptr;
+    mutable std::unique_ptr<HybridContinuousTimeEvolver> evolver_ptr;
     Void _set_evolver(const HybridAutomatonInterface& system) {
-        evolver_ptr = std::make_unique<GeneralHybridEvolver>(system);
+        evolver_ptr = std::make_unique<HybridContinuousTimeEvolver>(system);
         evolver_ptr->set_integrator(GradedTaylorSeriesIntegrator(1e-3));
     }
     Void expect_time(const HybridEnclosure& enclosure, double expected) {
@@ -251,14 +251,14 @@ Void TestHybridEvolver::test_components_and_copy_ownership() {
     auto factory = enclosure_config.function_factory();
     using FactoryInterface = EvolverFactoryInterface<HybridAutomatonInterface, HybridEnclosure, HybridTerminationCriterion>;
     static_assert(std::has_virtual_destructor_v<FactoryInterface>);
-    GeneralHybridEvolverFactory standard;
-    std::unique_ptr<GeneralHybridEvolver> made(standard.create(system));
+    HybridContinuousTimeEvolverFactory standard;
+    std::unique_ptr<HybridContinuousTimeEvolver> made(standard.create(system));
     std::unique_ptr<FactoryInterface> polymorphic_factory(standard.clone());
     std::unique_ptr<EvolverInterface<HybridAutomatonInterface, HybridEnclosure, HybridTerminationCriterion>> owned(polymorphic_factory->create(system));
     ARIADNE_TESTING_EXPECT_EQUAL(owned->system().continuous_state_space(q), RealSpace({x, y}));
-    GeneralHybridEvolverFactory customized(factory);
-    std::unique_ptr<GeneralHybridEvolverFactory> copied_factory(customized.clone());
-    std::unique_ptr<GeneralHybridEvolver> created(copied_factory->create(system));
+    HybridContinuousTimeEvolverFactory customized(factory);
+    std::unique_ptr<HybridContinuousTimeEvolverFactory> copied_factory(customized.clone());
+    std::unique_ptr<HybridContinuousTimeEvolver> created(copied_factory->create(system));
     created->set_function_factory(factory);
     created->set_solver(IntervalNewtonSolver(1e-9, 16u));
     created->configuration().set_enable_subdivisions(false);
@@ -274,11 +274,11 @@ Void TestHybridEvolver::test_components_and_copy_ownership() {
     ARIADNE_TESTING_EXPECT_EQUAL(computed.final().size(), 1u);
     std::ostringstream description;
     description << *created;
-    ARIADNE_TESTING_PROVE(description.str().find("GeneralHybridEvolver") != std::string::npos);
+    ARIADNE_TESTING_PROVE(description.str().find("HybridContinuousTimeEvolver") != std::string::npos);
     ARIADNE_TESTING_EXPECT_EXCEPTION(created->reconfigure(HybridExactBoxes(), HybridExactFloatVector()));
-    std::unique_ptr<GeneralHybridEvolver> surviving;
+    std::unique_ptr<HybridContinuousTimeEvolver> surviving;
     {
-        GeneralHybridEvolver original(system, factory);
+        HybridContinuousTimeEvolver original(system, factory);
         original.configuration().set_flow_accuracy(1e-7);
         original.configuration().set_maximum_step_size(0.25);
         original.ALLOW_UNWIND = true;
@@ -331,7 +331,7 @@ Void TestHybridEvolver::test_default_timing_and_policies() {
                                   {-ExactDouble(0.02), ExactDouble(0.02)}
     }),
                  0.25, 0u);
-    GeneralHybridEvolver evolver(system);
+    HybridContinuousTimeEvolver evolver(system);
     evolver.configuration().set_maximum_enclosure_radius(0.2);
     auto upper = evolver.orbit(box, HybridTime(0.125_x, 3), Semantics::UPPER);
     ARIADNE_TESTING_EXPECT_EQUAL(upper.final().size(), 2u);
@@ -547,7 +547,7 @@ Void TestHybridEvolver::test_uncertain_initial_time() {
     HybridAutomaton system;
     system.new_mode(q, {dot(x) = 1, dot(y) = 0});
     for (double width: {0.0625, 0.125, 0.5}) {
-        GeneralHybridEvolver evolver(system);
+        HybridContinuousTimeEvolver evolver(system);
         evolver.ALLOW_UNWIND = true;
         evolver.configuration().set_maximum_step_size(0.25);
         ExactBoxType domain({
@@ -651,7 +651,7 @@ Void TestHybridEvolver::test_subdivided_crossings_after_reset() {
     system.new_transition(q, e, middle, {next(x) = -0.5_dec, next(y) = 8 * y}, x >= 0, EventKind::URGENT);
     system.new_transition(middle, next_event, target, {next(x) = 0, next(y) = y}, (x + 1) * (x + 1) * (x + 1) - 1 >= 0, EventKind::URGENT);
     for (Bool subdivisions: {false, true}) {
-        GeneralHybridEvolver evolver(system);
+        HybridContinuousTimeEvolver evolver(system);
         evolver.configuration().set_maximum_step_size(0.5);
         evolver.configuration().set_maximum_enclosure_radius(0.0625);
         evolver.configuration().set_enable_subdivisions(subdivisions);
@@ -681,7 +681,7 @@ Void TestHybridEvolver::test_initial_constraints_and_contracts() {
     HybridAutomaton system;
     system.new_mode(q, {dot(x) = 1, dot(y) = 0});
     system.new_invariant(q, x <= 0.25_dec, e);
-    GeneralHybridEvolver evolver(system);
+    HybridContinuousTimeEvolver evolver(system);
     evolver.configuration().set_maximum_step_size(0.25);
     HybridBoxSet partial(q, {0.125_dec <= x <= 0.375_dec, -0.01_dec <= y <= 0.01_dec});
     auto orbit = evolver.orbit(partial, HybridTime(0.0625_x, 3), Semantics::UPPER);
@@ -728,7 +728,7 @@ Void TestHybridEvolver::test_solver_budget_fallback() {
         system.new_mode(target, {dot(x) = 0, dot(y) = 0});
         auto guard = concave ? y - sqr(x) : x - 0.25_dec;
         system.new_transition(q, e, target, {next(x) = 0, next(y) = 0}, guard >= 0, EventKind::URGENT);
-        GeneralHybridEvolver evolver(system);
+        HybridContinuousTimeEvolver evolver(system);
         // The solver is allowed to exhaust its proof budget. Evolution must
         // retain a validated event enclosure using guard constraints instead.
         if (failure == 2u)
@@ -844,7 +844,7 @@ Void TestHybridEvolver::test_nonlinear_grazing() {
     // The guard reaches its unique maximum at x=0; negative y misses it,
     // positive y crosses it, and y=0 is tangent.
     system.new_transition(q, e, q, {next(x) = x, next(y) = y - 1}, y - exp(x) - exp(-x) + 2 >= 0, EventKind::URGENT);
-    GeneralHybridEvolver evolver(system);
+    HybridContinuousTimeEvolver evolver(system);
     evolver.set_solver(IntervalNewtonSolver(1e-3, 16u));
     evolver.ALLOW_CREEP = false;
     evolver.configuration().set_maximum_step_size(1.0);
@@ -876,7 +876,7 @@ Void TestHybridEvolver::test_guaranteed_near_tangent_crossing() {
     HybridAutomaton system;
     system.new_mode(q, {dot(x) = 1, dot(y) = 0});
     system.new_transition(q, e, q, {next(x) = x, next(y) = y - 1}, y - sqr(x) >= 0, EventKind::URGENT);
-    GeneralHybridEvolver evolver(system);
+    HybridContinuousTimeEvolver evolver(system);
     evolver.ALLOW_CREEP = false;
     evolver.configuration().set_maximum_step_size(1.0);
     HybridBoxSet initial(q, {-0.5_dec <= x <= -0.49_dec, 0.0001_dec <= y <= 0.0002_dec});
@@ -905,7 +905,7 @@ Void TestHybridEvolver::test_crossing_in_the_past() {
     HybridAutomaton system;
     system.new_mode(q, {dot(x) = 1, dot(y) = 0});
     system.new_transition(q, e, q, {next(x) = x, next(y) = y - 1}, y - sqr(x) >= 0, EventKind::URGENT);
-    GeneralHybridEvolver evolver(system);
+    HybridContinuousTimeEvolver evolver(system);
     evolver.ALLOW_CREEP = false;
     evolver.configuration().set_maximum_step_size(0.25);
     auto orbit = evolver.orbit(HybridBoxSet(q, {-0.125_dec <= x <= 0.125_dec, 0.0001_dec <= y <= 0.0002_dec}),
@@ -943,7 +943,7 @@ Void TestHybridEvolver::test_initially_active_creep() {
     system.new_mode(target, {dot(x) = 0, dot(y) = 0});
     system.new_transition(q, e, target, {next(x) = 0, next(y) = y}, x >= 0, EventKind::URGENT);
     for (Bool active: {false, true}) {
-        GeneralHybridEvolver evolver(system);
+        HybridContinuousTimeEvolver evolver(system);
         evolver.configuration().set_maximum_step_size(active ? 0.25 : 0.5);
         auto initial = active
                          ? HybridBoxSet(q, {-0.5_dec <= x <= 0.125_dec, -0.01_dec <= y <= 0.01_dec})
@@ -980,7 +980,7 @@ Void TestHybridEvolver::test_creep_with_other_events() {
     system.new_transition(q, e, urgent_target, {next(x) = 0, next(y) = y}, x >= 0, EventKind::URGENT);
     system.new_transition(q, early, early_target, {next(x) = x, next(y) = y}, -x - 0.5_dec >= 0, EventKind::URGENT);
     system.new_transition(q, optional, optional_target, {next(x) = 2, next(y) = y}, x + 0.375_dec >= 0, EventKind::PERMISSIVE);
-    GeneralHybridEvolver evolver(system);
+    HybridContinuousTimeEvolver evolver(system);
     evolver.configuration().set_maximum_step_size(0.375);
     auto orbit = evolver.orbit(HybridBoxSet(q, {-0.5_dec <= x <= -0.25_dec, -0.01_dec <= y <= 0.01_dec}),
                                HybridTime(1.0_x, 1), Semantics::UPPER);
@@ -1030,7 +1030,7 @@ Void TestHybridEvolver::test_creep_solver_budget() {
     // exhaust their proof budget. Either event still has the same hit time.
     system.new_transition(q, linear, linear_target, {next(x) = 0, next(y) = y}, x >= 0, EventKind::URGENT);
     system.new_transition(q, e, curved_target, {next(x) = 2, next(y) = y}, (x + 1) * (x + 1) * (x + 1) - 1 >= 0, EventKind::URGENT);
-    GeneralHybridEvolver evolver(system);
+    HybridContinuousTimeEvolver evolver(system);
     evolver.set_solver(IntervalNewtonSolver(1e-8, 1u));
     evolver.configuration().set_maximum_step_size(0.5);
     auto orbit = evolver.orbit(HybridBoxSet(q, {-0.5_dec <= x <= -0.25_dec, -0.01_dec <= y <= 0.01_dec}),
@@ -1064,7 +1064,7 @@ Void TestHybridEvolver::test_partial_crossing_without_creep() {
     system.new_mode(q, {dot(x) = 1, dot(y) = 0});
     system.new_mode(target, {dot(x) = 0, dot(y) = 0});
     system.new_transition(q, e, target, {next(x) = 0, next(y) = y}, x >= 0.4_dec, EventKind::URGENT);
-    GeneralHybridEvolver evolver(system);
+    HybridContinuousTimeEvolver evolver(system);
     evolver.ALLOW_CREEP = false;
     evolver.configuration().set_maximum_step_size(0.25);
     auto orbit = evolver.orbit(HybridBoxSet(q, {-0.25_dec <= x <= 0.25_dec, -0.01_dec <= y <= 0.01_dec}),
@@ -1086,7 +1086,7 @@ Void TestHybridEvolver::test_partial_crossing_without_creep() {
 Void TestHybridEvolver::test_straddling_initial_times() {
     HybridAutomaton system;
     system.new_mode(q, {dot(x) = 1, dot(y) = 0});
-    GeneralHybridEvolver evolver(system);
+    HybridContinuousTimeEvolver evolver(system);
     evolver.ALLOW_CREEP = false;
     evolver.configuration().set_maximum_step_size(0.125);
     ExactBoxType domain({
@@ -1446,7 +1446,7 @@ Void TestHybridEvolver::test_transverse_linear_crossing() {
 }
 
 int main(int argc, char* argv[]) {
-    ARIADNE_TESTING_SUITE("test_hybrid_evolver");
+    ARIADNE_TESTING_SUITE("test_hybrid_continuous_time_evolver");
     ARIADNE_TESTING_ADD_TEST(TestHybridEvolver, test_components_and_copy_ownership);
     ARIADNE_TESTING_ADD_TEST(TestHybridEvolver, test_default_timing_and_policies);
     ARIADNE_TESTING_ADD_TEST(TestHybridEvolver, test_impact_and_optional_transition);

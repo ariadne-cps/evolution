@@ -36,8 +36,8 @@
 #include <sstream>
 #include <stdexcept>
 
+#include "evolution/hybrid_continuous_time_evolver.hpp"
 #include "evolution/hybrid_evolution_tree.hpp"
-#include "evolution/hybrid_evolver.hpp"
 #include "logging/test_runner.hpp"
 #include "system/hybrid_automata.hpp"
 #include "threading/thread_manager.hpp"
@@ -53,7 +53,7 @@ HybridEnclosure seed() {
     RealVariable x("x"), y("y");
     HybridAutomaton system;
     system.new_mode(q, {dot(x) = 1, dot(y) = 0});
-    GeneralHybridEvolver evolver(system);
+    HybridContinuousTimeEvolver evolver(system);
     return evolver.enclosure(HybridExactBox(q, RealSpace({
                                                    x, y
     }),
@@ -337,7 +337,7 @@ class TestHybridEvolutionTree : public Testing::ContextFixture {
     using ContextFixture::ContextFixture;
 
   private:
-    void compare_backend_orbits(GeneralHybridEvolver& evolver, const HybridEnclosure& initial,
+    void compare_backend_orbits(HybridContinuousTimeEvolver& evolver, const HybridEnclosure& initial,
                                 const HybridTerminationCriterion& termination, Semantics semantics) {
         std::ostringstream original;
         original << initial;
@@ -365,7 +365,7 @@ class TestHybridEvolutionTree : public Testing::ContextFixture {
      *  work order and genealogy, not reachability results or classifications.
      */
     void compare_flat_and_frontier_orbits(
-        GeneralHybridEvolver& evolver, const HybridEnclosure& initial,
+        HybridContinuousTimeEvolver& evolver, const HybridEnclosure& initial,
         const HybridTerminationCriterion& termination, Semantics semantics) {
         evolver.set_evolution_backend_factory(FlatHybridEvolutionBackendFactory());
         const auto flat = evolver.orbit(initial, termination, semantics);
@@ -397,7 +397,7 @@ class TestHybridEvolutionTree : public Testing::ContextFixture {
             system.new_mode(target, {dot(x) = 0, dot(y) = 0});
             system.new_transition(source, jump, target,
                                   {next(x) = x, next(y) = y}, x >= 0, event_kind);
-            GeneralHybridEvolver evolver(system);
+            HybridContinuousTimeEvolver evolver(system);
             evolver.configuration().set_maximum_step_size(0.25_x);
             const auto initial = evolver.enclosure(HybridExactBox(
                 source, RealSpace({
@@ -419,7 +419,7 @@ class TestHybridEvolutionTree : public Testing::ContextFixture {
         system.new_mode(target, {dot(x) = 0, dot(y) = 0});
         system.new_transition(source, jump, target,
                               {next(x) = x, next(y) = y}, x >= 0, EventKind::URGENT);
-        GeneralHybridEvolver evolver(system);
+        HybridContinuousTimeEvolver evolver(system);
         evolver.configuration().set_enable_subdivisions(true);
         evolver.configuration().set_maximum_enclosure_radius(0.25_x);
         const auto wide = evolver.enclosure(HybridExactBox(
@@ -432,7 +432,7 @@ class TestHybridEvolutionTree : public Testing::ContextFixture {
             compare_flat_and_frontier_orbits(evolver, wide, HybridTime(0, 1), semantics);
         }
         system.new_invariant(source, x <= -0.5_dec, invariant);
-        GeneralHybridEvolver constrained(system);
+        HybridContinuousTimeEvolver constrained(system);
         constrained.configuration().set_enable_subdivisions(true);
         constrained.configuration().set_maximum_enclosure_radius(0.25_x);
         const auto restricted = constrained.enclosure(HybridExactBox(
@@ -451,7 +451,7 @@ class TestHybridEvolutionTree : public Testing::ContextFixture {
         RealVariable x("x"), y("y");
         HybridAutomaton system;
         system.new_mode(q, {dot(x) = 1, dot(y) = 0});
-        GeneralHybridEvolver evolver(system);
+        HybridContinuousTimeEvolver evolver(system);
         evolver.configuration().set_enable_subdivisions(true);
         evolver.configuration().set_maximum_enclosure_radius(0.25_x);
         evolver.configuration().set_maximum_step_size(0.25_x);
@@ -490,7 +490,7 @@ class TestHybridEvolutionTree : public Testing::ContextFixture {
         RealVariable x("x"), y("y");
         HybridAutomaton system;
         system.new_mode(q, {dot(x) = 1, dot(y) = 0});
-        GeneralHybridEvolver evolver(system);
+        HybridContinuousTimeEvolver evolver(system);
         evolver.configuration().set_enable_subdivisions(true);
         evolver.configuration().set_maximum_enclosure_radius(0.25_x);
         evolver.configuration().set_maximum_step_size(0.25_x);
@@ -538,7 +538,7 @@ class TestHybridEvolutionTree : public Testing::ContextFixture {
             system.new_mode(target, {dot(x) = 0, dot(y) = 0});
             system.new_transition(source, jump, target,
                                   {next(x) = x, next(y) = y}, x >= 0, event_kind);
-            GeneralHybridEvolver evolver(system);
+            HybridContinuousTimeEvolver evolver(system);
             // The wide crossing interval is visited over several continuous
             // steps before every piece can reach the guard.
             evolver.configuration().set_maximum_step_size(0.125_x);
@@ -583,7 +583,7 @@ class TestHybridEvolutionTree : public Testing::ContextFixture {
         RealVariable x("x"), y("y");
         HybridAutomaton system;
         system.new_mode(q, {dot(x) = 1, dot(y) = 0});
-        GeneralHybridEvolver evolver(system);
+        HybridContinuousTimeEvolver evolver(system);
         evolver.configuration().set_enable_subdivisions(true);
         evolver.configuration().set_maximum_enclosure_radius(0.75_x);
         evolver.configuration().set_maximum_step_size(0.0625_x);
@@ -626,7 +626,7 @@ class TestHybridEvolutionTree : public Testing::ContextFixture {
             system.new_mode(target, {dot(x) = 0, dot(y) = 0});
             system.new_transition(source, jump, target,
                                   {next(x) = x, next(y) = y}, x >= 0, event_kind);
-            GeneralHybridEvolver evolver(system);
+            HybridContinuousTimeEvolver evolver(system);
             evolver.configuration().set_enable_subdivisions(true);
             evolver.configuration().set_maximum_enclosure_radius(0.5_x);
             evolver.configuration().set_maximum_step_size(0.125_x);
@@ -777,7 +777,7 @@ class TestHybridEvolutionTree : public Testing::ContextFixture {
         RealVariable x("x"), y("y");
         HybridAutomaton system;
         system.new_mode(q, {dot(x) = 1, dot(y) = 0});
-        GeneralHybridEvolver evolver(system);
+        HybridContinuousTimeEvolver evolver(system);
         const auto initial = evolver.enclosure(HybridExactBox(
             q, RealSpace({
                    x, y
@@ -1087,7 +1087,7 @@ class TestHybridEvolutionTree : public Testing::ContextFixture {
             system.new_mode(source, {dot(x) = 1, dot(y) = sqr(x)});
             system.new_mode(target, {dot(x) = 1 + sqr(y), dot(y) = 1});
             system.new_transition(source, jump, target, {next(x) = x, next(y) = y}, x >= 0, kind);
-            GeneralHybridEvolver evolver(system);
+            HybridContinuousTimeEvolver evolver(system);
             evolver.configuration().set_maximum_step_size(0.03125_x);
             evolver.configuration().set_maximum_enclosure_radius(0.03125_x);
             const auto initial = evolver.enclosure(HybridExactBox(source, RealSpace({
@@ -2131,7 +2131,7 @@ class TestHybridEvolutionTree : public Testing::ContextFixture {
             system.new_mode(source, {dot(x) = 1, dot(y) = 0});
             system.new_mode(target, {dot(x) = 0, dot(y) = 0});
             system.new_transition(source, DiscreteEvent("jump"), target, {next(x) = x, next(y) = y}, x >= 0, kind);
-            GeneralHybridEvolver evolver(system);
+            HybridContinuousTimeEvolver evolver(system);
             evolver.configuration().set_maximum_step_size(0.25_x);
             auto initial = evolver.enclosure(HybridExactBox(source, RealSpace({
                                                                         x, y
@@ -2149,7 +2149,7 @@ class TestHybridEvolutionTree : public Testing::ContextFixture {
         RealVariable x("x"), y("y");
         HybridAutomaton system;
         system.new_mode(q, {dot(x) = 1, dot(y) = 0});
-        GeneralHybridEvolver evolver(system);
+        HybridContinuousTimeEvolver evolver(system);
         evolver.configuration().set_maximum_step_size(0.25_x);
         const auto initial = evolver.enclosure(HybridExactBox(q, RealSpace({
                                                                      x, y
@@ -2171,7 +2171,7 @@ class TestHybridEvolutionTree : public Testing::ContextFixture {
         system.new_mode(q, {dot(x) = 1, dot(y) = 0});
         system.new_mode(target, {dot(x) = 0, dot(y) = 0});
         system.new_transition(q, jump, target, {next(x) = x, next(y) = y}, x >= 0, EventKind::URGENT);
-        GeneralHybridEvolver evolver(system);
+        HybridContinuousTimeEvolver evolver(system);
         evolver.configuration().set_enable_subdivisions(true);
         evolver.configuration().set_maximum_enclosure_radius(0.25_x);
         const auto active = evolver.enclosure(HybridExactBox(q, RealSpace({
@@ -2191,7 +2191,7 @@ class TestHybridEvolutionTree : public Testing::ContextFixture {
         }
 
         system.new_invariant(q, x <= -0.5_dec, invariant);
-        GeneralHybridEvolver constrained(system);
+        HybridContinuousTimeEvolver constrained(system);
         constrained.configuration().set_enable_subdivisions(true);
         constrained.configuration().set_maximum_enclosure_radius(0.25_x);
         for (auto semantics: {Semantics::UPPER, Semantics::LOWER}) {

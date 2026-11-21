@@ -32,7 +32,7 @@
 #include <string>
 #include <vector>
 
-#include "evolution/hybrid_evolver.hpp"
+#include "evolution/hybrid_continuous_time_evolver.hpp"
 #include "evolution/hybrid_orbit.hpp"
 #include "evolution/hybrid_time.hpp"
 #include "integration/integrator.hpp"
@@ -103,7 +103,7 @@ struct Measurement {
     SizeType reach, intermediate, final;
 };
 
-Measurement measure(const GeneralHybridEvolver& evolver,
+Measurement measure(const HybridContinuousTimeEvolver& evolver,
                     const HybridSet& initial, const HybridTime& horizon,
                     bool describe) {
     const auto start = Bench::Clock::now();
@@ -140,7 +140,7 @@ int main(int argc, const char* argv[]) {
         HybridSet initial(DiscreteLocation(valve | "opening"),
                           {0 <= height <= Real(1 / 16_q), 0 <= aperture <= Real(1 / 64_q)});
         HybridTime horizon(ExactDouble(options.duration), options.events);
-        GeneralHybridEvolver evolver(tank);
+        HybridContinuousTimeEvolver evolver(tank);
         evolver.set_integrator(
             TaylorPicardIntegrator(StepMaximumError(options.accuracy)));
         evolver.configuration().set_maximum_step_size(

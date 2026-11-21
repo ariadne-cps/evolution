@@ -1,5 +1,5 @@
 /***************************************************************************
- *            test_vector_field_evolver.cpp
+ *            test_continuous_time_evolver.cpp
  *
  *  Copyright  2006-21  Pieter Collins
  *
@@ -22,7 +22,7 @@
  *  along with Ariadne Evolution. If not, see <https://www.gnu.org/licenses/>.
  */
 
-/** @file tests/test_vector_field_evolver.cpp
+/** @file tests/test_continuous_time_evolver.cpp
  *  @brief Test vector field evolver behavior and numerical invariants.
  */
 
@@ -33,9 +33,9 @@
 #include "algebra/algebra.hpp"
 #include "algebra/matrix.hpp"
 #include "algebra/vector.hpp"
+#include "evolution/continuous_time_evolver.hpp"
 #include "evolution/enclosure.hpp"
 #include "evolution/orbit.hpp"
-#include "evolution/vector_field_evolver.hpp"
 #include "function/constraint.hpp"
 #include "function/function.hpp"
 #include "function/taylor_function.hpp"
@@ -59,7 +59,7 @@ decltype(auto) subset(LabelledBox<IVL1> bx1, LabelledBox<IVL2> bx2) {
     return subset(bx1.euclidean_set(), bx2.euclidean_set());
 }
 
-class TestVectorFieldEvolver : public Ariadne::Testing::ContextFixture {
+class TestContinuousTimeEvolver : public Ariadne::Testing::ContextFixture {
   public:
     using Ariadne::Testing::ContextFixture::ContextFixture;
 
@@ -87,7 +87,7 @@ class TestVectorFieldEvolver : public Ariadne::Testing::ContextFixture {
         RealVariable x("x");
         OrdinaryDifferentialAlgebraicEquation field(List<DottedRealAssignment>{dot(x) = 0});
         TaylorPicardIntegrator integrator(step_maximum_error = 1e-6);
-        VectorFieldEvolver evolver(field, integrator);
+        ContinuousTimeEvolver evolver(field, integrator);
         evolver.configuration().set_enable_reconditioning(false);
         evolver.configuration().set_maximum_enclosure_radius(0.75);
         for (const auto& constraint: List<ContinuousPredicate>{x <= 0.25_dec, x >= 1.75_dec}) {
@@ -109,14 +109,14 @@ class TestVectorFieldEvolver : public Ariadne::Testing::ContextFixture {
             PreconditionedGradedTaylorSeriesIntegrator integrator(step_maximum_error = 1e-6);
             integrator.set_preconditioning(mode);
             integrator.set_diagnostics(true);
-            VectorFieldEvolver evolver(field, integrator);
+            ContinuousTimeEvolver evolver(field, integrator);
             evolver.configuration().set_maximum_step_size(0.03125);
             evolver.configuration().set_enable_reconditioning(false);
             auto initial = evolver.enclosure(ExactBoxType({
                 {-0.03125_x, 0.03125_x}
             }));
-            std::unique_ptr<VectorFieldEvolver> clone(evolver.clone());
-            const VectorFieldEvolver& immutable = *clone;
+            std::unique_ptr<ContinuousTimeEvolver> clone(evolver.clone());
+            const ContinuousTimeEvolver& immutable = *clone;
             ARIADNE_TESTING_EXPECT_EQUAL(immutable.configuration().maximum_step_size(), 0.03125_x);
             auto result = immutable.orbit(initial, Real(1), Semantics::UPPER);
             ARIADNE_TESTING_PROVE(result.final().size() > 0u);
@@ -137,7 +137,7 @@ class TestVectorFieldEvolver : public Ariadne::Testing::ContextFixture {
         OrdinaryDifferentialAlgebraicEquation field(List<DottedRealAssignment>{dot(x) = 0});
         PreconditionedGradedTaylorSeriesIntegrator integrator(step_maximum_error = 1e-6);
         integrator.set_carried_expansion_diagnostics(true);
-        VectorFieldEvolver evolver(field, integrator);
+        ContinuousTimeEvolver evolver(field, integrator);
         evolver.configuration().set_maximum_step_size(1.0 / 2048.0);
         auto result = evolver.orbit(RealVariablesBox({0.9_dec <= x <= 1.1_dec}), Real(1), Semantics::UPPER);
         ARIADNE_TESTING_EXPECT_EQUAL(result.reach().size(), 2048u);
@@ -148,7 +148,7 @@ class TestVectorFieldEvolver : public Ariadne::Testing::ContextFixture {
     }
 
     Void test_single_trajectory() {
-        typedef VectorFieldEvolver::EnclosureType EnclosureType;
+        typedef ContinuousTimeEvolver::EnclosureType EnclosureType;
 
         // Set up the evolution parameters and grid
         Real time(2.0_dec);
@@ -178,7 +178,7 @@ class TestVectorFieldEvolver : public Ariadne::Testing::ContextFixture {
 
         Semantics semantics = Semantics::LOWER;
 
-        VectorFieldEvolver evolver(vanderpol, integrator);
+        ContinuousTimeEvolver evolver(vanderpol, integrator);
         evolver.configuration().set_maximum_enclosure_radius(enclosure_radius);
         evolver.configuration().set_maximum_step_size(step_size);
         ARIADNE_TESTING_NOTE(evolver.configuration());
@@ -218,7 +218,7 @@ class TestVectorFieldEvolver : public Ariadne::Testing::ContextFixture {
 
         fig << line_style(true) << fill_colour(blue) << trajectory.reach();
 
-        fig.write("test_vector_field_evolver-vdp");
+        fig.write("test_continuous_time_evolver-vdp");
     }
 
     Void test_failure() {
@@ -238,7 +238,7 @@ class TestVectorFieldEvolver : public Ariadne::Testing::ContextFixture {
                                           minimum_temporal_order = 0, maximum_temporal_order = 8);
 
         OrdinaryDifferentialAlgebraicEquation fail_vf({dot(x) = 1, dot(y) = y * y * 100});
-        VectorFieldEvolver evolver(fail_vf, integrator);
+        ContinuousTimeEvolver evolver(fail_vf, integrator);
         evolver.configuration().set_maximum_enclosure_radius(enclosure_radius);
         evolver.configuration().set_maximum_step_size(maximum_step_size);
         //        evolver.configuration().set_minimum_step_size(minimum_step_size);
@@ -261,7 +261,7 @@ class TestVectorFieldEvolver : public Ariadne::Testing::ContextFixture {
 
         TaylorPicardIntegrator integrator(max_err);
 
-        VectorFieldEvolver evolver(dynamics, integrator);
+        ContinuousTimeEvolver evolver(dynamics, integrator);
         evolver.configuration().set_maximum_enclosure_radius(0.1);
         evolver.configuration().set_maximum_step_size(0.1);
         evolver.configuration().set_maximum_spacial_error(1e-5);
@@ -290,7 +290,7 @@ class TestVectorFieldEvolver : public Ariadne::Testing::ContextFixture {
 
         TaylorPicardIntegrator integrator(max_err);
 
-        VectorFieldEvolver evolver(dynamics, integrator);
+        ContinuousTimeEvolver evolver(dynamics, integrator);
         evolver.configuration().set_maximum_enclosure_radius(0.1);
         evolver.configuration().set_maximum_step_size(0.1);
         evolver.configuration().set_maximum_spacial_error(1e-5);
@@ -309,7 +309,7 @@ class TestVectorFieldEvolver : public Ariadne::Testing::ContextFixture {
 
         LabelledFigure fig(Axes2d(1 <= x <= 5, 2 <= y <= 30));
         fig << orbit_upper.reach();
-        fig.write("test_vector_field_evolver-subdivisions");
+        fig.write("test_continuous_time_evolver-subdivisions");
 
         auto orbit_lower = evolver.orbit(initial_set, evolution_time, Semantics::LOWER);
 
@@ -318,15 +318,15 @@ class TestVectorFieldEvolver : public Ariadne::Testing::ContextFixture {
 };
 
 int main(int argc, const char* argv[]) {
-    ARIADNE_TESTING_SUITE("test_vector_field_evolver");
-    ARIADNE_TESTING_ADD_TEST(TestVectorFieldEvolver, test_single_trajectory);
-    ARIADNE_TESTING_ADD_TEST(TestVectorFieldEvolver, test_failure);
-    ARIADNE_TESTING_ADD_TEST(TestVectorFieldEvolver, test_subdivide_initially);
-    ARIADNE_TESTING_ADD_TEST(TestVectorFieldEvolver, test_subdivide_along_evolution);
-    ARIADNE_TESTING_ADD_TEST(TestVectorFieldEvolver, test_components_and_preconditioned_orbits);
-    ARIADNE_TESTING_ADD_TEST(TestVectorFieldEvolver, test_carried_expansion_diagnostics_checkpoints);
-    ARIADNE_TESTING_ADD_TEST(TestVectorFieldEvolver, test_constrained_initial_subdivision_and_tiny_horizon);
-    ARIADNE_TESTING_ADD_TEST(TestVectorFieldEvolver, test_binary64_step_limits);
-    ARIADNE_TESTING_ADD_TEST(TestVectorFieldEvolver, test_lower_termination_diagnostics);
+    ARIADNE_TESTING_SUITE("test_continuous_time_evolver");
+    ARIADNE_TESTING_ADD_TEST(TestContinuousTimeEvolver, test_single_trajectory);
+    ARIADNE_TESTING_ADD_TEST(TestContinuousTimeEvolver, test_failure);
+    ARIADNE_TESTING_ADD_TEST(TestContinuousTimeEvolver, test_subdivide_initially);
+    ARIADNE_TESTING_ADD_TEST(TestContinuousTimeEvolver, test_subdivide_along_evolution);
+    ARIADNE_TESTING_ADD_TEST(TestContinuousTimeEvolver, test_components_and_preconditioned_orbits);
+    ARIADNE_TESTING_ADD_TEST(TestContinuousTimeEvolver, test_carried_expansion_diagnostics_checkpoints);
+    ARIADNE_TESTING_ADD_TEST(TestContinuousTimeEvolver, test_constrained_initial_subdivision_and_tiny_horizon);
+    ARIADNE_TESTING_ADD_TEST(TestContinuousTimeEvolver, test_binary64_step_limits);
+    ARIADNE_TESTING_ADD_TEST(TestContinuousTimeEvolver, test_lower_termination_diagnostics);
     return Ariadne::Testing::run_logging_suite(ariadne_test_suite, argc, argv);
 }

@@ -42,14 +42,14 @@ class OrdinaryDifferentialAlgebraicInclusion;
 /** @brief HybridAutomatonInterface: compile-time correspondence between systems, evolvers and enclosures. */
 class HybridAutomatonInterface;
 
-/** @brief IteratedMapEvolver: compile-time correspondence between systems, evolvers and enclosures. */
-class IteratedMapEvolver;
-/** @brief VectorFieldEvolver: compile-time correspondence between systems, evolvers and enclosures. */
-class VectorFieldEvolver;
+/** @brief DiscreteTimeEvolver: compile-time correspondence between systems, evolvers and enclosures. */
+class DiscreteTimeEvolver;
+/** @brief ContinuousTimeEvolver: compile-time correspondence between systems, evolvers and enclosures. */
+class ContinuousTimeEvolver;
 /** @brief DifferentialInclusionEvolver: compile-time correspondence between systems, evolvers and enclosures. */
 class DifferentialInclusionEvolver;
-/** @brief HybridEvolverInterface: compile-time correspondence between systems, evolvers and enclosures. */
-class HybridEvolverInterface;
+/** @brief HybridContinuousTimeEvolverInterface: compile-time correspondence between systems, evolvers and enclosures. */
+class HybridContinuousTimeEvolverInterface;
 
 /** @brief LabelledEnclosure: compile-time correspondence between systems, evolvers and enclosures. */
 class LabelledEnclosure;
@@ -61,13 +61,13 @@ struct EvolutionTraits;
 
 template<>
 struct EvolutionTraits<IteratedMap> {
-    using EvolverType = IteratedMapEvolver;
+    using EvolverType = DiscreteTimeEvolver;
     using EnclosureType = LabelledEnclosure;
 };
 
 template<>
 struct EvolutionTraits<OrdinaryDifferentialAlgebraicEquation> {
-    using EvolverType = VectorFieldEvolver;
+    using EvolverType = ContinuousTimeEvolver;
     using EnclosureType = LabelledEnclosure;
 };
 
@@ -79,7 +79,7 @@ struct EvolutionTraits<OrdinaryDifferentialAlgebraicInclusion> {
 
 template<>
 struct EvolutionTraits<HybridAutomatonInterface> {
-    using EvolverType = HybridEvolverInterface;
+    using EvolverType = HybridContinuousTimeEvolverInterface;
     using EnclosureType = HybridEnclosure;
 };
 

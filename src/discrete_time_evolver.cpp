@@ -1,5 +1,5 @@
 /***************************************************************************
- *            iterated_map_evolver.cpp
+ *            discrete_time_evolver.cpp
  *
  *  Copyright  2008-20  Alberto Casagrande, Pieter Collins
  *
@@ -22,11 +22,11 @@
  *  along with Ariadne Evolution. If not, see <https://www.gnu.org/licenses/>.
  */
 
-/** @file src/iterated_map_evolver.cpp
+/** @file src/discrete_time_evolver.cpp
  *  @brief Implement iterated map evolver operations.
  */
 
-#include "evolution/iterated_map_evolver.hpp"
+#include "evolution/discrete_time_evolver.hpp"
 
 #include "algebra/vector.hpp"
 #include "evolution/enclosure.hpp"
@@ -58,28 +58,28 @@ List<ES> subdivide(const ES& enclosure) {
 
 } // namespace
 
-IteratedMapEvolver::IteratedMapEvolver(const SystemType& system)
+DiscreteTimeEvolver::DiscreteTimeEvolver(const SystemType& system)
     : _system(system.clone()), _configuration(new ConfigurationType()) {
 }
 
-const typename IteratedMapEvolver::FunctionFactoryType IteratedMapEvolver::function_factory() const {
+const typename DiscreteTimeEvolver::FunctionFactoryType DiscreteTimeEvolver::function_factory() const {
     return ValidatedFunctionPatchFactory(make_taylor_function_patch_factory());
 }
 
-typename IteratedMapEvolver::EnclosureType IteratedMapEvolver::enclosure(const ExactBoxType& box) const {
+typename DiscreteTimeEvolver::EnclosureType DiscreteTimeEvolver::enclosure(const ExactBoxType& box) const {
     return EnclosureType(box, this->system().state_space(), EnclosureConfiguration(this->function_factory()));
 }
 
-Orbit<IteratedMapEvolver::EnclosureType>
-    IteratedMapEvolver::
+Orbit<DiscreteTimeEvolver::EnclosureType>
+    DiscreteTimeEvolver::
         orbit(const RealExpressionBoundedConstraintSet& initial_set,
               const TerminationType& termination,
               Semantics semantics) const {
     return orbit(EnclosureType(initial_set.euclidean_set(this->system().state_space()), this->system().state_space(), EnclosureConfiguration(this->function_factory())), termination, semantics);
 }
 
-Orbit<IteratedMapEvolver::EnclosureType>
-    IteratedMapEvolver::
+Orbit<DiscreteTimeEvolver::EnclosureType>
+    DiscreteTimeEvolver::
         orbit(const EnclosureType& initial_set,
               const TerminationType& termination,
               Semantics semantics) const {
@@ -96,7 +96,7 @@ Orbit<IteratedMapEvolver::EnclosureType>
     return orbit;
 }
 
-Void IteratedMapEvolver::
+Void DiscreteTimeEvolver::
     _evolution(EnclosureListType& final_sets,
                EnclosureListType& reach_sets,
                EnclosureListType& intermediate_sets,
@@ -141,7 +141,7 @@ Void IteratedMapEvolver::
     }
 }
 
-Void IteratedMapEvolver::
+Void DiscreteTimeEvolver::
     _evolution_step(List<TimedEnclosureType>& working_sets,
                     EnclosureListType&,
                     EnclosureListType& reach_sets,
@@ -177,15 +177,15 @@ Void IteratedMapEvolver::
     working_sets.push_back(make_pair(final_time, final_enclosure));
 }
 
-IteratedMapEvolverConfiguration::IteratedMapEvolverConfiguration() {
+DiscreteTimeEvolverConfiguration::DiscreteTimeEvolverConfiguration() {
     set_maximum_enclosure_radius(100);
     set_enable_subdivisions(false);
     set_enable_premature_termination(false);
 }
 
 OutputStream&
-    IteratedMapEvolverConfiguration::_write(OutputStream& os) const {
-    os << "IteratedMapEvolverConfiguration"
+    DiscreteTimeEvolverConfiguration::_write(OutputStream& os) const {
+    os << "DiscreteTimeEvolverConfiguration"
        << ",\n  maximum_enclosure_radius=" << maximum_enclosure_radius()
        << ",\n  enable_subdivisions=" << enable_subdivisions()
        << ",\n  enable_premature_termination=" << enable_premature_termination()

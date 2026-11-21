@@ -15,9 +15,25 @@ Although independently maintained and usable, this repository is also part of th
 
 Public headers: `include/evolution`; C++ implementations: `src`; C++ tests: `tests`; Python bindings and smoke tests: `python`; pinned dependencies: `ss`. The umbrella header is `include/ariadne-evolution.hpp`.
 
+The concrete evolvers are `ContinuousTimeEvolver` (`continuous_time_evolver.hpp`),
+`DiscreteTimeEvolver` (`discrete_time_evolver.hpp`) and
+`HybridContinuousTimeEvolver` (`hybrid_continuous_time_evolver.hpp`). The previous
+class names and headers are removed. Discrete maps retain their own evolution
+step; numerical integration is shared by continuous evolution and hybrid modes.
+
+Ordinary and hybrid flows use `ValidatedIntegrationRequest` with a maximum step
+and consume `ValidatedIntegrationStep`. The continuous enclosure bridge applies
+the reach and endpoint certificates independently, preserving constraints,
+auxiliary outputs, existing parameter coordinates, absolute time and dwell time.
+The preconditioned solver retains its carried state and separately computed
+endpoint. This bridge currently accepts one autonomous reach patch with local
+time and an endpoint map; it explicitly rejects unsupported representations.
+The inclusion loop still awaits migration into `ContinuousTimeEvolver`, including
+removal of its competitive approximation scheduler.
+
 Hybrid evolution separates numerical step results from execution and Orbit
 accumulation. The default `FlatHybridEvolutionBackendFactory` retains the current
-workload scheduling; `HybridEvolverBase::set_evolution_backend_factory()` selects
+workload scheduling; `HybridContinuousTimeEvolverBase::set_evolution_backend_factory()` selects
 another factory without changing the `orbit()` overloads or return type.
 `TreeHybridEvolutionBackendFactory` records trajectory histories and genealogy
 backed by `DerivationTree`. Its single checkpoint scheduler supports parent,
@@ -31,7 +47,7 @@ design](doc/evolution_tree_design.md) for the current API and deferred operation
 The `multifunction` branch uses the ordinary dynamics declarations
 `OrdinaryDifferentialAlgebraicEquation` (`system/odae.hpp`) and
 `OrdinaryDifferentialAlgebraicInclusion` (`system/odai.hpp`).
-`VectorFieldEvolver` and `VectorFieldSimulator` currently accept autonomous
+`ContinuousTimeEvolver` and `VectorFieldSimulator` currently accept autonomous
 equations without constant parameters; `DifferentialInclusionEvolver` accepts
 autonomous structured inclusions with free inputs and no constant parameters. Their constructors
 reject explicit time, constant parameters and, for the inclusion evolver,
@@ -516,10 +532,10 @@ still execute (including explicit high-verbosity fixture variants); only the
 terminal output is discarded, preserving logging-code coverage.
 
 ```bash
-cmake --build build-release --target test_hybrid_evolver
-ctest --test-dir build-release -R '^test_hybrid_evolver$' --output-on-failure
-./build-release/tests/test_hybrid_evolver --concise
-./build-release/tests/test_hybrid_evolver --full
+cmake --build build-release --target test_hybrid_continuous_time_evolver
+ctest --test-dir build-release -R '^test_hybrid_continuous_time_evolver$' --output-on-failure
+./build-release/tests/test_hybrid_continuous_time_evolver --concise
+./build-release/tests/test_hybrid_continuous_time_evolver --full
 ```
 
 The three header-only compilation tests do not use the testing framework and

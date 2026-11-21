@@ -3,7 +3,7 @@ import pyariadne_evolution as a
 def test_evolution_bindings():
     names = ("Semantics", "Enclosure", "VectorFieldSimulator",
              "OrdinaryDifferentialAlgebraicEquation", "OrdinaryDifferentialAlgebraicInclusion",
-             "IteratedMapEvolver", "IteratedMapEvolverConfiguration", "VectorFieldEvolver", "HybridTime",
+             "DiscreteTimeEvolver", "DiscreteTimeEvolverConfiguration", "ContinuousTimeEvolver", "HybridTime",
              "HybridEnclosure", "HybridSimulator", "recombine",
              "EnclosureRecombinerInterface", "EnclosureRecombiner",
              "ReferenceEnclosureRecombiner", "EnclosureRecombinationContext",
@@ -13,12 +13,14 @@ def test_evolution_bindings():
     assert a.Semantics.UPPER != a.Semantics.LOWER
     assert not hasattr(a, "VectorField")
     assert not hasattr(a, "DifferentialInclusion")
+    for old_name in ("VectorFieldEvolver", "IteratedMapEvolver", "GeneralHybridEvolver"):
+        assert not hasattr(a, old_name)
 
 
 def test_iterated_map_configuration():
-    from pyariadne_evolution import IteratedMap, IteratedMapEvolver, RealVariable, next
+    from pyariadne_evolution import IteratedMap, DiscreteTimeEvolver, RealVariable, next
     x = RealVariable("x")
-    evolver = IteratedMapEvolver(IteratedMap([next(x) << x / 2]))
+    evolver = DiscreteTimeEvolver(IteratedMap([next(x) << x / 2]))
     config = evolver.configuration()
     config.set_maximum_enclosure_radius(1.0)
     config.set_enable_subdivisions(False)
@@ -27,7 +29,7 @@ def test_iterated_map_configuration():
 
 def test_continuous_recombination():
     x = a.RealVariable("x")
-    evolver = a.IteratedMapEvolver(a.IteratedMap([a.next(x) << x / 2]))
+    evolver = a.DiscreteTimeEvolver(a.IteratedMap([a.next(x) << x / 2]))
     evolver.configuration().set_maximum_enclosure_radius(1.0)
     initial = a.RealExpressionBoundedConstraintSet(
         [(a.dec_(0.9) <= x) & (x <= a.dec_(1.1))], [])
@@ -72,7 +74,7 @@ def test_ordinary_equation_consumers():
     equation = a.OrdinaryDifferentialAlgebraicEquation(
         [a.dot(x) << 1], [a.let(output) << (2*x)])
     integrator = a.TaylorPicardIntegrator(1e-5)
-    evolver = a.VectorFieldEvolver(equation, integrator)
+    evolver = a.ContinuousTimeEvolver(equation, integrator)
     initial = a.RealExpressionBoundedConstraintSet([(0 <= x) & (x <= 0)], [])
     orbit = evolver.orbit(initial, a.Real(1)/16, a.Semantics.UPPER)
     assert orbit.final().size() > 0
@@ -87,7 +89,7 @@ def test_ordinary_equation_consumers():
     )
     for field in unsupported:
         with unittest.TestCase().assertRaises(ValueError):
-            a.VectorFieldEvolver(field, integrator)
+            a.ContinuousTimeEvolver(field, integrator)
         with unittest.TestCase().assertRaises(ValueError):
             a.VectorFieldSimulator(field)
 

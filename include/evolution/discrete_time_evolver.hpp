@@ -1,5 +1,5 @@
 /***************************************************************************
- *            iterated_map_evolver.hpp
+ *            discrete_time_evolver.hpp
  *
  *  Copyright  2007-20  Alberto Casagrande, Pieter Collins
  *
@@ -22,12 +22,12 @@
  *  along with Ariadne Evolution. If not, see <https://www.gnu.org/licenses/>.
  */
 
-/** @file evolution/iterated_map_evolver.hpp
+/** @file evolution/discrete_time_evolver.hpp
  *  @brief Evolution by iteration of discrete-time maps.
  */
 
-#ifndef ARIADNE_ITERATED_MAP_EVOLVER_HPP
-#define ARIADNE_ITERATED_MAP_EVOLVER_HPP
+#ifndef ARIADNE_DISCRETE_TIME_EVOLVER_HPP
+#define ARIADNE_DISCRETE_TIME_EVOLVER_HPP
 
 #include <iostream>
 #include <list>
@@ -51,16 +51,16 @@ class IteratedMap;
 template<class ES>
 class Orbit;
 
-/** @brief IteratedMapEvolverConfiguration represents evolution by iteration of discrete-time maps. */
-class IteratedMapEvolverConfiguration;
+/** @brief DiscreteTimeEvolverConfiguration represents evolution by iteration of discrete-time maps. */
+class DiscreteTimeEvolverConfiguration;
 
 /*! \brief A class for computing the evolution of an iterated map.
  */
-class IteratedMapEvolver
+class DiscreteTimeEvolver
     : public EvolverInterface<IteratedMap, LabelledEnclosure, Integer> {
   public:
     typedef EvolverInterface<IteratedMap, LabelledEnclosure, Integer> Interface;
-    typedef IteratedMapEvolverConfiguration ConfigurationType;
+    typedef DiscreteTimeEvolverConfiguration ConfigurationType;
     typedef IteratedMap SystemType;
     typedef Integer TimeType;
     typedef Integer TerminationType;
@@ -72,10 +72,10 @@ class IteratedMapEvolver
 
   public:
     //! \brief Default constructor.
-    IteratedMapEvolver(const SystemType& system);
+    DiscreteTimeEvolver(const SystemType& system);
 
     /*! \brief Make a dynamically-allocated copy. */
-    IteratedMapEvolver* clone() const { return new IteratedMapEvolver(*this); }
+    DiscreteTimeEvolver* clone() const { return new DiscreteTimeEvolver(*this); }
 
     /* \brief Get the internal system. */
     virtual const SystemType& system() const { return *_system; }
@@ -117,15 +117,15 @@ class IteratedMapEvolver
     SharedPointer<ConfigurationType> _configuration;
 };
 
-//! \brief Configuration for a IteratedMapEvolver, essentially to control accuracy of evolution.
-class IteratedMapEvolverConfiguration : public ConfigurationInterface {
+//! \brief Configuration for a DiscreteTimeEvolver, essentially to control accuracy of evolution.
+class DiscreteTimeEvolverConfiguration : public ConfigurationInterface {
   public:
     typedef double RealType;
 
     //! \brief Default constructor gives reasonable values.
-    IteratedMapEvolverConfiguration();
+    DiscreteTimeEvolverConfiguration();
 
-    virtual ~IteratedMapEvolverConfiguration() = default;
+    virtual ~DiscreteTimeEvolverConfiguration() = default;
 
   private:
     //! \brief The maximum allowable radius of a basic set.
@@ -155,4 +155,4 @@ class IteratedMapEvolverConfiguration : public ConfigurationInterface {
 
 } // namespace Ariadne
 
-#endif // ARIADNE_ITERATED_MAP_EVOLVER_HPP
+#endif // ARIADNE_DISCRETE_TIME_EVOLVER_HPP

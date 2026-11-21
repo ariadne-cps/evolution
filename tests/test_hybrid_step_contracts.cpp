@@ -26,7 +26,7 @@
  *  @brief Test hybrid step contracts behavior and numerical invariants.
  */
 
-#include "evolution/hybrid_evolver.hpp"
+#include "evolution/hybrid_continuous_time_evolver.hpp"
 #include "integration/integrator.hpp"
 #include "log_verbosity_scope.hpp"
 #include "logging/test_runner.hpp"
@@ -36,14 +36,14 @@
 
 using namespace Ariadne;
 
-class StepProbe : public GeneralHybridEvolver {
+class StepProbe : public HybridContinuousTimeEvolver {
   public:
-    using GeneralHybridEvolver::_estimate_timing;
-    using GeneralHybridEvolver::GeneralHybridEvolver;
-    using HybridEvolverBase::_apply_evolve_step;
-    using HybridEvolverBase::_apply_guard;
-    using HybridEvolverBase::_apply_guard_step;
-    using HybridEvolverBase::_compute_flow;
+    using HybridContinuousTimeEvolver::_estimate_timing;
+    using HybridContinuousTimeEvolver::HybridContinuousTimeEvolver;
+    using HybridContinuousTimeEvolverBase::_apply_evolve_step;
+    using HybridContinuousTimeEvolverBase::_apply_guard;
+    using HybridContinuousTimeEvolverBase::_apply_guard_step;
+    using HybridContinuousTimeEvolverBase::_compute_flow;
 };
 
 class TestHybridStepContracts : public Testing::ContextFixture {

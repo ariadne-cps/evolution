@@ -1,5 +1,5 @@
 /***************************************************************************
- *            hybrid_evolver_interface.hpp
+ *            hybrid_continuous_time_evolver_interface.hpp
  *
  *  Copyright  2011-20  Luca Geretti
  *
@@ -22,12 +22,12 @@
  *  along with Ariadne Evolution. If not, see <https://www.gnu.org/licenses/>.
  */
 
-/** @file evolution/hybrid_evolver_interface.hpp
+/** @file evolution/hybrid_continuous_time_evolver_interface.hpp
  *  @brief Interface for numerical hybrid evolution.
  */
 
-#ifndef ARIADNE_HYBRID_EVOLVER_INTERFACE_HPP
-#define ARIADNE_HYBRID_EVOLVER_INTERFACE_HPP
+#ifndef ARIADNE_HYBRID_CONTINUOUS_TIME_EVOLVER_INTERFACE_HPP
+#define ARIADNE_HYBRID_CONTINUOUS_TIME_EVOLVER_INTERFACE_HPP
 
 #include "evolution/evolver_interface.hpp"
 #include "evolution/hybrid_orbit.hpp"
@@ -48,11 +48,11 @@ class HybridEnclosure;
 //! \ingroup HybridDynamicsSubModule
 //! \brief Interface for hybrid evolvers using HybridEnclosure as the enclosure type.
 //! \details The class is loggable in order to allow verbosity tuning at the analyser layer.
-class HybridEvolverInterface
+class HybridContinuousTimeEvolverInterface
     : public EvolverInterface<HybridAutomatonInterface, HybridEnclosure, HybridTerminationCriterion> {
   public:
     //! \brief Make a dynamically-allocated copy.
-    virtual HybridEvolverInterface* clone() const = 0;
+    virtual HybridContinuousTimeEvolverInterface* clone() const = 0;
 
     //!@{
     //! \name Main evolution functions.
@@ -84,17 +84,17 @@ class HybridEvolverInterface
 //! \ingroup AnalysisModule
 //! \ingroup HybridDynamicsSubModule
 //! \brief Factory for hybrid evolver interface classes.
-class HybridEvolverFactoryInterface
+class HybridContinuousTimeEvolverFactoryInterface
     : public EvolverFactoryInterface<HybridAutomatonInterface, HybridEnclosure, HybridTerminationCriterion> {
   public:
-    ~HybridEvolverFactoryInterface() override = default;
+    ~HybridContinuousTimeEvolverFactoryInterface() override = default;
 
     //! \brief Create a copy of the factory.
-    virtual HybridEvolverFactoryInterface* clone() const override = 0;
+    virtual HybridContinuousTimeEvolverFactoryInterface* clone() const override = 0;
     //! \brief Create a hybrid evolver interface object around a \a system.
-    virtual HybridEvolverInterface* create(const HybridAutomatonInterface& system) const override = 0;
+    virtual HybridContinuousTimeEvolverInterface* create(const HybridAutomatonInterface& system) const override = 0;
 };
 
 } // namespace Ariadne
 
-#endif // ARIADNE_HYBRID_EVOLVER_INTERFACE_HPP
+#endif // ARIADNE_HYBRID_CONTINUOUS_TIME_EVOLVER_INTERFACE_HPP

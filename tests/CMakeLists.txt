@@ -5,7 +5,7 @@ set(UNIT_TESTS
     test_hybrid_time
     test_hybrid_enclosure
     test_enclosure_recorded_draw
-    test_hybrid_evolver
+    test_hybrid_continuous_time_evolver
     test_hybrid_evolution_backend
     test_hybrid_evolution_tree
     test_hybrid_step_contracts
@@ -20,12 +20,13 @@ set(UNIT_TESTS
     test_enclosure_operations
     test_enclosure_recombination
     test_enclosure_precision
-    test_iterated_map_evolver
-    test_vector_field_evolver
-    test_vector_field_evolver_header
+    test_discrete_time_evolver
+    test_continuous_time_evolver
+    test_continuous_time_evolver_header
     test_vector_field_simulator
     test_evolution_dependency_boundary
     test_ordinary_dynamics_contract
+    test_continuous_integration
 )
 foreach(TEST IN LISTS UNIT_TESTS)
     add_executable(${TEST} ${TEST}.cpp)
@@ -38,7 +39,7 @@ endforeach()
 # MSVC's unoptimized Debug runtime. Keep their complete test coverage while
 # allowing more time than the workflow's default 240-second CTest timeout.
 if(WIN32 AND CMAKE_BUILD_TYPE STREQUAL "Debug")
-    set_tests_properties(test_hybrid_evolver test_vector_field_evolver
+    set_tests_properties(test_hybrid_continuous_time_evolver test_continuous_time_evolver
         PROPERTIES TIMEOUT 600)
 endif()
 

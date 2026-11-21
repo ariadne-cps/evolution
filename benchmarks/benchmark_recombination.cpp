@@ -42,7 +42,7 @@
 #include <vector>
 
 #include "evolution/enclosure_recombiner.hpp"
-#include "evolution/hybrid_evolver.hpp"
+#include "evolution/hybrid_continuous_time_evolver.hpp"
 #include "evolution/hybrid_orbit.hpp"
 #include "evolution/hybrid_time.hpp"
 #include "integration/integrator.hpp"
@@ -274,7 +274,7 @@ HybridAutomaton make_system(const Scenario& scenario, DiscreteLocation source,
     return system;
 }
 
-void configure(GeneralHybridEvolver& evolver, const Options& options) {
+void configure(HybridContinuousTimeEvolver& evolver, const Options& options) {
     evolver.set_integrator(TaylorPicardIntegrator(StepMaximumError(options.accuracy)));
     evolver.configuration().set_maximum_step_size(ApproximateDouble(options.step));
     // Prevent radius-driven splitting from dominating the first baseline.
@@ -285,7 +285,7 @@ List<Enclosure> generate(const Scenario& scenario, const Options& options,
                          DiscreteLocation source, DiscreteLocation target,
                          DiscreteEvent jump, RealVariable x, RealVariable y,
                          bool verbose, SizeType& generated, SizeType& eligible) {
-    GeneralHybridEvolver evolver(make_system(scenario, source, target, jump, x, y));
+    HybridContinuousTimeEvolver evolver(make_system(scenario, source, target, jump, x, y));
     configure(evolver, options);
     const HybridBoxSet initial = scenario.kind == EventKind::URGENT
                                    ? HybridBoxSet(source, {Real(-2) <= x <= Real(-1), Real(-1 / 2_q) <= y <= Real(1 / 2_q)})
@@ -527,7 +527,7 @@ struct Measurement {
 };
 
 Measurement measure(const List<Enclosure>& original,
-                    const GeneralHybridEvolver& continuation,
+                    const HybridContinuousTimeEvolver& continuation,
                     const HybridTerminationCriterion& stop,
                     DiscreteLocation target, RealSpace space,
                     double final_time, bool urgent, bool profile_recombine) {
@@ -752,7 +752,7 @@ ScenarioSummary run_scenario(const Scenario& scenario, const Options& options,
 
     HybridAutomaton target_system("recombination-continuation");
     target_system.new_mode(target, {dot(x) = 1 + sqr(y), dot(y) = 1});
-    GeneralHybridEvolver continuation(target_system);
+    HybridContinuousTimeEvolver continuation(target_system);
     configure(continuation, options);
     const HybridTerminationCriterion stop(Real(ExactDouble(scenario.continuation_horizon)), Integer(8));
 

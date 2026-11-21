@@ -8,8 +8,8 @@
 #include <stdexcept>
 #include <type_traits>
 
+#include "evolution/continuous_time_evolver.hpp"
 #include "evolution/differential_inclusion_evolver.hpp"
-#include "evolution/vector_field_evolver.hpp"
 #include "evolution/vector_field_simulator.hpp"
 #include "function/taylor_model.hpp"
 #include "integration/integrator.hpp"
@@ -21,7 +21,7 @@
 
 using namespace Ariadne;
 
-static_assert(std::is_same_v<VectorFieldEvolver::SystemType, OrdinaryDifferentialAlgebraicEquation>);
+static_assert(std::is_same_v<ContinuousTimeEvolver::SystemType, OrdinaryDifferentialAlgebraicEquation>);
 static_assert(std::is_same_v<VectorFieldSimulator::SystemType, OrdinaryDifferentialAlgebraicEquation>);
 static_assert(std::is_same_v<DifferentialInclusionEvolver::SystemType, OrdinaryDifferentialAlgebraicInclusion>);
 
@@ -37,7 +37,7 @@ class TestOrdinaryDynamicsContract : public Ariadne::Testing::ContextFixture {
         for (const auto& equation: {timed, parameterised}) {
             ARIADNE_TESTING_EXPECT_EQUAL(equation.dimension(), 1u);
             ARIADNE_TESTING_EXPECT_EQUAL(equation.function().argument_size(), 2u);
-            ARIADNE_TESTING_EXPECT_THROWS(std::invalid_argument, VectorFieldEvolver(equation, integrator));
+            ARIADNE_TESTING_EXPECT_THROWS(std::invalid_argument, ContinuousTimeEvolver(equation, integrator));
             ARIADNE_TESTING_EXPECT_THROWS(std::invalid_argument, (void)VectorFieldSimulator(equation));
         }
     }

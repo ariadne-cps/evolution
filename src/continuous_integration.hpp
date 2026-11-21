@@ -15,10 +15,11 @@ namespace EvolutionDetail {
 enum class IntegrationStepCoordinates { STATE,
                                         PARAMETERS };
 
-/** @brief Apply a common autonomous step to separate reach and endpoint copies.
+/** @brief Apply a structured validated step to separate reach and endpoint copies.
  *  Preserves constraints, auxiliary outputs, time and parameter dependence.
- *  This bridge currently requires one local-time reach patch and an endpoint
- *  map. Unsupported representations fail before either enclosure is changed.
+ *  This bridge requires one reach patch and an endpoint map. An absolute-time
+ *  reach argument is rebased to local time without discarding fixed-parameter
+ *  dependencies. Unsupported representations fail without mutating inputs.
  */
 void apply_integration_step(Enclosure& reach, Enclosure& evolved,
                             const ValidatedIntegrationStep& step, IntegrationStepCoordinates coordinates);

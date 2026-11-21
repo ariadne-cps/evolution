@@ -28,6 +28,7 @@
 
 #include "evolution/continuous_time_evolver.hpp"
 
+#include <algorithm>
 #include <array>
 #include <stdexcept>
 
@@ -190,8 +191,46 @@ Dyadic limit_step_to_remaining_time(const Dyadic& configured, const Dyadic& rema
 
 } // namespace EvolutionDetail
 
-ContinuousTimeEvolver::ContinuousTimeEvolver(const SystemType& system, const IntegratorInterface& i)
-    : _system(system.clone()), _integrator(i.clone()), _configuration(new ConfigurationType()) {
+ContinuousDynamics::ContinuousDynamics(const OrdinaryDifferentialAlgebraicEquation& system)
+    : _declaration(SharedPointer<const OrdinaryDifferentialAlgebraicEquation>(system.clone())) {}
+ContinuousDynamics::ContinuousDynamics(const OrdinaryDifferentialAlgebraicInclusion& system)
+    : _declaration(SharedPointer<const OrdinaryDifferentialAlgebraicInclusion>(system.clone())) {}
+ContinuousDynamics* ContinuousDynamics::clone() const { return new ContinuousDynamics(*this); }
+SizeType ContinuousDynamics::dimension() const {
+    return std::visit([](const auto& system) { return system->dimension(); }, _declaration);
+}
+RealSpace ContinuousDynamics::state_space() const {
+    return std::visit([](const auto& system) -> RealSpace { return system->state_space(); }, _declaration);
+}
+RealSpace ContinuousDynamics::auxiliary_space() const {
+    const auto* value = equation();
+    return value != nullptr ? value->auxiliary_space() : RealSpace{};
+}
+RealSpace ContinuousDynamics::state_auxiliary_space() const {
+    const auto* value = equation();
+    return value != nullptr ? value->state_auxiliary_space() : state_space();
+}
+const RealSpace& ContinuousDynamics::parameter_space() const {
+    return std::visit([](const auto& system) -> const RealSpace& { return system->parameter_space(); }, _declaration);
+}
+const BoxDomainType& ContinuousDynamics::constant_parameter_domain() const {
+    return std::visit([](const auto& system) -> const BoxDomainType& { return system->constant_parameter_domain(); }, _declaration);
+}
+bool ContinuousDynamics::has_explicit_time() const {
+    return std::visit([](const auto& system) { return system->has_explicit_time(); }, _declaration);
+}
+const OrdinaryDifferentialAlgebraicEquation* ContinuousDynamics::equation() const {
+    const auto* value = std::get_if<SharedPointer<const OrdinaryDifferentialAlgebraicEquation>>(&_declaration);
+    return value != nullptr ? value->get() : nullptr;
+}
+const OrdinaryDifferentialAlgebraicInclusion* ContinuousDynamics::inclusion() const {
+    const auto* value = std::get_if<SharedPointer<const OrdinaryDifferentialAlgebraicInclusion>>(&_declaration);
+    return value != nullptr ? value->get() : nullptr;
+}
+
+ContinuousTimeEvolver::ContinuousTimeEvolver(const OrdinaryDifferentialAlgebraicEquation& system, const IntegratorInterface& i)
+    : _system(new SystemType(system)), _integrator(i.clone()),
+      _function_factory(dynamic_cast<const IntegratorBase&>(i).function_factory()), _configuration(new ConfigurationType()) {
     if ((system.has_explicit_time() || system.parameter_space().dimension() != 0u) &&
         system.auxiliary_space().size() != 0u) {
         // Enclosure currently represents auxiliary outputs as state-only
@@ -206,12 +245,125 @@ ContinuousTimeEvolver::ContinuousTimeEvolver(const SystemType& system, const Int
     }
 }
 
+ContinuousTimeEvolver::ContinuousTimeEvolver(const OrdinaryDifferentialAlgebraicInclusion& system,
+                                             const IntegratorBase& integrator,
+                                             const InputApproximation& reach, const InputApproximation& evolve)
+    : _system(new SystemType(system)),
+      _inclusion_integrator(new SelectedParametricMultifunctionIntegrator(integrator, reach, evolve)),
+      _function_factory(integrator.function_factory()), _configuration(new ConfigurationType()) {
+    if (dynamic_cast<const PreconditionedGradedTaylorSeriesIntegrator*>(&integrator) != nullptr) {
+        throw std::invalid_argument("Preconditioned continuous integration does not support inclusion input approximations");
+    }
+    if (system.has_input_function() && system.number_of_inputs() == 0u) {
+        throw std::invalid_argument("The selected high-order inclusion method requires free inputs; select a capable solver explicitly");
+    }
+}
+
+ContinuousTimeEvolver::ContinuousTimeEvolver(const OrdinaryDifferentialAlgebraicInclusion& system,
+                                             const FirstOrderMultifunctionIntegrator& integrator)
+    : _system(new SystemType(system)), _box_integrator(new FirstOrderMultifunctionIntegrator(integrator)),
+      _function_factory(new TaylorFunctionFactory(ThresholdSweeper<FloatDP>(dp, 1e-10))),
+      _configuration(new ConfigurationType()) {}
+
+namespace {
+ValidatedIntegrationStep at_autonomous_time(const ValidatedIntegrationStep& step, const StepSizeType& time) {
+    // Autonomous fields are time-translation invariant. Keep the numerical
+    // patch arguments unchanged and record their offset from physical time.
+    return ValidatedIntegrationStep(step.time_step(), step.reach(), step.evolve(), {}, step.reach_models(),
+                                    step.has_evolve_model() ? std::optional(step.evolve_model()) : std::nullopt,
+                                    time, step.reach_time_index(), false, step.constant_parameter_domain(),
+                                    step.reach_time_offset() + time - step.initial_time());
+}
+
+Pair<StepSizeType, UpperBoxType> interval_field_bound(
+    const ValidatedIntervalTaylorBoxMultifunctionDP& field, const ExactBoxType& initial, StepSizeType h,
+    bool structured) {
+    const auto domain = field.domain();
+    if (!definitely(subset(initial, domain))) {
+        throw std::invalid_argument("Inclusion state lies outside the interval model's domain");
+    }
+    const UpperBoxType bound(domain);
+    const auto values = [&]() -> UpperBoxType {
+        if (structured) {
+            // Polynomial expansion can lose coefficient correlations. Bound
+            // the actual numerical input field used by the selected solver,
+            // which can be wider than the original pointwise box extension.
+            const auto data = field.inclusion_integrator_field();
+            return UpperBoxType(apply(data.field, product(bound, UpperBoxType(data.inputs))));
+        }
+        return field.evaluate(bound);
+    }();
+    for (SizeType attempt = 0u; attempt != 64u; ++attempt) {
+        UpperBoxType tube(initial.dimension());
+        for (SizeType i = 0u; i != initial.dimension(); ++i) {
+            tube[i] = UpperIntervalType(initial[i]) + UpperIntervalType(0u, h) * values[i];
+        }
+        if (definitely(inside(tube, domain))) {
+            return {h, bound};
+        }
+        h = EvolutionDetail::limit_step_to_remaining_time(h, h / 2u);
+    }
+    throw BoundingNotFoundException("Cannot certify an inclusion step inside the interval model's domain");
+}
+} // namespace
+
+ValidatedIntegrationStep ContinuousTimeEvolver::_inclusion_step(
+    const EnclosureType& current, const TimeStepType& time, const StepSizeType& maximum_step) const {
+    const auto& inclusion = *this->system().inclusion();
+    const auto initial = cast_exact_box(current.euclidean_set().bounding_box());
+    const auto run = [&](const ValidatedIntegrationRequest& request) {
+        if (this->_inclusion_integrator) {
+            return StructuredInclusionStepIntegratorAdapter(*this->_inclusion_integrator).step(request);
+        }
+        return MultiflowStepIntegratorAdapter(*this->_box_integrator).step(request);
+    };
+    if (!inclusion.has_input_function()) {
+        const ValidatedIntervalTaylorBoxMultifunctionDP field(inclusion.interval_taylor_multifunction());
+        const auto bounded = interval_field_bound(field, initial, maximum_step, this->_inclusion_integrator != nullptr);
+        return at_autonomous_time(run(ValidatedIntegrationRequest(field, initial, bounded.first, bounded.second)), time);
+    }
+    const SizeType np = inclusion.parameter_space().dimension();
+    const auto parameters = constant_parameter_coordinates(current, np);
+    const auto parameter_domain = cast_exact_box(UpperBoxType(parameters.range()));
+    const auto uncertain_arguments = product(parameter_domain, inclusion.inputs());
+    EulerBounder bounder;
+    auto bounded = inclusion.has_explicit_time()
+                     ? bounder.compute(inclusion.function(), initial, time, uncertain_arguments, suggest(maximum_step))
+                     : bounder.compute(inclusion.function(), initial, uncertain_arguments, suggest(maximum_step));
+    // Refinement can make Euler's bound coincide with the tube. The chosen
+    // inclusion solver still verifies strict containment on this padded box.
+    for (SizeType i = 0u; i != bounded.second.dimension(); ++i) {
+        const FloatDPUpperBound padding = cast_positive(mag(bounded.second[i]) + FloatDPUpperBound(1u, dp)) *
+                                          cast_positive(FloatDPUpperBound(0x1p-40_x, dp));
+        bounded.second[i] = widen(bounded.second[i], padding);
+    }
+    // The timed box capability also accepts a zero-dimensional input domain.
+    if (inclusion.has_explicit_time() || np != 0u || inclusion.number_of_inputs() == 0u) {
+        auto function = inclusion.function();
+        if (!inclusion.has_explicit_time()) {
+            const SizeType n = inclusion.dimension();
+            const auto coordinates = EffectiveScalarMultivariateFunction::coordinates(function.argument_size() + 1u);
+            List<EffectiveScalarMultivariateFunction> arguments;
+            for (SizeType i = 0u; i != function.argument_size(); ++i) {
+                arguments.append(coordinates[i < n ? i : i + 1u]);
+            }
+            function = compose(function, EffectiveVectorMultivariateFunction(arguments));
+        }
+        const ValidatedTimedInputFieldBoxAdapterDP field(
+            function, cast_exact_box(bounded.second), IntervalDomainType(time, time + bounded.first),
+            parameter_domain, inclusion.inputs());
+        return run(ValidatedIntegrationRequest(field, initial, time, bounded.first, parameter_domain, bounded.second));
+    }
+    const ValidatedInputFieldBoxAdapterDP field(inclusion.function(), inclusion.inputs(), cast_exact_box(bounded.second));
+    return at_autonomous_time(run(ValidatedIntegrationRequest(field, initial, bounded.first, bounded.second)), time);
+}
+
 auto ContinuousTimeEvolver::enclosure(const ExactBoxType& box) const -> EnclosureType {
     return EnclosureType(box, this->system().state_space(), EnclosureConfiguration(this->function_factory()));
 }
 
 auto ContinuousTimeEvolver::function_factory() const -> const FunctionFactoryType& {
-    return std::dynamic_pointer_cast<const IntegratorBase>(this->_integrator)->function_factory();
+    return this->_function_factory;
 }
 
 auto ContinuousTimeEvolver::orbit(const RealVariablesBox& initial_set, const TimeType& time, Semantics semantics) const -> Orbit<EnclosureType> {
@@ -220,7 +372,7 @@ auto ContinuousTimeEvolver::orbit(const RealVariablesBox& initial_set, const Tim
     // zero-output auxiliary function with arguments [state,time]. Enclosure
     // already has a state-arity zero-output mapping, so leave it unchanged.
     if (this->system().auxiliary_space().size() != 0u) {
-        enclosure.set_auxiliary(this->system().auxiliary_space(), this->system().auxiliary_function());
+        enclosure.set_auxiliary(this->system().auxiliary_space(), this->system().equation()->auxiliary_function());
     }
     return orbit(enclosure, time, semantics);
 }
@@ -231,7 +383,7 @@ auto ContinuousTimeEvolver::orbit(const RealExpressionBoundedConstraintSet& init
     // zero-output auxiliary function with arguments [state,time]. Enclosure
     // already has a state-arity zero-output mapping, so leave it unchanged.
     if (this->system().auxiliary_space().size() != 0u) {
-        enclosure.set_auxiliary(this->system().auxiliary_space(), this->system().auxiliary_function());
+        enclosure.set_auxiliary(this->system().auxiliary_space(), this->system().equation()->auxiliary_function());
     }
     return orbit(enclosure, time, semantics);
 }
@@ -240,6 +392,9 @@ auto ContinuousTimeEvolver::orbit(const EnclosureType& initial_set, const TimeTy
     LOGGING_SCOPE_CREATE
     ARIADNE_PRECONDITION(this->system().state_auxiliary_space() == initial_set.state_auxiliary_space())
 
+    if (this->system().inclusion() != nullptr && semantics != Semantics::UPPER) {
+        throw std::invalid_argument("Continuous inclusion evolution requires UPPER semantics");
+    }
     EnclosureType initial = initial_set;
     if (this->system().parameter_space().dimension() != 0u) {
         if (semantics == Semantics::LOWER) {
@@ -329,21 +484,28 @@ Void ContinuousTimeEvolver::
     LOGGING_PRINTLN("box = " << current_set.bounding_box())
     LOGGING_PRINTLN("radius = " << current_set.euclidean_set().bounding_box().radius())
 
-    const IntegratorInterface* integrator = this->_integrator.operator->();
+    const IntegratorInterface* integrator = this->_integrator.get();
     const auto* preconditioned_integrator =
         dynamic_cast<const PreconditionedGradedTaylorSeriesIntegrator*>(integrator);
 
     // The preconditioned integrator carries the local-initial Taylor mapping
     // across steps. Standard reconditioning would deliberately discard part of
     // that dependence, so it is bypassed on this specialised path.
-    if (preconditioned_integrator == nullptr && this->_configuration->enable_reconditioning() && possibly(norm(current_set.state_function().errors()) > this->_configuration->maximum_spacial_error())) {
+    const SizeType protected_parameters = static_cast<SizeType>(std::count(
+        current_set.variable_kinds().begin(), current_set.variable_kinds().end(), EnclosureVariableKind::PARAMETER));
+    const SizeType parameter_limit =
+        (current_set.configuration().reconditioning_num_blocks() + 1u) * current_set.state_dimension() +
+        protected_parameters;
+    const bool too_many_parameters = this->system().inclusion() != nullptr &&
+                                     current_set.number_of_parameters() > parameter_limit;
+    if (preconditioned_integrator == nullptr && this->_configuration->enable_reconditioning() &&
+        (too_many_parameters || possibly(norm(current_set.state_function().errors()) > this->_configuration->maximum_spacial_error()))) {
         current_set.recondition();
         workload.append({current_time, current_set});
         return;
     }
 
     /////////////// Main Evolution ////////////////////////////////
-    const FunctionType dynamic = equation_field(*_system);
 
     // Limit the next step to the remaining evolution horizon. Evolution
     // horizons are Real, while integration steps are exact Dyadic values:
@@ -378,141 +540,153 @@ Void ContinuousTimeEvolver::
     EvolutionDetail::AppliedIntegrationStep applied{{}, current_set, false};
     SharedPointer<PreconditionedTaylorSeriesState> next_preconditioned_state;
 
-    const SizeType parameter_count = _system->parameter_space().dimension();
-    if (_system->has_explicit_time() || parameter_count != 0u) {
-        // Bound the equation over absolute time and its fixed-parameter domain.
-        // In particular, the bound is a certified enclosure, not an
-        // unverified estimate constructed from the initial-state box.
-        EulerBounder bounder;
-        StepSizeType bounded_step;
-        UpperBoxType bounding_box;
-        const auto parameters = constant_parameter_coordinates(current_set, parameter_count);
-        const auto parameter_domain = cast_exact_box(UpperBoxType(parameters.range()));
-        make_lpair(bounded_step, bounding_box) = bounder.compute(
-            dynamic, current_set_bounds, current_time, parameter_domain,
-            suggest(maximum_step_size));
-        const FlowStepIntegratorAdapter step_integrator(*integrator);
-        const auto common_step = step_integrator.step(ValidatedIntegrationRequest(
-            dynamic, current_set_bounds, current_time, bounded_step,
-            parameter_domain, bounding_box));
+    if (this->system().inclusion() != nullptr) {
+        const auto common_step = this->_inclusion_step(current_set, current_time, maximum_step_size);
         step_size = common_step.time_step();
+        const auto parameters = constant_parameter_coordinates(current_set, this->system().parameter_space().dimension());
         applied = EvolutionDetail::apply_integration_step(
-            current_set, common_step, join(current_set.state_function(), parameters), semantics);
-    } else if (preconditioned_integrator != nullptr) {
-        if (preconditioned_integrator->diagnostics() && result->reach_size() == 1u && preconditioned_integrator->preconditioning() == TaylorSeriesPreconditioning::QR) {
-            PreconditionedGradedTaylorSeriesIntegrator identity_probe =
-                *preconditioned_integrator;
-            identity_probe.set_preconditioning(TaylorSeriesPreconditioning::IDENTITY);
-            identity_probe.set_diagnostics(true);
-
-            PreconditionedGradedTaylorSeriesIntegrator qr_probe =
-                *preconditioned_integrator;
-            qr_probe.set_preconditioning(TaylorSeriesPreconditioning::QR);
-            qr_probe.set_diagnostics(true);
-
-            auto identity_state =
-                identity_probe.precondition(current_set.state_function());
-            auto qr_state =
-                qr_probe.precondition(current_set.state_function());
-
-            std::cerr << "[PreconditionedSecondStepState]"
-                      << " physical_error=" << current_set.state_function().error()
-                      << " physical_range=" << current_set.state_function().range()
-                      << " identity_domy=" << identity_state.local_domain()
-                      << " identity_A=" << identity_state.linear_map()
-                      << " identity_normalized_error=" << identity_state.normalised_mapping().error()
-                      << " qr_domy=" << qr_state.local_domain()
-                      << " qr_A=" << qr_state.linear_map()
-                      << " qr_normalized_error=" << qr_state.normalised_mapping().error()
-                      << std::endl;
-
-            auto identity_step =
-                identity_probe.step(dynamic, identity_state, suggest(maximum_step_size));
-            auto qr_step =
-                qr_probe.step(dynamic, qr_state, suggest(maximum_step_size));
-
-            std::cerr << "[PreconditionedSecondStepResult]"
-                      << " identity_h=" << identity_step.time_step()
-                      << " identity_flow_error=" << identity_step.flowpipe_mapping().error()
-                      << " qr_h=" << qr_step.time_step()
-                      << " qr_flow_error=" << qr_step.flowpipe_mapping().error()
-                      << std::endl;
-        }
-
-        PreconditionedTaylorSeriesState local_state =
-            carried_preconditioned_state
-                ? *carried_preconditioned_state
-                : preconditioned_integrator->precondition(current_set.state_function());
-
-        const SizeType diagnostic_step = result->reach_size() + 1u;
-        const bool carried_snapshot_step =
-            diagnostic_step == 500u || diagnostic_step == 1000u || diagnostic_step == 1500u || diagnostic_step == 2000u;
-        if (preconditioned_integrator->carried_expansion_diagnostics() && carried_snapshot_step) {
-            print_carried_expansion_snapshot(
-                std::cerr, "input", diagnostic_step,
-                dynamic_cast<const ValidatedVectorMultivariateTaylorFunctionModelDP&>(
-                    local_state.normalised_mapping().reference()),
-                preconditioned_integrator->sweeper());
-        }
-
-        PreconditionedTaylorSeriesStep local_step =
-            preconditioned_integrator->step(
-                dynamic, local_state, suggest(maximum_step_size));
-
-        if (preconditioned_integrator->carried_expansion_diagnostics() && carried_snapshot_step) {
-            print_carried_expansion_snapshot(
-                std::cerr, "output", diagnostic_step,
-                dynamic_cast<const ValidatedVectorMultivariateTaylorFunctionModelDP&>(
-                    local_step.final_state().normalised_mapping().reference()),
-                preconditioned_integrator->sweeper());
-        }
-
-        step_size = local_step.time_step();
-
-        const ValidatedVectorMultivariateFunctionPatch& final_mapping = local_step.evolved_mapping();
-        const ValidatedIntegrationStep common_step(
-            step_size, local_step.flowpipe_mapping().range(), final_mapping.range(),
-            {}, {local_step.flowpipe_mapping()}, final_mapping, current_time,
-            local_step.flowpipe_mapping().argument_size() - 1u, false, ExactBoxType(0u), current_time);
-        applied = EvolutionDetail::apply_integration_step(current_set, common_step,
-                                                          EvolutionDetail::IntegrationStepCoordinates::PARAMETERS, semantics);
-        next_preconditioned_state =
-            std::make_shared<PreconditionedTaylorSeriesState>(
-                local_step.final_state());
-
-        // Temporary diagnostic: compare endpoint-first composition with the
-        // old endpoint-after-full-flowpipe ordering.
-        if (preconditioned_integrator->diagnostics() && result->reach_size() < 20u) {
-            const auto& final_state = local_step.final_state();
-            ValidatedVectorMultivariateFunctionPatch old_order_endpoint =
-                partial_evaluate(
-                    local_step.flowpipe_mapping(),
-                    local_step.flowpipe_mapping().argument_size() - 1u,
-                    step_size);
-            std::cerr << "[PreconditionedStepDiagnostic]"
-                      << " step=" << result->reach_size()
-                      << " carried_state=" << (carried_preconditioned_state ? 1 : 0)
-                      << " t=" << current_time
-                      << " h=" << step_size
-                      << " state_error=" << current_set.state_function().error()
-                      << " normalized_error=" << local_state.normalised_mapping().error()
-                      << " normalized_range=" << local_state.normalised_mapping().range()
-                      << " A=" << local_state.linear_map()
-                      << " flowpipe_error=" << local_step.flowpipe_mapping().error()
-                      << " old_order_endpoint_error=" << old_order_endpoint.error()
-                      << " final_mapping_error=" << final_mapping.error()
-                      << " final_normalized_error=" << final_state.normalised_mapping().error()
-                      << " final_normalized_range=" << final_state.normalised_mapping().range()
-                      << " final_A=" << final_state.linear_map()
-                      << std::endl;
-        }
+            current_set, common_step, join(current_set.state_function(), parameters), semantics,
+            this->_box_integrator != nullptr
+                ? EvolutionDetail::IntegrationStepRepresentation::ALLOW_BOX_ENCLOSURES
+                : EvolutionDetail::IntegrationStepRepresentation::REQUIRE_STRUCTURED);
     } else {
-        const FlowStepIntegratorAdapter step_integrator(*integrator);
-        const auto common_step = step_integrator.step(ValidatedIntegrationRequest(
-            dynamic, current_set_bounds, suggest(maximum_step_size), current_time));
-        step_size = common_step.time_step();
-        applied = EvolutionDetail::apply_integration_step(current_set, common_step,
-                                                          EvolutionDetail::IntegrationStepCoordinates::STATE, semantics);
+        const FunctionType dynamic = equation_field(*this->system().equation());
+        const SizeType parameter_count = _system->parameter_space().dimension();
+        if (_system->has_explicit_time() || parameter_count != 0u) {
+            // Bound the equation over absolute time and its fixed-parameter domain.
+            // In particular, the bound is a certified enclosure, not an
+            // unverified estimate constructed from the initial-state box.
+            EulerBounder bounder;
+            StepSizeType bounded_step;
+            UpperBoxType bounding_box;
+            const auto parameters = constant_parameter_coordinates(current_set, parameter_count);
+            const auto parameter_domain = cast_exact_box(UpperBoxType(parameters.range()));
+            make_lpair(bounded_step, bounding_box) = bounder.compute(
+                dynamic, current_set_bounds, current_time, parameter_domain,
+                suggest(maximum_step_size));
+            const FlowStepIntegratorAdapter step_integrator(*integrator);
+            const auto common_step = step_integrator.step(ValidatedIntegrationRequest(
+                dynamic, current_set_bounds, current_time, bounded_step,
+                parameter_domain, bounding_box));
+            step_size = common_step.time_step();
+            applied = EvolutionDetail::apply_integration_step(
+                current_set, common_step, join(current_set.state_function(), parameters), semantics);
+        } else if (preconditioned_integrator != nullptr) {
+            if (preconditioned_integrator->diagnostics() && result->reach_size() == 1u && preconditioned_integrator->preconditioning() == TaylorSeriesPreconditioning::QR) {
+                PreconditionedGradedTaylorSeriesIntegrator identity_probe =
+                    *preconditioned_integrator;
+                identity_probe.set_preconditioning(TaylorSeriesPreconditioning::IDENTITY);
+                identity_probe.set_diagnostics(true);
+
+                PreconditionedGradedTaylorSeriesIntegrator qr_probe =
+                    *preconditioned_integrator;
+                qr_probe.set_preconditioning(TaylorSeriesPreconditioning::QR);
+                qr_probe.set_diagnostics(true);
+
+                auto identity_state =
+                    identity_probe.precondition(current_set.state_function());
+                auto qr_state =
+                    qr_probe.precondition(current_set.state_function());
+
+                std::cerr << "[PreconditionedSecondStepState]"
+                          << " physical_error=" << current_set.state_function().error()
+                          << " physical_range=" << current_set.state_function().range()
+                          << " identity_domy=" << identity_state.local_domain()
+                          << " identity_A=" << identity_state.linear_map()
+                          << " identity_normalized_error=" << identity_state.normalised_mapping().error()
+                          << " qr_domy=" << qr_state.local_domain()
+                          << " qr_A=" << qr_state.linear_map()
+                          << " qr_normalized_error=" << qr_state.normalised_mapping().error()
+                          << std::endl;
+
+                auto identity_step =
+                    identity_probe.step(dynamic, identity_state, suggest(maximum_step_size));
+                auto qr_step =
+                    qr_probe.step(dynamic, qr_state, suggest(maximum_step_size));
+
+                std::cerr << "[PreconditionedSecondStepResult]"
+                          << " identity_h=" << identity_step.time_step()
+                          << " identity_flow_error=" << identity_step.flowpipe_mapping().error()
+                          << " qr_h=" << qr_step.time_step()
+                          << " qr_flow_error=" << qr_step.flowpipe_mapping().error()
+                          << std::endl;
+            }
+
+            PreconditionedTaylorSeriesState local_state =
+                carried_preconditioned_state
+                    ? *carried_preconditioned_state
+                    : preconditioned_integrator->precondition(current_set.state_function());
+
+            const SizeType diagnostic_step = result->reach_size() + 1u;
+            const bool carried_snapshot_step =
+                diagnostic_step == 500u || diagnostic_step == 1000u || diagnostic_step == 1500u || diagnostic_step == 2000u;
+            if (preconditioned_integrator->carried_expansion_diagnostics() && carried_snapshot_step) {
+                print_carried_expansion_snapshot(
+                    std::cerr, "input", diagnostic_step,
+                    dynamic_cast<const ValidatedVectorMultivariateTaylorFunctionModelDP&>(
+                        local_state.normalised_mapping().reference()),
+                    preconditioned_integrator->sweeper());
+            }
+
+            PreconditionedTaylorSeriesStep local_step =
+                preconditioned_integrator->step(
+                    dynamic, local_state, suggest(maximum_step_size));
+
+            if (preconditioned_integrator->carried_expansion_diagnostics() && carried_snapshot_step) {
+                print_carried_expansion_snapshot(
+                    std::cerr, "output", diagnostic_step,
+                    dynamic_cast<const ValidatedVectorMultivariateTaylorFunctionModelDP&>(
+                        local_step.final_state().normalised_mapping().reference()),
+                    preconditioned_integrator->sweeper());
+            }
+
+            step_size = local_step.time_step();
+
+            const ValidatedVectorMultivariateFunctionPatch& final_mapping = local_step.evolved_mapping();
+            const ValidatedIntegrationStep common_step(
+                step_size, local_step.flowpipe_mapping().range(), final_mapping.range(),
+                {}, {local_step.flowpipe_mapping()}, final_mapping, current_time,
+                local_step.flowpipe_mapping().argument_size() - 1u, false, ExactBoxType(0u), current_time);
+            applied = EvolutionDetail::apply_integration_step(current_set, common_step,
+                                                              EvolutionDetail::IntegrationStepCoordinates::PARAMETERS, semantics);
+            next_preconditioned_state =
+                std::make_shared<PreconditionedTaylorSeriesState>(
+                    local_step.final_state());
+
+            // Temporary diagnostic: compare endpoint-first composition with the
+            // old endpoint-after-full-flowpipe ordering.
+            if (preconditioned_integrator->diagnostics() && result->reach_size() < 20u) {
+                const auto& final_state = local_step.final_state();
+                ValidatedVectorMultivariateFunctionPatch old_order_endpoint =
+                    partial_evaluate(
+                        local_step.flowpipe_mapping(),
+                        local_step.flowpipe_mapping().argument_size() - 1u,
+                        step_size);
+                std::cerr << "[PreconditionedStepDiagnostic]"
+                          << " step=" << result->reach_size()
+                          << " carried_state=" << (carried_preconditioned_state ? 1 : 0)
+                          << " t=" << current_time
+                          << " h=" << step_size
+                          << " state_error=" << current_set.state_function().error()
+                          << " normalized_error=" << local_state.normalised_mapping().error()
+                          << " normalized_range=" << local_state.normalised_mapping().range()
+                          << " A=" << local_state.linear_map()
+                          << " flowpipe_error=" << local_step.flowpipe_mapping().error()
+                          << " old_order_endpoint_error=" << old_order_endpoint.error()
+                          << " final_mapping_error=" << final_mapping.error()
+                          << " final_normalized_error=" << final_state.normalised_mapping().error()
+                          << " final_normalized_range=" << final_state.normalised_mapping().range()
+                          << " final_A=" << final_state.linear_map()
+                          << std::endl;
+            }
+        } else {
+            const FlowStepIntegratorAdapter step_integrator(*integrator);
+            const auto common_step = step_integrator.step(ValidatedIntegrationRequest(
+                dynamic, current_set_bounds, suggest(maximum_step_size), current_time));
+            step_size = common_step.time_step();
+            applied = EvolutionDetail::apply_integration_step(current_set, common_step,
+                                                              EvolutionDetail::IntegrationStepCoordinates::STATE, semantics);
+        }
     }
 
     TimeStepType next_time = current_time + TimeStepType(step_size);

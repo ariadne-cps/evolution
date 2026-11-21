@@ -39,9 +39,10 @@ enclosures with independent uncertainty coordinates; the result records the
 loss of structure. Any available structured component is retained. Box
 application preserves the original feasible parameter coordinates and time
 maps, and never claims an inner reachability or correlated trajectory model.
-The ordinary evolution paths continue to require structured certificates.
-The inclusion loop still awaits migration into `ContinuousTimeEvolver`, including
-removal of its competitive approximation scheduler.
+The ordinary equation paths continue to require structured certificates.
+Equations and inclusions now share `ContinuousTimeEvolver`, `LabelledEnclosure`
+and the same workload, time, subdivision and reconditioning loop. The separate
+inclusion evolver and its competitive approximation scheduler have been removed.
 
 Hybrid evolution separates numerical step results from execution and Orbit
 accumulation. The default `FlatHybridEvolutionBackendFactory` retains the current
@@ -59,13 +60,16 @@ design](doc/evolution_tree_design.md) for the current API and deferred operation
 The `multifunction` branch uses the ordinary dynamics declarations
 `OrdinaryDifferentialAlgebraicEquation` (`system/odae.hpp`) and
 `OrdinaryDifferentialAlgebraicInclusion` (`system/odai.hpp`).
-`ContinuousTimeEvolver` accepts autonomous and explicit-time equations, including
+`ContinuousTimeEvolver` accepts autonomous and explicit-time equations and inclusions, including
 trajectory-constant parameters under `Semantics::UPPER`. Each parameter retains
 the same enclosure coordinate across integration steps, subdivision and
 reconditioning; parameters and time are not added to the physical state.
 Auxiliary outputs on timed or parameterised equations and the corresponding
 preconditioned integration paths remain unsupported and are rejected explicitly.
-`Semantics::LOWER` is also rejected for parameterised equations.
+`Semantics::LOWER` is rejected for parameterised equations and for all inclusions.
+`system()` returns an owning `ContinuousDynamics` metadata view of the original
+ODAE or ODAI declaration; numerical dispatch remains internal and introduces no
+additional physical state.
 
 For example, this computes two steps of `x'=p`, with one value of `p` retained
 throughout each trajectory:
@@ -80,12 +84,38 @@ evolver.configuration().set_maximum_step_size(0.0625);
 auto result = evolver.orbit(RealVariablesBox({x == 0}), Real(0.09375_x), Semantics::UPPER);
 ```
 
+For a structured inclusion, select exactly one rigorous reach approximation
+and one endpoint approximation when constructing the same evolver:
+
+```cpp
+RealVariable u("u");
+OrdinaryDifferentialAlgebraicInclusion inclusion(
+    {dot(x) = u - x}, RealVariablesBox({-1 <= u <= 1}));
+ContinuousTimeEvolver included(inclusion, integrator,
+                             ZeroApproximation(), ConstantApproximation());
+included.configuration().set_maximum_step_size(0.03125);
+auto tube = included.orbit(RealVariablesBox({x == 0}), Real(0.0625_x), Semantics::UPPER);
+```
+
+`ZeroApproximation` and `ConstantApproximation` certify the reach tube; all five
+supported approximations are available for the endpoint. No strategies compete
+by volume, retry or replace the selected methods. Inclusion reconditioning uses
+the common enclosure policy and parameter count, without winner statistics.
+The input-approximation remainder is separate from the underlying ODE solver's
+Taylor error: reduce the maximum step when tighter inclusion bounds are needed.
+
+Selecting `ContinuousTimeEvolver(inclusion, FirstOrderMultifunctionIntegrator())`
+explicitly requests outer box certificates. This path also supports structured
+ODAI declarations without free inputs. Interval-Taylor inclusions retain
+pointwise, time-varying coefficient semantics and remain inside the declared
+model domain. High-order integration requires a compatible numerical field
+provider with free input coordinates; interval coefficients can supply these
+as time-varying numerical inputs. Its bound covers the provider's possibly
+wider extension. Unsupported capabilities fail explicitly.
+
 `VectorFieldSimulator` still requires autonomous equations without constant
-parameters. `DifferentialInclusionEvolver` accepts autonomous structured
-inclusions with free inputs and no constant parameters; its constructor rejects
-explicit time, constant parameters, interval-Taylor fields and zero-input
-domains with `std::invalid_argument`. The inclusion loop still awaits migration
-to the shared continuous evolver.
+parameters. The continuous/hybrid simulator migration and inclusion support in
+hybrid evolution remain separate next steps.
 
 Evolution uses the Git submodules [System](https://github.com/ariadne-cps/system), [Integration](https://github.com/ariadne-cps/integration), [Equation Solving](https://github.com/ariadne-cps/equation-solving), [Tree](https://github.com/ariadne-cps/tree), and [Build](https://github.com/ariadne-cps/build). The C++ test suites additionally use [Ariadne Testing](https://github.com/ariadne-cps/testing), pinned as the test-only submodule `ss/tst`. Each registered test runs with a fresh fixture, retaining the original mathematical checks and diagnostic variants.
 

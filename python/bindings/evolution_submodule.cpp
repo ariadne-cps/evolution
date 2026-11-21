@@ -164,7 +164,7 @@ Void export_evolver_interface(pybind11::module& module, const char* name) {
 }
 
 template<class EV, class... Params>
-Void export_evolver(pybind11::module& module, const char* name) {
+auto export_evolver(pybind11::module& module, const char* name) {
     typedef EV Evolver;
     typedef typename EV::Interface Interface;
     typedef typename EV::EnclosureType EnclosureType;
@@ -179,6 +179,7 @@ Void export_evolver(pybind11::module& module, const char* name) {
     evolver_class.def("orbit", (OrbitType (Evolver::*)(const EnclosureType&, const TerminationType&, Semantics) const) & Evolver::orbit);
     evolver_class.def("orbit", (OrbitType (Evolver::*)(const RealExpressionBoundedConstraintSet&, const TerminationType&, Semantics) const) & Evolver::orbit);
     evolver_class.def("configuration", (ConfigurationType & (Evolver::*)()) & Evolver::configuration, reference_internal);
+    return evolver_class;
 }
 
 Void export_continuous_time_evolver_configuration(pybind11::module& module) {
@@ -220,7 +221,10 @@ Void evolution_submodule(pybind11::module& module) {
     export_orbit<ContinuousTimeEvolver::OrbitType>(module, "LabelledEnclosureOrbit");
 
     export_evolver<DiscreteTimeEvolver, IteratedMap>(module, "DiscreteTimeEvolver");
-    export_evolver<ContinuousTimeEvolver, OrdinaryDifferentialAlgebraicEquation, const IntegratorInterface&>(module, "ContinuousTimeEvolver");
+    auto continuous = export_evolver<ContinuousTimeEvolver, OrdinaryDifferentialAlgebraicEquation, const IntegratorInterface&>(module, "ContinuousTimeEvolver");
+    continuous.def(pybind11::init<const OrdinaryDifferentialAlgebraicInclusion&, const IntegratorBase&,
+                                  const InputApproximation&, const InputApproximation&>());
+    continuous.def(pybind11::init<const OrdinaryDifferentialAlgebraicInclusion&, const FirstOrderMultifunctionIntegrator&>());
 
     export_continuous_time_evolver_configuration(module);
     export_discrete_time_evolver_configuration(module);

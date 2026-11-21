@@ -9,7 +9,7 @@
 #include <type_traits>
 
 #include "evolution/continuous_time_evolver.hpp"
-#include "evolution/differential_inclusion_evolver.hpp"
+#include "evolution/traits.hpp"
 #include "evolution/vector_field_simulator.hpp"
 #include "function/taylor_model.hpp"
 #include "integration/integrator.hpp"
@@ -21,9 +21,12 @@
 
 using namespace Ariadne;
 
-static_assert(std::is_same_v<ContinuousTimeEvolver::SystemType, OrdinaryDifferentialAlgebraicEquation>);
+static_assert(std::is_same_v<ContinuousTimeEvolver::SystemType, ContinuousDynamics>);
 static_assert(std::is_same_v<VectorFieldSimulator::SystemType, OrdinaryDifferentialAlgebraicEquation>);
-static_assert(std::is_same_v<DifferentialInclusionEvolver::SystemType, OrdinaryDifferentialAlgebraicInclusion>);
+static_assert(std::is_same_v<EvolutionTraits<OrdinaryDifferentialAlgebraicEquation>::EvolverType,
+                             EvolutionTraits<OrdinaryDifferentialAlgebraicInclusion>::EvolverType>);
+static_assert(std::is_same_v<EvolutionTraits<ContinuousTimeEvolver::SystemType>::EnclosureType,
+                             ContinuousTimeEvolver::EnclosureType>);
 
 class TestOrdinaryDynamicsContract : public Ariadne::Testing::ContextFixture {
   public:
@@ -69,11 +72,13 @@ class TestOrdinaryDynamicsContract : public Ariadne::Testing::ContextFixture {
         const OrdinaryDifferentialAlgebraicInclusion timed({dot(x) = t + u}, inputs, RealVariablesBox{}, t);
         const OrdinaryDifferentialAlgebraicInclusion parameterised({dot(x) = p + u}, inputs, RealVariablesBox({0 <= p <= 1}));
         TaylorPicardIntegrator integrator(step_maximum_error = 1e-5);
-        LohnerReconditioner reconditioner(1u, 1u, 1u, 1.0_x);
         for (const auto& inclusion: {timed, parameterised}) {
             ARIADNE_TESTING_EXPECT_EQUAL(inclusion.dimension(), 1u);
             ARIADNE_TESTING_EXPECT_EQUAL(inclusion.function().argument_size(), 3u);
-            ARIADNE_TESTING_EXPECT_THROWS(std::invalid_argument, DifferentialInclusionEvolver(inclusion, integrator, reconditioner));
+            ContinuousTimeEvolver evolver(inclusion, integrator, ZeroApproximation(), ConstantApproximation());
+            ARIADNE_TESTING_EXPECT_EQUAL(evolver.system().dimension(), 1u);
+            ARIADNE_TESTING_EXPECT_THROWS(std::invalid_argument,
+                                          evolver.orbit(RealVariablesBox({x == 0}), Real(0.0625_x), Semantics::LOWER));
         }
     }
 
@@ -88,10 +93,10 @@ class TestOrdinaryDynamicsContract : public Ariadne::Testing::ContextFixture {
         const ValidatedVectorIntervalTaylorFunctionModel<FloatDP> field({uncertain});
         const OrdinaryDifferentialAlgebraicInclusion inclusion(RealSpace({x}), field);
         TaylorPicardIntegrator integrator(step_maximum_error = 1e-5);
-        LohnerReconditioner reconditioner(1u, 1u, 1u, 1.0_x);
         ARIADNE_TESTING_PROVE(!inclusion.has_input_function());
         ARIADNE_TESTING_EXPECT_EQUAL(inclusion.number_of_inputs(), 0u);
-        ARIADNE_TESTING_EXPECT_THROWS(std::invalid_argument, DifferentialInclusionEvolver(inclusion, integrator, reconditioner));
+        ContinuousTimeEvolver evolver(inclusion, integrator, ZeroApproximation(), ConstantApproximation());
+        ARIADNE_TESTING_EXPECT_EQUAL(evolver.system().state_space(), RealSpace({x}));
     }
 };
 

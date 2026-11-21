@@ -102,8 +102,31 @@ def test_ordinary_equation_consumers():
             a.VectorFieldSimulator(field)
 
 
+def test_common_inclusion_consumers():
+    import unittest
+    x, t, p, u = (a.RealVariable(name) for name in ("x", "t", "p", "u"))
+    system = a.OrdinaryDifferentialAlgebraicInclusion(
+        [a.dot(x) << (t + p + u)], a.RealVariablesBox({u: (-1, 1)}),
+        a.RealVariablesBox({p: (0, 1)}), time=t)
+    integrator = a.TaylorPicardIntegrator(1e-6)
+    selected = a.ContinuousTimeEvolver(
+        system, integrator, a.InputApproximation(a.ZeroApproximation()),
+        a.InputApproximation(a.ConstantApproximation()))
+    boxes = a.ContinuousTimeEvolver(system, a.FirstOrderMultifunctionIntegrator())
+    initial = a.RealExpressionBoundedConstraintSet([(0 <= x) & (x <= 0)], [])
+    for evolver in (selected, boxes):
+        evolver.configuration().set_maximum_step_size(0.03125)
+        result = evolver.orbit(initial, a.Real(1)/16, a.Semantics.UPPER)
+        assert result.final().size() > 0
+        assert result.final()[0].state_set().dimension() == 1
+        assert result.reach().size() >= 2
+        with unittest.TestCase().assertRaises(ValueError):
+            evolver.orbit(initial, a.Real(1)/16, a.Semantics.LOWER)
+
+
 if __name__ == "__main__":
     test_evolution_bindings()
     test_iterated_map_configuration()
     test_continuous_recombination()
     test_ordinary_equation_consumers()
+    test_common_inclusion_consumers()

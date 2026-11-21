@@ -4,7 +4,6 @@ add_library(EVOLUTION_SRC OBJECT
     enclosure_recombiner.cpp
     enclosure_augmented_paving.cpp
     orbit.cpp
-    differential_inclusion_evolver.cpp
     discrete_time_evolver.cpp
     continuous_time_evolver.cpp
     vector_field_simulator.cpp

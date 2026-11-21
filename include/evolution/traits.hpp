@@ -46,8 +46,7 @@ class HybridAutomatonInterface;
 class DiscreteTimeEvolver;
 /** @brief ContinuousTimeEvolver: compile-time correspondence between systems, evolvers and enclosures. */
 class ContinuousTimeEvolver;
-/** @brief DifferentialInclusionEvolver: compile-time correspondence between systems, evolvers and enclosures. */
-class DifferentialInclusionEvolver;
+class ContinuousDynamics;
 /** @brief HybridContinuousTimeEvolverInterface: compile-time correspondence between systems, evolvers and enclosures. */
 class HybridContinuousTimeEvolverInterface;
 
@@ -73,7 +72,13 @@ struct EvolutionTraits<OrdinaryDifferentialAlgebraicEquation> {
 
 template<>
 struct EvolutionTraits<OrdinaryDifferentialAlgebraicInclusion> {
-    using EvolverType = DifferentialInclusionEvolver;
+    using EvolverType = ContinuousTimeEvolver;
+    using EnclosureType = LabelledEnclosure;
+};
+
+template<>
+struct EvolutionTraits<ContinuousDynamics> {
+    using EvolverType = ContinuousTimeEvolver;
     using EnclosureType = LabelledEnclosure;
 };
 

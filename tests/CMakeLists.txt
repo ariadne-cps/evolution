@@ -14,7 +14,7 @@ set(UNIT_TESTS
     test_first_order_pde_evolution_header
     test_flowtube_header
     test_orbit_evolution_header
-    test_differential_inclusion_evolver
+    test_continuous_inclusions
     test_enclosure
     test_enclosure_augmented_paving
     test_enclosure_operations

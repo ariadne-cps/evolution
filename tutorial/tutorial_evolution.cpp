@@ -70,6 +70,19 @@ int main() {
     std::cout << "ContinuousTimeEvolver: " << validated_orbit.final().size()
               << " final enclosure(s)\n";
 
+    // The same evolver and Orbit type handle measurable uncertain inputs.
+    // Exactly one tube-rigorous reach method and one endpoint method are chosen.
+    RealVariable u("u");
+    OrdinaryDifferentialAlgebraicInclusion disturbed(
+        {dot(x) = u - x}, RealVariablesBox({-1 <= u <= 1}));
+    ContinuousTimeEvolver inclusion(disturbed, integrator, ZeroApproximation(), ConstantApproximation());
+    inclusion.configuration().set_maximum_step_size(0.03125);
+    const auto inclusion_orbit = inclusion.orbit(initial, Real(0.0625_x), Semantics::UPPER);
+    if (inclusion_orbit.final().size() == 0u) {
+        throw std::runtime_error("Continuous inclusion evolution produced no final enclosure");
+    }
+    std::cout << "Continuous inclusion: " << inclusion_orbit.final().size() << " final enclosure(s)\n";
+
     // Discrete-time system: one step of a contracting iterated map.
     List<PrimedRealAssignment> updates;
     updates.append(next(x) = 0.5_dec * x);

@@ -23,7 +23,7 @@
  */
 
 /** @file evolution/continuous_time_evolver.hpp
- *  @brief Validated evolvers for vector fields.
+ *  @brief Validated evolution of ordinary differential equations and inclusions.
  */
 
 #ifndef ARIADNE_CONTINUOUS_TIME_EVOLVER_HPP
@@ -32,6 +32,7 @@
 #include <iostream>
 #include <list>
 #include <string>
+#include <variant>
 #include <vector>
 
 #include "evolution/configuration_interface.hpp"
@@ -40,8 +41,10 @@
 #include "evolution/orbit.hpp"
 #include "function/function_interface.hpp"
 #include "integration/integrator_interface.hpp"
+#include "integration/selected_inclusion_integrator.hpp"
 #include "logging/logging.hpp"
 #include "system/odae.hpp"
+#include "system/odai.hpp"
 #include "threading/workload.hpp"
 #include "utility/tuple.hpp"
 
@@ -60,21 +63,49 @@ using LockGuard = std::lock_guard<T>;
 class ContinuousTimeEvolverConfiguration;
 /** @brief PreconditionedTaylorSeriesState: validated evolvers for vector fields. */
 class PreconditionedTaylorSeriesState;
+class ValidatedIntegrationStep;
 
 /** @brief RealExpressionBoundedConstraintSet: validated evolvers for vector fields. */
 class RealExpressionBoundedConstraintSet;
 
-//! \brief A class for computing the evolution of a vector_field system.
+/** @brief Owning metadata view of an ODAE or ODAI for the common evolution loop.
+ *  The original declaration is retained unchanged; this view defines no solver
+ *  or additional physical state. Numerical dispatch remains internal.
+ */
+class ContinuousDynamics {
+  public:
+    using TimeType = Real;
+    explicit ContinuousDynamics(const OrdinaryDifferentialAlgebraicEquation&);
+    explicit ContinuousDynamics(const OrdinaryDifferentialAlgebraicInclusion&);
+    ContinuousDynamics* clone() const;
+    SizeType dimension() const;
+    RealSpace state_space() const;
+    RealSpace auxiliary_space() const;
+    RealSpace state_auxiliary_space() const;
+    const RealSpace& parameter_space() const;
+    const BoxDomainType& constant_parameter_domain() const;
+    bool has_explicit_time() const;
+
+  private:
+    std::variant<SharedPointer<const OrdinaryDifferentialAlgebraicEquation>,
+                 SharedPointer<const OrdinaryDifferentialAlgebraicInclusion>>
+        _declaration;
+    const OrdinaryDifferentialAlgebraicEquation* equation() const;
+    const OrdinaryDifferentialAlgebraicInclusion* inclusion() const;
+    friend class ContinuousTimeEvolver;
+};
+
+//! \brief Compute continuous evolution of ODAE and ODAI declarations.
 //!
 //! The actual evolution steps are performed by the Integrator class.
 class ContinuousTimeEvolver
-    : public EvolverInterface<OrdinaryDifferentialAlgebraicEquation, LabelledEnclosure, typename OrdinaryDifferentialAlgebraicEquation::TimeType> {
+    : public EvolverInterface<ContinuousDynamics, LabelledEnclosure, Real> {
   public:
-    typedef EvolverInterface<OrdinaryDifferentialAlgebraicEquation, LabelledEnclosure, typename OrdinaryDifferentialAlgebraicEquation::TimeType> Interface;
+    typedef EvolverInterface<ContinuousDynamics, LabelledEnclosure, Real> Interface;
     typedef ContinuousTimeEvolverConfiguration ConfigurationType;
-    typedef OrdinaryDifferentialAlgebraicEquation SystemType;
+    typedef ContinuousDynamics SystemType;
     typedef IntegratorInterface IntegratorType;
-    typedef typename OrdinaryDifferentialAlgebraicEquation::TimeType TimeType;
+    typedef Real TimeType;
     typedef Dyadic TimeStepType;
     typedef TimeType TerminationType;
     typedef LabelledEnclosure EnclosureType;
@@ -132,7 +163,16 @@ class ContinuousTimeEvolver
     //! \throws std::invalid_argument for auxiliary outputs on timed or
     //! parameterised ODAEs, or if the selected preconditioned integrator lacks
     //! support for time or parameters.
-    ContinuousTimeEvolver(const SystemType&, const IntegratorInterface&);
+    ContinuousTimeEvolver(const OrdinaryDifferentialAlgebraicEquation&, const IntegratorInterface&);
+
+    //! \brief Construct an ODAI evolver with one explicitly selected reach and evolve method.
+    //! All inclusion paths require UPPER semantics; no competing scheduler is used.
+    //! The high-order method requires free numerical inputs and rejects
+    //! unsupported preconditioning or a reach approximation without tube rigor.
+    ContinuousTimeEvolver(const OrdinaryDifferentialAlgebraicInclusion&, const IntegratorBase&,
+                          const InputApproximation& reach, const InputApproximation& evolve);
+    //! \brief Select the first-order box integrator explicitly for an ODAI.
+    ContinuousTimeEvolver(const OrdinaryDifferentialAlgebraicInclusion&, const FirstOrderMultifunctionIntegrator&);
 
     //! \brief Make a dynamically-allocated copy.
     ContinuousTimeEvolver* clone() const { return new ContinuousTimeEvolver(*this); }
@@ -175,9 +215,15 @@ class ContinuousTimeEvolver
     /** @brief Perform the specified evolution operation. */
     Void _append_initial_set(WorkloadType& workload, const TimeStepType& initial_time, const EnclosureType& current_set) const;
 
+    ValidatedIntegrationStep _inclusion_step(const EnclosureType&, const TimeStepType&,
+                                             const StepSizeType& maximum_step) const;
+
   private:
     SharedPointer<SystemType> _system;
     SharedPointer<IntegratorType> _integrator;
+    SharedPointer<SelectedParametricMultifunctionIntegrator> _inclusion_integrator;
+    SharedPointer<FirstOrderMultifunctionIntegrator> _box_integrator;
+    FunctionFactoryType _function_factory;
     SharedPointer<ConfigurationType> _configuration;
 };
 

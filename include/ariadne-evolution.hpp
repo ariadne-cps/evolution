@@ -31,7 +31,6 @@
 
 #include "evolution/configuration_interface.hpp"
 #include "evolution/continuous_time_evolver.hpp"
-#include "evolution/differential_inclusion_evolver.hpp"
 #include "evolution/discrete_time_evolver.hpp"
 #include "evolution/enclosure.hpp"
 #include "evolution/enclosure_augmented_paving.hpp"

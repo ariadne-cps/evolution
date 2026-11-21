@@ -6,7 +6,9 @@ evolution capabilities with bounded scenarios:
 1. **VectorFieldSimulator** — simulate a stable one-dimensional continuous
    vector field for 0.1 time units.
 2. **ContinuousTimeEvolver** — compute a validated upper-semantics enclosure
-   for the same field over 0.05 time units.
+   for the same field over 0.05 time units, then evolve an inclusion with
+   measurable uncertain inputs using one explicitly selected reach method
+   and one endpoint method.
 3. **DiscreteTimeEvolver** — take one validated step of a contracting map.
 4. **HybridSimulator and HybridContinuousTimeEvolver** — specify a two-mode
    discrete-only automaton, create a simulator, then compute a short

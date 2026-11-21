@@ -325,7 +325,7 @@ Void ContinuousTimeEvolver::
         EulerBounder bounder;
         StepSizeType bounded_step;
         UpperBoxType bounding_box;
-        std::tie(bounded_step, bounding_box) = bounder.compute(
+        make_lpair(bounded_step, bounding_box) = bounder.compute(
             dynamic, current_set_bounds, current_time, ExactBoxType(0u),
             suggest(maximum_step_size));
         const FlowStepIntegratorAdapter step_integrator(*integrator);

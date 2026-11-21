@@ -79,7 +79,9 @@ class TestContinuousTimeEvolver : public Ariadne::Testing::ContextFixture {
         ARIADNE_TESTING_PROVE(result.reach().size() >= 2u);
         ARIADNE_TESTING_PROVE(result.final().size() > 0u);
         const auto final_box = result.final().bounding_box().euclidean_set();
-        ARIADNE_TESTING_PROVE(refines(FloatDPBounds(0.0078125_x, dp), final_box[0u]));
+        // The exact rational endpoint must lie in the certified final set.
+        ARIADNE_TESTING_PROVE(subset(RealBox({{0.0078125_dec, 0.0078125_dec}}),
+                                     final_box));
         ARIADNE_TESTING_PROVE(subset(final_box, RealBox({{0.007_dec, 0.009_dec}})));
     }
 

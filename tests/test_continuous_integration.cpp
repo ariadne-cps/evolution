@@ -142,6 +142,12 @@ class TestContinuousIntegration : public Ariadne::Testing::ContextFixture {
         const FlowStepIntegratorAdapter solver(taylor);
         const auto first = solver.step(ValidatedIntegrationRequest(field, initial, t0, h1, parameters, bound));
         const auto second = solver.step(ValidatedIntegrationRequest(field, first, h2, bound));
+        // First-step fields use [x0, absolute time, p], while continuation
+        // retains [x0, p, absolute time]. Both must keep the same original p.
+        ARIADNE_TESTING_EXPECT_EQUAL(first.reach_time_index().value(), 1u);
+        ARIADNE_TESTING_EXPECT_EQUAL(second.reach_time_index().value(), 2u);
+        ARIADNE_TESTING_EXPECT_EQUAL(first.constant_parameter_domain(), parameters);
+        ARIADNE_TESTING_EXPECT_EQUAL(second.constant_parameter_domain(), parameters);
         auto first_reach = source;
         auto first_evolved = source;
         apply_integration_step(first_reach, first_evolved, first, IntegrationStepCoordinates::PARAMETERS);

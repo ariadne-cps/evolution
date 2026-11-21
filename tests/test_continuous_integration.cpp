@@ -101,7 +101,10 @@ class TestContinuousIntegration : public Ariadne::Testing::ContextFixture {
                          EffectiveScalarMultivariateFunction::constant(1u, 0.5_x), {}, config);
         const auto t = EffectiveScalarMultivariateFunction::coordinate(3u, 2u);
         const EffectiveVectorMultivariateFunction field = {t, -t};
-        const UpperBoxType bound({{-2.0_x, 2.0_x}, {-2.0_x, 2.0_x}});
+        const UpperBoxType bound({
+            {-2.0_x, 2.0_x},
+            {-2.0_x, 2.0_x}
+        });
         TaylorSeriesIntegrator taylor(step_maximum_error = 1e-6, order = 8);
         const FlowStepIntegratorAdapter solver(taylor);
         const StepSizeType t0(0.5_x);
@@ -128,13 +131,19 @@ class TestContinuousIntegration : public Ariadne::Testing::ContextFixture {
         const auto t = EffectiveScalarMultivariateFunction::coordinate(3u, 1u);
         const auto p = EffectiveScalarMultivariateFunction::coordinate(3u, 2u);
         const EffectiveVectorMultivariateFunction field = {t + p};
-        const ExactBoxType initial({{0.0_x, 0.125_x}});
-        const ExactBoxType parameters({{0.5_x, 0.75_x}});
+        const ExactBoxType initial({
+            {0.0_x, 0.125_x}
+        });
+        const ExactBoxType parameters({
+            {0.5_x, 0.75_x}
+        });
         const ExactBoxType parameter_domain = product(initial, parameters);
         const auto x0 = EffectiveScalarMultivariateFunction::coordinate(2u, 0u);
         Enclosure source(parameter_domain, EffectiveVectorMultivariateFunction({x0}),
                          EffectiveScalarMultivariateFunction::constant(2u, 0.5_x), {}, config);
-        const UpperBoxType bound({{-1.0_x, 2.0_x}});
+        const UpperBoxType bound({
+            {-1.0_x, 2.0_x}
+        });
         const StepSizeType t0(0.5_x);
         const StepSizeType h1(0.0625_x);
         const StepSizeType h2(0.03125_x);

@@ -82,9 +82,13 @@ class TestContinuousTimeEvolver : public Ariadne::Testing::ContextFixture {
         // Test the certified box's outward-rounded binary endpoints as exact
         // values. Containment in an UpperBox is only upper semidecidable and
         // cannot prove this inclusion, even when the numerical bounds fit.
-        const ExactBoxType exact_endpoint({{0.0078125_x, 0.0078125_x}});
+        const ExactBoxType exact_endpoint({
+            {0.0078125_x, 0.0078125_x}
+        });
         ARIADNE_TESTING_PROVE(subset(exact_endpoint, cast_exact_box(final_box)));
-        const RealBox expected({{0.007_dec, 0.009_dec}});
+        const RealBox expected({
+            {0.007_dec, 0.009_dec}
+        });
         if (not definitely(subset(final_box, expected))) {
             // Diagnostic only: keep the tight numerical assertion unchanged.
             // Expose the certified range of each step to distinguish a

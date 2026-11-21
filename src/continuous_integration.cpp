@@ -61,14 +61,14 @@ void apply_integration_step(Enclosure& reach, Enclosure& evolved,
         const auto local_domain = product(model_coordinates, local_time_domain);
         const auto local_time = factory.create_coordinate(local_domain, arguments);
         const auto first_argument = time_index == 0u
-                                        ? local_time + patch_time_origin
-                                        : factory.create_coordinate(local_domain, 0u);
+                                      ? local_time + patch_time_origin
+                                      : factory.create_coordinate(local_domain, 0u);
         auto original_arguments = ValidatedVectorMultivariateFunctionPatch(1u, first_argument);
         for (SizeType i = 1u; i != tube.argument_size(); ++i) {
             const auto argument = i == time_index
-                                      ? local_time + patch_time_origin
-                                      : factory.create_coordinate(local_domain,
-                                                                  i < time_index ? i : i - 1u);
+                                    ? local_time + patch_time_origin
+                                    : factory.create_coordinate(local_domain,
+                                                                i < time_index ? i : i - 1u);
             original_arguments = join(original_arguments, argument);
         }
         local_tube = compose(tube, original_arguments);

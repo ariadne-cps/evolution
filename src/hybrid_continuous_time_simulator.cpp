@@ -1,5 +1,5 @@
 /***************************************************************************
- *            hybrid_simulator.cpp
+ *            hybrid_continuous_time_simulator.cpp
  *
  *  Copyright  2008-20  Luca Geretti, Mirko Albanese
  *
@@ -22,11 +22,11 @@
  *  along with Ariadne Evolution. If not, see <https://www.gnu.org/licenses/>.
  */
 
-/** @file src/hybrid_simulator.cpp
+/** @file src/hybrid_continuous_time_simulator.cpp
  *  @brief Implement hybrid simulator operations.
  */
 
-#include "evolution/hybrid_simulator.hpp"
+#include "evolution/hybrid_continuous_time_simulator.hpp"
 
 #include "algebra/algebra.hpp"
 #include "evolution/hybrid_orbit.hpp"
@@ -52,12 +52,12 @@ namespace Ariadne {
 template<class T>
 class Orbit;
 
-HybridSimulator::HybridSimulator(const SystemType& system)
+HybridContinuousTimeSimulator::HybridContinuousTimeSimulator(const SystemType& system)
     : _sys_ptr(system.clone()), _configuration(new ConfigurationType()) {
 }
 
 Map<DiscreteEvent, EffectiveScalarMultivariateFunction>
-    HybridSimulator::_guard_functions(const DiscreteLocation& location) const {
+    HybridContinuousTimeSimulator::_guard_functions(const DiscreteLocation& location) const {
     Set<DiscreteEvent> events = _sys_ptr->events(location);
     Map<DiscreteEvent, EffectiveScalarMultivariateFunction> guards;
     for (Set<DiscreteEvent>::ConstIterator iter = events.begin(); iter != events.end(); ++iter) {
@@ -68,7 +68,7 @@ Map<DiscreteEvent, EffectiveScalarMultivariateFunction>
     return guards;
 }
 
-Bool HybridSimulator::_satisfies_invariants(const DiscreteLocation& location, const Point<FloatDPApproximation>& point) const {
+Bool HybridContinuousTimeSimulator::_satisfies_invariants(const DiscreteLocation& location, const Point<FloatDPApproximation>& point) const {
     Set<DiscreteEvent> events = _sys_ptr->events(location);
     for (const auto& event: events) {
         EventKind kind = _sys_ptr->event_kind(location, event);
@@ -175,7 +175,7 @@ inline FloatDPApproximation evaluate(const EffectiveScalarMultivariateFunction& 
 inline Vector<FloatDPApproximation> evaluate(const EffectiveVectorMultivariateFunction& f, const Vector<FloatDPApproximation>& x) { return f(x); }
 
 /*
-auto HybridSimulator::orbit(const HybridBoundedConstraintSet& initial_set, const TerminationType& termination) const
+auto HybridContinuousTimeSimulator::orbit(const HybridBoundedConstraintSet& initial_set, const TerminationType& termination) const
     -> Orbit<HybridApproximatePointType>
 {
     DiscreteLocation first_location = *initial_set.locations().begin();
@@ -185,13 +185,13 @@ auto HybridSimulator::orbit(const HybridBoundedConstraintSet& initial_set, const
 }
 */
 
-auto HybridSimulator::orbit(const HybridRealPoint& init_pt, const TerminationType& termination) const
+auto HybridContinuousTimeSimulator::orbit(const HybridRealPoint& init_pt, const TerminationType& termination) const
     -> Orbit<HybridApproximatePointType> {
     return orbit(HybridApproximatePointType(init_pt, dp), termination);
 }
 
-auto HybridSimulator::orbit(const HybridApproximatePointType& init_pt,
-                            const TerminationType& termination) const
+auto HybridContinuousTimeSimulator::orbit(const HybridApproximatePointType& init_pt,
+                                          const TerminationType& termination) const
     -> Orbit<HybridApproximatePointType> {
     LOGGING_SCOPE_CREATE;
 
@@ -272,7 +272,7 @@ auto HybridSimulator::orbit(const HybridApproximatePointType& init_pt,
     return orbit;
 }
 
-auto HybridSimulator::orbit(const HybridBoundedConstraintSet& initial_set, const TerminationType& termination) const
+auto HybridContinuousTimeSimulator::orbit(const HybridBoundedConstraintSet& initial_set, const TerminationType& termination) const
     -> OrbitListType {
     DiscreteLocation first_location = *initial_set.locations().begin();
     RealSpace spc = this->_sys_ptr->continuous_state_space(first_location);
@@ -281,7 +281,7 @@ auto HybridSimulator::orbit(const HybridBoundedConstraintSet& initial_set, const
     return orbit(Hbox, first_location, this->_sys_ptr->state_space(), termination);
 }
 /*
-auto HybridSimulator::orbit(const Vector<HybridRealPoint>& initial_set, const TerminationType& termination) const
+auto HybridContinuousTimeSimulator::orbit(const Vector<HybridRealPoint>& initial_set, const TerminationType& termination) const
     -> Orbit<HybridApproximateListPointType>
 {
     HybridApproximateListPointType point_list = HybridApproximateListPointType(initial_set.size(),HybridApproximatePointType(initial_set.at(0),dp));
@@ -293,7 +293,7 @@ auto HybridSimulator::orbit(const Vector<HybridRealPoint>& initial_set, const Te
 }
 */
 
-auto HybridSimulator::orbit(const HybridUpperBox& initial_box, DiscreteLocation loc, HybridSpace space, const TerminationType& termination) const
+auto HybridContinuousTimeSimulator::orbit(const HybridUpperBox& initial_box, DiscreteLocation loc, HybridSpace space, const TerminationType& termination) const
     -> Orbit<HybridApproximateListPointType> {
     auto box = initial_box.euclidean_set(space[loc]);
     auto lengths = box.widths();
@@ -319,8 +319,8 @@ auto HybridSimulator::orbit(const HybridUpperBox& initial_box, DiscreteLocation 
     return orbit(pointList, termination);
 }
 
-auto HybridSimulator::orbit(const HybridApproximateListPointType& init_list,
-                            const TerminationType& termination) const
+auto HybridContinuousTimeSimulator::orbit(const HybridApproximateListPointType& init_list,
+                                          const TerminationType& termination) const
     -> Orbit<HybridApproximateListPointType> {
     LOGGING_SCOPE_CREATE;
 
@@ -416,10 +416,10 @@ auto HybridSimulator::orbit(const HybridApproximateListPointType& init_list,
     return orbitList;
 }
 
-HybridSimulatorConfiguration::HybridSimulatorConfiguration() : _step_size(0.125, double_precision), _fineness(0), _discretization_type(DiscretizationHybridType::HMince) {}
+HybridContinuousTimeSimulatorConfiguration::HybridContinuousTimeSimulatorConfiguration() : _step_size(0.125, double_precision), _fineness(0), _discretization_type(DiscretizationHybridType::HMince) {}
 
-OutputStream& HybridSimulatorConfiguration::_write(OutputStream& os) const {
-    os << "HybridSimulatorConfiguration("
+OutputStream& HybridContinuousTimeSimulatorConfiguration::_write(OutputStream& os) const {
+    os << "HybridContinuousTimeSimulatorConfiguration("
        << "\n  step_size=" << step_size()
        << "\n  fineness=" << fineness()
        << "\n  discretization type=" << d_type()

@@ -9,7 +9,7 @@ set(UNIT_TESTS
     test_hybrid_evolution_backend
     test_hybrid_evolution_tree
     test_hybrid_step_contracts
-    test_hybrid_simulator
+    test_hybrid_continuous_time_simulator
     test_first_order_pde
     test_first_order_pde_evolution_header
     test_flowtube_header
@@ -23,7 +23,7 @@ set(UNIT_TESTS
     test_discrete_time_evolver
     test_continuous_time_evolver
     test_continuous_time_evolver_header
-    test_vector_field_simulator
+    test_continuous_time_simulator
     test_evolution_dependency_boundary
     test_ordinary_dynamics_contract
     test_continuous_integration

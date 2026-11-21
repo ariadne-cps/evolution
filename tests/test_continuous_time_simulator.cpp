@@ -1,5 +1,5 @@
 /***************************************************************************
- *            test_vector_field_simulator.cpp
+ *            test_continuous_time_simulator.cpp
  *
  *  Copyright  2006-20  Luca Geretti, Mirko Albanese
  *
@@ -22,7 +22,7 @@
  *  along with Ariadne Evolution. If not, see <https://www.gnu.org/licenses/>.
  */
 
-/** @file tests/test_vector_field_simulator.cpp
+/** @file tests/test_continuous_time_simulator.cpp
  *  @brief Test vector field simulator behavior and numerical invariants.
  */
 
@@ -34,9 +34,9 @@
 #include "algebra/algebra.hpp"
 #include "algebra/matrix.hpp"
 #include "algebra/vector.hpp"
+#include "evolution/continuous_time_simulator.hpp"
 #include "evolution/enclosure.hpp"
 #include "evolution/orbit.hpp"
-#include "evolution/vector_field_simulator.hpp"
 #include "function/constraint.hpp"
 #include "function/function.hpp"
 #include "geometry/box.hpp"
@@ -54,7 +54,7 @@
 using namespace Ariadne;
 using namespace std;
 
-class TestVectorFieldSimulator : public Ariadne::Testing::ContextFixture {
+class TestContinuousTimeSimulator : public Ariadne::Testing::ContextFixture {
   public:
     using Ariadne::Testing::ContextFixture::ContextFixture;
 
@@ -62,10 +62,10 @@ class TestVectorFieldSimulator : public Ariadne::Testing::ContextFixture {
     Void test_linear_flow_and_input_labels() {
         RealVariable x("x"), y("y"), z("z"), missing("missing");
         OrdinaryDifferentialAlgebraicEquation field({dot(x) = 1, dot(y) = 0}, {let(z) = x + 2 * y});
-        VectorFieldSimulator simulator(field);
+        ContinuousTimeSimulator simulator(field);
         simulator.configuration().set_step_size(0.25);
-        using PointType = VectorFieldSimulator::ApproximatePointType;
-        using Points = VectorFieldSimulator::ApproximateListPointType;
+        using PointType = ContinuousTimeSimulator::ApproximatePointType;
+        using Points = ContinuousTimeSimulator::ApproximateListPointType;
         PointType start(RealSpace({x, y}), FloatDPApproximationPoint({0.0_x, 2.0_x}, dp));
         PointType reordered(RealSpace({y, x}), FloatDPApproximationPoint({2.0_x, 0.0_x}, dp));
         for (unsigned verbosity: {0u, 100u}) {
@@ -89,7 +89,7 @@ class TestVectorFieldSimulator : public Ariadne::Testing::ContextFixture {
     Void test_configuration_and_sampling() {
         RealVariable x("x"), y("y"), unknown("unknown");
         OrdinaryDifferentialAlgebraicEquation field({dot(x) = 0, dot(y) = 0});
-        VectorFieldSimulator simulator(field);
+        ContinuousTimeSimulator simulator(field);
         auto& config = simulator.configuration();
         ARIADNE_TESTING_EXPECT_EXCEPTION(config.set_step_size(0.0));
         ARIADNE_TESTING_EXPECT_EXCEPTION(config.set_step_size(-1.0));
@@ -130,12 +130,12 @@ class TestVectorFieldSimulator : public Ariadne::Testing::ContextFixture {
             std::ostringstream description;
             const ConfigurationInterface& base = config;
             description << base;
-            ARIADNE_TESTING_PROVE(description.str().find("VectorFieldSimulatorConfiguration") != std::string::npos);
+            ARIADNE_TESTING_PROVE(description.str().find("ContinuousTimeSimulatorConfiguration") != std::string::npos);
         }
     }
 
     Void test_multiple_trajectories_x() {
-        typedef VectorFieldSimulator::ApproximateListPointType ListPointType;
+        typedef ContinuousTimeSimulator::ApproximateListPointType ListPointType;
 
         Real mu = Dyadic(0.5_x);
         RealVariable x("x"), y("y"), z("z");
@@ -147,7 +147,7 @@ class TestVectorFieldSimulator : public Ariadne::Testing::ContextFixture {
 
         Real time = 1.0_dec;
 
-        VectorFieldSimulator simulator(vanderpol);
+        ContinuousTimeSimulator simulator(vanderpol);
         simulator.configuration().set_step_size(0.05);
         simulator.configuration().set_num_subdivisions(0);
         simulator.configuration().set_discretisation_type(DiscretisationType::Mince);
@@ -169,7 +169,7 @@ class TestVectorFieldSimulator : public Ariadne::Testing::ContextFixture {
     }
 
     Void test_multiple_trajectories_xy() {
-        typedef VectorFieldSimulator::ApproximateListPointType ListPointType;
+        typedef ContinuousTimeSimulator::ApproximateListPointType ListPointType;
 
         Real mu = Dyadic(0.5_x);
         RealVariable x("x"), y("y"), z("z");
@@ -181,7 +181,7 @@ class TestVectorFieldSimulator : public Ariadne::Testing::ContextFixture {
 
         Real time = 1.0_dec;
 
-        VectorFieldSimulator simulator(vanderpol);
+        ContinuousTimeSimulator simulator(vanderpol);
         simulator.configuration().set_step_size(0.05);
         simulator.configuration().set_num_subdivisions(0);
         simulator.configuration().set_discretisation_type(DiscretisationType::Mince);
@@ -206,7 +206,7 @@ class TestVectorFieldSimulator : public Ariadne::Testing::ContextFixture {
     }
 
     Void test_multiple_real_expr_vdp_cycle() {
-        typedef VectorFieldSimulator::ApproximateListPointType ListPointType;
+        typedef ContinuousTimeSimulator::ApproximateListPointType ListPointType;
 
         Real mu = Dyadic(0.5_x);
         RealVariable x("x"), y("y"), z("z");
@@ -218,7 +218,7 @@ class TestVectorFieldSimulator : public Ariadne::Testing::ContextFixture {
 
         Real time = 6.3_dec;
 
-        VectorFieldSimulator simulator(vanderpol);
+        ContinuousTimeSimulator simulator(vanderpol);
         simulator.configuration().set_step_size(0.05);
         simulator.configuration().set_num_subdivisions(0);
         simulator.configuration().set_discretisation_type(DiscretisationType::Mince);
@@ -231,15 +231,15 @@ class TestVectorFieldSimulator : public Ariadne::Testing::ContextFixture {
 
         LabelledFigure fig({-2.5_dec <= x <= 2.5_dec, -2.5_dec <= y <= 2.5_dec});
         fig << orbit;
-        fig.write("test_real_expr_vector_field_simulator_xy");
+        fig.write("test_real_expr_continuous_time_simulator_xy");
 
         LabelledFigure fig2({0 <= TimeVariable() <= 6.3_dec, 0 <= z <= 2.5_dec});
         fig2 << orbit;
-        fig2.write("test_real_expr_vector_field_simulator_tz");
+        fig2.write("test_real_expr_continuous_time_simulator_tz");
     }
 
     Void test_multiple_real_box_vdp_cycle() {
-        typedef VectorFieldSimulator::ApproximateListPointType ListPointType;
+        typedef ContinuousTimeSimulator::ApproximateListPointType ListPointType;
 
         Real mu = Dyadic(0.5_x);
         RealVariable x("x"), y("y"), z("z");
@@ -251,7 +251,7 @@ class TestVectorFieldSimulator : public Ariadne::Testing::ContextFixture {
 
         Real time = 6.3_dec;
 
-        VectorFieldSimulator simulator(vanderpol);
+        ContinuousTimeSimulator simulator(vanderpol);
         simulator.configuration().set_step_size(0.05);
         simulator.configuration().set_num_subdivisions(0);
         simulator.configuration().set_discretisation_type(DiscretisationType::Mince);
@@ -264,21 +264,21 @@ class TestVectorFieldSimulator : public Ariadne::Testing::ContextFixture {
 
         LabelledFigure fig({-2.5_dec <= x <= 2.5_dec, -3 <= y <= 3});
         fig << orbit;
-        fig.write("test_real_box_list_vector_field_simulator_xy");
+        fig.write("test_real_box_list_continuous_time_simulator_xy");
 
         LabelledFigure fig2({0 <= TimeVariable() <= 6.3_dec, 0 <= z <= 2.5_dec});
         fig2 << orbit;
-        fig2.write("test_real_box_list_vector_field_simulator_tz");
+        fig2.write("test_real_box_list_continuous_time_simulator_tz");
     }
 };
 
 int main(int argc, const char* argv[]) {
-    ARIADNE_TESTING_SUITE("test_vector_field_simulator");
-    ARIADNE_TESTING_ADD_TEST(TestVectorFieldSimulator, test_linear_flow_and_input_labels);
-    ARIADNE_TESTING_ADD_TEST(TestVectorFieldSimulator, test_configuration_and_sampling);
-    ARIADNE_TESTING_ADD_TEST(TestVectorFieldSimulator, test_multiple_real_expr_vdp_cycle);
-    ARIADNE_TESTING_ADD_TEST(TestVectorFieldSimulator, test_multiple_real_box_vdp_cycle);
-    ARIADNE_TESTING_ADD_TEST(TestVectorFieldSimulator, test_multiple_trajectories_x);
-    ARIADNE_TESTING_ADD_TEST(TestVectorFieldSimulator, test_multiple_trajectories_xy);
+    ARIADNE_TESTING_SUITE("test_continuous_time_simulator");
+    ARIADNE_TESTING_ADD_TEST(TestContinuousTimeSimulator, test_linear_flow_and_input_labels);
+    ARIADNE_TESTING_ADD_TEST(TestContinuousTimeSimulator, test_configuration_and_sampling);
+    ARIADNE_TESTING_ADD_TEST(TestContinuousTimeSimulator, test_multiple_real_expr_vdp_cycle);
+    ARIADNE_TESTING_ADD_TEST(TestContinuousTimeSimulator, test_multiple_real_box_vdp_cycle);
+    ARIADNE_TESTING_ADD_TEST(TestContinuousTimeSimulator, test_multiple_trajectories_x);
+    ARIADNE_TESTING_ADD_TEST(TestContinuousTimeSimulator, test_multiple_trajectories_xy);
     return Ariadne::Testing::run_logging_suite(ariadne_test_suite, argc, argv);
 }

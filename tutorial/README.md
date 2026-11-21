@@ -3,14 +3,14 @@
 The tutorials are non-graphical. The C++ tutorial exercises **five**
 evolution capabilities with bounded scenarios:
 
-1. **VectorFieldSimulator** — simulate a stable one-dimensional continuous
+1. **ContinuousTimeSimulator** — simulate a stable one-dimensional continuous
    vector field for 0.1 time units.
 2. **ContinuousTimeEvolver** — compute a validated upper-semantics enclosure
    for the same field over 0.05 time units, then evolve an inclusion with
    measurable uncertain inputs using one explicitly selected reach method
    and one endpoint method.
 3. **DiscreteTimeEvolver** — take one validated step of a contracting map.
-4. **HybridSimulator and HybridContinuousTimeEvolver** — specify a two-mode
+4. **HybridContinuousTimeSimulator and HybridContinuousTimeEvolver** — specify a two-mode
    discrete-only automaton, create a simulator, then compute a short
    validated orbit for a separate continuous single-mode hybrid system.
 5. **FirstOrderPDE** — construct a validated, owning PDE model using
@@ -24,10 +24,11 @@ discrete-only `HybridAutomaton` used in C++. Both examples use the installed
 `pyariadne_evolution` extension. `DiscreteTimeEvolverConfiguration` is exposed so that
 its enclosure-radius and subdivision options can be configured.
 
-Python parity remains incomplete: the C++ tutorial also executes
-`VectorFieldSimulator`, `ContinuousTimeEvolver`, `HybridContinuousTimeEvolver`, and
-the `FirstOrderPDE` solver. These workflows require further Python-side
-model, integrator, or solver bindings and matching executable examples.
+As the final Evolution migration task, the Python tutorial will execute the
+same workflows as C++, including `ContinuousTimeSimulator`,
+`ContinuousTimeEvolver`, `HybridContinuousTimeEvolver`, and the `FirstOrderPDE`
+solver. Any missing model, integrator or solver bindings will be added then,
+after the underlying APIs have settled.
 
 ## Build and install
 

@@ -29,13 +29,13 @@
 #include <vector>
 
 #include "evolution/continuous_time_evolver.hpp"
+#include "evolution/continuous_time_simulator.hpp"
 #include "evolution/discrete_time_evolver.hpp"
 #include "evolution/enclosure_recombiner.hpp"
+#include "evolution/hybrid_continuous_time_simulator.hpp"
 #include "evolution/hybrid_enclosure.hpp"
-#include "evolution/hybrid_simulator.hpp"
 #include "evolution/hybrid_time.hpp"
 #include "evolution/orbit.hpp"
-#include "evolution/vector_field_simulator.hpp"
 #include "pybind11.hpp"
 #include "system/hybrid_automaton.hpp"
 #include "system/hybrid_automaton_interface.hpp"
@@ -129,11 +129,11 @@ template<class SIM>
 Void export_simulator(pybind11::module& module, const char* name);
 
 template<>
-Void export_simulator<VectorFieldSimulator>(pybind11::module& module, const char* name) {
-    typedef VectorFieldSimulator::TerminationType TerminationType;
-    typedef VectorFieldSimulator::ApproximateListPointType ApproximateListPointType;
-    typedef VectorFieldSimulator::OrbitType OrbitType;
-    typedef VectorFieldSimulator::RealBoxType RealBoxType;
+Void export_simulator<ContinuousTimeSimulator>(pybind11::module& module, const char* name) {
+    typedef ContinuousTimeSimulator::TerminationType TerminationType;
+    typedef ContinuousTimeSimulator::ApproximateListPointType ApproximateListPointType;
+    typedef ContinuousTimeSimulator::OrbitType OrbitType;
+    typedef ContinuousTimeSimulator::RealBoxType RealBoxType;
 
     const auto& reference_internal = pybind11::return_value_policy::reference_internal;
 
@@ -142,16 +142,16 @@ Void export_simulator<VectorFieldSimulator>(pybind11::module& module, const char
     pybind11::class_<OrbitType, pybind11::bases<LabelledDrawable2dInterface>> simulator_orbit_class(module, "ApproximatePointOrbit");
     simulator_orbit_class.def("curves", &OrbitType::curves);
 
-    pybind11::class_<VectorFieldSimulator> simulator_class(module, name);
-    simulator_class.def(pybind11::init<const VectorFieldSimulator::SystemType&>());
-    simulator_class.def("configuration", pybind11::overload_cast<>(&VectorFieldSimulator::configuration), reference_internal);
-    simulator_class.def("orbit", (OrbitType (VectorFieldSimulator::*)(const ApproximateListPointType&, const TerminationType&) const) & VectorFieldSimulator::orbit);
-    simulator_class.def("orbit", pybind11::overload_cast<const ApproximateListPointType&, const TerminationType&>(&VectorFieldSimulator::orbit, pybind11::const_));
-    simulator_class.def("orbit", pybind11::overload_cast<const RealExpressionBoundedConstraintSet&, const TerminationType&>(&VectorFieldSimulator::orbit, pybind11::const_));
-    simulator_class.def("orbit", pybind11::overload_cast<const RealBoxType&, const TerminationType&>(&VectorFieldSimulator::orbit, pybind11::const_));
+    pybind11::class_<ContinuousTimeSimulator> simulator_class(module, name);
+    simulator_class.def(pybind11::init<const ContinuousTimeSimulator::SystemType&>());
+    simulator_class.def("configuration", pybind11::overload_cast<>(&ContinuousTimeSimulator::configuration), reference_internal);
+    simulator_class.def("orbit", (OrbitType (ContinuousTimeSimulator::*)(const ApproximateListPointType&, const TerminationType&) const) & ContinuousTimeSimulator::orbit);
+    simulator_class.def("orbit", pybind11::overload_cast<const ApproximateListPointType&, const TerminationType&>(&ContinuousTimeSimulator::orbit, pybind11::const_));
+    simulator_class.def("orbit", pybind11::overload_cast<const RealExpressionBoundedConstraintSet&, const TerminationType&>(&ContinuousTimeSimulator::orbit, pybind11::const_));
+    simulator_class.def("orbit", pybind11::overload_cast<const RealBoxType&, const TerminationType&>(&ContinuousTimeSimulator::orbit, pybind11::const_));
 
-    typedef typename VectorFieldSimulator::ConfigurationType ConfigurationType;
-    pybind11::class_<ConfigurationType> simulator_configuration_class(module, "VectorFieldSimulatorConfiguration");
+    typedef typename ContinuousTimeSimulator::ConfigurationType ConfigurationType;
+    pybind11::class_<ConfigurationType> simulator_configuration_class(module, "ContinuousTimeSimulatorConfiguration");
     simulator_configuration_class.def("set_step_size", &ConfigurationType::set_step_size);
     simulator_configuration_class.def("set_discretisation_type", &ConfigurationType::set_discretisation_type);
     simulator_configuration_class.def("set_num_subdivisions", &ConfigurationType::set_num_subdivisions);
@@ -213,7 +213,7 @@ Void evolution_submodule(pybind11::module& module) {
 
     export_list_set<LabelledEnclosure>(module, "LabelledEnclosureListSet");
 
-    export_simulator<VectorFieldSimulator>(module, "VectorFieldSimulator");
+    export_simulator<ContinuousTimeSimulator>(module, "ContinuousTimeSimulator");
 
     export_evolver_interface<DiscreteTimeEvolver::Interface>(module, "DiscreteTimeEvolverInterface");
     export_evolver_interface<ContinuousTimeEvolver::Interface>(module, "ContinuousTimeEvolverInterface");
@@ -237,12 +237,12 @@ Void evolution_submodule(pybind11::module& module) {
     pybind11::class_<HybridEnclosure>(module, "HybridEnclosure")
         .def("location", &HybridEnclosure::location)
         .def("state_space", &HybridEnclosure::state_space);
-    pybind11::class_<HybridSimulator>(module, "HybridSimulator")
-        .def(pybind11::init<const HybridSimulator::SystemType&>())
+    pybind11::class_<HybridContinuousTimeSimulator>(module, "HybridContinuousTimeSimulator")
+        .def(pybind11::init<const HybridContinuousTimeSimulator::SystemType&>())
         // HybridAutomaton is exported by System without a Python base-class
         // declaration; provide the concrete model overload explicitly.
         .def(pybind11::init([](const HybridAutomaton& automaton) {
-            return std::make_unique<HybridSimulator>(
+            return std::make_unique<HybridContinuousTimeSimulator>(
                 static_cast<const HybridAutomatonInterface&>(automaton));
         }));
 }

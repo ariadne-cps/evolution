@@ -1,5 +1,5 @@
 /***************************************************************************
- *            vector_field_simulator.hpp
+ *            continuous_time_simulator.hpp
  *
  *  Copyright  2009-21  Luca Geretti, Mirko Albanese
  *
@@ -22,12 +22,12 @@
  *  along with Ariadne Evolution. If not, see <https://www.gnu.org/licenses/>.
  */
 
-/** @file evolution/vector_field_simulator.hpp
+/** @file evolution/continuous_time_simulator.hpp
  *  @brief Numerical simulation of continuous vector-field systems.
  */
 
-#ifndef ARIADNE_VECTOR_FIELD_SIMULATOR_HPP
-#define ARIADNE_VECTOR_FIELD_SIMULATOR_HPP
+#ifndef ARIADNE_CONTINUOUS_TIME_SIMULATOR_HPP
+#define ARIADNE_CONTINUOUS_TIME_SIMULATOR_HPP
 
 #include "evolution/configuration_interface.hpp"
 #include "evolution/orbit.hpp"
@@ -62,8 +62,8 @@ inline OutputStream& operator<<(OutputStream& os, const DiscretisationType& dtyp
 
 /** @brief OrdinaryDifferentialAlgebraicEquation: numerical simulation of continuous vector-field systems. */
 class OrdinaryDifferentialAlgebraicEquation;
-/** @brief VectorFieldSimulatorConfiguration: numerical simulation of continuous vector-field systems. */
-class VectorFieldSimulatorConfiguration;
+/** @brief ContinuousTimeSimulatorConfiguration: numerical simulation of continuous vector-field systems. */
+class ContinuousTimeSimulatorConfiguration;
 
 /** @brief RealExpressionBoundedConstraintSet: numerical simulation of continuous vector-field systems. */
 class RealExpressionBoundedConstraintSet;
@@ -76,7 +76,7 @@ using subspace = Map<RealVariable, Nat>;
 
 /*! \brief A class for computing the simulated evolution of a continuous system.
  */
-class VectorFieldSimulator {
+class ContinuousTimeSimulator {
   public:
     typedef FloatDPApproximation ApproximateTimeType;
     typedef LabelledPoint<FloatDPApproximation> ApproximatePointType;
@@ -86,7 +86,7 @@ class VectorFieldSimulator {
     typedef RealVariablesBox RealBoxType;
     typedef Real TerminationType;
     typedef OrdinaryDifferentialAlgebraicEquation SystemType;
-    typedef VectorFieldSimulatorConfiguration ConfigurationType;
+    typedef ContinuousTimeSimulatorConfiguration ConfigurationType;
     typedef Orbit<ApproximateListPointType> OrbitType;
 
     //! \brief Synchronised wrapping of orbit to allow concurrent adjoining
@@ -106,7 +106,7 @@ class VectorFieldSimulator {
   public:
     //! \brief Construct from an autonomous ODAE without constant parameters.
     //! \throws std::invalid_argument if explicit time or constant parameters are declared.
-    VectorFieldSimulator(const SystemType& system);
+    ContinuousTimeSimulator(const SystemType& system);
 
     //!@{
     //! \name Configuration for the class.
@@ -134,13 +134,13 @@ class VectorFieldSimulator {
     SharedPointer<ConfigurationType> _configuration;
 };
 
-//! \brief Configuration for a VectorFieldSimulator, essentially to control accuracy of evolution.
-class VectorFieldSimulatorConfiguration : public ConfigurationInterface {
+//! \brief Configuration for a ContinuousTimeSimulator, essentially to control accuracy of evolution.
+class ContinuousTimeSimulatorConfiguration : public ConfigurationInterface {
   public:
     //! \brief Default constructor gives reasonable values.
-    VectorFieldSimulatorConfiguration();
+    ContinuousTimeSimulatorConfiguration();
 
-    virtual ~VectorFieldSimulatorConfiguration() = default;
+    virtual ~ContinuousTimeSimulatorConfiguration() = default;
 
   private:
     //! \brief The fixed integration step size to use.
@@ -194,4 +194,4 @@ class VectorFieldSimulatorConfiguration : public ConfigurationInterface {
 
 } // namespace Ariadne
 
-#endif // ARIADNE_VECTOR_FIELD_SIMULATOR_HPP
+#endif // ARIADNE_CONTINUOUS_TIME_SIMULATOR_HPP

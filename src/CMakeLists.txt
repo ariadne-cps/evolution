@@ -6,11 +6,11 @@ add_library(EVOLUTION_SRC OBJECT
     orbit.cpp
     discrete_time_evolver.cpp
     continuous_time_evolver.cpp
-    vector_field_simulator.cpp
+    continuous_time_simulator.cpp
     first_order_pde.cpp
     hybrid_orbit.cpp
     hybrid_enclosure.cpp
-    hybrid_simulator.cpp
+    hybrid_continuous_time_simulator.cpp
     hybrid_evolution_backend.cpp
     hybrid_evolution_tree.cpp
     hybrid_continuous_time_evolver.cpp

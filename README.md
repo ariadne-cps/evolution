@@ -113,9 +113,11 @@ provider with free input coordinates; interval coefficients can supply these
 as time-varying numerical inputs. Its bound covers the provider's possibly
 wider extension. Unsupported capabilities fail explicitly.
 
-`VectorFieldSimulator` still requires autonomous equations without constant
-parameters. The continuous/hybrid simulator migration and inclusion support in
-hybrid evolution remain separate next steps.
+`ContinuousTimeSimulator` simulates autonomous equations without constant
+parameters; `HybridContinuousTimeSimulator` simulates hybrid systems. These
+names also apply to their configuration classes, headers and Python exports.
+Support for inclusions and timed or parameterised equations in the simulators,
+and inclusion support in hybrid evolution, remain separate next steps.
 
 Evolution uses the Git submodules [System](https://github.com/ariadne-cps/system), [Integration](https://github.com/ariadne-cps/integration), [Equation Solving](https://github.com/ariadne-cps/equation-solving), [Tree](https://github.com/ariadne-cps/tree), and [Build](https://github.com/ariadne-cps/build). The C++ test suites additionally use [Ariadne Testing](https://github.com/ariadne-cps/testing), pinned as the test-only submodule `ss/tst`. Each registered test runs with a fresh fixture, retaining the original mathematical checks and diagnostic variants.
 

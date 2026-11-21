@@ -9,8 +9,8 @@
 #include <type_traits>
 
 #include "evolution/continuous_time_evolver.hpp"
+#include "evolution/continuous_time_simulator.hpp"
 #include "evolution/traits.hpp"
-#include "evolution/vector_field_simulator.hpp"
 #include "function/taylor_model.hpp"
 #include "integration/integrator.hpp"
 #include "logging/test_runner.hpp"
@@ -22,7 +22,7 @@
 using namespace Ariadne;
 
 static_assert(std::is_same_v<ContinuousTimeEvolver::SystemType, ContinuousDynamics>);
-static_assert(std::is_same_v<VectorFieldSimulator::SystemType, OrdinaryDifferentialAlgebraicEquation>);
+static_assert(std::is_same_v<ContinuousTimeSimulator::SystemType, OrdinaryDifferentialAlgebraicEquation>);
 static_assert(std::is_same_v<EvolutionTraits<OrdinaryDifferentialAlgebraicEquation>::EvolverType,
                              EvolutionTraits<OrdinaryDifferentialAlgebraicInclusion>::EvolverType>);
 static_assert(std::is_same_v<EvolutionTraits<ContinuousTimeEvolver::SystemType>::EnclosureType,
@@ -62,8 +62,8 @@ class TestOrdinaryDynamicsContract : public Ariadne::Testing::ContextFixture {
         PreconditionedGradedTaylorSeriesIntegrator preconditioned(step_maximum_error = 1e-5);
         ARIADNE_TESTING_EXPECT_THROWS(std::invalid_argument,
                                       ContinuousTimeEvolver(parameterised, preconditioned));
-        ARIADNE_TESTING_EXPECT_THROWS(std::invalid_argument, (void)VectorFieldSimulator(timed));
-        ARIADNE_TESTING_EXPECT_THROWS(std::invalid_argument, (void)VectorFieldSimulator(parameterised));
+        ARIADNE_TESTING_EXPECT_THROWS(std::invalid_argument, (void)ContinuousTimeSimulator(timed));
+        ARIADNE_TESTING_EXPECT_THROWS(std::invalid_argument, (void)ContinuousTimeSimulator(parameterised));
     }
 
     Void test_inclusion_consumer_rejects_unsupported_arguments() {

@@ -1,5 +1,5 @@
 /***************************************************************************
- *            hybrid_simulator.hpp
+ *            hybrid_continuous_time_simulator.hpp
  *
  *  Copyright  2009-20  Luca Geretti, Mirko Albanese
  *
@@ -22,12 +22,12 @@
  *  along with Ariadne Evolution. If not, see <https://www.gnu.org/licenses/>.
  */
 
-/** @file evolution/hybrid_simulator.hpp
+/** @file evolution/hybrid_continuous_time_simulator.hpp
  *  @brief Simulation algorithms for hybrid dynamical systems.
  */
 
-#ifndef ARIADNE_HYBRID_SIMULATOR_HPP
-#define ARIADNE_HYBRID_SIMULATOR_HPP
+#ifndef ARIADNE_HYBRID_CONTINUOUS_TIME_SIMULATOR_HPP
+#define ARIADNE_HYBRID_CONTINUOUS_TIME_SIMULATOR_HPP
 
 #include "evolution/configuration_interface.hpp"
 #include "hybrid/hybrid_paving.hpp"
@@ -63,21 +63,21 @@ class DiscreteEvent;
 /** @brief DiscreteLocation represents simulation algorithms for hybrid dynamical systems. */
 class DiscreteLocation;
 
-/** @brief HybridSimulatorConfiguration represents simulation algorithms for hybrid dynamical systems. */
-class HybridSimulatorConfiguration;
+/** @brief HybridContinuousTimeSimulatorConfiguration represents simulation algorithms for hybrid dynamical systems. */
+class HybridContinuousTimeSimulatorConfiguration;
 
 template<class T>
 class Orbit;
 
 /*! \brief A class for computing the evolution of a hybrid system.
  */
-class HybridSimulator {
+class HybridContinuousTimeSimulator {
   public:
     typedef HybridPoint<FloatDPApproximation> HybridApproximatePointType;
     typedef Vector<HybridApproximatePointType> HybridApproximateListPointType;
     typedef Point<FloatDPApproximation> ApproximatePointType;
     typedef Vector<ApproximatePointType> ApproximatePointListType;
-    typedef HybridSimulatorConfiguration ConfigurationType;
+    typedef HybridContinuousTimeSimulatorConfiguration ConfigurationType;
     typedef HybridAutomatonInterface SystemType;
     typedef HybridApproximatePointType EnclosureType;
     typedef Orbit<HybridApproximatePointType> OrbitType;
@@ -90,7 +90,7 @@ class HybridSimulator {
 
   public:
     //! \brief Default constructor.
-    HybridSimulator(const SystemType& system);
+    HybridContinuousTimeSimulator(const SystemType& system);
 
     //!@{
     //! \name Configuration for the class.
@@ -119,13 +119,13 @@ class HybridSimulator {
     Bool _satisfies_invariants(const DiscreteLocation& location, const Point<FloatDPApproximation>& point) const;
 };
 
-/** @brief HybridSimulatorConfiguration represents simulation algorithms for hybrid dynamical systems. */
-class HybridSimulatorConfiguration : public ConfigurationInterface {
+/** @brief HybridContinuousTimeSimulatorConfiguration represents simulation algorithms for hybrid dynamical systems. */
+class HybridContinuousTimeSimulatorConfiguration : public ConfigurationInterface {
   public:
     //! \brief Default constructor gives reasonable values.
-    HybridSimulatorConfiguration();
+    HybridContinuousTimeSimulatorConfiguration();
 
-    virtual ~HybridSimulatorConfiguration() = default;
+    virtual ~HybridContinuousTimeSimulatorConfiguration() = default;
 
   private:
     //! \brief The step size for integration.
@@ -151,4 +151,4 @@ class HybridSimulatorConfiguration : public ConfigurationInterface {
 
 } // namespace Ariadne
 
-#endif // ARIADNE_HYBRID_SIMULATOR_HPP
+#endif // ARIADNE_HYBRID_CONTINUOUS_TIME_SIMULATOR_HPP

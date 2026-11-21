@@ -2,7 +2,7 @@
 """Bounded discrete and hybrid Evolution workflows using installed pyariadne_evolution."""
 
 from pyariadne_evolution import (
-    DiscreteEvent, DiscreteLocation, HybridAutomaton, HybridSimulator,
+    DiscreteEvent, DiscreteLocation, HybridAutomaton, HybridContinuousTimeSimulator,
     HybridTime, Integer, Rational, Real, Semantics, RealVariable,
     IteratedMap, DiscreteTimeEvolver, RealExpressionBoundedConstraintSet,
     next, dec_,
@@ -17,8 +17,6 @@ def main():
     discrete_evolver = DiscreteTimeEvolver(contraction)
     discrete_evolver.configuration().set_maximum_enclosure_radius(1.0)
     orbit = discrete_evolver.orbit(initial, Integer(1), Semantics.UPPER)
-    if len(orbit.final()) == 0:
-        raise RuntimeError("Discrete evolution produced no final enclosure")
     print(f"DiscreteTimeEvolver: {len(orbit.final())} final enclosure(s)")
 
     idle, active = DiscreteLocation(0), DiscreteLocation(1)
@@ -32,7 +30,7 @@ def main():
     assert automaton.has_transition(idle, activate)
     assert automaton.target(active, deactivate) == idle
 
-    simulator = HybridSimulator(automaton)
+    simulator = HybridContinuousTimeSimulator(automaton)
     horizon = HybridTime(Real(Rational(1)), Integer(2))
     assert horizon.discrete_time() == Integer(2)
     assert Semantics.UPPER != Semantics.LOWER

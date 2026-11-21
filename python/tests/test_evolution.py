@@ -1,10 +1,10 @@
 import pyariadne_evolution as a
 
 def test_evolution_bindings():
-    names = ("Semantics", "Enclosure", "VectorFieldSimulator",
+    names = ("Semantics", "Enclosure", "ContinuousTimeSimulator",
              "OrdinaryDifferentialAlgebraicEquation", "OrdinaryDifferentialAlgebraicInclusion",
              "DiscreteTimeEvolver", "DiscreteTimeEvolverConfiguration", "ContinuousTimeEvolver", "HybridTime",
-             "HybridEnclosure", "HybridSimulator", "recombine",
+             "HybridEnclosure", "HybridContinuousTimeSimulator", "recombine",
              "EnclosureRecombinerInterface", "EnclosureRecombiner",
              "ReferenceEnclosureRecombiner", "EnclosureRecombinationContext",
              "EnclosureRecombinationResult", "EnclosureRecombinationOutput")
@@ -80,7 +80,7 @@ def test_ordinary_equation_consumers():
     assert orbit.final().size() > 0
     assert orbit.final()[0].state_set().dimension() == 1
     assert orbit.final()[0].state_auxiliary_set().dimension() == 2
-    assert isinstance(a.VectorFieldSimulator(equation), a.VectorFieldSimulator)
+    assert isinstance(a.ContinuousTimeSimulator(equation), a.ContinuousTimeSimulator)
     timed = a.OrdinaryDifferentialAlgebraicEquation(
         [a.dot(x) << (t - x)], a.RealVariablesBox({}), time=t)
     timed_evolver = a.ContinuousTimeEvolver(timed, integrator)
@@ -99,7 +99,7 @@ def test_ordinary_equation_consumers():
         parameterised_evolver.orbit(initial, a.Real(1)/16, a.Semantics.LOWER)
     for field in (timed, parameterised):
         with unittest.TestCase().assertRaises(ValueError):
-            a.VectorFieldSimulator(field)
+            a.ContinuousTimeSimulator(field)
 
 
 def test_common_inclusion_consumers():

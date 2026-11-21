@@ -1,5 +1,5 @@
 /***************************************************************************
- *            vector_field_simulator.cpp
+ *            continuous_time_simulator.cpp
  *
  *  Copyright  2008-21  Luca Geretti, Mirko Albanese
  *
@@ -22,11 +22,11 @@
  *  along with Ariadne Evolution. If not, see <https://www.gnu.org/licenses/>.
  */
 
-/** @file src/vector_field_simulator.cpp
+/** @file src/continuous_time_simulator.cpp
  *  @brief Implement vector field simulator operations.
  */
 
-#include "evolution/vector_field_simulator.hpp"
+#include "evolution/continuous_time_simulator.hpp"
 
 #include <stdexcept>
 
@@ -150,23 +150,23 @@ List<LabelledPoint<FloatDPApproximation>> create_point_list(BinaryTreePaving& pa
     return result;
 }
 
-VectorFieldSimulator::VectorFieldSimulator(const SystemType& system) : _system(system.clone()), _configuration(new VectorFieldSimulatorConfiguration()) {
+ContinuousTimeSimulator::ContinuousTimeSimulator(const SystemType& system) : _system(system.clone()), _configuration(new ContinuousTimeSimulatorConfiguration()) {
     if (system.has_explicit_time() || system.parameter_space().dimension() != 0u) {
-        throw std::invalid_argument("VectorFieldSimulator requires an autonomous ODAE without constant parameters");
+        throw std::invalid_argument("ContinuousTimeSimulator requires an autonomous ODAE without constant parameters");
     }
 }
 
 inline FloatDPApproximation evaluate(const EffectiveScalarMultivariateFunction& f, const Vector<FloatDPApproximation>& x) { return f(x); }
 inline Vector<FloatDPApproximation> evaluate(const EffectiveVectorMultivariateFunction& f, const Vector<FloatDPApproximation>& x) { return f(x); }
 
-auto VectorFieldSimulator::orbit(const RealExpressionBoundedConstraintSet& init_set, const TerminationType& termination) const
+auto ContinuousTimeSimulator::orbit(const RealExpressionBoundedConstraintSet& init_set, const TerminationType& termination) const
     -> OrbitType {
     auto spc = _system->state_space();
     UpperBoxType box = init_set.euclidean_set(spc).bounding_box();
     return orbit(box, termination);
 }
 
-auto VectorFieldSimulator::orbit(const RealBoxType& init_bx, const TerminationType& termination) const
+auto ContinuousTimeSimulator::orbit(const RealBoxType& init_bx, const TerminationType& termination) const
     -> OrbitType {
     auto spc = _system->state_space();
     auto box = init_bx.euclidean_set(spc);
@@ -174,7 +174,7 @@ auto VectorFieldSimulator::orbit(const RealBoxType& init_bx, const TerminationTy
     return orbit(ubox, termination);
 }
 
-auto VectorFieldSimulator::orbit(UpperBoxType& initial_box, const TerminationType& termination) const
+auto ContinuousTimeSimulator::orbit(UpperBoxType& initial_box, const TerminationType& termination) const
     -> OrbitType {
     BinaryTreePaving gridPaving = create_paving(initial_box, _system->state_space(), _configuration->get_subspace());
     Nat subdivisions = _configuration->is_using_subspace() ? 0u : _configuration->num_subdivisions();
@@ -184,7 +184,7 @@ auto VectorFieldSimulator::orbit(UpperBoxType& initial_box, const TerminationTyp
     return orbit(pointList, termination);
 }
 
-auto VectorFieldSimulator::orbit(const ApproximateListPointType& initial_points, const TerminationType& termination) const -> OrbitType {
+auto ContinuousTimeSimulator::orbit(const ApproximateListPointType& initial_points, const TerminationType& termination) const -> OrbitType {
     LOGGING_SCOPE_CREATE;
 
     LOGGING_PRINTLN("Simulating from " << initial_points.size() << " initial points")
@@ -207,7 +207,7 @@ auto VectorFieldSimulator::orbit(const ApproximateListPointType& initial_points,
     }
     auto result = std::make_shared<SynchronisedOrbit>(make_state_auxiliary_point(canonical_points, state_space, auxiliary_space, state_auxiliary_space, auxiliary_function));
 
-    WorkloadType workload(std::bind_front(&VectorFieldSimulator::_simulate_from_point, this), termination, result);
+    WorkloadType workload(std::bind_front(&ContinuousTimeSimulator::_simulate_from_point, this), termination, result);
     for (SizeType i = 0; i < canonical_points.size(); ++i) {
         workload.append({i, canonical_points.at(i)});
     }
@@ -216,7 +216,7 @@ auto VectorFieldSimulator::orbit(const ApproximateListPointType& initial_points,
     return std::move(*result);
 }
 
-void VectorFieldSimulator::_simulate_from_point(Pair<SizeType, ApproximatePointType> indexed_initial, const TerminationType& termination, SharedPointer<SynchronisedOrbit> orbit) const {
+void ContinuousTimeSimulator::_simulate_from_point(Pair<SizeType, ApproximatePointType> indexed_initial, const TerminationType& termination, SharedPointer<SynchronisedOrbit> orbit) const {
     LOGGING_SCOPE_CREATE
 
     const auto& curve_number = indexed_initial.first;
@@ -247,12 +247,12 @@ void VectorFieldSimulator::_simulate_from_point(Pair<SizeType, ApproximatePointT
     }
 }
 
-VectorFieldSimulatorConfiguration::VectorFieldSimulatorConfiguration() : _step_size(0.125_x, dp), _num_subdivisions(2), _discretisation_type(DiscretisationType::Recombine), _subspace() {
+ContinuousTimeSimulatorConfiguration::ContinuousTimeSimulatorConfiguration() : _step_size(0.125_x, dp), _num_subdivisions(2), _discretisation_type(DiscretisationType::Recombine), _subspace() {
 }
 
 OutputStream&
-    VectorFieldSimulatorConfiguration::_write(OutputStream& os) const {
-    os << "VectorFieldSimulatorConfiguration("
+    ContinuousTimeSimulatorConfiguration::_write(OutputStream& os) const {
+    os << "ContinuousTimeSimulatorConfiguration("
        << "\n  step_size=" << step_size()
        << "\n  discretisation_type=" << discretisation_type()
        << "\n  num_subdivisions=" << num_subdivisions()

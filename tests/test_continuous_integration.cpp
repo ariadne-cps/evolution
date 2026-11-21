@@ -93,6 +93,35 @@ class TestContinuousIntegration : public Ariadne::Testing::ContextFixture {
         ARIADNE_TESTING_EXPECT_EQUAL(evolved.parameter_domain(), domain);
     }
 
+    Void test_argument_maps_reject_missing_or_out_of_domain_parameters() {
+        Enclosure source(domain, config);
+        const ExactBoxType parameters({
+            {0.5_x, 0.75_x}
+        });
+        source.adjoin_constant_parameters(parameters);
+        const auto t = EffectiveScalarMultivariateFunction::coordinate(3u, 1u);
+        const auto p = EffectiveScalarMultivariateFunction::coordinate(3u, 2u);
+        const EffectiveVectorMultivariateFunction field = {t + p};
+        TaylorSeriesIntegrator taylor(step_maximum_error = 1e-6, order = 8);
+        const FlowStepIntegratorAdapter solver(taylor);
+        const auto step = solver.step(ValidatedIntegrationRequest(
+            field, domain, StepSizeType(0u), h, parameters, UpperBoxType({
+                                                                {-2.0_x, 2.0_x}
+        })));
+        auto reach = source;
+        auto evolved = source;
+        ARIADNE_TESTING_EXPECT_THROWS(std::invalid_argument,
+                                      apply_integration_step(reach, evolved, step, source.state_function()));
+        const auto fixed = config.function_factory().create_coordinate(source.parameter_domain(), 1u);
+        const auto outside = join(source.state_function(), fixed + Real(1));
+        ARIADNE_TESTING_EXPECT_THROWS(std::invalid_argument,
+                                      apply_integration_step(reach, evolved, step, outside));
+        ARIADNE_TESTING_EXPECT_EQUAL(reach.parameter_domain(), source.parameter_domain());
+        ARIADNE_TESTING_EXPECT_EQUAL(evolved.parameter_domain(), source.parameter_domain());
+        ARIADNE_TESTING_EXPECT_EQUAL(cast_exact_box(reach.state_function().range()), cast_exact_box(source.state_function().range()));
+        ARIADNE_TESTING_EXPECT_EQUAL(cast_exact_box(evolved.state_function().range()), cast_exact_box(source.state_function().range()));
+    }
+
     Void test_explicit_time_state_step_rebases_reach_without_losing_correlations() {
         // The numerical reach uses absolute time [1/2,5/8], whereas Enclosure
         // must gain a local temporal parameter [0,1/8].
@@ -182,6 +211,7 @@ int main(int argc, char** argv) {
     ARIADNE_TESTING_ADD_TEST(TestContinuousIntegration, test_local_step_preserves_correlations_and_absolute_time);
     ARIADNE_TESTING_ADD_TEST(TestContinuousIntegration, test_parameterized_step_uses_the_independent_endpoint_certificate);
     ARIADNE_TESTING_ADD_TEST(TestContinuousIntegration, test_unsupported_certificates_do_not_change_enclosures);
+    ARIADNE_TESTING_ADD_TEST(TestContinuousIntegration, test_argument_maps_reject_missing_or_out_of_domain_parameters);
     ARIADNE_TESTING_ADD_TEST(TestContinuousIntegration, test_explicit_time_state_step_rebases_reach_without_losing_correlations);
     ARIADNE_TESTING_ADD_TEST(TestContinuousIntegration, test_explicit_time_parameters_are_preserved_across_two_steps);
     return Ariadne::Testing::run_logging_suite(ariadne_test_suite, argc, argv);

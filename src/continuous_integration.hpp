@@ -6,6 +6,8 @@
 #ifndef ARIADNE_EVOLUTION_CONTINUOUS_INTEGRATION_HPP
 #define ARIADNE_EVOLUTION_CONTINUOUS_INTEGRATION_HPP
 
+#include "function/function_patch.hpp"
+
 namespace Ariadne {
 class Enclosure;
 class ValidatedIntegrationStep;
@@ -23,6 +25,14 @@ enum class IntegrationStepCoordinates { STATE,
  */
 void apply_integration_step(Enclosure& reach, Enclosure& evolved,
                             const ValidatedIntegrationStep& step, IntegrationStepCoordinates coordinates);
+
+/** @brief Apply a step using a map from existing enclosure parameters to
+ *  the numerical [state, constant parameters] arguments, excluding time.
+ *  Fixed parameters are composed from their original coordinates on every step.
+ */
+void apply_integration_step(Enclosure& reach, Enclosure& evolved,
+                            const ValidatedIntegrationStep& step,
+                            const ValidatedVectorMultivariateFunctionPatch& arguments);
 } // namespace EvolutionDetail
 } // namespace Ariadne
 #endif

@@ -61,6 +61,45 @@ inline PositiveValidatedUpperNumber abs(PositiveValidatedUpperNumber y) { return
 
 namespace {
 
+EffectiveVectorMultivariateFunction equation_field(const OrdinaryDifferentialAlgebraicEquation& system) {
+    if (system.has_explicit_time() || system.parameter_space().dimension() == 0u) {
+        return system.function();
+    }
+    // The numerical timed-parameter overload expects [state,time,parameters].
+    // An autonomous parameterised field ignores that argument; no clock or
+    // parameter is added to the physical state or differentiated.
+    const SizeType n = system.dimension();
+    const SizeType np = system.parameter_space().dimension();
+    const auto coordinates = EffectiveScalarMultivariateFunction::coordinates(n + 1u + np);
+    List<EffectiveScalarMultivariateFunction> arguments;
+    for (SizeType i = 0u; i != n; ++i) {
+        arguments.append(coordinates[i]);
+    }
+    for (SizeType i = 0u; i != np; ++i) {
+        arguments.append(coordinates[n + 1u + i]);
+    }
+    return compose(system.function(), EffectiveVectorMultivariateFunction(arguments));
+}
+
+ValidatedVectorMultivariateFunctionPatch constant_parameter_coordinates(const Enclosure& set, SizeType count) {
+    Array<SizeType> indices(count);
+    SizeType remaining = count;
+    for (SizeType i = set.number_of_parameters(); i != 0u && remaining != 0u; --i) {
+        if (set.variable_kinds()[i - 1u] == EnclosureVariableKind::PARAMETER) {
+            indices[--remaining] = i - 1u;
+        }
+    }
+    if (remaining != 0u) {
+        throw std::logic_error("Continuous evolution lost its trajectory-constant parameter coordinates");
+    }
+    const auto& factory = set.configuration().function_factory();
+    auto result = factory.create_zeros(count, set.parameter_domain());
+    for (SizeType i = 0u; i != count; ++i) {
+        result[i] = factory.create_coordinate(set.parameter_domain(), indices[i]);
+    }
+    return result;
+}
+
 template<class ES>
 List<ES> subdivide(const ES& enclosure) {
     List<ES> result;
@@ -153,19 +192,17 @@ Dyadic limit_step_to_remaining_time(const Dyadic& configured, const Dyadic& rema
 
 ContinuousTimeEvolver::ContinuousTimeEvolver(const SystemType& system, const IntegratorInterface& i)
     : _system(system.clone()), _integrator(i.clone()), _configuration(new ConfigurationType()) {
-    if (system.parameter_space().dimension() != 0u) {
-        throw std::invalid_argument("ContinuousTimeEvolver does not yet support trajectory-constant ODAE parameters");
-    }
-    if (system.has_explicit_time() && system.auxiliary_space().size() != 0u) {
+    if ((system.has_explicit_time() || system.parameter_space().dimension() != 0u) &&
+        system.auxiliary_space().size() != 0u) {
         // Enclosure currently represents auxiliary outputs as state-only
-        // functions. Time-dependent auxiliary outputs must not be evaluated
+        // functions. Time- or parameter-dependent outputs must not be evaluated
         // using a map with the wrong argument space.
         throw std::invalid_argument(
-            "ContinuousTimeEvolver does not yet support auxiliary outputs for explicit-time ODAE");
+            "ContinuousTimeEvolver does not yet support auxiliary outputs with explicit time or constant parameters");
     }
-    if (system.has_explicit_time() &&
+    if ((system.has_explicit_time() || system.parameter_space().dimension() != 0u) &&
         dynamic_cast<const PreconditionedGradedTaylorSeriesIntegrator*>(&i) != nullptr) {
-        throw std::invalid_argument("Preconditioned continuous evolution does not yet support explicit-time ODAE");
+        throw std::invalid_argument("Preconditioned continuous evolution does not yet support explicit time or constant parameters");
     }
 }
 
@@ -203,13 +240,20 @@ auto ContinuousTimeEvolver::orbit(const EnclosureType& initial_set, const TimeTy
     LOGGING_SCOPE_CREATE
     ARIADNE_PRECONDITION(this->system().state_auxiliary_space() == initial_set.state_auxiliary_space())
 
-    auto result = std::make_shared<SynchronisedOrbit>(initial_set);
+    EnclosureType initial = initial_set;
+    if (this->system().parameter_space().dimension() != 0u) {
+        if (semantics == Semantics::LOWER) {
+            throw std::invalid_argument("Parameterised continuous evolution currently requires UPPER semantics");
+        }
+        initial.adjoin_constant_parameters(this->system().constant_parameter_domain());
+    }
+    auto result = std::make_shared<SynchronisedOrbit>(initial);
     WorkloadType workload([time](const TimedEnclosureType& timed_enclosure, SharedPointer<ProgressIndicator> indicator) {
         indicator->update_current(timed_enclosure.first.get_d());
         indicator->update_final(time.get_d());
     },
                           std::bind_front(&ContinuousTimeEvolver::_process_timed_enclosure, this), time, semantics, result);
-    _append_initial_set(workload, TimeStepType(0u), initial_set);
+    _append_initial_set(workload, TimeStepType(0u), initial);
     workload.process();
 
     return std::move(*result);
@@ -299,7 +343,7 @@ Void ContinuousTimeEvolver::
     }
 
     /////////////// Main Evolution ////////////////////////////////
-    const FunctionType& dynamic = _system->function();
+    const FunctionType dynamic = equation_field(*_system);
 
     // Limit the next step to the remaining evolution horizon. Evolution
     // horizons are Real, while integration steps are exact Dyadic values:
@@ -335,23 +379,26 @@ Void ContinuousTimeEvolver::
     EnclosureType next_set = current_set;
     SharedPointer<PreconditionedTaylorSeriesState> next_preconditioned_state;
 
-    if (_system->has_explicit_time()) {
-        // Bound the nonautonomous equation over its physical time interval.
+    const SizeType parameter_count = _system->parameter_space().dimension();
+    if (_system->has_explicit_time() || parameter_count != 0u) {
+        // Bound the equation over absolute time and its fixed-parameter domain.
         // In particular, the bound is a certified enclosure, not an
         // unverified estimate constructed from the initial-state box.
         EulerBounder bounder;
         StepSizeType bounded_step;
         UpperBoxType bounding_box;
+        const auto parameters = constant_parameter_coordinates(current_set, parameter_count);
+        const auto parameter_domain = cast_exact_box(UpperBoxType(parameters.range()));
         make_lpair(bounded_step, bounding_box) = bounder.compute(
-            dynamic, current_set_bounds, current_time, ExactBoxType(0u),
+            dynamic, current_set_bounds, current_time, parameter_domain,
             suggest(maximum_step_size));
         const FlowStepIntegratorAdapter step_integrator(*integrator);
         const auto common_step = step_integrator.step(ValidatedIntegrationRequest(
             dynamic, current_set_bounds, current_time, bounded_step,
-            ExactBoxType(0u), bounding_box));
+            parameter_domain, bounding_box));
         step_size = common_step.time_step();
         EvolutionDetail::apply_integration_step(
-            reach_set, next_set, common_step, EvolutionDetail::IntegrationStepCoordinates::STATE);
+            reach_set, next_set, common_step, join(current_set.state_function(), parameters));
     } else if (preconditioned_integrator != nullptr) {
         if (preconditioned_integrator->diagnostics() && result->reach_size() == 1u && preconditioned_integrator->preconditioning() == TaylorSeriesPreconditioning::QR) {
             PreconditionedGradedTaylorSeriesIntegrator identity_probe =

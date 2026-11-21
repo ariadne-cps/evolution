@@ -125,12 +125,13 @@ class ContinuousTimeEvolver
     typedef DynamicWorkload<TimedEnclosureType, const TimeType&, Semantics, SharedPointer<SynchronisedOrbit>> WorkloadType;
 
   public:
-    //! \brief Construct from an ODAE without trajectory-constant parameters.
+    //! \brief Construct from an ODAE with optional trajectory-constant parameters.
     //! \details Autonomous and explicit-time ODAEs share the same evolution loop.
-    //! \throws std::invalid_argument if constant parameters are declared, if
-    //! explicit-time auxiliary outputs require an unavailable time-aware
-    //! enclosure mapping, or if the selected preconditioned integrator lacks
-    //! explicit-time support.
+    //! Parameters remain enclosure coordinates across steps, subdivision and
+    //! reconditioning. Parameterised evolution currently supports UPPER only.
+    //! \throws std::invalid_argument for auxiliary outputs on timed or
+    //! parameterised ODAEs, or if the selected preconditioned integrator lacks
+    //! support for time or parameters.
     ContinuousTimeEvolver(const SystemType&, const IntegratorInterface&);
 
     //! \brief Make a dynamically-allocated copy.

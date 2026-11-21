@@ -14,16 +14,30 @@
 
 namespace Ariadne::EvolutionDetail {
 
-void apply_integration_step(Enclosure& reach, Enclosure& evolved,
-                            const ValidatedIntegrationStep& step, IntegrationStepCoordinates coordinates) {
+namespace {
+void apply_step(Enclosure& reach, Enclosure& evolved,
+                const ValidatedIntegrationStep& step,
+                IntegrationStepCoordinates coordinates,
+                const ValidatedVectorMultivariateFunctionPatch* argument_map) {
     if (step.reach_models().size() != 1u || !step.has_evolve_model()) {
         throw std::invalid_argument("Continuous enclosure bridge requires one certified reach patch and an endpoint map");
     }
     const auto& tube = step.reach_models()[0];
     const auto& endpoint = step.evolve_model();
-    const SizeType arguments = coordinates == IntegrationStepCoordinates::STATE
-                                 ? reach.state_dimension()
-                                 : reach.number_of_parameters();
+    const SizeType arguments = argument_map != nullptr
+                                 ? argument_map->result_size()
+                                 : (coordinates == IntegrationStepCoordinates::STATE
+                                        ? reach.state_dimension()
+                                        : reach.number_of_parameters());
+    // Keep nullable guards separate from validated logical expressions:
+    // their overloaded operators may evaluate both operands.
+    if (argument_map != nullptr) {
+        if (argument_map->domain() != reach.parameter_domain() ||
+            argument_map->domain() != evolved.parameter_domain() ||
+            arguments != reach.state_dimension() + step.constant_parameter_domain().dimension()) {
+            throw std::invalid_argument("Integration argument map must retain the enclosure domain and fixed parameters");
+        }
+    }
     // The numerical solver can put time between state and fixed-parameter
     // coordinates (first step) or after all retained parameters (continuation).
     // Do not confuse the time index with the number of enclosure parameters.
@@ -41,14 +55,16 @@ void apply_integration_step(Enclosure& reach, Enclosure& evolved,
     const ExactBoxType model_coordinates = product(
         ExactBoxType(project(tube.domain(), range(0u, time_index))),
         ExactBoxType(project(tube.domain(), range(time_index + 1u, tube.argument_size()))));
-    if (coordinates == IntegrationStepCoordinates::STATE &&
-        step.constant_parameter_domain().dimension() != 0u) {
-        throw std::invalid_argument("A state-coordinate step cannot silently introduce trajectory-constant parameters");
-    }
-    if (coordinates == IntegrationStepCoordinates::PARAMETERS &&
+    if (argument_map == nullptr && coordinates == IntegrationStepCoordinates::PARAMETERS &&
         (endpoint.domain() != evolved.parameter_domain() ||
          model_coordinates != reach.parameter_domain())) {
         throw std::invalid_argument("Parameterized integration maps must retain the enclosure domain");
+    }
+    if (argument_map != nullptr) {
+        if (endpoint.domain() != model_coordinates ||
+            !subset(cast_exact_box(UpperBoxType(argument_map->range())), model_coordinates)) {
+            throw std::invalid_argument("Integration argument map exceeds the certified numerical domain");
+        }
     }
 
     // Enclosure requires [original coordinates, local time]. Normalize both
@@ -77,7 +93,16 @@ void apply_integration_step(Enclosure& reach, Enclosure& evolved,
     // Work on independent copies; a failure leaves both inputs unchanged.
     Enclosure next_reach = reach;
     Enclosure next_evolved = evolved;
-    if (coordinates == IntegrationStepCoordinates::STATE) {
+    if (argument_map != nullptr) {
+        const auto domain = product(argument_map->domain(), local_time_domain);
+        const auto time = reach.configuration().function_factory().create_coordinate(
+            domain, argument_map->argument_size());
+        const auto tube_arguments = join(embed(*argument_map, local_time_domain), time);
+        next_reach.apply_parameterised_full_reach_step(
+            compose(cast_unrestricted(local_tube), tube_arguments));
+        next_evolved.apply_parameterised_fixed_evolve_step(
+            compose(cast_unrestricted(endpoint), *argument_map), step.time_step());
+    } else if (coordinates == IntegrationStepCoordinates::STATE) {
         next_reach.apply_full_reach_step(local_tube);
         next_evolved.apply_parameterised_fixed_evolve_step(
             compose(cast_unrestricted(endpoint), next_evolved.state_function()), step.time_step());
@@ -87,5 +112,22 @@ void apply_integration_step(Enclosure& reach, Enclosure& evolved,
     }
     reach = std::move(next_reach);
     evolved = std::move(next_evolved);
+}
+} // namespace
+
+void apply_integration_step(Enclosure& reach, Enclosure& evolved,
+                            const ValidatedIntegrationStep& step, IntegrationStepCoordinates coordinates) {
+    if (coordinates == IntegrationStepCoordinates::STATE) {
+        if (step.constant_parameter_domain().dimension() != 0u) {
+            throw std::invalid_argument("A state-coordinate step cannot silently introduce trajectory-constant parameters");
+        }
+    }
+    apply_step(reach, evolved, step, coordinates, nullptr);
+}
+
+void apply_integration_step(Enclosure& reach, Enclosure& evolved,
+                            const ValidatedIntegrationStep& step,
+                            const ValidatedVectorMultivariateFunctionPatch& arguments) {
+    apply_step(reach, evolved, step, IntegrationStepCoordinates::PARAMETERS, &arguments);
 }
 } // namespace Ariadne::EvolutionDetail

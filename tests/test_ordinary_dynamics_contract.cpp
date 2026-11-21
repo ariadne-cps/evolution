@@ -34,8 +34,7 @@ class TestOrdinaryDynamicsContract : public Ariadne::Testing::ContextFixture {
         const OrdinaryDifferentialAlgebraicEquation timed({dot(x) = t - x}, RealVariablesBox{}, t);
         const OrdinaryDifferentialAlgebraicEquation parameterised({dot(x) = p - x}, RealVariablesBox({0 <= p <= 1}));
         TaylorPicardIntegrator integrator(step_maximum_error = 1e-5);
-        // The validated continuous solver now handles explicit time. Constant
-        // parameters still need enclosure coordinates that persist across steps.
+        // Both explicit time and trajectory-constant parameters are supported.
         ARIADNE_TESTING_EXPECT_EQUAL(timed.dimension(), 1u);
         ARIADNE_TESTING_EXPECT_EQUAL(timed.function().argument_size(), 2u);
         ARIADNE_TESTING_EXPECT_EQUAL(parameterised.function().argument_size(), 2u);
@@ -49,8 +48,17 @@ class TestOrdinaryDynamicsContract : public Ariadne::Testing::ContextFixture {
             {dot(x) = t - x}, RealVariablesBox{}, t, {let(output) = t + x});
         ARIADNE_TESTING_EXPECT_THROWS(
             std::invalid_argument, ContinuousTimeEvolver(timed_auxiliary, integrator));
-        ARIADNE_TESTING_EXPECT_THROWS(
-            std::invalid_argument, ContinuousTimeEvolver(parameterised, integrator));
+        ContinuousTimeEvolver parameterised_evolver(parameterised, integrator);
+        ARIADNE_TESTING_EXPECT_EQUAL(parameterised_evolver.system().parameter_space().dimension(), 1u);
+        ARIADNE_TESTING_EXPECT_THROWS(std::invalid_argument,
+                                      parameterised_evolver.orbit(RealVariablesBox({x == 0}), Real(0.125_x), Semantics::LOWER));
+        const OrdinaryDifferentialAlgebraicEquation parameterised_auxiliary(
+            {dot(x) = p - x}, RealVariablesBox({0 <= p <= 1}), std::nullopt, {let(output) = p + x});
+        ARIADNE_TESTING_EXPECT_THROWS(std::invalid_argument,
+                                      ContinuousTimeEvolver(parameterised_auxiliary, integrator));
+        PreconditionedGradedTaylorSeriesIntegrator preconditioned(step_maximum_error = 1e-5);
+        ARIADNE_TESTING_EXPECT_THROWS(std::invalid_argument,
+                                      ContinuousTimeEvolver(parameterised, preconditioned));
         ARIADNE_TESTING_EXPECT_THROWS(std::invalid_argument, (void)VectorFieldSimulator(timed));
         ARIADNE_TESTING_EXPECT_THROWS(std::invalid_argument, (void)VectorFieldSimulator(parameterised));
     }

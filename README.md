@@ -21,13 +21,15 @@ The concrete evolvers are `ContinuousTimeEvolver` (`continuous_time_evolver.hpp`
 class names and headers are removed. Discrete maps retain their own evolution
 step; numerical integration is shared by continuous evolution and hybrid modes.
 
-Ordinary and hybrid flows use `ValidatedIntegrationRequest` with a maximum step
-and consume `ValidatedIntegrationStep`. The continuous enclosure bridge applies
+Ordinary and hybrid flows use `ValidatedIntegrationRequest` and consume
+`ValidatedIntegrationStep`. The continuous enclosure bridge applies
 the reach and endpoint certificates independently, preserving constraints,
 auxiliary outputs, existing parameter coordinates, absolute time and dwell time.
 The preconditioned solver retains its carried state and separately computed
-endpoint. This bridge currently accepts one autonomous reach patch with local
-time and an endpoint map; it explicitly rejects unsupported representations.
+endpoint. This bridge accepts one reach patch with local or absolute time and
+an independent endpoint map. A validated argument map can bind the numerical
+state and fixed parameters to existing enclosure coordinates. Unsupported
+representations are rejected explicitly.
 The inclusion loop still awaits migration into `ContinuousTimeEvolver`, including
 removal of its competitive approximation scheduler.
 
@@ -47,13 +49,33 @@ design](doc/evolution_tree_design.md) for the current API and deferred operation
 The `multifunction` branch uses the ordinary dynamics declarations
 `OrdinaryDifferentialAlgebraicEquation` (`system/odae.hpp`) and
 `OrdinaryDifferentialAlgebraicInclusion` (`system/odai.hpp`).
-`ContinuousTimeEvolver` and `VectorFieldSimulator` currently accept autonomous
-equations without constant parameters; `DifferentialInclusionEvolver` accepts
-autonomous structured inclusions with free inputs and no constant parameters. Their constructors
-reject explicit time, constant parameters and, for the inclusion evolver,
-interval-Taylor fields or a zero-input domain with `std::invalid_argument`. Support for these forms
-will follow through the shared integration contract and unified continuous
-evolution loop. The existing evolver classes remain distinct at this stage.
+`ContinuousTimeEvolver` accepts autonomous and explicit-time equations, including
+trajectory-constant parameters under `Semantics::UPPER`. Each parameter retains
+the same enclosure coordinate across integration steps, subdivision and
+reconditioning; parameters and time are not added to the physical state.
+Auxiliary outputs on timed or parameterised equations and the corresponding
+preconditioned integration paths remain unsupported and are rejected explicitly.
+`Semantics::LOWER` is also rejected for parameterised equations.
+
+For example, this computes two steps of `x'=p`, with one value of `p` retained
+throughout each trajectory:
+
+```cpp
+RealVariable x("x"), p("p");
+OrdinaryDifferentialAlgebraicEquation equation(
+    {dot(x) = p}, RealVariablesBox({-1 <= p <= 1}));
+TaylorPicardIntegrator integrator(step_maximum_error = 1e-6);
+ContinuousTimeEvolver evolver(equation, integrator);
+evolver.configuration().set_maximum_step_size(0.0625);
+auto result = evolver.orbit(RealVariablesBox({x == 0}), Real(0.09375_x), Semantics::UPPER);
+```
+
+`VectorFieldSimulator` still requires autonomous equations without constant
+parameters. `DifferentialInclusionEvolver` accepts autonomous structured
+inclusions with free inputs and no constant parameters; its constructor rejects
+explicit time, constant parameters, interval-Taylor fields and zero-input
+domains with `std::invalid_argument`. The inclusion loop still awaits migration
+to the shared continuous evolver.
 
 Evolution uses the Git submodules [System](https://github.com/ariadne-cps/system), [Integration](https://github.com/ariadne-cps/integration), [Equation Solving](https://github.com/ariadne-cps/equation-solving), [Tree](https://github.com/ariadne-cps/tree), and [Build](https://github.com/ariadne-cps/build). The C++ test suites additionally use [Ariadne Testing](https://github.com/ariadne-cps/testing), pinned as the test-only submodule `ss/tst`. Each registered test runs with a fresh fixture, retaining the original mathematical checks and diagnostic variants.
 

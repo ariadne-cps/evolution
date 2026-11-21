@@ -56,6 +56,44 @@ using namespace std;
 
 class TestEnclosure : public Ariadne::Testing::ContextFixture {
   public:
+    Void test_constant_parameters_preserve_existing_maps_and_constraints() {
+        const ExactBoxType domain({
+            {-1.0_x, 1.0_x}
+        });
+        const ExactBoxType parameters({
+            {0.5_x, 0.75_x}
+        });
+        const auto s = EffectiveScalarMultivariateFunction::coordinate(1u, 0u);
+        EnclosureConfiguration config(TaylorFunctionFactory(ThresholdSweeper<FloatDP>(dp, 1e-10)));
+        config.set_reconditioning_num_blocks(1u);
+        Enclosure set(domain, EffectiveVectorMultivariateFunction({s}),
+                      EffectiveScalarMultivariateFunction::constant(1u, 2), {ValidatedConstraint(0, s, 1)}, config);
+        set.set_auxiliary_mapping(EffectiveVectorMultivariateFunction({2 * s}));
+        set.reduce();
+        const auto reduced = set.reduced_domain();
+        const auto constraints = set.constraint_bounds();
+        set.adjoin_constant_parameters(parameters);
+        ARIADNE_TESTING_EXPECT_EQUAL(set.state_dimension(), 1u);
+        ARIADNE_TESTING_EXPECT_EQUAL(set.parameter_domain(), product(domain, parameters));
+        ARIADNE_TESTING_EXPECT_EQUAL(set.reduced_domain(), product(reduced, parameters));
+        ARIADNE_TESTING_EXPECT_EQUAL(set.constraint_bounds(), constraints);
+        ARIADNE_TESTING_EXPECT_EQUAL(set.variable_kinds()[1u], EnclosureVariableKind::PARAMETER);
+        const Vector<FloatDPBounds> point({FloatDPBounds(0.5_x, dp), FloatDPBounds(0.625_x, dp)});
+        ARIADNE_TESTING_PROVE(refines(FloatDPBounds(0.5_x, dp), set.state_function()(point)[0u]));
+        ARIADNE_TESTING_PROVE(refines(FloatDPBounds(1, dp), set.auxiliary_function()(point)[0u]));
+        ARIADNE_TESTING_PROVE(refines(FloatDPBounds(2, dp), set.time_function()(point)));
+        ARIADNE_TESTING_PROVE(refines(FloatDPBounds(0, dp), set.dwell_time_function()(point)));
+        auto split = set.split(1u);
+        ARIADNE_TESTING_EXPECT_EQUAL(split.first.variable_kinds()[1u], EnclosureVariableKind::PARAMETER);
+        ARIADNE_TESTING_EXPECT_EQUAL(split.second.variable_kinds()[1u], EnclosureVariableKind::PARAMETER);
+        // The fixed coordinate has no state dependence here: a ranking based
+        // only on state sensitivity would discard it in favour of s.
+        set.recondition();
+        ARIADNE_TESTING_EXPECT_EQUAL(set.variable_kinds()[0u], EnclosureVariableKind::PARAMETER);
+        ARIADNE_TESTING_EXPECT_EQUAL(set.parameter_domain()[0u], parameters[0u]);
+        ARIADNE_TESTING_EXPECT_EQUAL(set.number_of_constraints(), 1u);
+    }
+
     using Ariadne::Testing::ContextFixture::ContextFixture;
 
   public:
@@ -355,6 +393,7 @@ class TestEnclosure : public Ariadne::Testing::ContextFixture {
 int main(int argc, char* argv[]) {
     ARIADNE_TESTING_SUITE("test_enclosure");
     ARIADNE_TESTING_ADD_TEST(TestEnclosure, test_construct_without_domain);
+    ARIADNE_TESTING_ADD_TEST(TestEnclosure, test_constant_parameters_preserve_existing_maps_and_constraints);
     ARIADNE_TESTING_ADD_TEST(TestEnclosure, test_construct_with_domain);
     ARIADNE_TESTING_ADD_TEST(TestEnclosure, test_is_bounded);
     ARIADNE_TESTING_ADD_TEST(TestEnclosure, test_subset_separated);

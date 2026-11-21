@@ -371,6 +371,24 @@ Void Enclosure::set_time_function(const ValidatedScalarMultivariateFunctionPatch
     this->_time_function = restriction(time, this->parameter_domain());
 }
 
+Void Enclosure::adjoin_constant_parameters(const ExactBoxType& parameters) {
+    if (parameters.dimension() == 0u) {
+        return;
+    }
+    Enclosure extended = *this;
+    extended._domain = product(this->_domain, parameters);
+    extended._reduced_domain = product(this->_reduced_domain, parameters);
+    extended._state_function = embed(this->_state_function, parameters);
+    extended._time_function = embed(this->_time_function, parameters);
+    extended._dwell_time_function = embed(this->_dwell_time_function, parameters);
+    for (auto& constraint: extended._constraints) {
+        constraint.set_function(embed(constraint.function(), parameters));
+    }
+    extended._variable_kinds.concatenate(
+        List<EnclosureVariableKind>(parameters.dimension(), EnclosureVariableKind::PARAMETER));
+    *this = std::move(extended);
+}
+
 Void Enclosure::clear_time() {
     this->_time_function = 0;
     this->_dwell_time_function = 0;
@@ -925,6 +943,8 @@ Pair<Enclosure, Enclosure>
 
     result1._auxiliary_mapping = this->_auxiliary_mapping;
     result2._auxiliary_mapping = this->_auxiliary_mapping;
+    result1._variable_kinds = this->_variable_kinds;
+    result2._variable_kinds = this->_variable_kinds;
 
     return result;
 }
@@ -1060,14 +1080,17 @@ Void Enclosure::kuhn_recondition() {
         return;
     }
 
-    const SizeType number_of_kept_parameters = (this->configuration().reconditioning_num_blocks() - 1) * this->state_dimension();
-    const SizeType number_of_discarded_parameters = this->number_of_parameters() - number_of_kept_parameters;
+    const SizeType fixed_parameters = static_cast<SizeType>(std::count(
+        this->_variable_kinds.begin(), this->_variable_kinds.end(), EnclosureVariableKind::PARAMETER));
+    const SizeType number_of_kept_parameters = std::max(
+        fixed_parameters, (this->configuration().reconditioning_num_blocks() - 1) * this->state_dimension());
     const SizeType number_of_error_parameters = this->state_dimension();
 
     if (this->number_of_parameters() <= number_of_kept_parameters) {
         this->uniform_error_recondition();
         return;
     }
+    const SizeType number_of_discarded_parameters = this->number_of_parameters() - number_of_kept_parameters;
 
     const ValidatedVectorMultivariateTaylorFunctionModelDP& function = dynamic_cast<const ValidatedVectorMultivariateTaylorFunctionModelDP&>(this->state_function().reference());
     const Vector<ValidatedTaylorModelDP>& models = function.models();
@@ -1088,7 +1111,12 @@ Void Enclosure::kuhn_recondition() {
             column_max_dependencies[j].first = max(column_max_dependencies[j].first, cast_exact(dependencies[i][j]));
         }
     }
-    std::sort(column_max_dependencies.begin(), column_max_dependencies.end(), std::greater<Pair<FloatDP, SizeType>>());
+    std::sort(column_max_dependencies.begin(), column_max_dependencies.end(),
+              [&](const auto& left, const auto& right) {
+                  const bool left_fixed = this->_variable_kinds[left.second] == EnclosureVariableKind::PARAMETER;
+                  const bool right_fixed = this->_variable_kinds[right.second] == EnclosureVariableKind::PARAMETER;
+                  return left_fixed != right_fixed ? left_fixed : left > right;
+              });
 
     Array<SizeType> kept_parameters(number_of_kept_parameters);
     Array<SizeType> discarded_parameters(number_of_discarded_parameters);

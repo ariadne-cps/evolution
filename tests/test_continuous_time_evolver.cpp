@@ -61,6 +61,77 @@ decltype(auto) subset(LabelledBox<IVL1> bx1, LabelledBox<IVL2> bx2) {
 
 class TestContinuousTimeEvolver : public Ariadne::Testing::ContextFixture {
   public:
+    Void test_autonomous_constant_parameters_preserve_the_endpoint_map() {
+        RealVariable x("x"), y("y"), p("p"), q("q");
+        const OrdinaryDifferentialAlgebraicEquation equation(
+            {dot(x) = p, dot(y) = q * x},
+            RealVariablesBox({-1 <= p <= 1, 0.5_dec <= q <= 1}));
+        TaylorPicardIntegrator integrator(step_maximum_error = 1e-8);
+        ContinuousTimeEvolver evolver(equation, integrator);
+        evolver.configuration().set_enable_reconditioning(false);
+        evolver.configuration().set_maximum_step_size(0.0625);
+        const auto result = evolver.orbit(RealVariablesBox({x == 0, y == 0}),
+                                          Real(0.09375_x), Semantics::UPPER);
+        ARIADNE_TESTING_EXPECT_EQUAL(result.reach().size(), 2u);
+        ARIADNE_TESTING_EXPECT_EQUAL(result.final().size(), 1u);
+        const auto& final = result.final()[0u];
+        ARIADNE_TESTING_EXPECT_EQUAL(final.state_dimension(), 2u);
+        ARIADNE_TESTING_EXPECT_EQUAL(final.number_of_parameters(), 4u);
+        const auto P = EffectiveScalarMultivariateFunction::coordinate(4u, 2u);
+        const auto Q = EffectiveScalarMultivariateFunction::coordinate(4u, 3u);
+        const EffectiveVectorMultivariateFunction expected = {
+            P * Real(0.09375_x), P * Q * Real(0.00439453125_x)};
+        ARIADNE_TESTING_EXPECT_LESS(norm(final.state_function() - expected), 1e-7_pr);
+        // Evaluate opposite parameter choices in the SAME map. A box restart
+        // or a swapped parameter order would lose this dependence.
+        const Vector<FloatDPBounds> positive({FloatDPBounds(0, dp), FloatDPBounds(0, dp),
+                                              FloatDPBounds(1, dp), FloatDPBounds(0.75_x, dp)});
+        const Vector<FloatDPBounds> negative({FloatDPBounds(0, dp), FloatDPBounds(0, dp),
+                                              FloatDPBounds(-1, dp), FloatDPBounds(0.75_x, dp)});
+        const auto delta = final.state_function()(positive) - final.state_function()(negative);
+        ARIADNE_TESTING_PROVE(refines(FloatDPBounds(0.1875_x, dp), delta[0u]));
+        ARIADNE_TESTING_PROVE(refines(FloatDPBounds(0.006591796875_x, dp), delta[1u]));
+        ARIADNE_TESTING_PROVE(refines(FloatDPBounds(0.09375_x, dp), final.time_function()(positive)));
+    }
+
+    Void test_constant_parameters_survive_reconditioning_and_subdivision() {
+        // Integral_0^H p*(2*t-H) dt = 0 for every FIXED p. Reselecting p
+        // on the second step yields a much wider interval and fails this test.
+        RealVariable x("x"), t("t"), p("p");
+        const OrdinaryDifferentialAlgebraicEquation equation(
+            {dot(x) = p * (2 * t - Real(0.09375_x))}, RealVariablesBox({-1 <= p <= 1}), t);
+        TaylorPicardIntegrator integrator(step_maximum_error = 1e-8);
+        ContinuousTimeEvolver evolver(equation, integrator);
+        evolver.configuration().set_maximum_step_size(0.0625);
+        evolver.configuration().set_maximum_spacial_error(0x1p-18);
+        evolver.configuration().set_enable_subdivisions(true);
+        evolver.configuration().set_maximum_enclosure_radius(0.0005);
+        const ExactBoxType domain({
+            {0.0_x, 0.0_x}
+        });
+        auto model = ValidatedVectorMultivariateTaylorFunctionModelDP::identity(
+            domain, ThresholdSweeper<FloatDP>(dp, 1e-10));
+        model[0u].set_error(FloatDPError(0x1p-16_x, dp));
+        EnclosureConfiguration config(integrator.function_factory(), 1u);
+        const LabelledEnclosure initial(Enclosure(domain, model, config), RealSpace({x}));
+        const auto result = evolver.orbit(initial, Real(0.09375_x), Semantics::UPPER);
+        ARIADNE_TESTING_PROVE(result.final().size() > 1u);
+        const auto final_box = cast_exact_box(result.final().bounding_box().euclidean_set());
+        ARIADNE_TESTING_PROVE(subset(ExactBoxType({
+                                         {-0x1p-16_x, 0x1p-16_x}
+        }),
+                                     final_box));
+        ARIADNE_TESTING_PROVE(subset(final_box, ExactBoxType({
+                                                    {-0x1p-15_x, 0x1p-15_x}
+        })));
+        for (const auto& final: result.final()) {
+            ARIADNE_TESTING_EXPECT_EQUAL(final.state_dimension(), 1u);
+            ARIADNE_TESTING_EXPECT_EQUAL(final.variable_kinds()[0u], EnclosureVariableKind::PARAMETER);
+            ARIADNE_TESTING_EXPECT_EQUAL(final.variable_kinds()[1u], EnclosureVariableKind::ERROR);
+            ARIADNE_TESTING_EXPECT_EQUAL(final.number_of_parameters(), 2u);
+        }
+    }
+
     using Ariadne::Testing::ContextFixture::ContextFixture;
 
   public:
@@ -376,6 +447,8 @@ int main(int argc, const char* argv[]) {
     ARIADNE_TESTING_ADD_TEST(TestContinuousTimeEvolver, test_constrained_initial_subdivision_and_tiny_horizon);
     ARIADNE_TESTING_ADD_TEST(TestContinuousTimeEvolver, test_binary64_step_limits);
     ARIADNE_TESTING_ADD_TEST(TestContinuousTimeEvolver, test_non_autonomous_two_step_orbit);
+    ARIADNE_TESTING_ADD_TEST(TestContinuousTimeEvolver, test_autonomous_constant_parameters_preserve_the_endpoint_map);
+    ARIADNE_TESTING_ADD_TEST(TestContinuousTimeEvolver, test_constant_parameters_survive_reconditioning_and_subdivision);
     ARIADNE_TESTING_ADD_TEST(TestContinuousTimeEvolver, test_lower_termination_diagnostics);
     return Ariadne::Testing::run_logging_suite(ariadne_test_suite, argc, argv);
 }

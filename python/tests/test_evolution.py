@@ -90,8 +90,13 @@ def test_ordinary_equation_consumers():
     assert timed_orbit.reach().size() >= 2
     parameterised = a.OrdinaryDifferentialAlgebraicEquation(
         [a.dot(x) << (p - x)], a.RealVariablesBox({p: (0, 1)}))
+    parameterised_evolver = a.ContinuousTimeEvolver(parameterised, integrator)
+    parameterised_evolver.configuration().set_maximum_step_size(0.03125)
+    parameterised_orbit = parameterised_evolver.orbit(initial, a.Real(1)/16, a.Semantics.UPPER)
+    assert parameterised_orbit.final().size() > 0
+    assert parameterised_orbit.reach().size() >= 2
     with unittest.TestCase().assertRaises(ValueError):
-        a.ContinuousTimeEvolver(parameterised, integrator)
+        parameterised_evolver.orbit(initial, a.Real(1)/16, a.Semantics.LOWER)
     for field in (timed, parameterised):
         with unittest.TestCase().assertRaises(ValueError):
             a.VectorFieldSimulator(field)

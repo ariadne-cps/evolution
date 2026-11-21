@@ -127,8 +127,10 @@ class ContinuousTimeEvolver
   public:
     //! \brief Construct from an ODAE without trajectory-constant parameters.
     //! \details Autonomous and explicit-time ODAEs share the same evolution loop.
-    //! \throws std::invalid_argument if constant parameters are declared, or if
-    //! the selected preconditioned integrator lacks explicit-time support.
+    //! \throws std::invalid_argument if constant parameters are declared, if
+    //! explicit-time auxiliary outputs require an unavailable time-aware
+    //! enclosure mapping, or if the selected preconditioned integrator lacks
+    //! explicit-time support.
     ContinuousTimeEvolver(const SystemType&, const IntegratorInterface&);
 
     //! \brief Make a dynamically-allocated copy.

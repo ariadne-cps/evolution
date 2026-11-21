@@ -156,6 +156,13 @@ ContinuousTimeEvolver::ContinuousTimeEvolver(const SystemType& system, const Int
     if (system.parameter_space().dimension() != 0u) {
         throw std::invalid_argument("ContinuousTimeEvolver does not yet support trajectory-constant ODAE parameters");
     }
+    if (system.has_explicit_time() && system.auxiliary_space().size() != 0u) {
+        // Enclosure currently represents auxiliary outputs as state-only
+        // functions. Time-dependent auxiliary outputs must not be evaluated
+        // using a map with the wrong argument space.
+        throw std::invalid_argument(
+            "ContinuousTimeEvolver does not yet support auxiliary outputs for explicit-time ODAE");
+    }
     if (system.has_explicit_time() &&
         dynamic_cast<const PreconditionedGradedTaylorSeriesIntegrator*>(&i) != nullptr) {
         throw std::invalid_argument("Preconditioned continuous evolution does not yet support explicit-time ODAE");
@@ -172,13 +179,23 @@ auto ContinuousTimeEvolver::function_factory() const -> const FunctionFactoryTyp
 
 auto ContinuousTimeEvolver::orbit(const RealVariablesBox& initial_set, const TimeType& time, Semantics semantics) const -> Orbit<EnclosureType> {
     auto enclosure = EnclosureType(initial_set, this->system().state_space(), EnclosureConfiguration(this->function_factory()));
-    enclosure.set_auxiliary(this->system().auxiliary_space(), this->system().auxiliary_function());
+    // A time-dependent field without auxiliary outputs still carries a
+    // zero-output auxiliary function with arguments [state,time]. Enclosure
+    // already has a state-arity zero-output mapping, so leave it unchanged.
+    if (this->system().auxiliary_space().size() != 0u) {
+        enclosure.set_auxiliary(this->system().auxiliary_space(), this->system().auxiliary_function());
+    }
     return orbit(enclosure, time, semantics);
 }
 
 auto ContinuousTimeEvolver::orbit(const RealExpressionBoundedConstraintSet& initial_set, const TimeType& time, Semantics semantics) const -> Orbit<EnclosureType> {
     auto enclosure = EnclosureType(initial_set.euclidean_set(this->system().state_space()), this->system().state_space(), EnclosureConfiguration(this->function_factory()));
-    enclosure.set_auxiliary(this->system().auxiliary_space(), this->system().auxiliary_function());
+    // A time-dependent field without auxiliary outputs still carries a
+    // zero-output auxiliary function with arguments [state,time]. Enclosure
+    // already has a state-arity zero-output mapping, so leave it unchanged.
+    if (this->system().auxiliary_space().size() != 0u) {
+        enclosure.set_auxiliary(this->system().auxiliary_space(), this->system().auxiliary_function());
+    }
     return orbit(enclosure, time, semantics);
 }
 

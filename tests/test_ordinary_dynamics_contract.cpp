@@ -41,6 +41,14 @@ class TestOrdinaryDynamicsContract : public Ariadne::Testing::ContextFixture {
         ARIADNE_TESTING_EXPECT_EQUAL(parameterised.function().argument_size(), 2u);
         ContinuousTimeEvolver timed_evolver(timed, integrator);
         ARIADNE_TESTING_PROVE(timed_evolver.system().has_explicit_time());
+        ARIADNE_TESTING_EXPECT_EQUAL(timed.auxiliary_space().size(), 0u);
+        // An explicit-time auxiliary map has an extra time argument.
+        // Reject it rather than silently evaluating a state-only map.
+        RealVariable output("output");
+        const OrdinaryDifferentialAlgebraicEquation timed_auxiliary(
+            {dot(x) = t - x}, RealVariablesBox{}, t, {let(output) = t + x});
+        ARIADNE_TESTING_EXPECT_THROWS(
+            std::invalid_argument, ContinuousTimeEvolver(timed_auxiliary, integrator));
         ARIADNE_TESTING_EXPECT_THROWS(
             std::invalid_argument, ContinuousTimeEvolver(parameterised, integrator));
         ARIADNE_TESTING_EXPECT_THROWS(std::invalid_argument, (void)VectorFieldSimulator(timed));

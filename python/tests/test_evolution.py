@@ -81,15 +81,18 @@ def test_ordinary_equation_consumers():
     assert orbit.final()[0].state_set().dimension() == 1
     assert orbit.final()[0].state_auxiliary_set().dimension() == 2
     assert isinstance(a.VectorFieldSimulator(equation), a.VectorFieldSimulator)
-    unsupported = (
-        a.OrdinaryDifferentialAlgebraicEquation(
-            [a.dot(x) << (t - x)], a.RealVariablesBox({}), time=t),
-        a.OrdinaryDifferentialAlgebraicEquation(
-            [a.dot(x) << (p - x)], a.RealVariablesBox({p: (0, 1)})),
-    )
-    for field in unsupported:
-        with unittest.TestCase().assertRaises(ValueError):
-            a.ContinuousTimeEvolver(field, integrator)
+    timed = a.OrdinaryDifferentialAlgebraicEquation(
+        [a.dot(x) << (t - x)], a.RealVariablesBox({}), time=t)
+    timed_evolver = a.ContinuousTimeEvolver(timed, integrator)
+    timed_evolver.configuration().set_maximum_step_size(0.03125)
+    timed_orbit = timed_evolver.orbit(initial, a.Real(1)/16, a.Semantics.UPPER)
+    assert timed_orbit.final().size() > 0
+    assert timed_orbit.reach().size() >= 2
+    parameterised = a.OrdinaryDifferentialAlgebraicEquation(
+        [a.dot(x) << (p - x)], a.RealVariablesBox({p: (0, 1)}))
+    with unittest.TestCase().assertRaises(ValueError):
+        a.ContinuousTimeEvolver(parameterised, integrator)
+    for field in (timed, parameterised):
         with unittest.TestCase().assertRaises(ValueError):
             a.VectorFieldSimulator(field)
 

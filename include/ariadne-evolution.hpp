@@ -47,6 +47,7 @@
 #include "evolution/hybrid_simulator.hpp"
 #include "evolution/hybrid_time.hpp"
 #include "evolution/iterated_map_evolver.hpp"
+#include "evolution/located_projection.hpp"
 #include "evolution/orbit.hpp"
 #include "evolution/scalings.hpp"
 #include "evolution/traits.hpp"

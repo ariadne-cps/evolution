@@ -295,14 +295,14 @@ does not imply tangency, and `UNRESOLVED` does not imply degeneracy.
 | Mode | UPPER | LOWER | Events / guards / invariants |
 | --- | --- | --- | --- |
 | Autonomous state-only ODAE, no fixed parameters | Existing validated local equation method | Existing equation method (no new inner claim) | Existing event policy and crossing classifier, subject to certified local flow layout |
-| Autonomous ODAI, no fixed parameters | Explicit structured or box method, with optional state-invariant outer filtering | Rejected, including at time zero | State invariants only; all transition, progress and impact events remain rejected |
+| Autonomous ODAI, no fixed parameters | Explicit structured or box method; necessary invariant restrictions and conservative urgent/permissive jump candidates | Rejected, including at time zero | State invariants plus UPPER urgent/permissive guards; PROGRESS and IMPACT still rejected |
 | Explicit-time or fixed-parameter ODAE/ODAI modes | Rejected by current hybrid mode validation | Rejected | Not reached |
 
 ODAI with arbitrary measurable input functions lacks, at present, a
 certified trajectory-level guard derivative and first-entry/maximum
 analysis compatible with this equation classifier. Neither an outer box
 nor an independent endpoint certificate supplies these properties.
-Consequently no ODAI *transition* handler is enabled by this refactor. Future support
+Conservative UPPER ODAI transitions can use outer reach/guard intersection without such certificates; certified-first-entry and LOWER transitions still require new evidence. Future support
 requires an *explicit, solver-provided validated event capability* and
 a separate proof of the semantics it supports; changing only a dispatch
 switch is mathematically unsound.
@@ -315,12 +315,11 @@ verify that event-free autonomous ODAI remains supported as before.
 
 ## Initial ODAI capability: state invariants under UPPER
 
-The private `src/hybrid_inclusion_invariants.hpp/.cpp` component admits
-only `EventKind::INVARIANT` in autonomous ODAI modes under UPPER
-semantics with the already-supported explicit structured or box
-integration method. It rejects every other event kind before execution,
-even at zero horizon. No input trajectory, first-contact time, Lie
-derivative, or reset is constructed.
+The private `src/hybrid_inclusion_invariants.hpp/.cpp` component initially
+admitted only `EventKind::INVARIANT`. Its UPPER capability is extended below
+to conservative urgent and permissive reset candidates. The existing explicit
+structured or box integration method remains required, and LOWER remains
+unsupported. No input trajectory or first-contact time is certified.
 
 An invariant `g(x) <= 0` is a *necessary pointwise condition* on
 every valid solution. The validated outer inclusion reach tube and the
@@ -335,17 +334,61 @@ mapping and event-history representations remain unchanged.
 in the invariant. It does **not** prove that each point in the
 intersection is dynamically realizable, that a whole trajectory
 respects the invariant between snapshots, or that the first hitting
-time is known. This capability therefore cannot safely be repurposed
-as a PROGRESS/URGENT/IMPACT/PERMISSIVE event handler; those cases
-remain explicitly unsupported for ODAI.
+time is known. This necessary-condition filter does not, on its own, justify source
+coverage, first-entry constraints, or any LOWER transition. Under UPPER,
+however, a guard intersection of the outer reach can generate additional
+possible (including spurious) transitions without such certificates.
 
 Analytic regression cases exercise an autonomous inclusion `x' = u`,
 `u in [-1,1]`, under `x <= 0`, across structured and box
 integration, including both reach and endpoint state constraints.
-A closed zero-horizon source slice and rejection of ODAI urgent events
-and LOWER semantics are checked independently.
+A closed zero-horizon source slice and rejection of ODAI LOWER semantics
+are checked independently.
 
-The next numerical extension must be based on an explicit trajectory
+The next *certified* event extension requires an explicit trajectory
 or crossing certificate from the inclusion solver, with separate
-justification for each event kind and semantics. Until then this
-capability is restricted to invariant intersection, not event handling.
+justification for each event kind and semantics. UPPER conservative jumps
+can instead use the validated reach/guard intersection, as detailed below.
+
+## Conservative ODAI URGENT/PERMISSIVE transitions in UPPER
+
+The key distinction is approximation semantics, not whether every
+candidate point actually takes a transition. In UPPER it is sufficient
+to retain all feasible transition states/times in the approximation;
+additional spurious jumps are permitted. LOWER requires a suitable
+all-points realizability or coverage guarantee on a selected subenclosure
+before claiming that subenclosure can take the transition.
+
+For autonomous inclusion modes, the already validated outer reach tube
+contains all realizable state/time pairs in the step. A candidate is
+constructed by intersecting this tube with the guard `g(x) >= 0` and
+the closed time horizon, then applying the existing target reset. The
+candidate retains its time chart and input-independent previous event
+history; the resulting successor retains the event kind and history.
+This construction is conservative: **the time is not a certified first
+entry**, and no source-wide coverage is inferred. It can retain
+post-first-contact candidates, including spurious jumps. The ordinary
+continuous branch is retained conservatively to avoid silently dropping
+realizable inclusion trajectories for urgent events.
+
+The inclusion transition extraction does not call
+`dynamic_function` or `lie_derivative`: those operations would
+silently treat a set-valued field as a single trajectory field.
+The transition handler operates only on validated outer reach
+enclosures. The same initial-event and invariant filtering phases apply.
+`EventKind::PROGRESS` and `EventKind::IMPACT` remain unsupported
+because the former requires progress semantics beyond this outer
+candidate, and the latter has a directional condition requiring
+additional proof. ODAI LOWER remains explicitly rejected.
+
+The analytic regression covers `x'=u`, `u in [-1,1]`,
+guard `x>=1/32`, and reset `x'=0`, with both URGENT and
+PERMISSIVE kinds and both existing structured and box integrators.
+The feasible witness `u=1` activates the guard at `t=1/32`.
+The test checks that target final states and source reach are
+retained without claiming all candidate transitions are realizable.
+A zero-horizon active urgent guard remains admissible in UPPER,
+while LOWER/PROGRESS/IMPACT are not expanded by this change.
+
+Do not reuse the ODAE first-entry, concavity or impact machinery for
+ODAI without a compatible numerical certificate from the integrator.

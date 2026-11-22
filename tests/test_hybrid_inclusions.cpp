@@ -284,6 +284,51 @@ class TestHybridInclusions : public Testing::ContextFixture {
         }
     }
 
+    Void test_upper_inclusion_transitions_use_guarded_reach() {
+        const DiscreteLocation source(1), target(2);
+        const RealVariable x("x"), u("u");
+        for (EventKind kind: {EventKind::URGENT, EventKind::PERMISSIVE}) {
+            HybridAutomaton system;
+            system.new_mode(source, OrdinaryDifferentialAlgebraicInclusion(
+                                        {dot(x) = u}, RealVariablesBox({-1 <= u <= 1})));
+            system.new_mode(target, {dot(x) = 0});
+            const DiscreteEvent event(kind == EventKind::URGENT ? "urgent" : "permissive");
+            system.new_transition(source, event, target, {next(x) = 0}, x >= 0.03125_x, kind);
+            for (bool boxes: {false, true}) {
+                HybridContinuousTimeEvolver evolver(system);
+                TaylorPicardIntegrator base(step_maximum_error = 1e-6);
+                if (boxes)
+                    evolver.set_integrator(FirstOrderMultifunctionIntegrator());
+                else
+                    evolver.set_integrator(base, ZeroApproximation(), ConstantApproximation());
+                evolver.configuration().set_maximum_step_size(0.03125);
+                const auto orbit = evolver.orbit(HybridExactBox(source, RealSpace({x}),
+                                                               ExactBoxType({{0, 0}})),
+                                                 HybridTime(0.125_x, 1), Semantics::UPPER);
+                // Both kinds admit a feasible crossing witness u=1 at t=1/32,
+                // but an outer candidate is not a first-entry certificate.
+                Bool jumped = false;
+                for (const auto& final: orbit.final()) {
+                    if (final.location() == target) {
+                        jumped = true;
+                        ARIADNE_TESTING_EXPECT_EQUAL(final.previous_events().size(), 1u);
+                        ARIADNE_TESTING_EXPECT_EQUAL(final.previous_events().back(), event);
+                        ARIADNE_TESTING_PROVE(definitely(final.inside(
+                            HybridExactBox(target, RealSpace({x}), ExactBoxType({{-0.001_x, 0.001_x}})))));
+                    }
+                }
+                ARIADNE_TESTING_PROVE(jumped);
+                ARIADNE_TESTING_REQUIRE(orbit.reach().size() > 0u);
+                // The ordinary continuous branch remains represented even
+                // if some of its points may also spuriously jump.
+                Bool source_reach = false;
+                for (const auto& reach: orbit.reach())
+                    source_reach = source_reach || reach.location() == source;
+                ARIADNE_TESTING_PROVE(source_reach);
+            }
+        }
+    }
+
     Void test_unsupported_capabilities_fail_explicitly() {
         const DiscreteLocation q(1);
         const RealVariable x("x"), u("u"), t("t"), p("p");
@@ -318,8 +363,10 @@ class TestHybridInclusions : public Testing::ContextFixture {
                                x >= 0, EventKind::URGENT);
         HybridContinuousTimeEvolver cannot_jump(jumping);
         cannot_jump.set_integrator(FirstOrderMultifunctionIntegrator());
-        ARIADNE_TESTING_EXPECT_THROWS(std::invalid_argument,
-                                      cannot_jump.orbit(initial, HybridTime(0u, 1), Semantics::UPPER));
+        const auto at_zero = cannot_jump.orbit(initial, HybridTime(0u, 1), Semantics::UPPER);
+        // The initial urgent phase is allowed in UPPER. Its result is a
+        // conservative event candidate, never a coverage certificate.
+        ARIADNE_TESTING_PROVE(at_zero.final().size() > 0u);
 
         HybridAutomaton timed;
         timed.new_mode(q, OrdinaryDifferentialAlgebraicInclusion({dot(x) = t + p + u}, RealVariablesBox({-1 <= u <= 1}),
@@ -337,6 +384,7 @@ int main(int argc, char** argv) {
     ARIADNE_TESTING_ADD_TEST(TestHybridInclusions, test_reset_into_inclusion_with_varying_arrival_time);
     ARIADNE_TESTING_ADD_TEST(TestHybridInclusions, test_interval_taylor_modes_use_the_same_cycle);
     ARIADNE_TESTING_ADD_TEST(TestHybridInclusions, test_box_horizon_slice_and_copy_ownership);
+    ARIADNE_TESTING_ADD_TEST(TestHybridInclusions, test_upper_inclusion_transitions_use_guarded_reach);
     ARIADNE_TESTING_ADD_TEST(TestHybridInclusions, test_state_invariants_filter_inclusion_reach_and_endpoints);
     ARIADNE_TESTING_ADD_TEST(TestHybridInclusions, test_inclusion_invariants_preserve_closed_zero_horizon);
     ARIADNE_TESTING_ADD_TEST(TestHybridInclusions, test_unsupported_capabilities_fail_explicitly);

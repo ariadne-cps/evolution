@@ -10,16 +10,16 @@
 
 namespace Ariadne::EvolutionDetail {
 
-/** @brief Admit only state invariants for an autonomous UPPER inclusion mode.
- *  Arbitrary measurable inputs offer no certified first-entry, urgent,
- *  progress or impact timing in the current hybrid integration bridge.
+/** @brief Admit state invariants and conservative URGENT/PERMISSIVE
+ *  candidates under UPPER only. Neither first entry nor impact direction is
+ *  certified for arbitrary measurable inputs.
  */
 Void validate_inclusion_event_kinds(const HybridAutomatonInterface&, DiscreteLocation);
 
-/** @brief Build invariant-only data without evaluating a nonexistent ODAI vector field.
- *  The unused Lie-derivative field and reset data remain empty.
+/** @brief Extract state guards and reset data without evaluating an ODAI Lie
+ *  derivative. This intentionally does not claim first contact or crossing.
  */
-Map<DiscreteEvent, TransitionData> inclusion_invariant_transitions(
+Map<DiscreteEvent, TransitionData> inclusion_upper_transitions(
     const HybridAutomatonInterface&, DiscreteLocation);
 
 /** @brief Intersect a state enclosure with necessary invariant conditions.
@@ -28,6 +28,14 @@ Map<DiscreteEvent, TransitionData> inclusion_invariant_transitions(
  *  and not a first-contact or event-time calculation.
  */
 Void apply_state_invariants(HybridEnclosure&, const Map<DiscreteEvent, TransitionData>&);
+
+/** @brief Publish all possible UPPER reset candidates from one validated reach
+ *  enclosure. Candidates retain the source time/dwell map until reset;
+ *  no candidate is claimed to cover all source trajectories.
+ */
+Void publish_inclusion_jump_candidates(
+    const HybridEnclosure& reach, const Map<DiscreteEvent, TransitionData>&,
+    const Real& final_time, HybridEvolutionStepResult&);
 
 } // namespace Ariadne::EvolutionDetail
 #endif

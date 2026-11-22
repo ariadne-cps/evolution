@@ -340,8 +340,8 @@ Void HybridContinuousTimeEvolverBase::_validate_mode(DiscreteLocation location, 
             throw std::invalid_argument("Hybrid inclusion modes require UPPER semantics");
         if (inclusion->has_explicit_time() || inclusion->parameter_space().dimension() != 0u)
             throw std::invalid_argument("Hybrid inclusion modes currently require autonomous dynamics without fixed parameters");
-        // State invariants need only necessary pointwise restrictions of a
-        // validated outer tube. Other events require pathwise certificates.
+        // A validated outer reach permits conservative URGENT/PERMISSIVE
+        // candidates. IMPACT/PROGRESS still require additional certificates.
         EvolutionDetail::validate_inclusion_event_kinds(this->system(), location);
         if (!this->_inclusion_integrator_ptr && !this->_box_integrator_ptr)
             throw std::invalid_argument("Select an explicit integration method for hybrid inclusion modes");
@@ -415,7 +415,7 @@ Map<DiscreteEvent, TransitionData>
     // An inclusion has no single-valued vector field from which to form
     // a Lie derivative. Its only supported events are state invariants.
     if (this->system().inclusion(location) != nullptr)
-        return EvolutionDetail::inclusion_invariant_transitions(this->system(), location);
+        return EvolutionDetail::inclusion_upper_transitions(this->system(), location);
 
     const EffectiveVectorMultivariateFunction& dynamic = this->system().dynamic_function(location);
     for (Set<DiscreteEvent>::ConstIterator event_iter = events.begin();
@@ -864,8 +864,8 @@ Void HybridContinuousTimeEvolverBase::
 Void HybridContinuousTimeEvolverBase::_evolve_inclusion(
     const HybridEnclosure& initial, const Real& final_time, HybridEvolutionStepResult& result) const {
     const auto& inclusion = *this->system().inclusion(initial.location());
-    // Every supported ODAI event is an invariant; no root or trajectory
-    // derivative is required. Reuse the same invariant predicate in all phases.
+    // Inclusion candidates use only validated outer reach and state guards.
+    // No root-time map, Lie derivative or full-source coverage is inferred.
     const auto invariants = this->_extract_transitions(initial.location());
     const auto horizon = FloatDPBounds(final_time, dp);
     const StepSizeType remaining = StepSizeType(horizon.upper_raw()) -
@@ -900,6 +900,10 @@ Void HybridContinuousTimeEvolverBase::_evolve_inclusion(
         // Apply the state invariant to every point of the certified outer tube,
         // including the closed final-time slice when it intersects this step.
         EvolutionDetail::apply_state_invariants(reach, invariants);
+        // Publish the pre-reset guard intersection, retaining the full
+        // source-time chart. The reset is a separate successor; UPPER may
+        // include infeasible (spurious) candidate transitions.
+        EvolutionDetail::publish_inclusion_jump_candidates(reach, invariants, final_time, completed);
         if (!at_horizon && possibly(reach.time_range().upper_bound() >= final_time)) {
             auto final_slice = reach;
             final_slice.set_time(final_time);

@@ -37,6 +37,7 @@
 #include "function/functional.hpp"
 #include "function/taylor_model.hpp"
 #include "integration/runge_kutta_integrator.hpp"
+#include "simulation_time.hpp"
 #include "symbolic/assignment.hpp"
 #include "symbolic/space.hpp"
 #include "symbolic/valuation.hpp"
@@ -52,9 +53,9 @@ namespace Ariadne {
 
 template<class X>
 LabelledPoint<X> make_state_auxiliary_point(const Point<X>& spt,
-                                            const RealSpace& sspc, const RealSpace& aspc, const RealSpace& saspc, const EffectiveVectorMultivariateFunction& auxiliary_function) {
+                                            const RealSpace& sspc, const RealSpace& aspc, const RealSpace& saspc, const EffectiveVectorMultivariateFunction& auxiliary_function, bool timed = false, X time = X(0, dp)) {
     Point<X> sapt(saspc.dimension(), spt.zero_element());
-    Point<X> apt = evaluate(auxiliary_function, spt);
+    Point<X> apt = evaluate(auxiliary_function, EvolutionDetail::simulation_arguments(Vector<X>(spt), timed, time));
     for (SizeType i = 0; i != sapt.size(); ++i) {
         RealVariable var = saspc.variable(i);
         sapt[i] = sspc.contains(var) ? spt[sspc[var]] : apt[aspc[var]];
@@ -64,11 +65,11 @@ LabelledPoint<X> make_state_auxiliary_point(const Point<X>& spt,
 
 template<class X>
 List<LabelledPoint<X>> make_state_auxiliary_point(const Vector<Point<X>>& spt,
-                                                  const RealSpace& sspc, const RealSpace& aspc, const RealSpace& saspc, const EffectiveVectorMultivariateFunction& auxiliary_function) {
+                                                  const RealSpace& sspc, const RealSpace& aspc, const RealSpace& saspc, const EffectiveVectorMultivariateFunction& auxiliary_function, bool timed = false, X time = X(0, dp)) {
     List<LabelledPoint<X>> pointLst(spt.size(), LabelledPoint<X>(saspc, Point<X>()));
     for (SizeType i = 0; i < spt.size(); i++) {
         Point<X> sapt(saspc.dimension(), spt.at(i).zero_element());
-        Point<X> apt = evaluate(auxiliary_function, spt.at(i));
+        Point<X> apt = evaluate(auxiliary_function, EvolutionDetail::simulation_arguments(Vector<X>(spt.at(i)), timed, time));
         for (SizeType j = 0; j != sapt.size(); ++j) {
             RealVariable var = saspc.variable(j);
             sapt[j] = sspc.contains(var) ? spt.at(i)[sspc[var]] : apt[aspc[var]];
@@ -82,11 +83,11 @@ List<LabelledPoint<X>> make_state_auxiliary_point(const Vector<Point<X>>& spt,
 
 template<class X>
 List<LabelledPoint<X>> make_state_auxiliary_point(const List<LabelledPoint<X>>& spt,
-                                                  const RealSpace& sspc, const RealSpace& aspc, const RealSpace& saspc, const EffectiveVectorMultivariateFunction& auxiliary_function) {
+                                                  const RealSpace& sspc, const RealSpace& aspc, const RealSpace& saspc, const EffectiveVectorMultivariateFunction& auxiliary_function, bool timed = false, X time = X(0, dp)) {
     List<LabelledPoint<X>> pointLst(spt.size(), LabelledPoint<X>(saspc, Point<X>()));
     for (SizeType i = 0; i < spt.size(); i++) {
         Point<X> sapt(saspc.dimension(), spt.at(i).zero_element());
-        Point<X> apt = evaluate(auxiliary_function, spt.at(i));
+        Point<X> apt = evaluate(auxiliary_function, EvolutionDetail::simulation_arguments(Vector<X>(spt.at(i)), timed, time));
         for (SizeType j = 0; j != sapt.size(); ++j) {
             RealVariable var = saspc.variable(j);
             sapt[j] = sspc.contains(var) ? spt.at(i)[sspc[var]] : apt[aspc[var]];
@@ -151,8 +152,8 @@ List<LabelledPoint<FloatDPApproximation>> create_point_list(BinaryTreePaving& pa
 }
 
 ContinuousTimeSimulator::ContinuousTimeSimulator(const SystemType& system) : _system(system.clone()), _configuration(new ContinuousTimeSimulatorConfiguration()) {
-    if (system.has_explicit_time() || system.parameter_space().dimension() != 0u) {
-        throw std::invalid_argument("ContinuousTimeSimulator requires an autonomous ODAE without constant parameters");
+    if (system.parameter_space().dimension() != 0u) {
+        throw std::invalid_argument("ContinuousTimeSimulator does not yet support constant model parameters");
     }
 }
 
@@ -205,7 +206,7 @@ auto ContinuousTimeSimulator::orbit(const ApproximateListPointType& initial_poin
         }
         point = ApproximatePointType(state_space, ordered);
     }
-    auto result = std::make_shared<SynchronisedOrbit>(make_state_auxiliary_point(canonical_points, state_space, auxiliary_space, state_auxiliary_space, auxiliary_function));
+    auto result = std::make_shared<SynchronisedOrbit>(make_state_auxiliary_point(canonical_points, state_space, auxiliary_space, state_auxiliary_space, auxiliary_function, _system->has_explicit_time()));
 
     WorkloadType workload(std::bind_front(&ContinuousTimeSimulator::_simulate_from_point, this), termination, result);
     for (SizeType i = 0; i < canonical_points.size(); ++i) {
@@ -239,9 +240,12 @@ void ContinuousTimeSimulator::_simulate_from_point(Pair<SizeType, ApproximatePoi
     std::streamsize old_precision = std::clog.precision();
     LOGGING_PRINTLN("t=" << std::setw(4) << std::left << t << " p=" << state_pt << std::setprecision(old_precision));
     while (decide(t < tmax)) {
-        state_pt = integrator.step(dynamic_function, state_pt, _configuration->step_size());
-        t += h;
-        orbit->insert(cast_exact(t), make_state_auxiliary_point(ApproximatePointType(state_space, state_pt), state_space, auxiliary_space, state_auxiliary_space, auxiliary_function), curve_number);
+        const auto duration = decide(t + h > tmax) ? tmax - t : h;
+        state_pt = _system->has_explicit_time()
+                     ? integrator.step(dynamic_function, state_pt, t, duration)
+                     : integrator.step(dynamic_function, state_pt, duration);
+        t += duration;
+        orbit->insert(cast_exact(t), make_state_auxiliary_point(ApproximatePointType(state_space, state_pt), state_space, auxiliary_space, state_auxiliary_space, auxiliary_function, _system->has_explicit_time(), t), curve_number);
         old_precision = std::clog.precision();
         LOGGING_PRINTLN("t=" << std::setw(4) << std::left << t << " p=" << state_pt << std::setprecision(old_precision));
     }

@@ -408,6 +408,7 @@ class HybridContinuousTimeEvolverBase
     Void _create(const SystemType& system, const FunctionFactoryType& factory);
     Void _validate_mode(DiscreteLocation, Semantics) const;
     Void _evolve_inclusion(const HybridEnclosure&, const Real& final_time, HybridEvolutionStepResult&) const;
+    Void _evolve_clocked_equation(const HybridEnclosure&, const Real& final_time, HybridEvolutionStepResult&) const;
     std::shared_ptr<IntegratorInterface> _integrator_ptr;
     std::shared_ptr<const SelectedParametricMultifunctionIntegrator> _inclusion_integrator_ptr;
     std::shared_ptr<const FirstOrderMultifunctionIntegrator> _box_integrator_ptr;
@@ -453,6 +454,8 @@ struct TransitionData {
     EffectiveVectorMultivariateFunction target_auxiliary_function;
     //! \brief The auxliary space in the target location.
     RealSpace target_auxiliary_space;
+    EnclosureFunctionArguments source_arguments = EnclosureFunctionArguments::STATE;
+    EnclosureFunctionArguments target_auxiliary_arguments = EnclosureFunctionArguments::STATE;
     // TransitionData() { }
     // TransitionData(DiscreteLocation t, ValidatedScalarMultivariateFunction g, ValidatedVectorMultivariateFunction r)
     //     : target(t), guard_function(g), reset_function(r) { }

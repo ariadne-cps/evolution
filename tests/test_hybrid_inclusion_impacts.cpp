@@ -4,7 +4,7 @@
  *  SPDX-License-Identifier: GPL-3.0-or-later
  ****************************************************************************/
 
-#include "../src/hybrid_inclusion_invariants.hpp"
+#include "../src/hybrid_outer_flow.hpp"
 #include "evolution/hybrid_evolution_tree.hpp"
 #include "integration/integrator.hpp"
 #include "integration/selected_inclusion_integrator.hpp"
@@ -96,11 +96,11 @@ class TestHybridInclusionImpacts : public Testing::ContextFixture {
     void test_exact_tangent_contact_retains_witness_and_reset_metadata() {
         ContactScenario scenario;
         const auto system = scenario.system(-sqr(scenario.x));
-        const auto transitions = inclusion_upper_transitions(system, scenario.source);
+        const auto transitions = outer_flow_transitions(system, scenario.source);
         auto reach = scenario.exact_reach();
-        apply_inclusion_flow_blockers(reach, transitions);
+        apply_outer_flow_blockers(reach, transitions);
         HybridEvolutionStepResult result;
-        publish_inclusion_jump_candidates(reach, transitions, Real(2), result);
+        publish_outer_jump_candidates(reach, transitions, Real(2), result);
         ARIADNE_TESTING_REQUIRE(result.successors.size() == 1u);
         const auto& successor = result.successors.front();
         const auto& reset = successor.work.enclosure;
@@ -133,9 +133,9 @@ class TestHybridInclusionImpacts : public Testing::ContextFixture {
         // A transverse guard has both signs on this raw reach, so activation
         // alone would incorrectly admit the positive-side witness too.
         const auto transverse_system = scenario.system(scenario.x);
-        const auto transverse = inclusion_upper_transitions(transverse_system, scenario.source);
+        const auto transverse = outer_flow_transitions(transverse_system, scenario.source);
         HybridEvolutionStepResult boundary;
-        publish_inclusion_jump_candidates(scenario.exact_reach(), transverse, Real(3), boundary);
+        publish_outer_jump_candidates(scenario.exact_reach(), transverse, Real(3), boundary);
         ARIADNE_TESTING_REQUIRE(boundary.successors.size() == 1u);
         const auto& boundary_set = boundary.successors.front().work.enclosure;
         ARIADNE_TESTING_PROVE(!excludes_witness(boundary_set, contact));
@@ -148,12 +148,12 @@ class TestHybridInclusionImpacts : public Testing::ContextFixture {
     void test_closed_horizon_excludes_future_contact() {
         ContactScenario scenario;
         const auto system = scenario.system(-sqr(scenario.x));
-        const auto transitions = inclusion_upper_transitions(system, scenario.source);
+        const auto transitions = outer_flow_transitions(system, scenario.source);
         auto reach = scenario.exact_reach();
-        apply_inclusion_flow_blockers(reach, transitions);
+        apply_outer_flow_blockers(reach, transitions);
         HybridEvolutionStepResult before, at_contact;
-        publish_inclusion_jump_candidates(reach, transitions, Real(1.5_x), before);
-        publish_inclusion_jump_candidates(reach, transitions, Real(2), at_contact);
+        publish_outer_jump_candidates(reach, transitions, Real(1.5_x), before);
+        publish_outer_jump_candidates(reach, transitions, Real(2), at_contact);
         ARIADNE_TESTING_PROVE(before.successors.empty());
         ARIADNE_TESTING_EXPECT_EQUAL(at_contact.successors.size(), 1u);
     }
@@ -162,11 +162,11 @@ class TestHybridInclusionImpacts : public Testing::ContextFixture {
         ContactScenario scenario;
         auto blocked = scenario.system(scenario.x);
         blocked.new_guard(scenario.source, DiscreteEvent("earlier"), scenario.x >= -0.25_x, EventKind::PROGRESS);
-        const auto blockers = inclusion_upper_transitions(blocked, scenario.source);
+        const auto blockers = outer_flow_transitions(blocked, scenario.source);
         auto reach = scenario.exact_reach();
-        apply_inclusion_flow_blockers(reach, blockers);
+        apply_outer_flow_blockers(reach, blockers);
         HybridEvolutionStepResult excluded;
-        publish_inclusion_jump_candidates(reach, blockers, Real(3), excluded);
+        publish_outer_jump_candidates(reach, blockers, Real(3), excluded);
         ARIADNE_TESTING_PROVE(excluded.successors.empty());
 
         auto simultaneous = scenario.system(scenario.x);
@@ -174,11 +174,11 @@ class TestHybridInclusionImpacts : public Testing::ContextFixture {
         const DiscreteEvent urgent("simultaneous");
         simultaneous.new_transition(scenario.source, urgent, scenario.other,
                                     {next(scenario.z) = 9}, scenario.x >= 0, EventKind::URGENT);
-        const auto transitions = inclusion_upper_transitions(simultaneous, scenario.source);
+        const auto transitions = outer_flow_transitions(simultaneous, scenario.source);
         reach = scenario.exact_reach();
-        apply_inclusion_flow_blockers(reach, transitions);
+        apply_outer_flow_blockers(reach, transitions);
         HybridEvolutionStepResult result;
-        publish_inclusion_jump_candidates(reach, transitions, Real(2), result);
+        publish_outer_jump_candidates(reach, transitions, Real(2), result);
         ARIADNE_TESTING_REQUIRE(result.successors.size() == 2u);
         bool contact_found = false, urgent_found = false;
         for (const auto& successor: result.successors) {

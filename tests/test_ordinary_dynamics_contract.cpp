@@ -44,13 +44,12 @@ class TestOrdinaryDynamicsContract : public Ariadne::Testing::ContextFixture {
         ContinuousTimeEvolver timed_evolver(timed, integrator);
         ARIADNE_TESTING_PROVE(timed_evolver.system().has_explicit_time());
         ARIADNE_TESTING_EXPECT_EQUAL(timed.auxiliary_space().size(), 0u);
-        // An explicit-time auxiliary map has an extra time argument.
-        // Reject it rather than silently evaluating a state-only map.
+        // Time-aware auxiliary outputs use the separate clock argument.
         RealVariable output("output");
         const OrdinaryDifferentialAlgebraicEquation timed_auxiliary(
             {dot(x) = t - x}, RealVariablesBox{}, t, {let(output) = t + x});
-        ARIADNE_TESTING_EXPECT_THROWS(
-            std::invalid_argument, ContinuousTimeEvolver(timed_auxiliary, integrator));
+        ContinuousTimeEvolver timed_output(timed_auxiliary, integrator);
+        ARIADNE_TESTING_PROVE(timed_output.system().has_explicit_time());
         ContinuousTimeEvolver parameterised_evolver(parameterised, integrator);
         ARIADNE_TESTING_EXPECT_EQUAL(parameterised_evolver.system().parameter_space().dimension(), 1u);
         ARIADNE_TESTING_EXPECT_THROWS(std::invalid_argument,
@@ -62,7 +61,8 @@ class TestOrdinaryDynamicsContract : public Ariadne::Testing::ContextFixture {
         PreconditionedGradedTaylorSeriesIntegrator preconditioned(step_maximum_error = 1e-5);
         ARIADNE_TESTING_EXPECT_THROWS(std::invalid_argument,
                                       ContinuousTimeEvolver(parameterised, preconditioned));
-        ARIADNE_TESTING_EXPECT_THROWS(std::invalid_argument, (void)ContinuousTimeSimulator(timed));
+        ContinuousTimeSimulator timed_simulator(timed);
+        ARIADNE_TESTING_PROVE(timed_simulator.configuration().step_size().raw().get_d() > 0);
         ARIADNE_TESTING_EXPECT_THROWS(std::invalid_argument, (void)ContinuousTimeSimulator(parameterised));
     }
 

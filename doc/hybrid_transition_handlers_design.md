@@ -299,7 +299,8 @@ does not imply tangency, and `UNRESOLVED` does not imply degeneracy.
 | --- | --- | --- | --- |
 | Autonomous state-only ODAE, no fixed parameters | Existing validated local equation method | Existing equation method (no new inner claim) | Existing event policy and crossing classifier, subject to certified local flow layout |
 | Autonomous ODAI, no fixed parameters | Explicit structured or box method; necessary blocking restrictions and conservative urgent/permissive/impact jump candidates | Rejected, including at time zero | State invariants and PROGRESS/URGENT/IMPACT blockers; UPPER urgent/permissive active-side and impact-boundary candidates |
-| Explicit-time or fixed-parameter ODAE/ODAI modes | Rejected by current hybrid mode validation | Rejected | Not reached |
+| Explicit-time ODAE/ODAI or autonomous fields with timed events, no fixed model parameters | Clock-conditioned step and necessary state/time outer filters | Rejected | Timed invariants, all blocking kinds and conservative reset candidates |
+| Fixed-parameter ODAE/ODAI modes | Rejected by current hybrid mode validation | Rejected | Not reached |
 
 ODAI with arbitrary measurable input functions lacks, at present, a
 certified trajectory-level guard derivative and first-entry/maximum
@@ -314,7 +315,7 @@ separate proof of the semantics it supports.
 The focused handler contracts exercise geometric witnesses, root-time
 maps, ambiguous sampled/discard behavior, impact direction, branch order,
 and incompatible certificate rejection. The inclusion tests exercise state-only
-event restrictions and conservative UPPER jumps with both explicit integration choices; unsupported LOWER, time
+event restrictions and conservative UPPER jumps with both explicit integration choices; unsupported LOWER
 and fixed-parameter capabilities are rejected before integration.
 
 ## Initial ODAI capability: state invariants under UPPER
@@ -571,3 +572,31 @@ formatting accumulated in the preceding hybrid refactoring commits. The remote
 functional CI of the new commit must be checked independently of these local
 results and the five successful functional workflows of predecessor `85c0781`.
 The four-family roadmap and full Python/C++ tutorial parity remain open.
+
+
+## Global time and the shared outer-flow component
+
+The [global-time design](global_time_design.md) extends native clock support
+without adding a differential time state. Timed equation modes and inclusion
+modes share `src/hybrid_outer_flow.hpp/.cpp`, the renamed and generalized
+inclusion guard component. Native helper names are `outer_flow_transitions`,
+`apply_outer_flow_blockers` and `publish_outer_jump_candidates`; removed names
+have no compatibility aliases. `publish_outer_step` retains the existing
+endpoint/reach/horizon ordering for both numerical producers.
+
+Each transition explicitly declares `STATE` or `STATE_TIME` source arguments
+and the target auxiliary layout. Invariants, activations and boundary constraints
+compose through that layout; resets read the pre-reset clock and preserve its
+value. Initial activation remains a whole-source decision with the requested
+semantics. Timed modes require UPPER, including at zero horizon. Conservative
+clocked equation event handling claims no ODAE first-entry certificate; the
+existing autonomous equation classifier is unchanged.
+
+Clock-conditioned numerical steps retain parameter-dependent arrival maps.
+Timed auxiliary outputs survive subdivision, reconditioning and compatible
+recombination. Six new analytic Evolution cases cover clock correlations,
+ordinary/hybrid equation outputs, timed inclusions with uncertain arrival,
+time-only equation events, timed inclusion events on autonomous/nonautonomous
+fields, and equation simulation at stage times. Structured/box methods and
+flat/tree backends remain active. Fixed model parameters in hybrid modes and
+inclusion simulation input policies remain separate future work.

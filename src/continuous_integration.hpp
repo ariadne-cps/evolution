@@ -8,6 +8,7 @@
 
 #include "evolution/enclosure.hpp"
 #include "evolution/evolver_interface.hpp"
+#include "integration/validated_integration_step.hpp"
 
 namespace Ariadne {
 class ValidatedIntegrationStep;
@@ -27,6 +28,25 @@ ValidatedIntegrationStep compute_inclusion_step(
     const ValidatedVectorMultivariateFunctionPatch& constant_parameters,
     const Dyadic& time, const Dyadic& maximum_step,
     const FirstOrderMultifunctionIntegrator& solver);
+
+/** @brief A numerical step conditioned on an enclosure's external clock map.
+ *  The first numerical conditioning argument is the clock origin for this step;
+ *  it is composed from the source, never adjoined as a physical state or a
+ *  trajectory-constant model parameter. Local duration advances that clock.
+ */
+struct AnchoredIntegrationStep {
+    ValidatedIntegrationStep step;
+    ValidatedVectorMultivariateFunctionPatch arguments;
+};
+AnchoredIntegrationStep compute_clocked_equation_step(
+    const EffectiveVectorMultivariateFunction& field, const Enclosure&,
+    const ValidatedVectorMultivariateFunctionPatch& model_parameters, const Dyadic& maximum_step, const IntegratorInterface&);
+AnchoredIntegrationStep compute_clocked_inclusion_step(
+    const OrdinaryDifferentialAlgebraicInclusion&, const Enclosure&,
+    const ValidatedVectorMultivariateFunctionPatch& model_parameters, const Dyadic& maximum_step, const SelectedParametricMultifunctionIntegrator&);
+AnchoredIntegrationStep compute_clocked_inclusion_step(
+    const OrdinaryDifferentialAlgebraicInclusion&, const Enclosure&,
+    const ValidatedVectorMultivariateFunctionPatch& model_parameters, const Dyadic& maximum_step, const FirstOrderMultifunctionIntegrator&);
 
 /** @brief Whether the maps take physical states or existing enclosure parameters. */
 enum class IntegrationStepCoordinates { STATE,
@@ -59,7 +79,9 @@ AppliedIntegrationStep apply_integration_step(
 
 /** @brief Apply a step using a map from existing enclosure parameters to
  *  the numerical [state, constant parameters] arguments, excluding time.
- *  Fixed parameters are composed from their original coordinates on every step.
+ *  Model parameters are composed from their original coordinates on every step.
+ *  A clocked step additionally composes its explicit source-clock conditioning
+ *  coordinate; this is not persisted as a model parameter.
  */
 AppliedIntegrationStep apply_integration_step(
     const Enclosure& initial, const ValidatedIntegrationStep& step,

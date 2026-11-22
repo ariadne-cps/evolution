@@ -295,6 +295,78 @@ ValidatedIntegrationStep compute_inclusion_step(
     return inclusion_step_impl(inclusion, current, parameters, time, maximum_step, nullptr, &solver);
 }
 
+namespace {
+// The numerical parameter is a step-local conditioning coordinate: the source
+// absolute clock. No synthetic ODAE/ODAI declaration or dot(time)=1 is created.
+EffectiveVectorMultivariateFunction clocked_field(const EffectiveVectorMultivariateFunction& field, SizeType n) {
+    const auto coordinates = EffectiveScalarMultivariateFunction::coordinates(field.argument_size() + 1u);
+    List<EffectiveScalarMultivariateFunction> arguments;
+    for (SizeType i = 0u; i != n; ++i)
+        arguments.append(coordinates[i]);
+    arguments.append(coordinates[n] + coordinates[n + 1u]);
+    for (SizeType i = n + 1u; i != field.argument_size(); ++i)
+        arguments.append(coordinates[i + 1u]);
+    return compose(field, EffectiveVectorMultivariateFunction(arguments));
+}
+
+AnchoredIntegrationStep clocked_step(
+    const EffectiveVectorMultivariateFunction& field, const ExactBoxType& inputs,
+    const Enclosure& current, const ValidatedVectorMultivariateFunctionPatch& model_parameters,
+    const StepSizeType& maximum_step, const IntegratorInterface* equation, const SelectedParametricMultifunctionIntegrator* selected,
+    const FirstOrderMultifunctionIntegrator* boxes) {
+    const auto n = current.state_dimension();
+    if (field.result_size() != n || field.argument_size() != n + 1u + model_parameters.result_size() + inputs.dimension() ||
+        model_parameters.domain() != current.parameter_domain())
+        throw std::invalid_argument("Clocked integration requires [state, global time, inputs]");
+    const auto initial = hull(cast_exact_box(current.bounding_box()), cast_exact_box(UpperBoxType(current.state_function().range())));
+    const auto origin = product(ExactBoxType({cast_exact_interval(current.time_function().range())}),
+                                cast_exact_box(UpperBoxType(model_parameters.range())));
+    if (origin.is_empty() || !origin.is_bounded())
+        throw std::invalid_argument("Clocked integration requires a finite global time chart");
+    const auto dynamic = clocked_field(field, n);
+    EulerBounder bounder;
+    auto bounded = bounder.compute(dynamic, initial, StepSizeType(0u), product(origin, inputs), suggest(maximum_step));
+    if (equation == nullptr) {
+        for (SizeType i = 0u; i != bounded.second.dimension(); ++i) {
+            const auto padding = cast_positive(mag(bounded.second[i]) + FloatDPUpperBound(1u, dp)) * cast_positive(FloatDPUpperBound(0x1p-40_x, dp));
+            bounded.second[i] = widen(bounded.second[i], padding);
+        }
+    }
+    const auto run = [&]() -> ValidatedIntegrationStep {
+        if (equation)
+            return FlowStepIntegratorAdapter(*equation).step(ValidatedIntegrationRequest(
+                dynamic, initial, StepSizeType(0u), bounded.first, origin, bounded.second));
+        const ValidatedTimedInputFieldBoxAdapterDP adapter(dynamic, cast_exact_box(bounded.second),
+                                                           IntervalDomainType(StepSizeType(0u), bounded.first), origin, inputs);
+        const ValidatedIntegrationRequest request(adapter, initial, StepSizeType(0u), bounded.first, origin, bounded.second);
+        if (selected)
+            return StructuredInclusionStepIntegratorAdapter(*selected).step(request);
+        return MultiflowStepIntegratorAdapter(*boxes).step(request);
+    };
+    return {run(), join(join(current.state_function(), current.time_function()), model_parameters)};
+}
+} // namespace
+
+AnchoredIntegrationStep compute_clocked_equation_step(const EffectiveVectorMultivariateFunction& field,
+                                                      const Enclosure& current, const ValidatedVectorMultivariateFunctionPatch& parameters,
+                                                      const StepSizeType& maximum_step, const IntegratorInterface& solver) {
+    return clocked_step(field, ExactBoxType(0u), current, parameters, maximum_step, &solver, nullptr, nullptr);
+}
+AnchoredIntegrationStep compute_clocked_inclusion_step(const OrdinaryDifferentialAlgebraicInclusion& model,
+                                                       const Enclosure& current, const ValidatedVectorMultivariateFunctionPatch& parameters,
+                                                       const StepSizeType& maximum_step, const SelectedParametricMultifunctionIntegrator& solver) {
+    if (!model.has_explicit_time() || model.parameter_space().dimension() != parameters.result_size())
+        throw std::invalid_argument("Clocked inclusion step requires explicit time and the original model parameter map");
+    return clocked_step(model.function(), model.inputs(), current, parameters, maximum_step, nullptr, &solver, nullptr);
+}
+AnchoredIntegrationStep compute_clocked_inclusion_step(const OrdinaryDifferentialAlgebraicInclusion& model,
+                                                       const Enclosure& current, const ValidatedVectorMultivariateFunctionPatch& parameters,
+                                                       const StepSizeType& maximum_step, const FirstOrderMultifunctionIntegrator& solver) {
+    if (!model.has_explicit_time() || model.parameter_space().dimension() != parameters.result_size())
+        throw std::invalid_argument("Clocked inclusion step requires explicit time and the original model parameter map");
+    return clocked_step(model.function(), model.inputs(), current, parameters, maximum_step, nullptr, nullptr, &solver);
+}
+
 AppliedIntegrationStep apply_integration_step(const Enclosure& initial, const ValidatedIntegrationStep& step,
                                               IntegrationStepCoordinates coordinates, Semantics semantics,
                                               IntegrationStepRepresentation representation) {

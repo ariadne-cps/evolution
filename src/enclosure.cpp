@@ -345,9 +345,23 @@ const EffectiveVectorMultivariateFunction& Enclosure::auxiliary_mapping() const 
     return this->_auxiliary_mapping;
 }
 
-Void Enclosure::set_auxiliary_mapping(const EffectiveVectorMultivariateFunction& aux) {
-    ARIADNE_PRECONDITION(this->_state_function.result_size() == aux.argument_size());
+EnclosureFunctionArguments Enclosure::auxiliary_arguments() const { return _auxiliary_arguments; }
+
+ValidatedVectorMultivariateFunctionPatch Enclosure::argument_function(EnclosureFunctionArguments arguments) const {
+    switch (arguments) {
+        case EnclosureFunctionArguments::STATE:
+            return _state_function;
+        case EnclosureFunctionArguments::STATE_TIME:
+            return join(_state_function, _time_function);
+        default:
+            throw std::invalid_argument("Unknown enclosure function argument layout");
+    }
+}
+
+Void Enclosure::set_auxiliary_mapping(const EffectiveVectorMultivariateFunction& aux, EnclosureFunctionArguments arguments) {
+    ARIADNE_PRECONDITION(argument_function(arguments).result_size() == aux.argument_size());
     this->_auxiliary_mapping = aux;
+    this->_auxiliary_arguments = arguments;
 }
 
 Void Enclosure::_unchecked_new_variable(ExactIntervalType ivl, EnclosureVariableKind vk) {
@@ -396,17 +410,22 @@ Void Enclosure::clear_time() {
 
 Void Enclosure::apply_map(ValidatedVectorMultivariateFunction map) {
     ARIADNE_PRECONDITION_MSG(map.argument_size() == this->state_dimension(), "state_dimension=" << this->state_dimension() << ", map=" << map);
-    ARIADNE_PRECONDITION(map.result_size() == this->_auxiliary_mapping.argument_size());
+    ARIADNE_PRECONDITION(map.result_size() + (_auxiliary_arguments == EnclosureFunctionArguments::STATE_TIME ? 1u : 0u) == this->_auxiliary_mapping.argument_size());
     this->_state_function = compose(map, this->_state_function);
     this->_dwell_time_function = this->configuration().function_factory().create_zero(this->domain());
 }
 
-Void Enclosure::apply_map(ValidatedVectorMultivariateFunction map, EffectiveVectorMultivariateFunction aux_map) {
-    ARIADNE_PRECONDITION_MSG(map.argument_size() == this->state_dimension(), "state_dimension=" << this->state_dimension() << ", map=" << map);
-    ARIADNE_PRECONDITION_MSG(aux_map.argument_size() == map.result_size(), "map=" << map << ", aux_map=" << aux_map);
-    this->_state_function = compose(map, this->_state_function);
+Void Enclosure::apply_map(ValidatedVectorMultivariateFunction map, EffectiveVectorMultivariateFunction aux_map,
+                          EnclosureFunctionArguments source_arguments, EnclosureFunctionArguments auxiliary_arguments) {
+    const auto arguments = argument_function(source_arguments);
+    ARIADNE_PRECONDITION_MSG(map.argument_size() == arguments.result_size(), "arguments=" << arguments << ", map=" << map);
+    const SizeType nt = auxiliary_arguments == EnclosureFunctionArguments::STATE_TIME ? 1u : 0u;
+    ARIADNE_PRECONDITION(auxiliary_arguments == EnclosureFunctionArguments::STATE || auxiliary_arguments == EnclosureFunctionArguments::STATE_TIME);
+    ARIADNE_PRECONDITION_MSG(aux_map.argument_size() == map.result_size() + nt, "map=" << map << ", aux_map=" << aux_map);
+    this->_state_function = compose(map, arguments);
     this->_dwell_time_function = this->configuration().function_factory().create_zero(this->domain());
     this->_auxiliary_mapping = aux_map;
+    this->_auxiliary_arguments = auxiliary_arguments;
 }
 
 Void Enclosure::apply_discrete_time_map_step(ValidatedVectorMultivariateFunction map) {
@@ -639,7 +658,7 @@ const ValidatedVectorMultivariateFunctionPatch Enclosure::auxiliary_function() c
     static_assert(not Convertible<ValidatedVectorMultivariateFunction, EffectiveVectorMultivariateFunction>);
     static_assert(not Convertible<ValidatedVectorMultivariateFunctionPatch, EffectiveVectorMultivariateFunction>);
     static_assert(not Convertible<EffectiveVectorMultivariateFunction, ValidatedVectorMultivariateFunctionPatch>);
-    return compose(this->_auxiliary_mapping, this->_state_function);
+    return compose(this->_auxiliary_mapping, this->argument_function(this->_auxiliary_arguments));
 }
 
 SizeType Enclosure::number_of_constraints() const {
@@ -942,7 +961,9 @@ Pair<Enclosure, Enclosure>
     result2._dwell_time_function = dwell_time_function2;
 
     result1._auxiliary_mapping = this->_auxiliary_mapping;
+    result1._auxiliary_arguments = this->_auxiliary_arguments;
     result2._auxiliary_mapping = this->_auxiliary_mapping;
+    result2._auxiliary_arguments = this->_auxiliary_arguments;
     result1._variable_kinds = this->_variable_kinds;
     result2._variable_kinds = this->_variable_kinds;
 
@@ -1157,6 +1178,7 @@ Void Enclosure::kuhn_recondition() {
     new_set._dwell_time_function = ValidatedScalarMultivariateTaylorFunctionModelDP(new_domain, Ariadne::recondition(dwell_time.model(), discarded_parameters, number_of_error_parameters));
 
     new_set._auxiliary_mapping = this->_auxiliary_mapping;
+    new_set._auxiliary_arguments = this->_auxiliary_arguments;
     new_set._reduced_domain = new_reduced_domain;
     new_set._variable_kinds = List<EnclosureVariableKind>(new_domain.size(), EnclosureVariableKind::ERROR);
     for (SizeType j = 0; j < number_of_kept_parameters; ++j) {
@@ -1196,7 +1218,7 @@ const ValidatedScalarMultivariateFunctionPatch Enclosure::get_function(SizeType 
     } else if (i == this->state_dimension()) {
         return this->_time_function;
     } else {
-        return compose(this->_auxiliary_mapping[i - this->state_dimension() - 1u], this->_state_function);
+        return this->auxiliary_function()[i - this->state_dimension() - 1u];
     }
 }
 
@@ -1363,10 +1385,9 @@ const RealSpace LabelledEnclosure::space() const {
     return this->state_time_auxiliary_space();
 }
 
-Void LabelledEnclosure::set_auxiliary(const RealSpace& spc, const EffectiveVectorMultivariateFunction& aux) {
-    ARIADNE_PRECONDITION(this->state_function().result_size() == aux.argument_size());
+Void LabelledEnclosure::set_auxiliary(const RealSpace& spc, const EffectiveVectorMultivariateFunction& aux, EnclosureFunctionArguments arguments) {
     ARIADNE_PRECONDITION(spc.size() == aux.result_size());
-    this->Enclosure::set_auxiliary_mapping(aux);
+    this->Enclosure::set_auxiliary_mapping(aux, arguments);
     this->_auxiliary_variables = spc.variable_names();
 }
 
@@ -1414,10 +1435,10 @@ Void LabelledEnclosure::apply_map(const ValidatedVectorMultivariateFunction& f, 
 }
 
 Void LabelledEnclosure::apply_map(const ValidatedVectorMultivariateFunction& f, const RealSpace& spc,
-                                  const EffectiveVectorMultivariateFunction& aux_f, const RealSpace& aux_spc) {
-    ARIADNE_PRECONDITION(spc.size() == aux_f.argument_size());
+                                  const EffectiveVectorMultivariateFunction& aux_f, const RealSpace& aux_spc,
+                                  EnclosureFunctionArguments source_arguments, EnclosureFunctionArguments auxiliary_arguments) {
     ARIADNE_PRECONDITION(aux_spc.size() == aux_f.result_size());
-    this->Enclosure::apply_map(f, aux_f);
+    this->Enclosure::apply_map(f, aux_f, source_arguments, auxiliary_arguments);
     this->_state_variables = spc.variable_names();
     this->_auxiliary_variables = aux_spc.variable_names();
 }

@@ -116,7 +116,7 @@ class HybridContinuousTimeSimulator {
     /** @brief Perform the specified evolution operation. */
     Map<DiscreteEvent, EffectiveScalarMultivariateFunction> _guard_functions(const DiscreteLocation& location) const;
     /** @brief Perform the specified evolution operation. */
-    Bool _satisfies_invariants(const DiscreteLocation& location, const Point<FloatDPApproximation>& point) const;
+    Bool _satisfies_invariants(const DiscreteLocation& location, const Point<FloatDPApproximation>& point, const FloatDPApproximation& time) const;
 };
 
 /** @brief HybridContinuousTimeSimulatorConfiguration represents simulation algorithms for hybrid dynamical systems. */

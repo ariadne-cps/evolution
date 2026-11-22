@@ -97,7 +97,10 @@ def test_ordinary_equation_consumers():
     assert parameterised_orbit.reach().size() >= 2
     with unittest.TestCase().assertRaises(ValueError):
         parameterised_evolver.orbit(initial, a.Real(1)/16, a.Semantics.LOWER)
-    for field in (timed, parameterised):
+    timed_simulator = a.ContinuousTimeSimulator(timed)
+    timed_simulator.configuration().set_step_size(0.03125)
+    timed_simulator.orbit(initial, a.Real(1)/16)
+    for field in (parameterised,):
         with unittest.TestCase().assertRaises(ValueError):
             a.ContinuousTimeSimulator(field)
 

@@ -369,6 +369,7 @@ EnclosureRecombinationResult ReferenceEnclosureRecombiner::recombine(
     const auto& reference = sources.front();
     const auto auxiliary_formula = make_formula(reference.auxiliary_mapping());
     for (const auto& source: sources) {
+        ARIADNE_PRECONDITION(source.auxiliary_arguments() == reference.auxiliary_arguments());
         ARIADNE_PRECONDITION_MSG(identical(auxiliary_formula, make_formula(source.auxiliary_mapping())),
                                  "Recombination requires identical auxiliary mappings.");
     }
@@ -403,6 +404,7 @@ EnclosureRecombinationResult ReferenceEnclosureRecombiner::recombine(
         transformed._time_function = unchecked_compose(source.time_function(), parameters);
         transformed._dwell_time_function = unchecked_compose(source.dwell_time_function(), parameters);
         transformed._auxiliary_mapping = reference.auxiliary_mapping();
+        transformed._auxiliary_arguments = reference.auxiliary_arguments();
         transformed._variable_kinds = List<EnclosureVariableKind>(parameter_count, EnclosureVariableKind::UNKNOWN);
         for (SizeType k = 0; k != source.number_of_parameters(); ++k)
             transformed._variable_kinds[k] = source.variable_kinds()[k];

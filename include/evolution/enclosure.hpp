@@ -94,6 +94,10 @@ class EnclosureConfiguration {
 };
 
 /** @brief EnclosureVariableKind: validated enclosures for continuous dynamics. */
+/** @brief Explicit argument layout; global time is never a physical state. */
+enum class EnclosureFunctionArguments : std::uint8_t { STATE,
+                                                       STATE_TIME };
+
 enum class EnclosureVariableKind : std::uint8_t { INITIAL,
                                                   TEMPORAL,
                                                   PARAMETER,
@@ -116,6 +120,7 @@ class Enclosure
     // extension embeds every map and appends its variable kind together.
     ExactBoxType _domain;
     EffectiveVectorMultivariateFunction _auxiliary_mapping;
+    EnclosureFunctionArguments _auxiliary_arguments = EnclosureFunctionArguments::STATE;
     ValidatedVectorMultivariateFunctionPatch _state_function;
     ValidatedScalarMultivariateFunctionPatch _time_function;
     ValidatedScalarMultivariateFunctionPatch _dwell_time_function;
@@ -184,7 +189,10 @@ class Enclosure
     const ValidatedScalarMultivariateFunctionPatch get_function(SizeType i) const;
 
     //! \brief Set the auxiliary function.
-    Void set_auxiliary_mapping(const EffectiveVectorMultivariateFunction& aux);
+    Void set_auxiliary_mapping(const EffectiveVectorMultivariateFunction& aux,
+                               EnclosureFunctionArguments arguments = EnclosureFunctionArguments::STATE);
+    EnclosureFunctionArguments auxiliary_arguments() const;
+    ValidatedVectorMultivariateFunctionPatch argument_function(EnclosureFunctionArguments) const;
     //! \brief Get the auxiliary function.
     const EffectiveVectorMultivariateFunction& auxiliary_mapping() const;
 
@@ -208,7 +216,9 @@ class Enclosure
     //! \brief Apply the map \f$r\f$ to the enclosure, obtaining \f$\phi'(s)=r(\phi(s))(x,h)\f$ and \f$\tau'(s)=\tau(s)\f$. \f$f\f$. The state variables are unchanged.
     Void apply_map(ValidatedVectorMultivariateFunction r);
     //! \brief Apply the map \f$r\f$ to the enclosure, obtaining \f$\phi'(s)=r(\phi(s))(x,h)\f$ and \f$\tau'(s)=\tau(s)\f$. \f$f\f$. The auxiliary function is updated to \a aux.
-    Void apply_map(ValidatedVectorMultivariateFunction r, EffectiveVectorMultivariateFunction aux);
+    Void apply_map(ValidatedVectorMultivariateFunction r, EffectiveVectorMultivariateFunction aux,
+                   EnclosureFunctionArguments source_arguments = EnclosureFunctionArguments::STATE,
+                   EnclosureFunctionArguments auxiliary_arguments = EnclosureFunctionArguments::STATE);
     //! \brief Apply the map \f$r\f$ to the enclosure, obtaining \f$\phi'(s)=r(\phi(s))(x,h)\f$ and \f$\tau'(s)=\tau(s)\f$. \f$f\f$. The state variables are unchanged. Time is increased by one.
     Void apply_discrete_time_map_step(ValidatedVectorMultivariateFunction r);
     //! \brief Apply the flow \f$\xi'(s)=\phi(\xi(s),h)\f$ and \f$\tau'(s)=\tau(s)+h\f$.
@@ -470,7 +480,9 @@ class LabelledEnclosure
     /** @brief Perform the specified evolution operation. */
     Void apply_map(const ValidatedVectorMultivariateFunction& f, const RealSpace& new_state_space);
     Void apply_map(const ValidatedVectorMultivariateFunction& f, const RealSpace& new_state_space,
-                   const EffectiveVectorMultivariateFunction& a, const RealSpace& new_auxiliary_space);
+                   const EffectiveVectorMultivariateFunction& a, const RealSpace& new_auxiliary_space,
+                   EnclosureFunctionArguments source_arguments = EnclosureFunctionArguments::STATE,
+                   EnclosureFunctionArguments auxiliary_arguments = EnclosureFunctionArguments::STATE);
 
     /** @brief Perform the specified evolution operation. */
     Void set_state_space(const RealSpace&);
@@ -488,7 +500,8 @@ class LabelledEnclosure
     const ValidatedVectorMultivariateFunctionPatch state_time_auxiliary_function() const;
 
     /** @brief Perform the specified evolution operation. */
-    Void set_auxiliary(const RealSpace& spc, const EffectiveVectorMultivariateFunction& aux);
+    Void set_auxiliary(const RealSpace& spc, const EffectiveVectorMultivariateFunction& aux,
+                       EnclosureFunctionArguments arguments = EnclosureFunctionArguments::STATE);
 
     /** @brief Perform the specified evolution operation. */
     friend LabelledEnclosure product(const LabelledEnclosure&, const ExactIntervalType&);

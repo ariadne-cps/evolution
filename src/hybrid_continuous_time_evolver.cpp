@@ -42,7 +42,7 @@
 #include "function/function_model.hpp"
 #include "function/function_patch.hpp"
 #include "hybrid_crossing_analysis.hpp"
-#include "hybrid_inclusion_invariants.hpp"
+#include "hybrid_outer_flow.hpp"
 #include "hybrid_step_results.hpp"
 #include "hybrid_timing.hpp"
 #include "hybrid_transition_handlers.hpp"
@@ -201,13 +201,17 @@ Set<DiscreteEvent> activating_events(const Map<DiscreteEvent, TransitionData>& t
 Void set_auxiliary(const HybridAutomatonInterface& system, HybridEnclosure& enclosure) {
     DiscreteLocation initial_location = enclosure.location();
     if (const auto* equation = system.equation(initial_location)) {
-        if (equation->has_explicit_time() || equation->parameter_space().dimension() != 0u)
-            throw std::invalid_argument("Hybrid equation modes currently require autonomous dynamics without fixed parameters");
+        if (equation->parameter_space().dimension() != 0u)
+            throw std::invalid_argument("Hybrid equation modes do not yet support fixed model parameters");
     }
+    if (const auto* inclusion = system.inclusion(initial_location))
+        if (inclusion->parameter_space().dimension() != 0u)
+            throw std::invalid_argument("Hybrid inclusion modes do not yet support fixed model parameters");
     ARIADNE_PRECONDITION(system.state_space().has_location(initial_location))
     RealSpace auxiliary_space = system.continuous_auxiliary_space(initial_location);
     EffectiveVectorMultivariateFunction auxiliary_function = system.auxiliary_function(initial_location);
-    enclosure.set_auxiliary(auxiliary_space.variables(), auxiliary_function);
+    enclosure.set_auxiliary(auxiliary_space.variables(), auxiliary_function,
+                            system.time_variable(initial_location) ? EnclosureFunctionArguments::STATE_TIME : EnclosureFunctionArguments::STATE);
 }
 
 Orbit<HybridEnclosure>
@@ -331,19 +335,25 @@ Void HybridContinuousTimeEvolverBase::set_integrator(const FirstOrderMultifuncti
 }
 
 Void HybridContinuousTimeEvolverBase::_validate_mode(DiscreteLocation location, Semantics semantics) const {
+    if (this->system().time_variable(location)) {
+        if (semantics != Semantics::UPPER)
+            throw std::invalid_argument("Timed hybrid dynamics/events currently require UPPER semantics");
+        if (dynamic_cast<const PreconditionedGradedTaylorSeriesIntegrator*>(this->_integrator_ptr.get()) != nullptr)
+            throw std::invalid_argument("Timed hybrid evolution does not support preconditioning");
+    }
     if (const auto* equation = this->system().equation(location)) {
-        if (equation->has_explicit_time() || equation->parameter_space().dimension() != 0u)
-            throw std::invalid_argument("Hybrid equation modes currently require autonomous dynamics without fixed parameters");
+        if (equation->parameter_space().dimension() != 0u)
+            throw std::invalid_argument("Hybrid equation modes do not yet support fixed model parameters");
     }
     if (const auto* inclusion = this->system().inclusion(location)) {
         if (semantics != Semantics::UPPER)
             throw std::invalid_argument("Hybrid inclusion modes require UPPER semantics");
-        if (inclusion->has_explicit_time() || inclusion->parameter_space().dimension() != 0u)
-            throw std::invalid_argument("Hybrid inclusion modes currently require autonomous dynamics without fixed parameters");
+        if (inclusion->parameter_space().dimension() != 0u)
+            throw std::invalid_argument("Hybrid inclusion modes do not yet support fixed model parameters");
         // UPPER may restrict reach by PROGRESS boundaries and construct
         // conservative URGENT/PERMISSIVE/IMPACT candidates. Boundary-only
         // impact filtering retains tangencies; LOWER remains unsupported.
-        EvolutionDetail::validate_inclusion_event_kinds(this->system(), location);
+        EvolutionDetail::validate_outer_event_kinds(this->system(), location);
         if (!this->_inclusion_integrator_ptr && !this->_box_integrator_ptr)
             throw std::invalid_argument("Select an explicit integration method for hybrid inclusion modes");
         if (this->_inclusion_integrator_ptr && inclusion->has_input_function() && inclusion->number_of_inputs() == 0u)
@@ -415,8 +425,8 @@ Map<DiscreteEvent, TransitionData>
         return transitions;
     // An inclusion has no single-valued field for a Lie derivative.
     // Extract supported guards and non-reset blockers without one.
-    if (this->system().inclusion(location) != nullptr)
-        return EvolutionDetail::inclusion_upper_transitions(this->system(), location);
+    if (this->system().inclusion(location) != nullptr || this->system().time_variable(location))
+        return EvolutionDetail::outer_flow_transitions(this->system(), location);
 
     const EffectiveVectorMultivariateFunction& dynamic = this->system().dynamic_function(location);
     for (Set<DiscreteEvent>::ConstIterator event_iter = events.begin();
@@ -445,6 +455,8 @@ Map<DiscreteEvent, TransitionData>
             target_auxiliary_space = this->system().continuous_auxiliary_space(target);
         }
         TransitionData transition_data = {event, event_kind, constraint_function, constraint_flow_derivative_function, target, reset_function, target_space, target_auxiliary_function, target_auxiliary_space};
+        if (is_activating(event_kind))
+            transition_data.target_auxiliary_arguments = this->system().time_variable(target) ? EnclosureFunctionArguments::STATE_TIME : EnclosureFunctionArguments::STATE;
         transitions.insert(event, transition_data);
     }
     LOGGING_PRINTLN("transitions=" << transitions);
@@ -493,14 +505,14 @@ Void HybridContinuousTimeEvolverBase::
             if (activation != EvolutionDetail::HybridInitialGuardActivation::EXCLUDED) {
                 if (policy.resets_initially && EvolutionDetail::permits_initial_reset(activation, semantics)) {
                     HybridEnclosure immediate_jump_set = invariant_set;
-                    immediate_jump_set.new_activation(event, transition.guard_function);
+                    immediate_jump_set.new_activation(event, transition.guard_function, transition.source_arguments);
                     if (!definitely(immediate_jump_set.is_empty())) {
                         // UPPER retains possible (including spurious) jumps.
                         // LOWER never selects only the guard-active part of a
                         // source whose whole activation has not been certified.
                         LOGGING_PRINTLN_AT(1, event << ": " << transition.event_kind << ", immediate");
                         result.record_reach(immediate_jump_set);
-                        immediate_jump_set.apply_reset(event, transition.target, transition.target_space, transition.reset_function, transition.target_auxiliary_space, transition.target_auxiliary_function);
+                        immediate_jump_set.apply_reset(event, transition.target, transition.target_space, transition.reset_function, transition.target_auxiliary_space, transition.target_auxiliary_function, transition.source_arguments, transition.target_auxiliary_arguments);
                         LOGGING_PRINTLN_AT(1, "immediate_jump_set=" << immediate_jump_set);
                         result.record_intermediate(immediate_jump_set);
                         const auto resolution = policy.blocks_flow &&
@@ -513,7 +525,7 @@ Void HybridContinuousTimeEvolverBase::
                 // Preserve the existing blocking restriction; refinement of
                 // a partition is not a substitute for universal activation.
                 if (policy.blocks_flow) {
-                    flowable_set.new_invariant(event, transition.guard_function);
+                    flowable_set.new_invariant(event, transition.guard_function, transition.source_arguments);
                 }
             }
         }
@@ -802,6 +814,10 @@ Void HybridContinuousTimeEvolverBase::
         this->_evolve_inclusion(starting_set, final_time, result);
         return;
     }
+    if (this->system().time_variable(location)) {
+        this->_evolve_clocked_equation(starting_set, final_time, result);
+        return;
+    }
     const auto dynamic = this->system().dynamic_function(location);
 
     Map<DiscreteEvent, EffectiveScalarMultivariateFunction> guard_functions;
@@ -882,67 +898,37 @@ Void HybridContinuousTimeEvolverBase::_evolve_inclusion(
     const auto parameters = this->function_factory().create_zeros(0u, source.parameter_domain());
     // The field is autonomous. The bridge advances each source time/dwell
     // map, including a parameter-dependent arrival time after a reset.
-    const auto step = this->_inclusion_integrator_ptr
-                        ? EvolutionDetail::compute_inclusion_step(inclusion, source, parameters, StepSizeType(0u), maximum_step,
-                                                                  *this->_inclusion_integrator_ptr)
-                        : EvolutionDetail::compute_inclusion_step(inclusion, source, parameters, StepSizeType(0u), maximum_step,
-                                                                  *this->_box_integrator_ptr);
-    const auto applied = EvolutionDetail::apply_integration_step(
-        source, step, EvolutionDetail::IntegrationStepCoordinates::STATE, Semantics::UPPER,
-        this->_box_integrator_ptr ? EvolutionDetail::IntegrationStepRepresentation::ALLOW_BOX_ENCLOSURES
-                                  : EvolutionDetail::IntegrationStepRepresentation::REQUIRE_STRUCTURED);
-    HybridEnclosure endpoint = initial;
-    endpoint.replace_continuous_set(applied.evolved);
-    // Necessary state restrictions include invariants, PROGRESS, URGENT and IMPACT
-    // blockers. They do not certify an inclusion crossing time.
-    EvolutionDetail::apply_inclusion_flow_blockers(endpoint, invariants);
-    const auto endpoint_time = endpoint.time_range();
-    const bool at_horizon = definitely(endpoint_time.lower_bound() >= final_time) &&
-                            definitely(endpoint_time.upper_bound() <= final_time);
-    HybridEvolutionStepResult completed;
-    for (const auto& continuous: applied.reach) {
-        auto reach = initial;
-        reach.replace_continuous_set(continuous);
-        // Restrict the certified outer tube by invariant and every
-        // blocking guard, including competing URGENT events. The guard
-        // boundary is retained for conservative event candidates.
-        EvolutionDetail::apply_inclusion_flow_blockers(reach, invariants);
-        // Publish the pre-reset guard intersection, retaining the full
-        // source-time chart. The reset is a separate successor; UPPER may
-        // include infeasible (spurious) candidate transitions.
-        EvolutionDetail::publish_inclusion_jump_candidates(reach, invariants, final_time, completed);
-        if (!at_horizon && possibly(reach.time_range().upper_bound() >= final_time)) {
-            auto final_slice = reach;
-            final_slice.set_time(final_time);
-            if (!definitely(final_slice.is_empty())) {
-                // Keep the old time equality as a constraint on the state and
-                // dwell maps, then expose the certified stopping time itself.
-                final_slice.set_time_function(this->function_factory().create_constant(
-                    final_slice.parameter_domain(), final_time));
-                completed.record_final(final_slice);
-            }
+    const auto numerical = [&]() -> EvolutionDetail::AnchoredIntegrationStep {
+        if (inclusion.has_explicit_time()) {
+            return this->_inclusion_integrator_ptr
+                     ? EvolutionDetail::compute_clocked_inclusion_step(inclusion, source, parameters, maximum_step, *this->_inclusion_integrator_ptr)
+                     : EvolutionDetail::compute_clocked_inclusion_step(inclusion, source, parameters, maximum_step, *this->_box_integrator_ptr);
         }
-        if (possibly(reach.time_range().upper_bound() > final_time))
-            reach.bound_time(final_time);
-        if (!definitely(reach.is_empty()))
-            completed.record_reach(reach);
-    }
-    if (at_horizon) {
-        endpoint.set_time(final_time);
-        if (!definitely(endpoint.is_empty()))
-            completed.record_final(endpoint);
-    } else if (possibly(endpoint_time.lower_bound() < final_time)) {
-        if (possibly(endpoint_time.upper_bound() > final_time))
-            endpoint.bound_time(final_time);
-        if (!definitely(endpoint.is_empty())) {
-            completed.record_intermediate(endpoint);
-            completed.continue_with(endpoint);
-        }
-    }
-    completed.continuous_evolution_time = std::min(step.time_step().get_d(), remaining.get_d());
-    if (completed.successors.empty())
-        completed.stop_reason = HybridEvolutionStopReason::TIME_LIMIT;
-    result = std::move(completed);
+        const auto step = this->_inclusion_integrator_ptr
+                            ? EvolutionDetail::compute_inclusion_step(inclusion, source, parameters, StepSizeType(0u), maximum_step, *this->_inclusion_integrator_ptr)
+                            : EvolutionDetail::compute_inclusion_step(inclusion, source, parameters, StepSizeType(0u), maximum_step, *this->_box_integrator_ptr);
+        return {step, source.state_function()};
+    }();
+    const auto& step = numerical.step;
+    const auto applied = EvolutionDetail::apply_integration_step(source, step, numerical.arguments, Semantics::UPPER,
+                                                                 this->_box_integrator_ptr ? EvolutionDetail::IntegrationStepRepresentation::ALLOW_BOX_ENCLOSURES
+                                                                                           : EvolutionDetail::IntegrationStepRepresentation::REQUIRE_STRUCTURED);
+    result = EvolutionDetail::publish_outer_step(initial, applied, invariants, final_time,
+                                                 std::min(step.time_step().get_d(), remaining.get_d()));
+}
+
+Void HybridContinuousTimeEvolverBase::_evolve_clocked_equation(
+    const HybridEnclosure& initial, const Real& final_time, HybridEvolutionStepResult& result) const {
+    const auto remaining = StepSizeType(FloatDPBounds(final_time, dp).upper_raw()) -
+                           StepSizeType(initial.time_range().lower_bound().raw());
+    const auto maximum_step = EvolutionDetail::limit_step_to_remaining_time(configuration().maximum_step_size(), remaining);
+    const auto numerical = EvolutionDetail::compute_clocked_equation_step(
+        system().dynamic_function(initial.location()), initial.continuous_set(),
+        function_factory().create_zeros(0u, initial.parameter_domain()), maximum_step, *this->_integrator_ptr);
+    const auto applied = EvolutionDetail::apply_integration_step(initial.continuous_set(), numerical.step,
+                                                                 numerical.arguments, Semantics::UPPER);
+    result = EvolutionDetail::publish_outer_step(initial, applied, _extract_transitions(initial.location()), final_time,
+                                                 std::min(numerical.step.time_step().get_d(), remaining.get_d()));
 }
 
 Void HybridContinuousTimeEvolverBase::
@@ -1090,7 +1076,7 @@ Void HybridContinuousTimeEvolverBase::
                 const DiscreteLocation& target = transitions[event].target;
                 LOGGING_PRINTLN_AT(2, "target=" << target << ", auxiliary_space=" << this->system().continuous_auxiliary_space(target) << ", auxiliary_function=" << this->system().auxiliary_function(target));
                 const TransitionData& transition = transitions[event];
-                _jump_set.apply_reset(event, target, transition.target_space, transition.reset_function, transition.target_auxiliary_space, transition.target_auxiliary_function);
+                _jump_set.apply_reset(event, target, transition.target_space, transition.reset_function, transition.target_auxiliary_space, transition.target_auxiliary_function, transition.source_arguments, transition.target_auxiliary_arguments);
                 result.transition_to(_jump_set, event, transition.event_kind, crossings[event].summary());
                 _step_data.events.insert(event);
                 LOGGING_PRINTLN_AT(1, "jump_set=" << _jump_set);

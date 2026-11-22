@@ -231,13 +231,11 @@ const OrdinaryDifferentialAlgebraicInclusion* ContinuousDynamics::inclusion() co
 ContinuousTimeEvolver::ContinuousTimeEvolver(const OrdinaryDifferentialAlgebraicEquation& system, const IntegratorInterface& i)
     : _system(new SystemType(system)), _integrator(i.clone()),
       _function_factory(dynamic_cast<const IntegratorBase&>(i).function_factory()), _configuration(new ConfigurationType()) {
-    if ((system.has_explicit_time() || system.parameter_space().dimension() != 0u) &&
-        system.auxiliary_space().size() != 0u) {
-        // Enclosure currently represents auxiliary outputs as state-only
-        // functions. Time- or parameter-dependent outputs must not be evaluated
-        // using a map with the wrong argument space.
+    if (system.parameter_space().dimension() != 0u && system.auxiliary_space().size() != 0u) {
+        // Time-aware auxiliary layouts are supported. Fixed model parameters
+        // still require their own labelled auxiliary argument contract.
         throw std::invalid_argument(
-            "ContinuousTimeEvolver does not yet support auxiliary outputs with explicit time or constant parameters");
+            "ContinuousTimeEvolver does not yet support auxiliary outputs with constant model parameters");
     }
     if ((system.has_explicit_time() || system.parameter_space().dimension() != 0u) &&
         dynamic_cast<const PreconditionedGradedTaylorSeriesIntegrator*>(&i) != nullptr) {
@@ -289,7 +287,8 @@ auto ContinuousTimeEvolver::orbit(const RealVariablesBox& initial_set, const Tim
     // zero-output auxiliary function with arguments [state,time]. Enclosure
     // already has a state-arity zero-output mapping, so leave it unchanged.
     if (this->system().auxiliary_space().size() != 0u) {
-        enclosure.set_auxiliary(this->system().auxiliary_space(), this->system().equation()->auxiliary_function());
+        enclosure.set_auxiliary(this->system().auxiliary_space(), this->system().equation()->auxiliary_function(),
+                                this->system().has_explicit_time() ? EnclosureFunctionArguments::STATE_TIME : EnclosureFunctionArguments::STATE);
     }
     return orbit(enclosure, time, semantics);
 }
@@ -300,7 +299,8 @@ auto ContinuousTimeEvolver::orbit(const RealExpressionBoundedConstraintSet& init
     // zero-output auxiliary function with arguments [state,time]. Enclosure
     // already has a state-arity zero-output mapping, so leave it unchanged.
     if (this->system().auxiliary_space().size() != 0u) {
-        enclosure.set_auxiliary(this->system().auxiliary_space(), this->system().equation()->auxiliary_function());
+        enclosure.set_auxiliary(this->system().auxiliary_space(), this->system().equation()->auxiliary_function(),
+                                this->system().has_explicit_time() ? EnclosureFunctionArguments::STATE_TIME : EnclosureFunctionArguments::STATE);
     }
     return orbit(enclosure, time, semantics);
 }
@@ -458,18 +458,29 @@ Void ContinuousTimeEvolver::
     SharedPointer<PreconditionedTaylorSeriesState> next_preconditioned_state;
 
     if (this->system().inclusion() != nullptr) {
-        const auto common_step = this->_inclusion_step(current_set, current_time, maximum_step_size);
-        step_size = common_step.time_step();
         const auto parameters = constant_parameter_coordinates(current_set, this->system().parameter_space().dimension());
-        applied = EvolutionDetail::apply_integration_step(
-            current_set, common_step, join(current_set.state_function(), parameters), semantics,
-            this->_box_integrator != nullptr
-                ? EvolutionDetail::IntegrationStepRepresentation::ALLOW_BOX_ENCLOSURES
-                : EvolutionDetail::IntegrationStepRepresentation::REQUIRE_STRUCTURED);
+        const auto& model = *this->system().inclusion();
+        const auto numerical = [&]() -> EvolutionDetail::AnchoredIntegrationStep {
+            if (model.has_explicit_time()) {
+                return this->_inclusion_integrator
+                         ? EvolutionDetail::compute_clocked_inclusion_step(model, current_set, parameters, maximum_step_size, *this->_inclusion_integrator)
+                         : EvolutionDetail::compute_clocked_inclusion_step(model, current_set, parameters, maximum_step_size, *this->_box_integrator);
+            }
+            return {this->_inclusion_step(current_set, current_time, maximum_step_size), join(current_set.state_function(), parameters)};
+        }();
+        step_size = numerical.step.time_step();
+        applied = EvolutionDetail::apply_integration_step(current_set, numerical.step, numerical.arguments, semantics,
+                                                          this->_box_integrator != nullptr ? EvolutionDetail::IntegrationStepRepresentation::ALLOW_BOX_ENCLOSURES
+                                                                                           : EvolutionDetail::IntegrationStepRepresentation::REQUIRE_STRUCTURED);
     } else {
         const FunctionType dynamic = equation_field(*this->system().equation());
         const SizeType parameter_count = _system->parameter_space().dimension();
-        if (_system->has_explicit_time() || parameter_count != 0u) {
+        if (_system->has_explicit_time()) {
+            const auto parameters = constant_parameter_coordinates(current_set, parameter_count);
+            const auto numerical = EvolutionDetail::compute_clocked_equation_step(dynamic, current_set, parameters, maximum_step_size, *integrator);
+            step_size = numerical.step.time_step();
+            applied = EvolutionDetail::apply_integration_step(current_set, numerical.step, numerical.arguments, semantics);
+        } else if (parameter_count != 0u) {
             // Bound the equation over absolute time and its fixed-parameter domain.
             // In particular, the bound is a certified enclosure, not an
             // unverified estimate constructed from the initial-state box.

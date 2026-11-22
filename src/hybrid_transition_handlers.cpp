@@ -337,11 +337,11 @@ HybridInitialGuardActivation classify_initial_guard(
 
     // This certificate is about every source point, not merely every point
     // left after intersecting the guard. Never promote a partial candidate.
-    if (definitely(invariant_valid_source.continuous_set().satisfies(transition.guard_function)))
+    if (definitely(invariant_valid_source.range_of(transition.guard_function, transition.source_arguments).lower_bound() > 0))
         return HybridInitialGuardActivation::FULL_SOURCE;
 
     HybridEnclosure candidate = invariant_valid_source;
-    candidate.new_activation(transition.event, transition.guard_function);
+    candidate.new_activation(transition.event, transition.guard_function, transition.source_arguments);
     return definitely(candidate.is_empty())
              ? HybridInitialGuardActivation::EXCLUDED
              : HybridInitialGuardActivation::UNRESOLVED;

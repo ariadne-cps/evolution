@@ -70,14 +70,14 @@ their actual stopping time. The numerical domain covers the entire state map
 over the enclosure parameter domain, including points excluded by constraints,
 so composition stays within the certified patch domain.
 
-Equation-mode hybrid event analysis requires one structured autonomous reach patch
+The autonomous equation crossing analyzer requires one structured local reach patch
 on `[state, local time]` and a structured endpoint. Multipatch results, extra
 input coordinates, explicit-time or fixed-parameter metadata and box-only
 certificates are rejected explicitly for that event analysis.
 
 `HybridAutomaton::new_mode(location, equation_or_inclusion)` retains an owned copy
 of the original ODAE or ODAI declaration. `HybridContinuousTimeEvolver` supports
-autonomous inclusion modes without declared fixed parameters, under `UPPER`
+autonomous and nonautonomous inclusion modes without fixed model parameters, under `UPPER`
 semantics. State invariants and PROGRESS/URGENT/IMPACT guards restrict outer
 reach and endpoint; URGENT/PERMISSIVE/IMPACT can produce conservative reset
 candidates. IMPACT retains the entire closed guard boundary, including
@@ -101,7 +101,14 @@ no nested continuous Orbit or separate inclusion scheduler is created. At an
 uncertain arrival time, final sections retain the time equality as a constraint
 on state/dwell maps and expose the requested final time as the time map.
 
-Timed or fixed-parameter hybrid modes and composition of typed mode declarations
+Global time is separate from physical state: use `TimeVariable()` in dynamics,
+guards, invariants, resets or auxiliary outputs without declaring `dot(t)=1`.
+A field can remain autonomous while its events depend on time. Timed hybrid
+modes use validated UPPER outer-flow filtering and preserve uncertain arrival
+clocks through resets. See the [global-time design](doc/global_time_design.md)
+for numerical conditioning, argument layouts and capability boundaries.
+
+Fixed-parameter hybrid modes and composition of typed mode declarations still
 require further capabilities and fail explicitly. Inclusion guard intersections
 may retain spurious transitions and never imply full-source activation.
 Inclusions reject `LOWER`, including at zero horizon. Input axes accumulate
@@ -118,8 +125,8 @@ The `multifunction` branch uses the ordinary dynamics declarations
 trajectory-constant parameters under `Semantics::UPPER`. Each parameter retains
 the same enclosure coordinate across integration steps, subdivision and
 reconditioning; parameters and time are not added to the physical state.
-Auxiliary outputs on timed or parameterised equations and the corresponding
-preconditioned integration paths remain unsupported and are rejected explicitly.
+Time-dependent auxiliary outputs use the separate enclosure clock. Fixed-parameter
+auxiliary outputs and timed/parameterised preconditioning remain unsupported.
 `Semantics::LOWER` is rejected for parameterised equations and for all inclusions.
 `system()` returns an owning `ContinuousDynamics` metadata view of the original
 ODAE or ODAI declaration; numerical dispatch remains internal and introduces no
@@ -167,10 +174,11 @@ provider with free input coordinates; interval coefficients can supply these
 as time-varying numerical inputs. Its bound covers the provider's possibly
 wider extension. Unsupported capabilities fail explicitly.
 
-`ContinuousTimeSimulator` simulates autonomous equations without constant
-parameters; `HybridContinuousTimeSimulator` simulates hybrid systems. These
+`ContinuousTimeSimulator` simulates autonomous and nonautonomous equations
+without fixed model parameters; `HybridContinuousTimeSimulator` also evaluates
+timed equation modes, guards, invariants, resets and auxiliary outputs. These
 names also apply to their configuration classes, headers and Python exports.
-Simulator support for inclusions and timed or parameterised dynamics remains
+Simulator input sampling for inclusions and constant model parameters remains
 planned. The [four-family design](doc/system_families_design.md) also plans native
 discrete and hybrid discrete-time simulation/evolution, shared infrastructure,
 and explicit continuous-to-discrete converters. Those new APIs and converters

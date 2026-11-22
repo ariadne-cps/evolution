@@ -6,9 +6,9 @@ This is the implementation roadmap adopted in design v6.20 on 22 November
 | Native family | Validated evolution | Numerical simulation | Current status |
 | --- | --- | --- | --- |
 | Discrete time (`IteratedMap`) | `DiscreteTimeEvolver` | `DiscreteTimeSimulator` | Evolver exists; simulator planned |
-| Continuous time (ODAE / ODAI) | `ContinuousTimeEvolver` | `ContinuousTimeSimulator` | Evolver accepts both; simulator still autonomous ODAE |
+| Continuous time (ODAE / ODAI) | `ContinuousTimeEvolver` | `ContinuousTimeSimulator` | Evolver accepts both with explicit time; simulator accepts autonomous/nonautonomous ODAE |
 | Hybrid discrete time | `HybridDiscreteTimeEvolver` | `HybridDiscreteTimeSimulator` | Native System model and both algorithms planned |
-| Hybrid continuous time | `HybridContinuousTimeEvolver` | `HybridContinuousTimeSimulator` | ODAE and partial ODAI UPPER evolution; simulator extensions planned |
+| Hybrid continuous time | `HybridContinuousTimeEvolver` | `HybridContinuousTimeSimulator` | ODAE/ODAI timed UPPER evolution; equation simulator supports external time; other extensions planned |
 
 `IteratedMap` keeps its existing name and contract. Hybrid discrete time needs
 its own native model in `ariadne-cps/system` before either algorithm is added.
@@ -79,7 +79,23 @@ contract, with its limitations visible to the caller.
    Python tutorial functional parity with C++ for every available capability.
    Update installation, exports and documentation without compatibility aliases.
 
-The current change advances only the first item. All planned APIs, converters
+IMPACT and external global time advance the first two items; constant model
+parameters in the hybrid path and further simulator capabilities remain open. All planned APIs, converters
 and the native hybrid discrete-time model remain unimplemented. The detailed
 [continuous hybrid handler design](hybrid_transition_handlers_design.md)
 records the implemented event capabilities and their mathematical boundaries.
+
+
+## Proposed paradigm axis (not yet implemented)
+
+The proposed API migration makes the numerical paradigm part of each evolver
+type, using `ApproximateTag` and `ValidatedTag`, for example
+`ContinuousTimeEvolver<ApproximateTag>` and
+`ContinuousTimeEvolver<ValidatedTag>`, and corresponding hybrid/discrete types.
+The paradigm must select actual input/result types and available operations,
+not just change a name. Approximate trajectories and validated enclosures
+remain distinct; UPPER/LOWER is a separate semantic axis with explicit numerical
+capabilities. Shared interfaces and compatible infrastructure should not force
+the same step algorithm or certificates. The present canonical classes have
+not been renamed in the global-time implementation; this proposal needs an
+atomic API/consumer migration, with Python tutorial parity still the final task.

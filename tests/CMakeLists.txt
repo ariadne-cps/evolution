@@ -3,6 +3,7 @@ set(UNIT_TESTS
     test_orbit_collections
     test_scalings
     test_hybrid_time
+    test_global_time
     test_hybrid_enclosure
     test_enclosure_recorded_draw
     test_hybrid_continuous_time_evolver

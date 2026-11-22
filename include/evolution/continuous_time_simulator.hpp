@@ -104,8 +104,8 @@ class ContinuousTimeSimulator {
     typedef StaticWorkload<Pair<SizeType, ApproximatePointType>, const TerminationType&, SharedPointer<SynchronisedOrbit>> WorkloadType;
 
   public:
-    //! \brief Construct from an autonomous ODAE without constant parameters.
-    //! \throws std::invalid_argument if explicit time or constant parameters are declared.
+    //! \brief Construct from an autonomous or nonautonomous ODAE without fixed parameters.
+    //! \throws std::invalid_argument if constant model parameters are declared.
     ContinuousTimeSimulator(const SystemType& system);
 
     //!@{

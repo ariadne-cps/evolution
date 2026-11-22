@@ -40,8 +40,15 @@
 #include "symbolic/space.hpp"
 
 namespace Ariadne {
+namespace {
+void require_state_auxiliary_paving(const Enclosure& enclosure) {
+    if (enclosure.auxiliary_arguments() == EnclosureFunctionArguments::STATE_TIME && enclosure.auxiliary_mapping().result_size() != 0u)
+        throw std::invalid_argument("A state-only augmented paving cannot represent time-dependent auxiliary outputs");
+}
+} // namespace
 
 Void adjoin_outer_approximation_to(const Enclosure& enclosure, AugmentedPaving& paving, Nat fineness, const Paver& paver) {
+    require_state_auxiliary_paving(enclosure);
     if (enclosure.auxiliary_mapping().result_size() != 0 &&
         enclosure.auxiliary_mapping().managed_pointer() == paving.auxiliary_mapping().managed_pointer()) {
         ARIADNE_WARN("enclosure=" << enclosure << ", "
@@ -54,7 +61,11 @@ Void adjoin_outer_approximation_to(const Enclosure& enclosure, AugmentedPaving& 
 }
 
 AugmentedPaving outer_approximation(const Enclosure& enclosure, const Grid& grid, Nat fineness, const Paver& paver) {
-    AugmentedPaving result(grid, enclosure.auxiliary_mapping());
+    require_state_auxiliary_paving(enclosure);
+    const auto auxiliary = enclosure.auxiliary_mapping().result_size() == 0u
+                             ? EffectiveVectorMultivariateFunction(0u, EuclideanDomain(enclosure.state_dimension()))
+                             : enclosure.auxiliary_mapping();
+    AugmentedPaving result(grid, auxiliary);
     adjoin_outer_approximation_to(enclosure, result, fineness, paver);
     return result;
 }

@@ -293,7 +293,7 @@ class TestGlobalTime : public Testing::ContextFixture {
         ARIADNE_TESTING_EXPECT_WITHIN(final_curve.euclidean_set().end()->second[final_curve.space()[a]].raw().get_d(), 0.105, 1e-14);
         auto multiple = hybrid.orbit(HybridContinuousTimeSimulator::HybridApproximateListPointType{point, point}, HybridTime(Real(0.125_x), 2));
         ARIADNE_TESTING_EXPECT_EQUAL(multiple.number_of_trajectories(), 2u);
-        for (SizeType i = 0u; i != 2u; ++i) {
+        for (Nat i = 0u; i != 2u; ++i) {
             const auto& path = multiple.curves(i)[0u];
             ARIADNE_TESTING_EXPECT_WITHIN(path.euclidean_set().end()->second[path.space()[x]].raw().get_d(), 0.0078125, 1e-14);
         }

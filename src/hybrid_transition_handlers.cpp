@@ -330,6 +330,34 @@ HybridJumpGuardCapability jump_guard_capability(EventKind event, const CrossingD
     }
 }
 
+HybridInitialGuardActivation classify_initial_guard(
+    const HybridEnclosure& invariant_valid_source, const TransitionData& transition) {
+    if (definitely(invariant_valid_source.is_empty()))
+        return HybridInitialGuardActivation::EXCLUDED;
+
+    // This certificate is about every source point, not merely every point
+    // left after intersecting the guard. Never promote a partial candidate.
+    if (definitely(invariant_valid_source.continuous_set().satisfies(transition.guard_function)))
+        return HybridInitialGuardActivation::FULL_SOURCE;
+
+    HybridEnclosure candidate = invariant_valid_source;
+    candidate.new_activation(transition.event, transition.guard_function);
+    return definitely(candidate.is_empty())
+               ? HybridInitialGuardActivation::EXCLUDED
+               : HybridInitialGuardActivation::UNRESOLVED;
+}
+
+bool permits_initial_reset(HybridInitialGuardActivation activation, Semantics semantics) {
+    switch (semantics) {
+        case Semantics::UPPER:
+            return activation != HybridInitialGuardActivation::EXCLUDED;
+        case Semantics::LOWER:
+            return activation == HybridInitialGuardActivation::FULL_SOURCE;
+        default:
+            ARIADNE_FAIL_MSG("Unhandled semantics in initial guard activation");
+    }
+}
+
 bool defer_endpoint_guard(const CrossingData& crossing) {
     return crossing.crossing_time() != nullptr || crossing.geometry() == CrossingGeometry::INCREASING;
 }

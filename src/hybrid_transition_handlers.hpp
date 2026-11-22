@@ -23,6 +23,25 @@ struct HybridTransitionPolicy {
 
 HybridTransitionPolicy transition_policy(EventKind);
 
+/** @brief Validated initial guard activation on one entire invariant-valid source.
+ *  UNRESOLVED can mean partial activation or insufficient numerical evidence;
+ *  it never certifies a LOWER transition. This is not a collective tree check.
+ */
+enum class HybridInitialGuardActivation : std::uint8_t {
+    EXCLUDED,    //!< Intersection with the active side is definitely empty.
+    UNRESOLVED,  //!< A candidate may activate, but not the whole source is certified.
+    FULL_SOURCE  //!< The entire represented source satisfies the guard.
+};
+
+/** @brief Use guard intersection for possibility and universal satisfaction for coverage. */
+HybridInitialGuardActivation classify_initial_guard(
+    const HybridEnclosure& invariant_valid_source, const TransitionData& transition);
+
+/** @brief UPPER admits possible jumps; LOWER only certifiably whole-source jumps.
+ *  For split trajectories, a future collective check must cover every piece.
+ */
+bool permits_initial_reset(HybridInitialGuardActivation, Semantics);
+
 /** @brief Private flow-restriction implementations, selected by actual evidence. */
 enum class HybridFlowGuardMethod : std::uint8_t {
     KEEP,

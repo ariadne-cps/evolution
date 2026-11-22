@@ -305,6 +305,7 @@ class HybridContinuousTimeEvolverBase
     virtual Void
         _process_jumped_set(const HybridEnclosure& jumped_set,
                             const TerminationType& termination,
+                            Semantics semantics,
                             HybridEvolutionStepResult& result) const;
 
     //! \brief Process the \a starting_set to find any
@@ -324,6 +325,7 @@ class HybridContinuousTimeEvolverBase
     virtual Void
         _process_starting_events(const HybridEnclosure& starting_set,
                                  const Map<DiscreteEvent, TransitionData>& transitions,
+                                 Semantics semantics,
                                  HybridEvolutionStepResult& result) const;
 
     //! \brief Apply the \a flow to the \a set up to the time specified by \a timing_data

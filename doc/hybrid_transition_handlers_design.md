@@ -392,3 +392,45 @@ while LOWER/PROGRESS/IMPACT are not expanded by this change.
 
 Do not reuse the ODAE first-entry, concavity or impact machinery for
 ODAI without a compatible numerical certificate from the integrator.
+
+## Single-source initial guard activation and deferred collective LOWER verification
+
+The private `classify_initial_guard` policy distinguishes `EXCLUDED`,
+`UNRESOLVED`, and `FULL_SOURCE` against the entire *invariant-valid*
+source. `FULL_SOURCE` is established by universal guard satisfaction
+on that source, never by satisfying the guard only after intersecting or
+selecting a favorable subset. `EXCLUDED` requires a certified empty
+guard intersection. `UNRESOLVED` includes both genuinely partial and
+numerically inconclusive activation.
+
+The initial-event phase carries `Semantics` explicitly to the common
+policy: UPPER may create a possible, potentially spurious reset for
+`UNRESOLVED`, but LOWER creates that initial reset only for
+`FULL_SOURCE`. The event policy still determines whether the guard
+blocks flow, whether a reset is optional, and whether the event is
+inspected on entry. Existing complete-source urgent provenance is
+preserved; permissive transitions remain optional and therefore do
+not assert urgent full-source resolution.
+
+No LOWER subdivision is enabled. Numerical splitting is conceptually
+compatible with LOWER *only when every part of the complete partition
+is retained*. One cannot certify a LOWER transition by selecting
+the guard-active pieces and discarding the others. A future tree-level
+collective guard decision could certify full activation when **every**
+part of a complete partition is certified active; that aggregate check
+does not exist yet, and is not simulated by independently certifying
+a few child enclosures.
+
+The new backend contract tests use constant ODAE flow, full guard
+activation on `[1/4,1/2]`, and partial activation on
+`[-1/4,1/4]`, for both URGENT and PERMISSIVE transitions.
+LOWER must preserve a fully active reset, reject a partial reset
+without discarding the whole computational state, and UPPER must
+retain a conservative possible reset with unresolved provenance.
+
+This change addresses *initial* activation only. Time-interior ODAE
+LOWER handlers and the guarded-reach UPPER ODAI path retain their
+separate numerical policies. The inclusion bridge still rejects
+LOWER modes: the present UPPER integration methods do not furnish a
+LOWER reachable-set representation merely because a guard is fully
+active. No claim of such support is made here.

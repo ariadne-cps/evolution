@@ -510,6 +510,61 @@ class TestHybridEvolutionBackend : public Testing::ContextFixture {
         }
     }
 
+    void test_lower_initial_activation_requires_the_whole_source() {
+        const DiscreteLocation source(1), target(2);
+        const DiscreteEvent event("activate");
+        const RealVariable x("x");
+        const RealSpace space({x});
+        for (auto kind: {EventKind::URGENT, EventKind::PERMISSIVE}) {
+            HybridAutomaton system;
+            system.new_mode(source, {dot(x) = 0});
+            system.new_mode(target, {dot(x) = 0});
+            system.new_transition(source, event, target, {next(x) = x}, x >= 0, kind);
+            StepProbe probe(system);
+            HybridTime horizon(1, 1);
+            const auto fully_active = probe.enclosure(
+                HybridExactBox(source, space, ExactBoxType({{0.25_x, 0.5_x}})));
+            const auto partially_active = probe.enclosure(
+                HybridExactBox(source, space, ExactBoxType({{-0.25_x, 0.25_x}})));
+
+            const auto full = probe._process_working_set(
+                {fully_active, HybridEvolutionPhase::PROCESS_STARTING_EVENTS},
+                horizon, Semantics::LOWER, {});
+            bool full_transition = false;
+            for (const auto& successor: full.successors) {
+                if (successor.kind == HybridEvolutionSuccessorKind::TRANSITION) {
+                    full_transition = true;
+                    ARIADNE_TESTING_EXPECT_EQUAL(successor.event, event);
+                    ARIADNE_TESTING_EXPECT_EQUAL(successor.event_kind, kind);
+                    if (kind == EventKind::URGENT)
+                        ARIADNE_TESTING_EXPECT_EQUAL(successor.resolution,
+                                                    HybridEvolutionTransitionResolution::FULL_SOURCE);
+                }
+            }
+            ARIADNE_TESTING_PROVE(full_transition);
+
+            const auto lower = probe._process_working_set(
+                {partially_active, HybridEvolutionPhase::PROCESS_STARTING_EVENTS},
+                horizon, Semantics::LOWER, {});
+            for (const auto& successor: lower.successors)
+                ARIADNE_TESTING_PROVE(successor.kind != HybridEvolutionSuccessorKind::TRANSITION);
+            ARIADNE_TESTING_PROVE(!lower.successors.empty());
+
+            const auto upper = probe._process_working_set(
+                {partially_active, HybridEvolutionPhase::PROCESS_STARTING_EVENTS},
+                horizon, Semantics::UPPER, {});
+            bool possible_transition = false;
+            for (const auto& successor: upper.successors) {
+                if (successor.kind == HybridEvolutionSuccessorKind::TRANSITION) {
+                    possible_transition = true;
+                    ARIADNE_TESTING_EXPECT_EQUAL(successor.resolution,
+                                                HybridEvolutionTransitionResolution::UNRESOLVED);
+                }
+            }
+            ARIADNE_TESTING_PROVE(possible_transition);
+        }
+    }
+
     void test_step_preserves_transition_and_subdivision_provenance() {
         DiscreteLocation source(1), target(2);
         DiscreteEvent event("jump");
@@ -579,6 +634,7 @@ int main(int argc, char** argv) {
     ARIADNE_TESTING_ADD_TEST(TestHybridEvolutionBackend, test_output_and_work_are_distinct);
     ARIADNE_TESTING_ADD_TEST(TestHybridEvolutionBackend, test_failed_step_cannot_release_an_orbit);
     ARIADNE_TESTING_ADD_TEST(TestHybridEvolutionBackend, test_evolver_accepts_an_independent_scheduler);
+    ARIADNE_TESTING_ADD_TEST(TestHybridEvolutionBackend, test_lower_initial_activation_requires_the_whole_source);
     ARIADNE_TESTING_ADD_TEST(TestHybridEvolutionBackend, test_step_preserves_transition_and_subdivision_provenance);
     return Ariadne::Testing::run_logging_suite(ariadne_test_suite, argc, argv);
 }

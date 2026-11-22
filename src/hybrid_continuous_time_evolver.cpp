@@ -462,6 +462,7 @@ Void HybridContinuousTimeEvolverBase::
 Void HybridContinuousTimeEvolverBase::
     _process_starting_events(const HybridEnclosure& initial_set,
                              const Map<DiscreteEvent, TransitionData>& transitions,
+                             Semantics semantics,
                              HybridEvolutionStepResult& result) const {
     LOGGING_SCOPE_CREATE;
     HybridEnclosure invariant_set = initial_set;
@@ -487,26 +488,29 @@ Void HybridContinuousTimeEvolverBase::
         //       Since this is now available, we should implement this!
         const auto policy = EvolutionDetail::transition_policy(transition.event_kind);
         if (policy.inspect_initial_activation) {
-            if (possibly(initial_set.satisfies(transition.guard_function >= 0))) {
-                if (policy.resets_initially) {
+            const auto activation = EvolutionDetail::classify_initial_guard(invariant_set, transition);
+            if (activation != EvolutionDetail::HybridInitialGuardActivation::EXCLUDED) {
+                if (policy.resets_initially && EvolutionDetail::permits_initial_reset(activation, semantics)) {
                     HybridEnclosure immediate_jump_set = invariant_set;
                     immediate_jump_set.new_activation(event, transition.guard_function);
                     if (!definitely(immediate_jump_set.is_empty())) {
-                        // Put the immediate jump set in the reached sets, since it does not occur in the flowable set
+                        // UPPER retains possible (including spurious) jumps.
+                        // LOWER never selects only the guard-active part of a
+                        // source whose whole activation has not been certified.
                         LOGGING_PRINTLN_AT(1, event << ": " << transition.event_kind << ", immediate");
                         result.record_reach(immediate_jump_set);
                         immediate_jump_set.apply_reset(event, transition.target, transition.target_space, transition.reset_function, transition.target_auxiliary_space, transition.target_auxiliary_function);
                         LOGGING_PRINTLN_AT(1, "immediate_jump_set=" << immediate_jump_set);
                         result.record_intermediate(immediate_jump_set);
-                        // Only a strict whole-source activation certifies an immediate
-                        // urgent reset. Do not infer coverage from successor count.
                         const auto resolution = policy.blocks_flow &&
-                                                        definitely(invariant_set.continuous_set().satisfies(transition.guard_function))
+                                                        activation == EvolutionDetail::HybridInitialGuardActivation::FULL_SOURCE
                                                   ? HybridEvolutionTransitionResolution::FULL_SOURCE
                                                   : HybridEvolutionTransitionResolution::UNRESOLVED;
                         result.transition_to(immediate_jump_set, event, transition.event_kind, std::nullopt, resolution);
                     }
                 }
+                // Preserve the existing blocking restriction; refinement of
+                // a partition is not a substitute for universal activation.
                 if (policy.blocks_flow) {
                     flowable_set.new_invariant(event, transition.guard_function);
                 }
@@ -619,6 +623,7 @@ Void HybridContinuousTimeEvolverBase::
 Void HybridContinuousTimeEvolverBase::
     _process_jumped_set(const HybridEnclosure& jumped_set,
                         const TerminationType& termination,
+                        Semantics semantics,
                         HybridEvolutionStepResult& result) const {
     const Real final_time = termination.maximum_time();
     const Integer maximum_steps = termination.maximum_steps();
@@ -680,7 +685,7 @@ Void HybridContinuousTimeEvolverBase::
     // Process the initially active events; cut out active points to leave initial flowable set.
     LOGGING_PRINTLN_AT(2, "initial_set has not reached the discrete termination condition");
 
-    this->_process_starting_events(initial_set, transitions, result);
+    this->_process_starting_events(initial_set, transitions, semantics, result);
 }
 
 HybridEvolutionStepResult HybridContinuousTimeEvolverBase::
@@ -693,7 +698,7 @@ HybridEvolutionStepResult HybridContinuousTimeEvolverBase::
     HybridEvolutionStepResult result;
     switch (working_set.phase) {
         case HybridEvolutionPhase::PROCESS_STARTING_EVENTS:
-            this->_process_jumped_set(working_set.enclosure, termination, result);
+            this->_process_jumped_set(working_set.enclosure, termination, semantics, result);
             break;
         case HybridEvolutionPhase::EVOLVE_CONTINUOUSLY:
             this->_log_summary(working_set.enclosure, statistics);

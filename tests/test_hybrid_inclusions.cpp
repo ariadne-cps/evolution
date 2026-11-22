@@ -314,7 +314,7 @@ class TestHybridInclusions : public Testing::ContextFixture {
                         ARIADNE_TESTING_EXPECT_EQUAL(final.previous_events().size(), 1u);
                         ARIADNE_TESTING_EXPECT_EQUAL(final.previous_events().back(), event);
                         ARIADNE_TESTING_PROVE(definitely(final.inside(
-                            HybridExactBox(target, RealSpace({x}), ExactBoxType({{-0.001_x, 0.001_x}})))));
+                            HybridExactBox(target, RealSpace({x}), ExactBoxType({{-0x1p-10_x, 0x1p-10_x}})))));
                     }
                 }
                 ARIADNE_TESTING_PROVE(jumped);

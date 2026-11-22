@@ -14,10 +14,11 @@ namespace Ariadne::EvolutionDetail {
 Void validate_inclusion_event_kinds(const HybridAutomatonInterface& system, DiscreteLocation location) {
     for (const auto& event: system.events(location)) {
         const auto kind = system.event_kind(location, event);
-        if (kind != EventKind::INVARIANT && kind != EventKind::URGENT && kind != EventKind::PERMISSIVE)
+        if (kind != EventKind::INVARIANT && kind != EventKind::PROGRESS &&
+            kind != EventKind::URGENT && kind != EventKind::PERMISSIVE)
             throw std::invalid_argument(
-                "Hybrid inclusion UPPER currently supports state invariants and conservative "
-                "URGENT/PERMISSIVE jumps; PROGRESS and IMPACT require dedicated event certificates");
+                "Hybrid inclusion UPPER currently supports state invariants, PROGRESS blockers and "
+                "conservative URGENT/PERMISSIVE jumps; IMPACT requires dedicated event certificates");
     }
 }
 
@@ -33,11 +34,15 @@ Map<DiscreteEvent, TransitionData> inclusion_upper_transitions(
             transition.guard_function = system.invariant_function(location, event);
         } else {
             transition.guard_function = system.guard_function(location, event);
-            transition.target = system.target(location, event);
-            transition.target_space = system.continuous_state_space(transition.target);
-            transition.reset_function = system.reset_function(location, event);
-            transition.target_auxiliary_space = system.continuous_auxiliary_space(transition.target);
-            transition.target_auxiliary_function = system.auxiliary_function(transition.target);
+            // A PROGRESS guard blocks continuous flow; it is not a reset.
+            if (transition.event_kind == EventKind::URGENT ||
+                transition.event_kind == EventKind::PERMISSIVE) {
+                transition.target = system.target(location, event);
+                transition.target_space = system.continuous_state_space(transition.target);
+                transition.reset_function = system.reset_function(location, event);
+                transition.target_auxiliary_space = system.continuous_auxiliary_space(transition.target);
+                transition.target_auxiliary_function = system.auxiliary_function(transition.target);
+            }
         }
         transitions.insert(event, transition);
     }
@@ -52,6 +57,18 @@ Void apply_state_invariants(HybridEnclosure& set,
         if (transition.event_kind == EventKind::INVARIANT &&
             possibly(set.satisfies(transition.guard_function >= 0))) {
             set.new_invariant(event, transition.guard_function);
+        }
+    }
+}
+
+Void apply_inclusion_flow_blockers(
+    HybridEnclosure& set, const Map<DiscreteEvent, TransitionData>& transitions) {
+    apply_state_invariants(set, transitions);
+    for (const auto& item: transitions) {
+        const auto& transition = item.second;
+        if (transition.event_kind == EventKind::PROGRESS &&
+            possibly(set.satisfies(transition.guard_function >= 0))) {
+            set.new_invariant(transition.event, transition.guard_function);
         }
     }
 }

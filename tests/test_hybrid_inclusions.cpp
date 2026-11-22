@@ -329,6 +329,45 @@ class TestHybridInclusions : public Testing::ContextFixture {
         }
     }
 
+    Void test_upper_inclusion_progress_blocks_flow_without_reset() {
+        const DiscreteLocation q(1);
+        const RealVariable x("x"), u("u");
+        const DiscreteEvent progress("progress");
+        HybridAutomaton system;
+        system.new_mode(q, OrdinaryDifferentialAlgebraicInclusion(
+                               {dot(x) = u}, RealVariablesBox({-1 <= u <= 1})));
+        system.new_guard(q, progress, x >= 0.03125_x, EventKind::PROGRESS);
+        for (bool boxes: {false, true}) {
+            HybridContinuousTimeEvolver evolver(system);
+            TaylorPicardIntegrator base(step_maximum_error = 1e-6);
+            if (boxes)
+                evolver.set_integrator(FirstOrderMultifunctionIntegrator());
+            else
+                evolver.set_integrator(base, ZeroApproximation(), ConstantApproximation());
+            evolver.configuration().set_maximum_step_size(0.03125);
+            const auto initial = evolver.enclosure(
+                HybridExactBox(q, RealSpace({x}), ExactBoxType({{0, 0}})));
+            const auto orbit = evolver.orbit(initial, HybridTime(0.125_x, 1), Semantics::UPPER);
+            ARIADNE_TESTING_REQUIRE(orbit.reach().size() > 0u);
+            for (const auto& reach: orbit.reach()) {
+                ARIADNE_TESTING_EXPECT_EQUAL(reach.location(), q);
+                ARIADNE_TESTING_PROVE(reach.previous_events().empty());
+                ARIADNE_TESTING_PROVE(reach.number_of_constraints() > 0u);
+            }
+            for (const auto& final: orbit.final()) {
+                ARIADNE_TESTING_EXPECT_EQUAL(final.location(), q);
+                ARIADNE_TESTING_PROVE(final.previous_events().empty());
+                ARIADNE_TESTING_PROVE(final.number_of_constraints() > 0u);
+            }
+            const auto at_zero = evolver.orbit(initial, HybridTime(0u, 1), Semantics::UPPER);
+            ARIADNE_TESTING_REQUIRE(at_zero.final().size() > 0u);
+            for (const auto& final: at_zero.final()) {
+                ARIADNE_TESTING_PROVE(final.previous_events().empty());
+                ARIADNE_TESTING_PROVE(!definitely(final.is_empty()));
+            }
+        }
+    }
+
     Void test_unsupported_capabilities_fail_explicitly() {
         const DiscreteLocation q(1);
         const RealVariable x("x"), u("u"), t("t"), p("p");
@@ -387,6 +426,7 @@ int main(int argc, char** argv) {
     ARIADNE_TESTING_ADD_TEST(TestHybridInclusions, test_upper_inclusion_transitions_use_guarded_reach);
     ARIADNE_TESTING_ADD_TEST(TestHybridInclusions, test_state_invariants_filter_inclusion_reach_and_endpoints);
     ARIADNE_TESTING_ADD_TEST(TestHybridInclusions, test_inclusion_invariants_preserve_closed_zero_horizon);
+    ARIADNE_TESTING_ADD_TEST(TestHybridInclusions, test_upper_inclusion_progress_blocks_flow_without_reset);
     ARIADNE_TESTING_ADD_TEST(TestHybridInclusions, test_unsupported_capabilities_fail_explicitly);
     return Testing::run_logging_suite(ariadne_test_suite, argc, argv);
 }

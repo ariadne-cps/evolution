@@ -10,8 +10,8 @@
 
 namespace Ariadne::EvolutionDetail {
 
-/** @brief Admit state invariants and conservative URGENT/PERMISSIVE
- *  candidates under UPPER only. Neither first entry nor impact direction is
+/** @brief Admit state invariants, PROGRESS blockers and conservative
+ *  URGENT/PERMISSIVE candidates under UPPER only. Neither first entry nor impact direction is
  *  certified for arbitrary measurable inputs.
  */
 Void validate_inclusion_event_kinds(const HybridAutomatonInterface&, DiscreteLocation);
@@ -28,6 +28,12 @@ Map<DiscreteEvent, TransitionData> inclusion_upper_transitions(
  *  and not a first-contact or event-time calculation.
  */
 Void apply_state_invariants(HybridEnclosure&, const Map<DiscreteEvent, TransitionData>&);
+
+/** @brief Constrain an UPPER reach/endpoint to the admissible side of
+ *  invariants and PROGRESS boundaries. Unlike invariants, PROGRESS is
+ *  not imposed on already-terminal zero-horizon initial states.
+ */
+Void apply_inclusion_flow_blockers(HybridEnclosure&, const Map<DiscreteEvent, TransitionData>&);
 
 /** @brief Publish all possible UPPER reset candidates from one validated reach
  *  enclosure. Candidates retain the source time/dwell map until reset;

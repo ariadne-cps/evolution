@@ -295,14 +295,14 @@ does not imply tangency, and `UNRESOLVED` does not imply degeneracy.
 | Mode | UPPER | LOWER | Events / guards / invariants |
 | --- | --- | --- | --- |
 | Autonomous state-only ODAE, no fixed parameters | Existing validated local equation method | Existing equation method (no new inner claim) | Existing event policy and crossing classifier, subject to certified local flow layout |
-| Autonomous ODAI, no fixed parameters | Explicit structured or box method; necessary invariant restrictions and conservative urgent/permissive jump candidates | Rejected, including at time zero | State invariants plus UPPER urgent/permissive guards; PROGRESS and IMPACT still rejected |
+| Autonomous ODAI, no fixed parameters | Explicit structured or box method; necessary invariant restrictions and conservative urgent/permissive jump candidates | Rejected, including at time zero | State invariants, PROGRESS blockers and UPPER urgent/permissive guards; IMPACT still rejected |
 | Explicit-time or fixed-parameter ODAE/ODAI modes | Rejected by current hybrid mode validation | Rejected | Not reached |
 
 ODAI with arbitrary measurable input functions lacks, at present, a
 certified trajectory-level guard derivative and first-entry/maximum
 analysis compatible with this equation classifier. Neither an outer box
 nor an independent endpoint certificate supplies these properties.
-Conservative UPPER ODAI transitions can use outer reach/guard intersection without such certificates; certified-first-entry and LOWER transitions still require new evidence. Future support
+Conservative UPPER ODAI transitions and PROGRESS restrictions can use outer reach/guard intersection without such certificates; certified-first-entry and LOWER transitions still require new evidence. Future support
 requires an *explicit, solver-provided validated event capability* and
 a separate proof of the semantics it supports; changing only a dispatch
 switch is mathematically unsound.
@@ -376,10 +376,12 @@ The inclusion transition extraction does not call
 silently treat a set-valued field as a single trajectory field.
 The transition handler operates only on validated outer reach
 enclosures. The same initial-event and invariant filtering phases apply.
-`EventKind::PROGRESS` and `EventKind::IMPACT` remain unsupported
-because the former requires progress semantics beyond this outer
-candidate, and the latter has a directional condition requiring
-additional proof. ODAI LOWER remains explicitly rejected.
+`EventKind::PROGRESS` is supported as a blocking state constraint
+on the validated outer reach and endpoint, without reset and without a
+first-hit certificate. The initial/zero-horizon source is not
+retroactively constrained by PROGRESS. `EventKind::IMPACT` remains
+unsupported because its directional condition requires additional
+proof. ODAI LOWER remains explicitly rejected.
 
 The analytic regression covers `x'=u`, `u in [-1,1]`,
 guard `x>=1/32`, and reset `x'=0`, with both URGENT and
@@ -454,3 +456,23 @@ not be confused with the simple initial-source predicate: a certified
 parameter-dependent entry time may establish valid per-trajectory
 crossings even where a fixed-time reach slice activates only a subset.
 Changing such numerical handlers requires separate proof and tests.
+
+## UPPER ODAI PROGRESS blockers (no transition)
+
+A PROGRESS guard `g(x)>=0` is an upper-blocking condition: a valid
+continuous branch must stay on `g(x)<=0`. `apply_inclusion_flow_blockers`
+adds this necessary pointwise condition to every certified inclusion
+reach tube and independently calculated endpoint, alongside invariants.
+No reset or target mode is queried for PROGRESS. As with UPPER invariant
+filtering, the guarded outer tube may contain spurious trajectories:
+the intersection is a necessary set condition, not a first-hitting-time
+certificate. An urgent or permissive jump candidate formed from the
+restricted reach must also respect PROGRESS blockers.
+
+Unlike invariants, a PROGRESS guard is not imposed on the initially
+terminated source at a closed zero-time horizon; the initial phase
+retains its existing ODAE-style blocking policy. This does not enable
+LOWER inclusion modes or directional IMPACT. Focused tests use
+`x'=u, u in [-1,1]` and `x>=1/32` as PROGRESS, checking both
+structured and box integrators, constrained source reach, lack of
+spurious reset provenance, and preservation of the t=0 terminal set.

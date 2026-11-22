@@ -340,8 +340,9 @@ Void HybridContinuousTimeEvolverBase::_validate_mode(DiscreteLocation location, 
             throw std::invalid_argument("Hybrid inclusion modes require UPPER semantics");
         if (inclusion->has_explicit_time() || inclusion->parameter_space().dimension() != 0u)
             throw std::invalid_argument("Hybrid inclusion modes currently require autonomous dynamics without fixed parameters");
-        // A validated outer reach permits conservative URGENT/PERMISSIVE
-        // candidates. IMPACT/PROGRESS still require additional certificates.
+        // UPPER may restrict reach by PROGRESS boundaries and construct
+        // conservative URGENT/PERMISSIVE candidates. IMPACT still needs a
+        // dedicated policy; LOWER integration remains unsupported.
         EvolutionDetail::validate_inclusion_event_kinds(this->system(), location);
         if (!this->_inclusion_integrator_ptr && !this->_box_integrator_ptr)
             throw std::invalid_argument("Select an explicit integration method for hybrid inclusion modes");
@@ -412,8 +413,8 @@ Map<DiscreteEvent, TransitionData>
     Set<DiscreteEvent> events = this->system().events(location);
     if (events.empty())
         return transitions;
-    // An inclusion has no single-valued vector field from which to form
-    // a Lie derivative. Its only supported events are state invariants.
+    // An inclusion has no single-valued field for a Lie derivative.
+    // Extract supported guards and non-reset blockers without one.
     if (this->system().inclusion(location) != nullptr)
         return EvolutionDetail::inclusion_upper_transitions(this->system(), location);
 
@@ -892,9 +893,9 @@ Void HybridContinuousTimeEvolverBase::_evolve_inclusion(
                                   : EvolutionDetail::IntegrationStepRepresentation::REQUIRE_STRUCTURED);
     HybridEnclosure endpoint = initial;
     endpoint.replace_continuous_set(applied.evolved);
-    // This outer restriction is necessary for valid trajectories; it cannot
-    // prove that any particular input stayed inside the invariant before now.
-    EvolutionDetail::apply_state_invariants(endpoint, invariants);
+    // Necessary state restrictions include invariants and PROGRESS
+    // blockers. They do not prove that an input stayed admissible earlier.
+    EvolutionDetail::apply_inclusion_flow_blockers(endpoint, invariants);
     const auto endpoint_time = endpoint.time_range();
     const bool at_horizon = definitely(endpoint_time.lower_bound() >= final_time) &&
                             definitely(endpoint_time.upper_bound() <= final_time);
@@ -902,9 +903,9 @@ Void HybridContinuousTimeEvolverBase::_evolve_inclusion(
     for (const auto& continuous: applied.reach) {
         auto reach = initial;
         reach.replace_continuous_set(continuous);
-        // Apply the state invariant to every point of the certified outer tube,
-        // including the closed final-time slice when it intersects this step.
-        EvolutionDetail::apply_state_invariants(reach, invariants);
+        // Restrict the certified outer tube by invariant and PROGRESS
+        // conditions, including closed final-time slices.
+        EvolutionDetail::apply_inclusion_flow_blockers(reach, invariants);
         // Publish the pre-reset guard intersection, retaining the full
         // source-time chart. The reset is a separate successor; UPPER may
         // include infeasible (spurious) candidate transitions.

@@ -6,6 +6,8 @@
 #ifndef ARIADNE_EVOLUTION_HYBRID_TRANSITION_HANDLERS_HPP
 #define ARIADNE_EVOLUTION_HYBRID_TRANSITION_HANDLERS_HPP
 
+#include <cstdint>
+
 #include "evolution/hybrid_continuous_time_evolver.hpp"
 
 namespace Ariadne::EvolutionDetail {
@@ -20,6 +22,53 @@ struct HybridTransitionPolicy {
 };
 
 HybridTransitionPolicy transition_policy(EventKind);
+
+/** @brief Private flow-restriction implementations, selected by actual evidence. */
+enum class HybridFlowGuardMethod : std::uint8_t {
+    KEEP,
+    FIRST_ENTRY_BOUND,
+    GUARD_SIDE,
+    TWO_SAMPLES,
+    MAXIMUM_SPLIT,
+    DISCARD
+};
+
+/** @brief Private pre-reset jump implementations, separate from flow guards. */
+enum class HybridJumpGuardMethod : std::uint8_t {
+    SOURCE_ACTIVATION,
+    TUBE_ACTIVATION,
+    FIRST_ENTRY,
+    BOUNDARY,
+    DIRECTED_BOUNDARY,
+    DISCARD
+};
+
+/** @brief The numerical evidence required by the chosen flow operation.
+ *  All calls from the evolver require a validated autonomous local state-flow
+ *  patch. NONE is not a claim that the source geometry is certified.
+ */
+struct HybridFlowGuardCapability {
+    HybridFlowGuardMethod method;
+    CrossingEvidenceKind evidence;
+    bool uses_timed_flow;
+};
+
+/** @brief Evidence and additional analytic operations required by a jump.
+ *  In particular, a directed entry or an impact uses a Lie derivative; the
+ *  latter condition is independent of the chosen entry operation.
+ */
+struct HybridJumpGuardCapability {
+    HybridJumpGuardMethod method;
+    CrossingEvidenceKind evidence;
+    bool uses_timed_flow;
+    bool requires_lie_derivative;
+};
+
+/** @brief Classify actual flow strategy; semantics do not imply inner guarantees. */
+HybridFlowGuardCapability flow_guard_capability(const CrossingData&, Semantics);
+
+/** @brief Classify actual jump strategy and its analytic requirements. */
+HybridJumpGuardCapability jump_guard_capability(EventKind, const CrossingData&, Semantics);
 
 /** @brief Preserve the continuation copy before these endpoint restrictions. */
 bool defer_endpoint_guard(const CrossingData&);

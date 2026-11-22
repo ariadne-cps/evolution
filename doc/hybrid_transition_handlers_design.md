@@ -165,7 +165,7 @@ evidence and semantics they require, and reject unavailable capabilities.
 - [x] Decompose timing, creep and unwinding while preserving their strategies.
 - [x] Replace parallel endpoint/continuation lists with explicit paired branch
       results and make result publication a small orchestration phase.
-- [ ] Document and verify the supported capability matrix for each handler;
+- [x] Document and verify the supported capability matrix for each handler;
       extend ODAI events only with corresponding mathematical certificates.
 
 The first six tasks form the implemented behavior-preserving extraction. Changes
@@ -175,7 +175,8 @@ contract, backend and tree regressions, then the full Evolution suite. Use
 analytic witnesses and exclusion bounds for new mathematical checks; do not
 replace them with tests which merely repeat policy-table entries.
 
-Run `apply-format` and `check-format` before committing. Keep simulator work
+Format is currently non-blocking by decision; maintain the functional
+compiler/test/coverage/sanitizer checks before expanding numerical capabilities. Keep simulator work
 after the required hybrid capabilities. Full Python/C++ tutorial parity and
 the bindings it needs remain the final Evolution task.
 
@@ -186,7 +187,8 @@ and `.cpp`. The protected `_apply_guard` and `_apply_guard_step` hooks are remov
 all repository callers use the private operations directly. There are no naming
 aliases or compatibility wrappers for those removed hooks. Crossing analysis
 and typed evidence are implemented in the dedicated crossing components. Timing decomposition, paired continuation results and the capability
-audit remain the unchecked tasks above, before new ODAI event capabilities.
+audit have since been implemented. ODAI event capabilities remain unavailable
+without mathematical certificates.
 
 The Debug build treats warnings as errors. Validation passes all 30 Evolution
 CTest targets, including Python, and the 13 System C++ targets in the consuming
@@ -249,3 +251,64 @@ continuous publication and remain owned by the evolver. The private
 component publishes only into a local `HybridEvolutionStepResult`; backends
 remain responsible for orbit publication and scheduling. Numerical
 crossing/solver policy, LOWER limitations and ODAI capability are unchanged.
+
+## Validated handler capability matrix
+
+The live selectors `flow_guard_capability` and `jump_guard_capability`
+in `src/hybrid_transition_handlers.cpp` are the source of the dispatch
+matrix, rather than a second, independently maintained table. They return
+the chosen private method, required typed crossing evidence, whether a
+timed flow is used, and whether a guard Lie derivative is required.
+`select_flow_handler` and `select_entry_handler` dispatch through those
+results. All complete event-analysis calls still require the existing
+single autonomous state-only flow patch, independent endpoint, and
+supported chart; this is enforced by `_evolution_step`. This matrix
+documents the *present ODAE implementation*, not generic ODAI support.
+
+| Crossing certificate or geometry | Flow restriction (UPPER / LOWER) | Blocking jump (UPPER / LOWER) | Required numerical information |
+| --- | --- | --- | --- |
+| Certified first-entry (INCREASING, CONVEX or CONCAVE) | FIRST_ENTRY_BOUND / same | FIRST_ENTRY / same | Certified entry-time patch on original state chart, structured flow |
+| Certified concave maximum | MAXIMUM_SPLIT / same | DIRECTED_BOUNDARY / same | Critical-time patch, maximum guard range/state bounds; Lie derivative for directed entry |
+| INCREASING or CONVEX without entry certificate | GUARD_SIDE / same | BOUNDARY / same | State guard, validated local tube; no root-time claim |
+| CONCAVE without certificate | TWO_SAMPLES / DISCARD | DIRECTED_BOUNDARY / same | Upper flow samples at two fixed times; blocking jump requires guard Lie derivative |
+| UNRESOLVED | TWO_SAMPLES / DISCARD | DIRECTED_BOUNDARY / DISCARD | Upper: two flow samples or directed boundary; lower conservatively discards |
+| NEGATIVE, POSITIVE, DECREASING | KEEP / same | SOURCE_ACTIVATION / same | Initial-phase treatment and source guard; no invented future entry time |
+
+Event-policy effects are independent of that crossing matrix:
+
+| Event | Flow handler | Jump handler | Additional requirement |
+| --- | --- | --- | --- |
+| INVARIANT | Blocking flow handler | Not applicable | No reset |
+| PROGRESS | Blocking flow handler | Not applicable | No reset |
+| PERMISSIVE | No blocking flow restriction | TUBE_ACTIVATION in both semantics, independently of crossing geometry | Tube with elapsed-time coordinate and active-side guard |
+| URGENT | Blocking flow handler | Blocking entry from matrix | Event reset, competing blockers, closed time horizon |
+| IMPACT | Blocking flow handler | Blocking entry from matrix | Additional impact-direction Lie derivative even with a first-entry certificate |
+
+The `uses_timed_flow` and `requires_lie_derivative` flags describe
+*operations performed*, not a proof that an inner approximation exists.
+In particular, `LOWER` is an existing ODAE algorithmic path, not a
+general guarantee for inclusion solutions. A positive concave maximum
+does not imply tangency, and `UNRESOLVED` does not imply degeneracy.
+
+**Dynamical capability gate (current):**
+
+| Mode | UPPER | LOWER | Events / guards / invariants |
+| --- | --- | --- | --- |
+| Autonomous state-only ODAE, no fixed parameters | Existing validated local equation method | Existing equation method (no new inner claim) | Existing event policy and crossing classifier, subject to certified local flow layout |
+| Autonomous ODAI, no fixed parameters | Explicit structured or box method | Rejected, including at time zero | Rejected, including at time zero |
+| Explicit-time or fixed-parameter ODAE/ODAI modes | Rejected by current hybrid mode validation | Rejected | Not reached |
+
+ODAI with arbitrary measurable input functions lacks, at present, a
+certified trajectory-level guard derivative and first-entry/maximum
+analysis compatible with this equation classifier. Neither an outer box
+nor an independent endpoint certificate supplies these properties.
+Consequently no ODAI handler is enabled by this refactor. Future support
+requires an *explicit, solver-provided validated event capability* and
+a separate proof of the semantics it supports; changing only a dispatch
+switch is mathematically unsound.
+
+The focused handler contracts exercise geometric witnesses, root-time
+maps, ambiguous sampled/discard behavior, impact direction, branch order,
+and incompatible certificate rejection. The inclusion gate tests reject
+each kind of declared source event before attempting integration, and
+verify that event-free autonomous ODAI remains supported as before.

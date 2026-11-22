@@ -145,6 +145,14 @@ class TestHybridStepContracts : public Testing::ContextFixture {
                                      Dyadic(1));
         CrossingData crossing(CrossingGeometry::INCREASING,
                               CrossingTimeCertificate(-scenario.factory.create_coordinate(scenario.initial.parameter_domain(), 0u)));
+        const auto first_entry_flow = flow_guard_capability(crossing, Semantics::UPPER);
+        ARIADNE_TESTING_EXPECT_EQUAL(first_entry_flow.method, HybridFlowGuardMethod::FIRST_ENTRY_BOUND);
+        ARIADNE_TESTING_EXPECT_EQUAL(first_entry_flow.evidence, CrossingEvidenceKind::CROSSING_TIME);
+        ARIADNE_TESTING_PROVE(first_entry_flow.uses_timed_flow);
+        const auto first_entry_jump = jump_guard_capability(EventKind::URGENT, crossing, Semantics::LOWER);
+        ARIADNE_TESTING_EXPECT_EQUAL(first_entry_jump.method, HybridJumpGuardMethod::FIRST_ENTRY);
+        ARIADNE_TESTING_EXPECT_EQUAL(first_entry_jump.evidence, CrossingEvidenceKind::CROSSING_TIME);
+        ARIADNE_TESTING_PROVE(!first_entry_jump.requires_lie_derivative);
         for (auto semantics: {Semantics::UPPER, Semantics::LOWER}) {
             for (auto kind: {EventKind::URGENT, EventKind::IMPACT}) {
                 const auto event = scenario.transition(kind, scenario.x);
@@ -167,6 +175,11 @@ class TestHybridStepContracts : public Testing::ContextFixture {
             const auto candidate = make_jump_candidate(scenario.context(event, crossing, semantics),
                                                        scenario.dynamic, scenario.timing);
             ARIADNE_TESTING_EXPECT_EQUAL(candidate.enclosure.number_of_parameters(), 3u);
+            const auto optional = jump_guard_capability(EventKind::PERMISSIVE, crossing, semantics);
+            ARIADNE_TESTING_EXPECT_EQUAL(optional.method, HybridJumpGuardMethod::TUBE_ACTIVATION);
+            ARIADNE_TESTING_EXPECT_EQUAL(optional.evidence, CrossingEvidenceKind::NONE);
+            ARIADNE_TESTING_PROVE(optional.uses_timed_flow);
+            ARIADNE_TESTING_PROVE(!optional.requires_lie_derivative);
             ARIADNE_TESTING_EXPECT_EQUAL(candidate.elapsed_time.domain(), candidate.enclosure.parameter_domain());
             // Optional activation includes the interior after entry, not just x=0.
             const auto box = cast_exact_box(candidate.enclosure.state_bounding_box());
@@ -211,6 +224,12 @@ class TestHybridStepContracts : public Testing::ContextFixture {
         ARIADNE_TESTING_PROVE(subset(cast_exact_interval(candidate.enclosure.time_range()), ExactIntervalType(2, 2)));
         // The same active source cannot impact against a strictly negative direction.
         event.event_kind = EventKind::IMPACT;
+        const auto source_entry = jump_guard_capability(EventKind::URGENT, active, Semantics::UPPER);
+        ARIADNE_TESTING_EXPECT_EQUAL(source_entry.method, HybridJumpGuardMethod::SOURCE_ACTIVATION);
+        ARIADNE_TESTING_PROVE(!source_entry.requires_lie_derivative);
+        const auto impact_entry = jump_guard_capability(EventKind::IMPACT, active, Semantics::UPPER);
+        ARIADNE_TESTING_EXPECT_EQUAL(impact_entry.method, HybridJumpGuardMethod::SOURCE_ACTIVATION);
+        ARIADNE_TESTING_PROVE(impact_entry.requires_lie_derivative);
         const auto impact = make_jump_candidate(scenario.context(event, active, Semantics::UPPER),
                                                 scenario.dynamic, scenario.timing);
         ARIADNE_TESTING_PROVE(definitely(impact.enclosure.is_empty()));
@@ -232,6 +251,16 @@ class TestHybridStepContracts : public Testing::ContextFixture {
                                      Dyadic(1));
         const auto event = scenario.transition(EventKind::URGENT, scenario.x);
         const CrossingData unresolved(CrossingGeometry::UNRESOLVED);
+        const auto unresolved_outer = flow_guard_capability(unresolved, Semantics::UPPER);
+        const auto unresolved_inner = flow_guard_capability(unresolved, Semantics::LOWER);
+        ARIADNE_TESTING_EXPECT_EQUAL(unresolved_outer.method, HybridFlowGuardMethod::TWO_SAMPLES);
+        ARIADNE_TESTING_EXPECT_EQUAL(unresolved_inner.method, HybridFlowGuardMethod::DISCARD);
+        ARIADNE_TESTING_EXPECT_EQUAL(unresolved_outer.evidence, CrossingEvidenceKind::NONE);
+        const auto unresolved_jump = jump_guard_capability(EventKind::URGENT, unresolved, Semantics::UPPER);
+        const auto unresolved_discard = jump_guard_capability(EventKind::URGENT, unresolved, Semantics::LOWER);
+        ARIADNE_TESTING_EXPECT_EQUAL(unresolved_jump.method, HybridJumpGuardMethod::DIRECTED_BOUNDARY);
+        ARIADNE_TESTING_PROVE(unresolved_jump.requires_lie_derivative);
+        ARIADNE_TESTING_EXPECT_EQUAL(unresolved_discard.method, HybridJumpGuardMethod::DISCARD);
         const auto upper = make_jump_candidate(scenario.context(event, unresolved, Semantics::UPPER),
                                                scenario.dynamic, scenario.timing);
         const auto lower = make_jump_candidate(scenario.context(event, unresolved, Semantics::LOWER),
@@ -271,6 +300,14 @@ class TestHybridStepContracts : public Testing::ContextFixture {
         critical_bounds[0u] = UpperIntervalType(0, 0);
         const CrossingData crossing(GuardMaximumCertificate(critical,
                                                             scenario.factory.create_coordinate(scenario.initial.parameter_domain(), 1u).range(), critical_bounds));
+        const auto maximum_flow = flow_guard_capability(crossing, Semantics::UPPER);
+        ARIADNE_TESTING_EXPECT_EQUAL(maximum_flow.method, HybridFlowGuardMethod::MAXIMUM_SPLIT);
+        ARIADNE_TESTING_EXPECT_EQUAL(maximum_flow.evidence, CrossingEvidenceKind::GUARD_MAXIMUM);
+        ARIADNE_TESTING_PROVE(maximum_flow.uses_timed_flow);
+        const auto maximum_jump = jump_guard_capability(EventKind::URGENT, crossing, Semantics::UPPER);
+        ARIADNE_TESTING_EXPECT_EQUAL(maximum_jump.method, HybridJumpGuardMethod::DIRECTED_BOUNDARY);
+        ARIADNE_TESTING_EXPECT_EQUAL(maximum_jump.evidence, CrossingEvidenceKind::GUARD_MAXIMUM);
+        ARIADNE_TESTING_PROVE(maximum_jump.requires_lie_derivative);
         auto endpoint = scenario.initial;
         endpoint.apply_parameter_evolve_step(scenario.flow, scenario.timing.parameter_dependent_evolution_time);
         List<HybridEnclosure> branches{endpoint, endpoint};
@@ -588,6 +625,11 @@ class TestHybridStepContracts : public Testing::ContextFixture {
         transition.event_kind = EventKind::URGENT;
         ARIADNE_TESTING_EXPECT_THROWS(std::invalid_argument,
                                       CrossingData(static_cast<CrossingGeometry>(255u)));
+        ARIADNE_TESTING_EXPECT_EXCEPTION(jump_guard_capability(EventKind::INVARIANT, crossing, Semantics::UPPER));
+        ARIADNE_TESTING_EXPECT_EXCEPTION(jump_guard_capability(EventKind::PROGRESS, crossing, Semantics::UPPER));
+        ARIADNE_TESTING_EXPECT_EXCEPTION(flow_guard_capability(crossing, static_cast<Semantics>(255u)));
+        ARIADNE_TESTING_EXPECT_EXCEPTION(jump_guard_capability(EventKind::URGENT, crossing, static_cast<Semantics>(255u)));
+
         ARIADNE_TESTING_EXPECT_THROWS(std::invalid_argument,
                                       (void)CrossingTimeCertificate(ValidatedScalarMultivariateFunctionPatch{}));
 

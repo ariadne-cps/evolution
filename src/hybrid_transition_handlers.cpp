@@ -36,7 +36,7 @@ ExtraBranches keep_flow(HybridEnclosure&, const FlowContext&) { return {}; }
 ExtraBranches restrict_crossing_time(HybridEnclosure& set, const FlowContext& context) {
     ARIADNE_PRECONDITION(set.parameter_domain() == context.initial_state.domain());
     set.new_parameter_constraint(context.guard.transition.event,
-                                 context.elapsed <= unchecked_compose(context.guard.crossing.crossing_time, context.initial_state));
+                                 context.elapsed <= unchecked_compose(context.guard.crossing.crossing_time()->time(), context.initial_state));
     return {};
 }
 
@@ -63,7 +63,7 @@ ExtraBranches restrict_sampled_flow(HybridEnclosure& set, const FlowContext& con
     return {};
 }
 
-ExtraBranches restrict_grazing_flow(HybridEnclosure& set, const FlowContext& context) {
+ExtraBranches restrict_maximum_flow(HybridEnclosure& set, const FlowContext& context) {
     const auto event = context.guard.transition.event;
     const auto& guard_function = context.guard.transition.guard_function;
     const auto& guard_crossing_data = context.guard.crossing;
@@ -72,10 +72,10 @@ ExtraBranches restrict_grazing_flow(HybridEnclosure& set, const FlowContext& con
     const auto& flow = context.guard.flow;
     ExtraBranches additional;
 
-    ValidatedScalarMultivariateFunctionPatch critical_time_function = unchecked_compose(guard_crossing_data.critical_time, starting_state_function);
+    ValidatedScalarMultivariateFunctionPatch critical_time_function = unchecked_compose(guard_crossing_data.guard_maximum()->time(), starting_state_function);
     ValidatedScalarMultivariateFunctionPatch final_guard_function = compose(guard_function, unchecked_compose(flow, join(starting_state_function, elapsed_time_function)));
     ValidatedScalarMultivariateFunctionPatch maximal_guard_function = compose(guard_function, unchecked_compose(flow, join(starting_state_function, critical_time_function)));
-    UpperIntervalType guard_range_at_critical_time = guard_crossing_data.guard_range_at_critical_time;
+    UpperIntervalType guard_range_at_critical_time = guard_crossing_data.guard_maximum()->guard_range();
     // Embedding above gives the starting map the elapsed-time
     // domain; composition and join preserve that argument domain.
     // The per-set domain check already establishes compatibility.
@@ -143,24 +143,24 @@ ExtraBranches restrict_grazing_flow(HybridEnclosure& set, const FlowContext& con
     return additional;
 }
 
-FlowHandler select_flow_handler(CrossingKind crossing, Semantics semantics) {
-    switch (crossing) {
-        case CrossingKind::TRANSVERSE:
-            return restrict_crossing_time;
-        case CrossingKind::INCREASING:
-        case CrossingKind::CONVEX:
+FlowHandler select_flow_handler(const CrossingData& crossing, Semantics semantics) {
+    if (crossing.crossing_time() != nullptr)
+        return restrict_crossing_time;
+    if (crossing.guard_maximum() != nullptr)
+        return restrict_maximum_flow;
+    switch (crossing.geometry()) {
+        case CrossingGeometry::INCREASING:
+        case CrossingGeometry::CONVEX:
             return restrict_guard_side;
-        case CrossingKind::GRAZING:
-            return restrict_grazing_flow;
-        case CrossingKind::CONCAVE:
-        case CrossingKind::DEGENERATE:
+        case CrossingGeometry::CONCAVE:
+        case CrossingGeometry::UNRESOLVED:
             return semantics == Semantics::UPPER ? restrict_sampled_flow : discard_flow;
-        case CrossingKind::NEGATIVE:
-        case CrossingKind::POSITIVE:
-        case CrossingKind::DECREASING:
+        case CrossingGeometry::NEGATIVE:
+        case CrossingGeometry::POSITIVE:
+        case CrossingGeometry::DECREASING:
             return keep_flow;
         default:
-            ARIADNE_FAIL_MSG("Unhandled crossing kind in flow restriction: " << crossing);
+            ARIADNE_FAIL_MSG("Unhandled crossing geometry in flow restriction");
     }
 }
 
@@ -192,10 +192,10 @@ HybridJumpCandidate activate_tube(const HybridGuardContext& context,
     return result;
 }
 
-HybridJumpCandidate transverse_entry(const HybridGuardContext& context,
-                                     const EffectiveVectorMultivariateFunction&, const TimingData& timing) {
+HybridJumpCandidate first_entry_at_time(const HybridGuardContext& context,
+                                        const EffectiveVectorMultivariateFunction&, const TimingData& timing) {
     auto result = initial_candidate(context);
-    result.elapsed_time = unchecked_compose(context.crossing.crossing_time, context.initial.state_function());
+    result.elapsed_time = unchecked_compose(context.crossing.crossing_time()->time(), context.initial.state_function());
     if (timing.step_kind != StepKind::CONSTANT_EVOLUTION_TIME &&
         possibly((result.elapsed_time - timing.parameter_dependent_evolution_time).range().upper_bound() > handler_zero)) {
         result.enclosure.new_parameter_constraint(guard_step_event,
@@ -227,24 +227,25 @@ HybridJumpCandidate discard_jump(const HybridGuardContext& context,
     return result;
 }
 
-JumpHandler select_entry_handler(CrossingKind crossing, Semantics semantics) {
-    switch (crossing) {
-        case CrossingKind::TRANSVERSE:
-            return transverse_entry;
-        case CrossingKind::INCREASING:
-        case CrossingKind::CONVEX:
+JumpHandler select_entry_handler(const CrossingData& crossing, Semantics semantics) {
+    if (crossing.crossing_time() != nullptr)
+        return first_entry_at_time;
+    if (crossing.guard_maximum() != nullptr)
+        return directed_entry;
+    switch (crossing.geometry()) {
+        case CrossingGeometry::INCREASING:
+        case CrossingGeometry::CONVEX:
             return boundary_entry;
-        case CrossingKind::GRAZING:
-        case CrossingKind::CONCAVE:
+        case CrossingGeometry::CONCAVE:
             return directed_entry;
-        case CrossingKind::DEGENERATE:
+        case CrossingGeometry::UNRESOLVED:
             return semantics == Semantics::UPPER ? directed_entry : discard_jump;
-        case CrossingKind::NEGATIVE:
-        case CrossingKind::POSITIVE:
-        case CrossingKind::DECREASING:
+        case CrossingGeometry::NEGATIVE:
+        case CrossingGeometry::POSITIVE:
+        case CrossingGeometry::DECREASING:
             return activate_source;
         default:
-            ARIADNE_FAIL_MSG("Unhandled crossing kind in jump construction: " << crossing);
+            ARIADNE_FAIL_MSG("Unhandled crossing geometry in jump construction");
     }
 }
 
@@ -278,22 +279,8 @@ HybridTransitionPolicy transition_policy(EventKind event) {
     }
 }
 
-bool defer_endpoint_guard(CrossingKind crossing) {
-    switch (crossing) {
-        case CrossingKind::TRANSVERSE:
-        case CrossingKind::INCREASING:
-            return true;
-        case CrossingKind::NEGATIVE:
-        case CrossingKind::POSITIVE:
-        case CrossingKind::DECREASING:
-        case CrossingKind::CONVEX:
-        case CrossingKind::GRAZING:
-        case CrossingKind::CONCAVE:
-        case CrossingKind::DEGENERATE:
-            return false;
-        default:
-            ARIADNE_FAIL_MSG("Unhandled endpoint crossing kind: " << crossing);
-    }
+bool defer_endpoint_guard(const CrossingData& crossing) {
+    return crossing.crossing_time() != nullptr || crossing.geometry() == CrossingGeometry::INCREASING;
 }
 
 HybridJumpCandidate make_jump_candidate(const HybridGuardContext& context,
@@ -307,7 +294,7 @@ HybridJumpCandidate make_jump_candidate(const HybridGuardContext& context,
         ARIADNE_FAIL_MSG("Invalid event kind for jump construction: " << context.transition.event_kind);
     }
     const JumpHandler handler = policy.blocks_flow
-                                  ? select_entry_handler(context.crossing.crossing_kind, context.semantics)
+                                  ? select_entry_handler(context.crossing, context.semantics)
                                   : activate_tube;
     auto result = handler(context, dynamic, timing);
     if (policy.requires_impact_direction)
@@ -320,9 +307,9 @@ Void apply_flow_guard(List<HybridEnclosure>& sets, const HybridGuardContext& con
                       const ValidatedScalarMultivariateFunctionPatch& elapsed) {
     LOGGING_SCOPE_CREATE;
     validate_semantics(context.semantics);
-    const FlowHandler handler = select_flow_handler(context.crossing.crossing_kind, context.semantics);
+    const FlowHandler handler = select_flow_handler(context.crossing, context.semantics);
     LOGGING_PRINTLN_AT(1, "flow restriction event=" << context.transition.event
-                                                    << " crossing=" << context.crossing.crossing_kind
+                                                    << " crossing=" << context.crossing.summary()
                                                     << " semantics=" << (context.semantics == Semantics::UPPER ? "UPPER" : "LOWER"));
     auto initial_state = context.initial.state_function();
     if (elapsed.domain().dimension() > context.initial.parameter_domain().dimension()) {

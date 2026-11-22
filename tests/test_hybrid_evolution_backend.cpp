@@ -531,7 +531,7 @@ class TestHybridEvolutionBackend : public Testing::ContextFixture {
         ARIADNE_TESTING_PROVE(successor.work.phase == HybridEvolutionPhase::PROCESS_STARTING_EVENTS);
         ARIADNE_TESTING_PROVE(successor.event == event);
         ARIADNE_TESTING_PROVE(successor.event_kind == EventKind::URGENT);
-        ARIADNE_TESTING_PROVE(!successor.crossing_kind.has_value());
+        ARIADNE_TESTING_PROVE(!successor.crossing.has_value());
         ARIADNE_TESTING_PROVE(successor.resolution == HybridEvolutionTransitionResolution::FULL_SOURCE);
         ARIADNE_TESTING_EXPECT_EQUAL(jumped.contributions.size(), 2u);
         ARIADNE_TESTING_PROVE(jumped.contributions.at(0).kind == HybridEvolutionSetKind::REACH);

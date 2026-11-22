@@ -58,7 +58,8 @@ design](doc/evolution_tree_design.md) for the current API and deferred operation
 Hybrid transitions use one event policy and separate geometric handlers for
 flow restrictions and jump construction. Jump candidates carry their own
 elapsed-time maps; blocking guards retain their explicit before/after-continuation
-order. See the [transition-handler design](doc/hybrid_transition_handlers_design.md)
+order. Crossing analysis produces independent geometry and typed first-entry or
+guard-maximum certificates, so solver fallbacks retain only available evidence. See the [transition-handler design](doc/hybrid_transition_handlers_design.md)
 for the behavior matrix, numerical guarantees and remaining refactoring tasks.
 
 Hybrid numerical steps retain the common `ValidatedIntegrationStep` result.

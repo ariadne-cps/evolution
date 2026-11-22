@@ -36,13 +36,12 @@
 #include <vector>
 
 #include "evolution/evolver_interface.hpp"
+#include "evolution/hybrid_crossing.hpp"
 #include "evolution/hybrid_orbit.hpp"
 #include "system/discrete_event.hpp"
 #include "system/hybrid_automaton_interface.hpp"
 
 namespace Ariadne {
-
-enum class CrossingKind : std::uint8_t;
 
 /** @brief Processing required by an enclosure, independent of its provenance. */
 enum class HybridEvolutionPhase : std::uint8_t {
@@ -78,7 +77,7 @@ struct HybridEvolutionSuccessor {
     HybridEvolutionSuccessorKind kind;                                                                //!< Reason for producing the checkpoint.
     std::optional<DiscreteEvent> event;                                                               //!< Transition event, when applicable.
     std::optional<EventKind> event_kind;                                                              //!< Urgency/permissiveness, when applicable.
-    std::optional<CrossingKind> crossing_kind;                                                        //!< Crossing classification; absent for starting events.
+    std::optional<CrossingSummary> crossing;                                                          //!< Geometry and evidence kind; absent for starting events.
     HybridEvolutionTransitionResolution resolution = HybridEvolutionTransitionResolution::UNRESOLVED; //!< Source coverage evidence.
 };
 
@@ -128,7 +127,7 @@ struct HybridEvolutionStepResult {
     Void continue_with(const HybridEnclosure& set, HybridEvolutionSuccessorKind kind = HybridEvolutionSuccessorKind::CONTINUATION);
     /** @brief Record a post-reset checkpoint with explicit event provenance. */
     Void transition_to(const HybridEnclosure& set, DiscreteEvent event, EventKind event_kind,
-                       std::optional<CrossingKind> crossing_kind = std::nullopt,
+                       std::optional<CrossingSummary> crossing = std::nullopt,
                        HybridEvolutionTransitionResolution resolution = HybridEvolutionTransitionResolution::UNRESOLVED);
 };
 

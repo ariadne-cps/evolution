@@ -2,9 +2,10 @@
 
 The hybrid evolver separates numerical capabilities, event policy, crossing
 analysis, geometric guard operations and orchestration. Refactoring these
-responsibilities precedes further ODAI event support. The first implementation
-extracts event policies and guard handlers while retaining the numerical rules
-and the order of constraints used by the equation path.
+responsibilities precedes further ODAI event support. Event policies, guard handlers and crossing analysis are separate private
+components. Public crossing data distinguish geometry from typed numerical
+evidence while retaining the numerical rules and constraint order of the
+equation path.
 
 ## Responsibilities
 
@@ -60,20 +61,20 @@ must use the source domain rather than a nonexistent extra temporal coordinate.
 
 | Crossing information | Flow restriction retained in this refactor | Urgent entry retained in this refactor |
 | --- | --- | --- |
-| TRANSVERSE | elapsed time no later than crossing time | evaluate flow at crossing time |
-| INCREASING or CONVEX | guard on admissible side | tube restricted to guard boundary |
-| GRAZING | split using critical time and guard maximum | boundary and entry direction |
-| CONCAVE without critical time | upper: existing two temporal samples; lower: discard continuation | boundary and entry direction |
-| DEGENERATE or unresolved | upper: existing two temporal samples; lower: discard continuation | upper: boundary and direction; lower: discard candidate |
+| First-entry time certificate (increasing or concave geometry) | elapsed time no later than crossing time | evaluate flow at crossing time |
+| INCREASING or CONVEX without a time certificate | guard on admissible side | tube restricted to guard boundary |
+| Concave guard-maximum certificate | split using critical time and guard maximum | boundary and entry direction |
+| CONCAVE without a certificate | upper: existing two temporal samples; lower: discard continuation | boundary and entry direction |
+| UNRESOLVED | upper: existing two temporal samples; lower: discard continuation | upper: boundary and direction; lower: discard candidate |
 | NEGATIVE, POSITIVE or DECREASING | initial phase has already handled activation | restrict initial source to active side |
-| MONOTONE or invalid tag | explicit rejection | explicit rejection for first-entry dispatch |
+| Invalid geometry or incompatible certificate | rejected at construction | rejected at construction |
 
 Permissive activation does not require a crossing classification in the current
 algorithm. Impact applies its directional condition after the common entry
 handler. The table describes existing numerical behavior; shared code between
 UPPER and LOWER is not itself a proof of inner reachability.
 
-The grazing handler keeps the named hitting, missing and past subsets local.
+The maximum-based flow handler keeps the named hitting, missing and past subsets local.
 It returns additional branches to a single list traversal. Primary branches
 retain their original positions; additional branches follow in the same order
 as before. No handler holds a reference into a vector-backed list while that
@@ -87,7 +88,7 @@ list is extended.
    when the complete duration is taken.
 4. Apply all blocking guards to reach, and non-deferred guards to endpoint.
 5. Copy the endpoint branches used for future continuation.
-6. Apply transverse and increasing endpoint guards after that copy.
+6. Apply guards with a first-entry certificate, and increasing guards, after that copy.
 7. Record horizon-limited reach, final and intermediate contributions.
 8. For each activating event, construct its jump candidate and elapsed map,
    enforce the horizon and apply every other blocking event.
@@ -101,12 +102,47 @@ horizon must survive the extraction. Handlers must preserve validated
 
 ## Crossing information and future capabilities
 
-`CrossingKind` currently combines geometric properties with available
-certificates. In particular, GRAZING can be emitted when a critical maximum is
-known but the first crossing-time solve failed. DEGENERATE can also mean that
-classification is unresolved. Later work will separate these facts and use
-typed evidence so that a crossing-time map or critical-time map is required
-only by the handlers which consume it.
+`CrossingData` stores `CrossingGeometry` independently of a variant containing
+no evidence, `CrossingTimeCertificate` or `GuardMaximumCertificate`. The old
+`CrossingKind` and its TRANSVERSE/GRAZING/DEGENERATE tags are removed without
+aliases. UNRESOLVED means that sign and curvature were not established; it
+makes no claim of actual geometric degeneracy.
+
+A time certificate owns the first-entry map. A maximum certificate owns the
+critical-time map, the guard range and state bounds at the maximum. Constructors
+check finite, nonempty domains/ranges and consistent chart dimensions; the
+numerical producer remains responsible for certifying their mathematical
+meaning. Certificate data are immutable through the API. A maximum certificate
+forces concave geometry; a time certificate requires increasing, convex or
+concave geometry. Geometry-only data never claim a numerical certificate.
+
+The private `analyze_crossings` function receives the configured solver and
+an autonomous state-only flow. `_compute_crossings` remains the evolver strategy
+hook and delegates to that analyzer. The extraction preserves all predicates,
+solver settings, the 15/16 reduced search interval and fallback choices:
+
+| Numerical case | Geometry retained | Evidence/result |
+| --- | --- | --- |
+| Strictly increasing, root solve succeeds | INCREASING | First-entry time |
+| Strictly increasing, EquationSolverException | INCREASING | None |
+| Strictly increasing, unexpected runtime error | — | Propagate original error |
+| Strictly decreasing | DECREASING | None |
+| Strictly convex | CONVEX | None |
+| Concave, certified maximum strictly negative | — | Omit event |
+| Concave, positive maximum and first root found | CONCAVE | First-entry time |
+| Concave, positive maximum but first root solve fails | CONCAVE | Guard maximum |
+| Concave, maximum guard range contains zero | CONCAVE | Guard maximum |
+| Concave, critical solve fails (equation or runtime error) | CONCAVE | None |
+| Sign and curvature unresolved | UNRESOLVED | None |
+
+The nested first-entry runtime-error path retains its existing outer fallback
+to concave geometry without evidence. A guard-maximum certificate therefore
+does not mean tangency: its maximum may be strictly positive after failed root
+solving. Critical times in the past remain valid information. Timing, creep
+and deferred endpoint guards test certificate presence; a concave first-entry
+certificate receives the same treatment as the former TRANSVERSE result.
+Backends retain geometry and evidence kind as `CrossingSummary`, without
+retaining numerical patches in transition provenance.
 
 ODE classification uses a single-valued vector field and Lie derivatives.
 For ODAI with measurable inputs, second derivatives and a smooth crossing-time
@@ -123,16 +159,16 @@ evidence and semantics they require, and reject unavailable capabilities.
       branch order, competing events, reset history and horizon handling.
 - [x] Validate existing mathematical suites and add focused cases for distinct
       jump/flow behavior, upper/lower unresolved geometry and grazing splits.
-- [ ] Separate geometric properties from typed crossing evidence, including
+- [x] Separate geometric properties from typed crossing evidence, including
       explicit unavailable/unsupported states.
-- [ ] Extract crossing analysis from the evolver and audit its solver fallbacks.
+- [x] Extract crossing analysis from the evolver and audit its solver fallbacks.
 - [ ] Decompose timing, creep and unwinding while preserving their strategies.
 - [ ] Replace parallel endpoint/continuation lists with explicit paired branch
       results and make result publication a small orchestration phase.
 - [ ] Document and verify the supported capability matrix for each handler;
       extend ODAI events only with corresponding mathematical certificates.
 
-The first four tasks form the initial behavior-preserving extraction. Changes
+The first six tasks form the implemented behavior-preserving extraction. Changes
 to inner guarantees, impact assumptions, approximation rules or unresolved-case
 handling are separate numerical work. Run the existing hybrid evolution,
 contract, backend and tree regressions, then the full Evolution suite. Use
@@ -143,20 +179,30 @@ Run `apply-format` and `check-format` before committing. Keep simulator work
 after the required hybrid capabilities. Full Python/C++ tutorial parity and
 the bindings it needs remain the final Evolution task.
 
-## Verified initial extraction
+## Verified extraction
 
 The first four tasks above are implemented in `src/hybrid_transition_handlers.hpp`
 and `.cpp`. The protected `_apply_guard` and `_apply_guard_step` hooks are removed;
 all repository callers use the private operations directly. There are no naming
-aliases or compatibility wrappers for those removed hooks. Crossing analysis,
-typed evidence, timing decomposition and paired continuation results remain the
-unchecked tasks above, before new ODAI event capabilities.
+aliases or compatibility wrappers for those removed hooks. Crossing analysis
+and typed evidence are implemented in the dedicated crossing components. Timing decomposition, paired continuation results and the capability
+audit remain the unchecked tasks above, before new ODAI event capabilities.
 
-The Debug build treats warnings as errors. Validation passes all 29 Evolution
+The Debug build treats warnings as errors. Validation passes all 30 Evolution
 CTest targets, including Python, and the 13 System C++ targets in the consuming
 build. The hybrid contract suite contains 13 cases. Four new analytic cases
 check transverse versus permissive elapsed maps in both semantics, impact
 direction and zero-time source candidates with competing guards, unresolved
 upper/lower restrictions, and stable grazing branch order with explicit feasible
 trajectory witnesses. Existing hybrid, backend, tree and inclusion tests remain
-active. Full Python/C++ tutorial parity remains deferred to the final task.
+active. The new crossing suite has five analytic cases covering certificate
+invariants, increasing roots and decreasing direction, concave maxima and
+strictly negative exclusion, convex/unresolved geometry, equation/runtime solver
+fallbacks, and first-entry provenance for concave geometry. Analytic residuals
+check root and critical-time maps; the positive-maximum fallback explicitly
+excludes an interpretation as tangency. The public header is included first.
+
+The complete consuming build passes 43/43 CTest targets. A fresh install supports
+the independently built C++ tutorial and the existing Python tutorial.
+`apply-format` and `check-format` pass for all 83 tracked C++ files before commit.
+Full Python/C++ tutorial parity remains deferred to the final task.

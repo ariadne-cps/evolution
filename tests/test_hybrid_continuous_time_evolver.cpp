@@ -1148,17 +1148,14 @@ Void TestHybridEvolver::test_formatting() {
     ARIADNE_TESTING_PROVE(!is_activating(EventKind::PROGRESS));
     ARIADNE_TESTING_EXPECT_EXCEPTION(is_blocking(static_cast<EventKind>(255)));
     ARIADNE_TESTING_EXPECT_EXCEPTION(is_activating(static_cast<EventKind>(255)));
-    check(CrossingKind::DEGENERATE, "DEGENERATE");
-    check(CrossingKind::POSITIVE, "POSITIVE");
-    check(CrossingKind::NEGATIVE, "NEGATIVE");
-    check(CrossingKind::MONOTONE, "MONOTONE");
-    check(CrossingKind::INCREASING, "INCREASING");
-    check(CrossingKind::DECREASING, "DECREASING");
-    check(CrossingKind::CONVEX, "CONVEX");
-    check(CrossingKind::CONCAVE, "CONCAVE");
-    check(CrossingKind::TRANSVERSE, "TRANSVERSE");
-    check(CrossingKind::GRAZING, "GRAZING");
-    check(static_cast<CrossingKind>(255), "unknown");
+    check(CrossingGeometry::UNRESOLVED, "UNRESOLVED");
+    check(CrossingGeometry::POSITIVE, "POSITIVE");
+    check(CrossingGeometry::NEGATIVE, "NEGATIVE");
+    check(CrossingGeometry::INCREASING, "INCREASING");
+    check(CrossingGeometry::DECREASING, "DECREASING");
+    check(CrossingGeometry::CONVEX, "CONVEX");
+    check(CrossingGeometry::CONCAVE, "CONCAVE");
+    check(static_cast<CrossingGeometry>(255), "unknown");
     check(StepKind::CONSTANT_EVOLUTION_TIME, "CONSTANT_EVOLUTION_TIME");
     check(StepKind::SPACE_DEPENDENT_EVOLUTION_TIME, "SPACE_DEPENDENT_EVOLUTION_TIME");
     check(StepKind::TIME_DEPENDENT_EVOLUTION_TIME, "TIME_DEPENDENT_EVOLUTION_TIME");
@@ -1179,12 +1176,17 @@ Void TestHybridEvolver::test_formatting() {
                                                               {-1, 1}
     }),
                                                           Real(1 / 4_q));
-    CrossingData transverse(CrossingKind::TRANSVERSE, time), grazing(CrossingKind::GRAZING), negative(CrossingKind::NEGATIVE);
-    grazing.critical_time = time;
-    for (const auto& crossing: {transverse, grazing, negative}) {
+    const CrossingData transverse(CrossingGeometry::INCREASING, CrossingTimeCertificate(time));
+    const CrossingData maximum(GuardMaximumCertificate(time, UpperIntervalType(-1, 1),
+                                                       UpperBoxType({
+                                                           {-1, 1},
+                                                           {-1, 1}
+    })));
+    const CrossingData negative(CrossingGeometry::NEGATIVE);
+    for (const auto& crossing: {transverse, maximum, negative}) {
         std::ostringstream text;
         text << crossing;
-        ARIADNE_TESTING_PROVE(text.str().find("kind=") != std::string::npos);
+        ARIADNE_TESTING_PROVE(text.str().find("geometry=") != std::string::npos);
     }
 }
 

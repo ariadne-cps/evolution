@@ -22,7 +22,7 @@ struct HybridTransitionPolicy {
 HybridTransitionPolicy transition_policy(EventKind);
 
 /** @brief Preserve the continuation copy before these endpoint restrictions. */
-bool defer_endpoint_guard(CrossingKind);
+bool defer_endpoint_guard(const CrossingData&);
 
 /** @brief Borrowed immutable numerical data; no workload or backend is owned. */
 struct HybridGuardContext {

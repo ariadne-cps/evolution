@@ -36,6 +36,7 @@
 
 #include "evolution/configuration_interface.hpp"
 #include "evolution/hybrid_continuous_time_evolver_interface.hpp"
+#include "evolution/hybrid_crossing.hpp"
 #include "evolution/hybrid_enclosure.hpp"
 #include "evolution/hybrid_evolution_backend.hpp"
 #include "evolution/hybrid_orbit.hpp"
@@ -87,7 +88,7 @@ class FlowFunctionModel
 /** @brief TransitionData represents hybrid evolution strategies, transitions and timing. */
 struct TransitionData;
 /** @brief CrossingData represents hybrid evolution strategies, transitions and timing. */
-struct CrossingData;
+class CrossingData;
 /** @brief TimingData represents hybrid evolution strategies, transitions and timing. */
 struct TimingData;
 
@@ -254,10 +255,11 @@ class HybridContinuousTimeEvolverBase
     //! A crossing_time computed must be valid over the \a initial_set, though
     //! will often be computed over the entire bounding box.
     //!
-    //! If the crossing is #CrossingKind::INCREASING, then the \a crossing_time \f$\gamma\f$
-    //! should be computed, satisfying \f$g(\phi(x,\gamma(x)))=0\f$.
-    //! If the crossing is #CrossingKind::CONCAVE, the the \a critical_time (\a maximum_time) \f$\mu\f$
-    //! should be computed, satisfying \f$L_{f}g(\phi(x,\mu(x)))=0\f$.
+    //! Geometry and available numerical evidence are independent. A
+    //! CrossingTimeCertificate supplies the first-entry map gamma satisfying
+    //! g(phi(x,gamma(x)))=0. A GuardMaximumCertificate supplies the concave
+    //! critical-time map mu satisfying L_f g(phi(x,mu(x)))=0 and its bounds.
+    //! Either solve may fail while the certified geometry remains available.
     virtual Map<DiscreteEvent, CrossingData>
         _compute_crossings(const Set<DiscreteEvent>& active_events,
                            const EffectiveVectorMultivariateFunction& dynamic,
@@ -379,7 +381,7 @@ class HybridContinuousTimeEvolverBase
     //!
     //! \note The \a jump, \a finishing, \a final and \a reach sets may need to
     //! be constructed as unions of Enclosure sets. The is because when dealing
-    //! with #CrossingKind::CONCAVE events, it may be the case that these sets are split into
+    //! with #CrossingGeometry::CONCAVE events, it may be the case that these sets are split into
     //! two.
     //!
     //! TODO: This method might be better split into even simpler events.
@@ -455,66 +457,6 @@ struct TransitionData {
 };
 /** @brief Apply the requested operation. */
 OutputStream& operator<<(OutputStream& os, const TransitionData& transition);
-
-//! \ingroup HybridDynamicsSubModule
-//! \brief The way trajectories of the flow \f$\phi(x_0,t)\f$ of \f$\frac{dx}{dt}=f(x)\f$ cross the guard set \f$g(x)=0\f$.
-//! The rate of change of the guard function changes along flow lines is given by
-//! \f$d g(x(t))/dt = L_{f}g(x(t))\f$ where the Lie derivative \f$L_{f}g\f$ is defined by \f$L_{f}g(x) = (\nabla g\cdot f)(x)\f$.
-//!
-//! Defaults to DEGENERATE whenever the crossing kind has not been resolved;
-//! this need not necessarily mean that the crossing is degenerate, but may
-//! also imply that the crossing information is too expensive or sensitive to
-//! compute.
-enum class CrossingKind : std::uint8_t {
-    DEGENERATE, //!< The crossing may be degenerate to second order.
-    NEGATIVE,   //!< The guard function is negative on the flow domain. No event occurs.
-    POSITIVE,   //!< The guard function is negative on the domain. The event occurs immediately (if urgent) or at all times (if permissive).
-    MONOTONE,   //!< The guard function is strictly increasing or decreasing along flow lines at a crossing point.
-                //! i.e. \f$\frac{d}{dt}g(\phi(x_0,t))>0\f$ whenever \f$g(\phi(x_0,t))=0\f$.
-                //! Implied by \f$L_{f}g \geq 0\f$.
-    INCREASING, //!< The guard function is strictly increasing along flow lines at a crossing point.
-                //! i.e. \f$\frac{d}{dt}g(\phi(x_0,t))>0\f$ whenever \f$g(\phi(x_0,t))=0\f$.
-                //! Implied by \f$L_{f}g \geq 0\f$.
-    DECREASING, //!< The guard function is strictly decreasing along flow lines.
-    CONCAVE,    //!< The guard function is positive over at most an interval.
-                //! Implied by concavity along flow lines, which is equivalent to \f$L_{f}^{2} g < 0\f$ within the reached set.
-    CONVEX,     //!< The guard function is negative over at most an interval. Implied by convexity along flow lines.
-                //! Implied by convexity along flow lines, which is equivalent to \f$L_{f}^{2} g > 0\f$ within the reached set.
-    TRANSVERSE, //!< The guard function is strictly increasing along flow lines, and
-                //! the crossing time can be computed as a smooth function of the initial state.
-                //! Given an initial point \f$x_0\f$, the crossing time is \f$\gamma(x_0)\f$.
-    GRAZING     //!< The time at which the guard function reaches a maximum along flow lines is a smooth function \f$\mu(x_0)\f$ of the initial state \f$x_0\f$.
-                //! Implies by concavity along flow lines, which is equivalent to \f$L_{f}^{2} g < 0\f$ within the reached set.
-};
-/** @brief Apply the requested operation. */
-OutputStream& operator<<(OutputStream& os, const CrossingKind& crk);
-
-//! \ingroup HybridDynamicsSubModule
-//! \brief A data type used to store information about the way flow lines cross a guard \f$g(x)=0\f$.
-//! \relates HybridContinuousTimeEvolverBase
-struct CrossingData {
-    CrossingData() : crossing_kind() {}
-    CrossingData(CrossingKind crk) : crossing_kind(crk) {}
-    CrossingData(CrossingKind crk, const ValidatedScalarMultivariateFunctionPatch& crt)
-        : crossing_kind(crk), crossing_time(crt) {}
-    //! \brief The way in which the guard function changes along trajectories
-    //! during a crossing. e.g. increasing.
-    CrossingKind crossing_kind;
-    //! \brief The range of times at which the crossing may occur.
-    UpperIntervalType crossing_time_range;
-    //! \brief The time \f$\gamma(x)\f$ at which the crossing occurs,
-    //! as a function of the initial point in space. Satisfies \f$g(\phi(x,\gamma(x)))=0\f$.
-    ValidatedScalarMultivariateFunctionPatch crossing_time;
-    //! \brief The time \f$\mu(x)\f$ at which the guard function reaches a maximum or minimum
-    //! i.e. \f$L_{f}g(\phi(x,\mu(x))) = 0\f$.
-    ValidatedScalarMultivariateFunctionPatch critical_time;
-    //! \brief The range of values of the guard function at the critical time.
-    UpperIntervalType guard_range_at_critical_time;
-    //! \brief The range of values of the guard function at the critical time.
-    UpperBoxType evolve_bounds_at_critical_time;
-};
-/** @brief Apply the requested operation. */
-OutputStream& operator<<(OutputStream& os, const CrossingData& crk);
 
 //! \ingroup HybridDynamicsSubModule
 //! \brief The kind of step taken in the evolution. Determines how the evolution time is specified.

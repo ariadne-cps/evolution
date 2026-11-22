@@ -142,8 +142,8 @@ class TestHybridStepContracts : public Testing::ContextFixture {
                                          { 0,      0}
         }),
                                      Dyadic(1));
-        CrossingData crossing(CrossingKind::TRANSVERSE,
-                              -scenario.factory.create_coordinate(scenario.initial.parameter_domain(), 0u));
+        CrossingData crossing(CrossingGeometry::INCREASING,
+                              CrossingTimeCertificate(-scenario.factory.create_coordinate(scenario.initial.parameter_domain(), 0u)));
         for (auto semantics: {Semantics::UPPER, Semantics::LOWER}) {
             for (auto kind: {EventKind::URGENT, EventKind::IMPACT}) {
                 const auto event = scenario.transition(kind, scenario.x);
@@ -200,7 +200,7 @@ class TestHybridStepContracts : public Testing::ContextFixture {
                                          { 0,      0}
         }),
                                      Dyadic(1));
-        const CrossingData active(CrossingKind::POSITIVE);
+        const CrossingData active(CrossingGeometry::POSITIVE);
         auto event = scenario.transition(EventKind::URGENT, -scenario.x);
         const auto candidate = make_jump_candidate(scenario.context(event, active, Semantics::UPPER),
                                                    scenario.dynamic, scenario.timing);
@@ -215,8 +215,8 @@ class TestHybridStepContracts : public Testing::ContextFixture {
         ARIADNE_TESTING_PROVE(definitely(impact.enclosure.is_empty()));
         // A competing blocking guard uses the returned zero-time map directly.
         const auto other = scenario.transition(EventKind::INVARIANT, scenario.x - 2);
-        const CrossingData later(CrossingKind::TRANSVERSE,
-                                 scenario.factory.create_constant(scenario.initial.parameter_domain(), 0.25_x));
+        const CrossingData later(CrossingGeometry::INCREASING,
+                                 CrossingTimeCertificate(scenario.factory.create_constant(scenario.initial.parameter_domain(), 0.25_x)));
         List<HybridEnclosure> guarded{candidate.enclosure};
         apply_flow_guard(guarded, scenario.context(other, later, Semantics::UPPER), candidate.elapsed_time);
         ARIADNE_TESTING_EXPECT_EQUAL(guarded.size(), 1u);
@@ -230,7 +230,7 @@ class TestHybridStepContracts : public Testing::ContextFixture {
         }),
                                      Dyadic(1));
         const auto event = scenario.transition(EventKind::URGENT, scenario.x);
-        const CrossingData unresolved(CrossingKind::DEGENERATE);
+        const CrossingData unresolved(CrossingGeometry::UNRESOLVED);
         const auto upper = make_jump_candidate(scenario.context(event, unresolved, Semantics::UPPER),
                                                scenario.dynamic, scenario.timing);
         const auto lower = make_jump_candidate(scenario.context(event, unresolved, Semantics::LOWER),
@@ -239,7 +239,7 @@ class TestHybridStepContracts : public Testing::ContextFixture {
         ARIADNE_TESTING_PROVE(definitely(lower.enclosure.is_empty()));
         auto endpoint = scenario.initial;
         endpoint.apply_parameter_evolve_step(scenario.flow, scenario.timing.parameter_dependent_evolution_time);
-        for (auto kind: {CrossingKind::DEGENERATE, CrossingKind::CONCAVE}) {
+        for (auto kind: {CrossingGeometry::UNRESOLVED, CrossingGeometry::CONCAVE}) {
             const CrossingData uncertain(kind);
             List<HybridEnclosure> outer{endpoint}, inner{endpoint};
             apply_flow_guard(outer, scenario.context(event, uncertain, Semantics::UPPER),
@@ -265,9 +265,11 @@ class TestHybridStepContracts : public Testing::ContextFixture {
                                      Dyadic(0.5_x));
         const auto event = scenario.transition(EventKind::INVARIANT, scenario.y - sqr(scenario.x));
         scenario.initial.new_invariant(event.event, event.guard_function);
-        CrossingData crossing(CrossingKind::GRAZING);
-        crossing.critical_time = -scenario.factory.create_coordinate(scenario.initial.parameter_domain(), 0u);
-        crossing.guard_range_at_critical_time = scenario.factory.create_coordinate(scenario.initial.parameter_domain(), 1u).range();
+        const auto critical = -scenario.factory.create_coordinate(scenario.initial.parameter_domain(), 0u);
+        auto critical_bounds = scenario.initial.state_bounding_box();
+        critical_bounds[0u] = UpperIntervalType(0, 0);
+        const CrossingData crossing(GuardMaximumCertificate(critical,
+                                                            scenario.factory.create_coordinate(scenario.initial.parameter_domain(), 1u).range(), critical_bounds));
         auto endpoint = scenario.initial;
         endpoint.apply_parameter_evolve_step(scenario.flow, scenario.timing.parameter_dependent_evolution_time);
         List<HybridEnclosure> branches{endpoint, endpoint};
@@ -448,18 +450,18 @@ class TestHybridStepContracts : public Testing::ContextFixture {
         Map<DiscreteEvent, TransitionData> transitions;
         Set<DiscreteEvent> active;
         auto timing = probe._estimate_timing(active, Real(2), flow, crossings, transitions, initial);
-        for (auto kind: {CrossingKind::NEGATIVE, CrossingKind::POSITIVE, CrossingKind::DECREASING}) {
+        for (auto kind: {CrossingGeometry::NEGATIVE, CrossingGeometry::POSITIVE, CrossingGeometry::DECREASING}) {
             TransitionData transition;
             transition.event = event;
             transition.event_kind = EventKind::URGENT;
-            RealExpression guard = kind == CrossingKind::DECREASING ? -RealExpression(x)
-                                                                    : RealExpression(kind == CrossingKind::POSITIVE ? 1 : -1);
+            RealExpression guard = kind == CrossingGeometry::DECREASING ? -RealExpression(x)
+                                                                        : RealExpression(kind == CrossingGeometry::POSITIVE ? 1 : -1);
             transition.guard_function = make_function(space, guard);
             const auto candidate = make_jump_candidate(
                 {initial, flow, transition, CrossingData(kind), Semantics::UPPER, probe.function_factory()}, dynamic, timing);
             const auto& jump = candidate.enclosure;
             ARIADNE_TESTING_EXPECT_EQUAL(jump.number_of_parameters(), initial.number_of_parameters());
-            ARIADNE_TESTING_EXPECT_EQUAL(definitely(jump.is_empty()), kind == CrossingKind::NEGATIVE);
+            ARIADNE_TESTING_EXPECT_EQUAL(definitely(jump.is_empty()), kind == CrossingGeometry::NEGATIVE);
         }
     }
 
@@ -523,8 +525,8 @@ class TestHybridStepContracts : public Testing::ContextFixture {
         // this step. Creep must preserve the exact final-time termination.
         initial.set_time_function(factory.create_constant(initial.parameter_domain(), Real(0)));
         DiscreteEvent event("crossing");
-        CrossingData crossing(CrossingKind::TRANSVERSE);
-        crossing.crossing_time = 0.125_x - factory.create_coordinate(flow.space_domain(), 0u);
+        const CrossingData crossing(CrossingGeometry::INCREASING, CrossingTimeCertificate(
+                                                                      0.125_x - factory.create_coordinate(flow.space_domain(), 0u)));
         crossings.insert(event, crossing);
         TransitionData transition;
         transition.event = event;
@@ -542,7 +544,8 @@ class TestHybridStepContracts : public Testing::ContextFixture {
         // Conservative active-event detection may retain a future crossing.
         // It must not shorten a step toward a guard that is not yet reached.
         initial.set_time_function(factory.create_constant(initial.parameter_domain(), Real(0)));
-        crossings[event].crossing_time = 3 - factory.create_coordinate(flow.space_domain(), 0u);
+        crossings[event] = CrossingData(CrossingGeometry::INCREASING, CrossingTimeCertificate(
+                                                                          3 - factory.create_coordinate(flow.space_domain(), 0u)));
         transitions[event].guard_function = make_function(space, x - 3);
         auto future = probe._estimate_timing(active, Real(2), flow, crossings, transitions, initial);
         ARIADNE_TESTING_EXPECT_EQUAL(future.step_kind, StepKind::CONSTANT_EVOLUTION_TIME);
@@ -578,23 +581,22 @@ class TestHybridStepContracts : public Testing::ContextFixture {
         transition.event = event;
         transition.event_kind = static_cast<EventKind>(255u);
         transition.guard_function = make_function(space, x);
-        CrossingData crossing(CrossingKind::DEGENERATE);
+        CrossingData crossing(CrossingGeometry::UNRESOLVED);
         ARIADNE_TESTING_EXPECT_EXCEPTION(make_jump_candidate(
             {target, flow, transition, crossing, Semantics::UPPER, probe.function_factory()}, dynamic, timing));
         transition.event_kind = EventKind::URGENT;
-        crossing.crossing_kind = static_cast<CrossingKind>(255u);
-        ARIADNE_TESTING_EXPECT_EXCEPTION(make_jump_candidate(
-            {target, flow, transition, crossing, Semantics::UPPER, probe.function_factory()}, dynamic, timing));
+        ARIADNE_TESTING_EXPECT_THROWS(std::invalid_argument,
+                                      CrossingData(static_cast<CrossingGeometry>(255u)));
+        ARIADNE_TESTING_EXPECT_THROWS(std::invalid_argument,
+                                      (void)CrossingTimeCertificate(ValidatedScalarMultivariateFunctionPatch{}));
 
         auto elapsed = probe.function_factory().create_constant(initial.parameter_domain(), 0.5_x);
         List<HybridEnclosure> sets{initial};
-        ARIADNE_TESTING_EXPECT_EXCEPTION(apply_flow_guard(sets,
-                                                          {initial, flow, transition, crossing, Semantics::UPPER, probe.function_factory()}, elapsed));
-        crossing.crossing_kind = CrossingKind::DEGENERATE;
+        crossing = CrossingData(CrossingGeometry::UNRESOLVED);
         ARIADNE_TESTING_EXPECT_EXCEPTION(apply_flow_guard(sets,
                                                           {initial, flow, transition, crossing, static_cast<Semantics>(255u), probe.function_factory()}, elapsed));
-        for (auto kind: {CrossingKind::NEGATIVE, CrossingKind::POSITIVE, CrossingKind::DECREASING}) {
-            crossing.crossing_kind = kind;
+        for (auto kind: {CrossingGeometry::NEGATIVE, CrossingGeometry::POSITIVE, CrossingGeometry::DECREASING}) {
+            crossing = CrossingData(kind);
             auto untouched = sets;
             apply_flow_guard(untouched,
                              {initial, flow, transition, crossing, Semantics::UPPER, probe.function_factory()}, elapsed);
@@ -633,9 +635,11 @@ class TestHybridStepContracts : public Testing::ContextFixture {
         transition.event = event;
         transition.event_kind = EventKind::INVARIANT;
         transition.guard_function = make_function(space, y - sqr(x));
-        CrossingData crossing(CrossingKind::GRAZING);
-        crossing.critical_time = -factory.create_coordinate(flow.space_domain(), 0u);
-        crossing.guard_range_at_critical_time = factory.create_coordinate(flow.space_domain(), 1u).range();
+        const auto critical = -factory.create_coordinate(flow.space_domain(), 0u);
+        auto critical_bounds = initial.state_bounding_box();
+        critical_bounds[0u] = UpperIntervalType(0, 0);
+        const CrossingData crossing(GuardMaximumCertificate(critical,
+                                                            factory.create_coordinate(flow.space_domain(), 1u).range(), critical_bounds));
         apply_flow_guard(sets,
                          {initial, flow, transition, crossing, Semantics::UPPER, probe.function_factory()}, elapsed);
         // x only increases from x>=1, so y-x^2 stays strictly negative.

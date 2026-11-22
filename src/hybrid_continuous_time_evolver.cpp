@@ -41,6 +41,7 @@
 #include "function/function.hpp"
 #include "function/function_model.hpp"
 #include "function/function_patch.hpp"
+#include "hybrid_crossing_analysis.hpp"
 #include "hybrid_transition_handlers.hpp"
 #include "integration/integrator.hpp"
 #include "integration/selected_inclusion_integrator.hpp"
@@ -89,45 +90,6 @@ typedef Vector<ExactIntervalType> ExactIntervalVectorType;
 
 Set<DiscreteEvent> blocking_events(const Map<DiscreteEvent, TransitionData>& transitions);
 Set<DiscreteEvent> activating_events(const Map<DiscreteEvent, TransitionData>& transitions);
-
-OutputStream& operator<<(OutputStream& os, const CrossingKind& crk) {
-    switch (crk) {
-        case CrossingKind::DEGENERATE:
-            os << "DEGENERATE";
-            break;
-        case CrossingKind::POSITIVE:
-            os << "POSITIVE";
-            break;
-        case CrossingKind::NEGATIVE:
-            os << "NEGATIVE";
-            break;
-        case CrossingKind::MONOTONE:
-            os << "MONOTONE";
-            break;
-        case CrossingKind::INCREASING:
-            os << "INCREASING";
-            break;
-        case CrossingKind::DECREASING:
-            os << "DECREASING";
-            break;
-        case CrossingKind::CONVEX:
-            os << "CONVEX";
-            break;
-        case CrossingKind::CONCAVE:
-            os << "CONCAVE";
-            break;
-        case CrossingKind::TRANSVERSE:
-            os << "TRANSVERSE";
-            break;
-        case CrossingKind::GRAZING:
-            os << "GRAZING";
-            break;
-        default:
-            os << "unknown";
-            break;
-    }
-    return os;
-}
 
 OutputStream& operator<<(OutputStream& os, const StepKind& stpk) {
     switch (stpk) {
@@ -205,60 +167,6 @@ OutputStream& operator<<(OutputStream& os, const TimingData& timing) {
     return os;
 }
 
-OutputStream& operator<<(OutputStream& os, const CrossingData& crossing_data) {
-    os << "{kind=" << crossing_data.crossing_kind;
-    if (crossing_data.crossing_kind == CrossingKind::TRANSVERSE) {
-        os << ", crossing_time=" << crossing_data.crossing_time;
-    }
-    if (crossing_data.crossing_kind == CrossingKind::GRAZING) {
-        os << ", critical_time=" << crossing_data.critical_time;
-    }
-    os << "}";
-    return os;
-}
-
-template<class T>
-struct LogOutput {
-    const T& _ref;
-    operator const T&() const { return _ref; }
-};
-template<class T>
-LogOutput<T> log_output(const T& t) { return LogOutput<T>{t}; }
-
-template<class K, class V>
-OutputStream& operator<<(OutputStream& os, const LogOutput<Map<K, V>>& map_output) {
-    const Map<K, V>& map = map_output;
-    os << "{";
-    for (auto iter = map.begin(); iter != map.end(); ++iter) {
-        os << (iter == map.begin() ? "" : ",") << iter->first << ":" << log_output(iter->second);
-    }
-    return os << "}";
-}
-template<class T>
-OutputStream& operator<<(OutputStream& os, const LogOutput<List<T>>& lst) {
-    os << "[";
-    for (SizeType i = 0; i != lst._ref.size(); ++i) {
-        os << (i == 0 ? "" : ",") << LogOutput<T>{lst._ref[i]};
-    }
-    return os << "]";
-}
-inline OutputStream& operator<<(OutputStream& os, const LogOutput<CrossingData>& crossing_data_output) {
-    const CrossingData& crossing_data = crossing_data_output._ref;
-    os << "{kind=" << crossing_data.crossing_kind;
-    if (crossing_data.crossing_kind == CrossingKind::TRANSVERSE) {
-        os << ",crossing_time_range=" << crossing_data.crossing_time.range();
-        os << ",crossing_time_error=" << crossing_data.crossing_time.error();
-    } else if (crossing_data.crossing_kind == CrossingKind::GRAZING) {
-        os << ",critical_time_range=" << crossing_data.critical_time.range();
-        os << ",critical_time_error=" << crossing_data.critical_time.error();
-        os << ",guard_range_at_critical_time=" << crossing_data.guard_range_at_critical_time;
-        os << ",evolve_bounds_at_critical_time=" << crossing_data.evolve_bounds_at_critical_time;
-    }
-
-    return os;
-}
-
-// Test if an event 'blocks' continuous evolution.
 Bool is_blocking(EventKind evk) { return EvolutionDetail::transition_policy(evk).blocks_flow; }
 
 Bool is_activating(EventKind evk) { return EvolutionDetail::transition_policy(evk).activates_reset; }
@@ -671,197 +579,11 @@ Set<DiscreteEvent>
 }
 
 Map<DiscreteEvent, CrossingData>
-    HybridContinuousTimeEvolverBase::
-        _compute_crossings(const Set<DiscreteEvent>& active_events,
-                           const EffectiveVectorMultivariateFunction& dynamic,
-                           const Map<DiscreteEvent, EffectiveScalarMultivariateFunction>& guards,
-                           const FlowFunctionModel& flow,
-                           const HybridEnclosure& initial_set) const {
-    LOGGING_SCOPE_CREATE;
-
-    const EquationSolverInterface& solver = *this->_solver_ptr;
-
-    Map<DiscreteEvent, CrossingData> crossings;
-
-    ExactBoxType flow_spacial_domain = project(flow.domain(), range(0, flow.argument_size() - 1u));
-    ExactIntervalType flow_time_domain = flow.domain()[flow.argument_size() - 1u];
-    UpperBoxType flow_bounds = flow.range();
-    for (Set<DiscreteEvent>::ConstIterator event_iter = active_events.begin();
-         event_iter != active_events.end(); ++event_iter) {
-        const DiscreteEvent event = *event_iter;
-        LOGGING_PRINTLN_AT(1, "event=" << event);
-        const EffectiveScalarMultivariateFunction& guard = guards[event];
-        LOGGING_PRINTLN_AT(2, "guard=" << guard);
-
-        // Compute the value of the guard function g over the flow of $\dot(x)=f(x)$
-        UpperIntervalType guard_range = apply(guard, flow_bounds);
-        LOGGING_PRINTLN_AT(2, "guard_range=" << guard_range);
-        // Compute the derivative of the guard function g along flow lines of $\dot(x)=f(x)$
-        // This is given by the Lie derivative at a point x, defined as $L_{f}g(x) = (\nabla g\cdot f)(x)$
-        EffectiveScalarMultivariateFunction guard_derivative = lie_derivative(guard, dynamic);
-        UpperIntervalType guard_derivative_range = apply(guard_derivative, flow_bounds);
-        LOGGING_PRINTLN_AT(2, "guard_derivative_range=" << guard_derivative_range);
-        if (definitely(guard_derivative_range.lower_bound() > hybrid_zero)) {
-            // If the derivative $L_{f}g$is strictly positive over the bounding box for the flow,
-            // then the guard function is strictly increasing.
-            // There is at most one crossing with the guard, and the time of this
-            // crossing must be the time of the event along the trajectory.
-            // The crossing time $\gamma(x_0)$ given the initial state can usually be computed
-            // by solving the equation $g(\phi(x_0,\gamma(x_0))) = 0$
-            ValidatedScalarMultivariateFunctionPatch crossing_time;
-            try {
-                crossing_time = solver.implicit(compose(guard, flow), flow_spacial_domain, flow_time_domain);
-                if (possibly(crossing_time.error() > 1e-8_pr)) {
-                    LOGGING_PRINTLN_AT(2, event << ": crossing_time: error=" << crossing_time.error() << ", range=" << crossing_time.range());
-                }
-                crossings[event] = CrossingData(CrossingKind::TRANSVERSE, crossing_time);
-                LOGGING_PRINTLN_AT(2, "crossing_time=" << crossing_time);
-            } catch (const EquationSolverException& e) {
-                // If the crossing time cannot be computed, then we can still
-                // use the fact that the crossing occurs as soon as $g(x(t))=0$.
-                LOGGING_PRINTLN_AT(2, "Error in computing crossing time for event " << *event_iter << ": " << e.what());
-                crossings[event] = CrossingData(CrossingKind::INCREASING);
-            } catch (const std::runtime_error& e) {
-                LOGGING_PRINTLN_AT(2, "Unexpected error in computing crossing time for event " << *event_iter << ": " << e.what());
-                throw;
-            }
-        } else if (definitely(guard_derivative_range.upper_bound() < hybrid_zero)) {
-            // If the guard derivative is strictly negative over the bounding box for the flow,
-            // then the guard function is strictly decreasing.
-            // This means that the event is either initially active, or does not occur.
-            // There is no need to compute a crossing time.
-            crossings[event] = CrossingData(CrossingKind::DECREASING);
-        } else {
-            // If the derivative of the guard function along flow lines cannot be shown
-            // to have a definite sign over the entire flow box, then try to compute
-            // the sign of the second derivative $L_{f}^{2}g(x)=L_{f}L_{f}g(x)$.
-            ValidatedScalarMultivariateFunction guard_second_derivative = lie_derivative(guard_derivative, dynamic);
-            UpperIntervalType guard_second_derivative_bounds_range = apply(guard_second_derivative, flow_bounds);
-            UpperIntervalType guard_second_derivative_flow_range = compose(guard_second_derivative, flow).range();
-            UpperIntervalType guard_second_derivative_range = intersection(guard_second_derivative_bounds_range, guard_second_derivative_flow_range);
-            LOGGING_PRINTLN_AT(2, "guard_second_derivative_range=" << guard_second_derivative_range);
-            if (definitely(guard_second_derivative_range.lower_bound() > hybrid_zero)) {
-                // If the second derivative is positive, then either
-                //    (i) the event is immediately active
-                //   (ii) the event is never active, or
-                //  (iii) the event is initially inactive, but becomes active
-                //        due to a transverse crossing.
-                //   (iv) the initial state is on the boundary of the guard
-                //        set, possibly with the flow tangent to this set
-                // It is hard compute the crossing time, even in case (iii),
-                // due to the singularity due to the tangency in (iv). However,
-                // we do know that in (iii), the event occurs when $t>0$ and
-                // $g(\phi(x_0,t))=0$. The crossing time is not computed.
-                crossings[event] = CrossingData(CrossingKind::CONVEX);
-            } else if (definitely(guard_second_derivative_range.upper_bound() < hybrid_zero)) {
-                // If the second derivative is negative, then the guard
-                // values $g(x(t))$ are concave along flow lines. There are
-                // five main cases:
-                //   (i) The event is initially active.
-                //  (ii) The event is not initially active, but later becomes active.
-                // (iii) The event is never active, but would become active if
-                //       flowing backwards in time.
-                //  (iv) The event is never active, and the maximum value of
-                //       the guard along the flow lines is zero.
-                // Additionally, there is the degenerate case
-                //  (vi) At some point in the (forward) flow, the state touches
-                //       the guard set at a point of tangency.
-                // Due to the presence of the tangency, the event time is
-                // not a smooth function of the initial state. Further, since
-                // some trajectories cross the boundary of the guard set twice,
-                // the condition $g(x(t))=0$ is not sufficient for determining
-                // the jump time. A necessary and sufficient condition,
-                // assuming the event is not initially active, is that
-                // $g(x)=0$ and $L_{f}g(x)\geq 0$. Alternatively, we can compute
-                // the <em>critical time</em> $|mu(x_0) at which the guard value
-                // reaches a maximum. A necessary and sufficient condition
-                // is then $g(\phi(x_0,t))=0$ and $t<= \mu(x_0)$.
-                //   Note that while $g(\phi(x_0,t))=0$ and $L_{f}f(\phi(x_0,t))\geq0$ is a
-                // necessary and sufficient condition for a crossing, there
-                // is no necessary and sufficient condition for no crossing
-                // which does not involve the critical time. A necessary and
-                // sufficient condition for no crossing involving the critical
-                // time is $(g(\phi(x_0,t))<=0 /\ t<=\mu(x_0)) \/ g(\phi(x_0,\mu(x_0)))<=0$
-                try {
-                    ValidatedScalarMultivariateFunctionPatch critical_time = solver.implicit(compose(guard_derivative, flow), flow_spacial_domain, flow_time_domain);
-                    UpperIntervalType critical_time_range = critical_time.range();
-                    LOGGING_PRINTLN_AT(2, "critical_time_range=" << critical_time_range);
-                    if (possibly(critical_time.error() > 1e-8_pr)) {
-                        LOGGING_PRINTLN_AT(2, event << ": critical_time: error=" << critical_time.error() << ", range=" << critical_time.range());
-                    }
-
-                    HybridEnclosure evolve_set_at_critical_time = initial_set;
-                    evolve_set_at_critical_time.apply_space_evolve_step(flow, critical_time);
-                    ValidatedVectorMultivariateFunctionPatch identity = factory(critical_time).create_identity();
-                    // ValidatedVectorFunctionModelDP::identity(critical_time.domain(),critical_time.sweeper());
-                    UpperBoxType evolve_bounds_at_critical_time = evolve_set_at_critical_time.bounding_box().euclidean_set();
-                    UpperIntervalType guard_range_at_critical_time = intersection(apply(guard, evolve_bounds_at_critical_time), evolve_set_at_critical_time.range_of(guard));
-                    // Less accurate version: guard_range_at_critical_time=evolve_set_at_critical_time.range_of(guard);
-                    LOGGING_PRINTLN_AT(2, "evolve_bounds_at_critical_time=" << evolve_bounds_at_critical_time);
-                    LOGGING_PRINTLN_AT(2, "guard_range_at_critical_time=" << guard_range_at_critical_time);
-                    if (definitely(guard_range_at_critical_time.upper_bound() < 0)) {
-                        // No crossing
-                        // Omit this event from the returned crossing map.
-                    } else if (definitely(guard_range_at_critical_time.lower_bound() > 0)) {
-                        LOGGING_PRINTLN_AT(2, "guard range eventually positive");
-                        // Transverse crossing
-                        // FIXME: Find a more reliable way of solving the implicit equation for the crossing time
-                        //   which takes into account the fact that the derivative over the domain goes negative
-                        static const Rational INTERVAL_REDUCTION_FACTOR(15, 16);
-                        ValidatedScalarMultivariateFunctionPatch reduced_critical_time = INTERVAL_REDUCTION_FACTOR * critical_time;
-                        HybridEnclosure evolve_set_at_reduced_critical_time = initial_set;
-                        evolve_set_at_reduced_critical_time.apply_space_evolve_step(flow, reduced_critical_time);
-                        HybridEnclosure evolve_set_at_upper_reduced_critical_time = initial_set;
-                        evolve_set_at_upper_reduced_critical_time.apply_fixed_evolve_step(flow, static_cast<StepSizeType>(cast_exact(reduced_critical_time.range().upper_bound())));
-                        LOGGING_PRINTLN_AT(2, "guard_range_at_initial_time=" << initial_set.range_of(guard));
-                        LOGGING_PRINTLN_AT(2, "guard_range_at_reduced_critical_time=" << evolve_set_at_reduced_critical_time.range_of(guard));
-                        LOGGING_PRINTLN_AT(2, "guard_derivative_range_at_initial_time=" << initial_set.range_of(guard_derivative));
-                        LOGGING_PRINTLN_AT(2, "guard_derivative_range_at_upper_reduced_critical_time=" << evolve_set_at_upper_reduced_critical_time.range_of(guard_derivative));
-                        LOGGING_PRINTLN_AT(2, "guard_derivative_range_at_reduced_critical_time=" << evolve_set_at_reduced_critical_time.range_of(guard_derivative));
-                        UpperIntervalType crossing_flow_time_range(0, critical_time_range.upper_bound());
-                        LOGGING_PRINTLN_AT(2, "crossing_flow_time_range=" << crossing_flow_time_range);
-                        ExactIntervalType crossing_flow_time_domain = cast_exact_interval(INTERVAL_REDUCTION_FACTOR * UpperIntervalType(0, critical_time_range.upper_bound()));
-                        LOGGING_PRINTLN_AT(2, "crossing_flow_time_domain=" << crossing_flow_time_domain);
-                        try {
-                            // KrawczykSolver solver=KrawczykSolver(1e-10,20);
-                            // solver.verbosity=9;//this->verbosity;
-                            ValidatedScalarMultivariateFunctionPatch crossing_time = solver.implicit(compose(guard, flow), flow_spacial_domain, crossing_flow_time_domain);
-                            UpperIntervalType crossing_time_range = crossing_time.range();
-                            LOGGING_PRINTLN_AT(2, "crossing_time_range=" << crossing_time_range);
-                            crossings[event] = CrossingData(CrossingKind::TRANSVERSE, crossing_time);
-                        } catch (const EquationSolverException& e) {
-                            LOGGING_PRINTLN_AT(2, "Error in computing crossing time over reduced time interval for event " << *event_iter << ": " << e.what());
-                            // NOTE: Use GRAZING here since this will later put in a block on continuous evolution at critical time.
-                            crossings[event] = CrossingData(CrossingKind::GRAZING);
-                            crossings[event].critical_time = critical_time;
-                            crossings[event].evolve_bounds_at_critical_time = evolve_bounds_at_critical_time;
-                            crossings[event].guard_range_at_critical_time = guard_range_at_critical_time;
-                        }
-                    } else {
-                        crossings[event] = CrossingData(CrossingKind::GRAZING);
-                        crossings[event].critical_time = critical_time;
-                        crossings[event].evolve_bounds_at_critical_time = evolve_bounds_at_critical_time;
-                        crossings[event].guard_range_at_critical_time = guard_range_at_critical_time;
-                    }
-                } catch (const EquationSolverException& e) {
-                    LOGGING_PRINTLN_AT(2, "Error in computing critical time for event " << *event_iter << ":\n  " << e.what());
-                    crossings[event] = CrossingData(CrossingKind::CONCAVE);
-                } catch (const std::runtime_error& e) {
-                    LOGGING_PRINTLN_AT(2, "Unexpected error in computing critical time for event " << *event_iter << ":\n  " << e.what());
-                    crossings[event] = CrossingData(CrossingKind::CONCAVE);
-                }
-            } else {
-                // The crossing cannot be shown to be one of the kinds mentioned
-                // above. A theoretically exact expression for the crossing
-                // set is generally not available.
-                crossings[event] = CrossingData(CrossingKind::DEGENERATE);
-            }
-        }
-    }
-    if (!crossings.empty()) {
-        LOGGING_PRINTLN("crossings: " << log_output(crossings));
-    }
-    return crossings;
+    HybridContinuousTimeEvolverBase::_compute_crossings(
+        const Set<DiscreteEvent>& active_events, const EffectiveVectorMultivariateFunction& dynamic,
+        const Map<DiscreteEvent, EffectiveScalarMultivariateFunction>& guards,
+        const FlowFunctionModel& flow, const HybridEnclosure& initial_set) const {
+    return EvolutionDetail::analyze_crossings(active_events, dynamic, guards, flow, initial_set, *this->_solver_ptr);
 }
 
 Void HybridContinuousTimeEvolverBase::
@@ -1279,7 +1001,7 @@ Void HybridContinuousTimeEvolverBase::
         const EvolutionDetail::HybridGuardContext context{
             starting_set, flow, transition_data, crossing_data, semantics, this->function_factory()};
         EvolutionDetail::apply_flow_guard(reach_sets, context, reach_step_time);
-        if (!EvolutionDetail::defer_endpoint_guard(crossing_data.crossing_kind)) {
+        if (!EvolutionDetail::defer_endpoint_guard(crossing_data)) {
             EvolutionDetail::apply_flow_guard(evolve_sets, context, evolve_step_time);
         }
     }
@@ -1291,7 +1013,7 @@ Void HybridContinuousTimeEvolverBase::
          event_iter != blocking_events.end(); ++event_iter) {
         const TransitionData& transition_data = transitions[*event_iter];
         const CrossingData& crossing_data = crossings[*event_iter];
-        if (EvolutionDetail::defer_endpoint_guard(crossing_data.crossing_kind)) {
+        if (EvolutionDetail::defer_endpoint_guard(crossing_data)) {
             const EvolutionDetail::HybridGuardContext context{
                 starting_set, flow, transition_data, crossing_data, semantics, this->function_factory()};
             EvolutionDetail::apply_flow_guard(evolve_sets, context, evolve_step_time);
@@ -1410,7 +1132,7 @@ Void HybridContinuousTimeEvolverBase::
             }
         }
 
-        LOGGING_PRINTLN_AT(1, event << ": " << transitions[event].event_kind << ", " << crossings[event].crossing_kind);
+        LOGGING_PRINTLN_AT(1, event << ": " << transitions[event].event_kind << ", " << crossings[event].summary());
         // Apply reset
         for (List<HybridEnclosure>::Iterator jump_set_iter = jump_sets.begin(); jump_set_iter != jump_sets.end(); ++jump_set_iter) {
             HybridEnclosure& _jump_set = *jump_set_iter;
@@ -1419,7 +1141,7 @@ Void HybridContinuousTimeEvolverBase::
                 LOGGING_PRINTLN_AT(2, "target=" << target << ", auxiliary_space=" << this->system().continuous_auxiliary_space(target) << ", auxiliary_function=" << this->system().auxiliary_function(target));
                 const TransitionData& transition = transitions[event];
                 _jump_set.apply_reset(event, target, transition.target_space, transition.reset_function, transition.target_auxiliary_space, transition.target_auxiliary_function);
-                result.transition_to(_jump_set, event, transition.event_kind, crossings[event].crossing_kind);
+                result.transition_to(_jump_set, event, transition.event_kind, crossings[event].summary());
                 _step_data.events.insert(event);
                 LOGGING_PRINTLN_AT(1, "jump_set=" << _jump_set);
             }
@@ -1649,18 +1371,17 @@ TimingData
              crossing_iter != crossings.end(); ++crossing_iter) {
             DiscreteEvent event = crossing_iter->first;
             EventKind event_kind = transitions[event].event_kind;
-            CrossingKind crossing_kind = crossing_iter->second.crossing_kind;
-            LOGGING_PRINTLN_AT(1, "Event " << event << ": " << event_kind << ": " << crossing_kind);
+            const auto geometry = crossing_iter->second.geometry();
+            LOGGING_PRINTLN_AT(1, "Event " << event << ": " << event_kind << ": " << geometry);
             if (event_kind != EventKind::PERMISSIVE) {
                 evolve_set.new_invariant(event, transitions[event].guard_function);
             }
             // FIXME: When using permissive crossings, jumps in the step after the crossing time are lost.
             // A hack to fix this is to only creep on non-permissive events. Check that evolution is correct in this case.
             // FIXME: What should we do on increasing but non-transverse crossings?
-            if ((crossing_kind == CrossingKind::TRANSVERSE) // || crossing_kind==CrossingKind::INCREASING)
-                && event_kind != EventKind::PERMISSIVE) {
-                LOGGING_PRINTLN_AT(1, "crossing_time_range=" << crossing_iter->second.crossing_time.range());
-                const ValidatedScalarMultivariateFunctionPatch& crossing_time = crossing_iter->second.crossing_time;
+            if ((crossing_iter->second.crossing_time() != nullptr) && event_kind != EventKind::PERMISSIVE) {
+                LOGGING_PRINTLN_AT(1, "crossing_time_range=" << crossing_iter->second.crossing_time()->time().range());
+                const ValidatedScalarMultivariateFunctionPatch& crossing_time = crossing_iter->second.crossing_time()->time();
                 UpperIntervalType crossing_time_range = crossing_time.range();
                 // Every supported non-permissive event blocks evolution;
                 // the enclosing condition has already excluded PERMISSIVE.
@@ -1739,9 +1460,9 @@ TimingData
              crossing_iter != crossings.end();) {
             DiscreteEvent event = crossing_iter->first;
             EventKind event_kind = transitions[event].event_kind;
-            CrossingKind crossing_kind = crossing_iter->second.crossing_kind;
+            const auto geometry = crossing_iter->second.geometry();
             EffectiveScalarMultivariateFunction guard_function = transitions[event].guard_function;
-            LOGGING_PRINTLN_AT(1, "Event " << event << ": " << event_kind << ": " << crossing_kind);
+            LOGGING_PRINTLN_AT(1, "Event " << event << ": " << event_kind << ": " << geometry);
             if (event_kind != EventKind::PERMISSIVE) {
                 UpperIntervalType guard_range = compose(guard_function, flow).range();
                 ARIADNE_ASSERT(decide(guard_range.lower_bound() < hybrid_zero));

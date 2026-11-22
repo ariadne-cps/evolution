@@ -291,7 +291,7 @@ class TestHybridInclusions : public Testing::ContextFixture {
             HybridAutomaton system;
             system.new_mode(source, OrdinaryDifferentialAlgebraicInclusion(
                                         {dot(x) = u}, RealVariablesBox({-1 <= u <= 1})));
-            system.new_mode(target, {dot(x) = 0});
+            system.new_mode(target, OrdinaryDifferentialAlgebraicEquation({dot(x) = 0}));
             const DiscreteEvent event(kind == EventKind::URGENT ? "urgent" : "permissive");
             system.new_transition(source, event, target, {next(x) = 0}, x >= 0.03125_x, kind);
             for (bool boxes: {false, true}) {
@@ -358,7 +358,7 @@ class TestHybridInclusions : public Testing::ContextFixture {
         HybridAutomaton jumping;
         jumping.new_mode(q, OrdinaryDifferentialAlgebraicInclusion(
                                 {dot(x) = u}, RealVariablesBox({-1 <= u <= 1})));
-        jumping.new_mode(target, {dot(x) = 0});
+        jumping.new_mode(target, OrdinaryDifferentialAlgebraicEquation({dot(x) = 0}));
         jumping.new_transition(q, DiscreteEvent("jump"), target, {next(x) = x},
                                x >= 0, EventKind::URGENT);
         HybridContinuousTimeEvolver cannot_jump(jumping);

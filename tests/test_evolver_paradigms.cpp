@@ -114,7 +114,7 @@ class TestEvolverParadigms : public Testing::ContextFixture {
         RealVariable x("x");
         const DiscreteLocation q(1);
         HybridAutomaton system;
-        system.new_mode(q, {dot(x) = 1});
+        system.new_mode(q, OrdinaryDifferentialAlgebraicEquation({dot(x) = 1}));
         ApproximateHybrid evolver(system);
         evolver.configuration().set_step_size(0.03125);
         std::unique_ptr<HybridContinuousTimeEvolverInterface<ApproximateTag>> sampled(evolver.clone());

@@ -279,7 +279,6 @@ Void apply_guard_creep(
         result.step_kind = StepKind::SPACETIME_DEPENDENT_EVOLUTION_TIME;
         result.finishing_kind = FinishingKind::BEFORE_FINAL_TIME;
     }
-
 }
 
 /** @brief Reduce a spread in clock values only in the absence of crossings. */
@@ -313,7 +312,6 @@ Void apply_clock_unwinding(
         LOGGING_PRINTLN_AT(1, "Unwinding to time " << result.parameter_dependent_finishing_time);
         result.parameter_dependent_evolution_time = result.parameter_dependent_finishing_time - starting_time_function;
     }
-
 }
 
 } // namespace

@@ -77,8 +77,12 @@ certificates are rejected explicitly for that event analysis.
 
 `HybridAutomaton::new_mode(location, equation_or_inclusion)` retains an owned copy
 of the original ODAE or ODAI declaration. `HybridContinuousTimeEvolver` supports
-autonomous inclusion modes without declared fixed parameters or outgoing events,
-under `UPPER` semantics. Select their numerical capability explicitly:
+autonomous inclusion modes without declared fixed parameters, under `UPPER`
+semantics. State invariants and PROGRESS/URGENT/IMPACT guards restrict outer
+reach and endpoint; URGENT/PERMISSIVE/IMPACT can produce conservative reset
+candidates. IMPACT retains the entire closed guard boundary, including
+zero-derivative contacts, without claiming direction or a first-entry time.
+Select their numerical capability explicitly:
 
 ```cpp
 HybridAutomaton automaton;
@@ -97,8 +101,9 @@ no nested continuous Orbit or separate inclusion scheduler is created. At an
 uncertain arrival time, final sections retain the time equality as a constraint
 on state/dwell maps and expose the requested final time as the time map.
 
-Inclusion guards/invariants, timed or fixed-parameter typed modes, and composition
-of typed mode declarations require further capabilities and fail explicitly.
+Timed or fixed-parameter hybrid modes and composition of typed mode declarations
+require further capabilities and fail explicitly. Inclusion guard intersections
+may retain spurious transitions and never imply full-source activation.
 Inclusions reject `LOWER`, including at zero horizon. Input axes accumulate
 between steps; numerical reconditioning protects all carried fixed-parameter
 axes and allows state/time error axes in its parameter-count limit. Switching
@@ -165,8 +170,12 @@ wider extension. Unsupported capabilities fail explicitly.
 `ContinuousTimeSimulator` simulates autonomous equations without constant
 parameters; `HybridContinuousTimeSimulator` simulates hybrid systems. These
 names also apply to their configuration classes, headers and Python exports.
-Support for inclusions and timed or parameterised equations in the simulators,
-and inclusion support in hybrid evolution, remain separate next steps.
+Simulator support for inclusions and timed or parameterised dynamics remains
+planned. The [four-family design](doc/system_families_design.md) also plans native
+discrete and hybrid discrete-time simulation/evolution, shared infrastructure,
+and explicit continuous-to-discrete converters. Those new APIs and converters
+are not implemented yet. Full Python/C++ tutorial parity remains the final
+Evolution activity.
 
 Evolution uses the Git submodules [System](https://github.com/ariadne-cps/system), [Integration](https://github.com/ariadne-cps/integration), [Equation Solving](https://github.com/ariadne-cps/equation-solving), [Tree](https://github.com/ariadne-cps/tree), and [Build](https://github.com/ariadne-cps/build). The C++ test suites additionally use [Ariadne Testing](https://github.com/ariadne-cps/testing), pinned as the test-only submodule `ss/tst`. Each registered test runs with a fresh fixture, retaining the original mathematical checks and diagnostic variants.
 

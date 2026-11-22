@@ -287,8 +287,8 @@ HybridFlowGuardCapability flow_guard_capability(const CrossingData& crossing, Se
         case CrossingGeometry::CONCAVE:
         case CrossingGeometry::UNRESOLVED:
             return semantics == Semantics::UPPER
-                       ? HybridFlowGuardCapability{HybridFlowGuardMethod::TWO_SAMPLES, CrossingEvidenceKind::NONE, true}
-                       : HybridFlowGuardCapability{HybridFlowGuardMethod::DISCARD, CrossingEvidenceKind::NONE, false};
+                     ? HybridFlowGuardCapability{HybridFlowGuardMethod::TWO_SAMPLES, CrossingEvidenceKind::NONE, true}
+                     : HybridFlowGuardCapability{HybridFlowGuardMethod::DISCARD, CrossingEvidenceKind::NONE, false};
         case CrossingGeometry::NEGATIVE:
         case CrossingGeometry::POSITIVE:
         case CrossingGeometry::DECREASING:
@@ -319,8 +319,8 @@ HybridJumpGuardCapability jump_guard_capability(EventKind event, const CrossingD
             return {HybridJumpGuardMethod::DIRECTED_BOUNDARY, CrossingEvidenceKind::NONE, true, true};
         case CrossingGeometry::UNRESOLVED:
             return semantics == Semantics::UPPER
-                       ? HybridJumpGuardCapability{HybridJumpGuardMethod::DIRECTED_BOUNDARY, CrossingEvidenceKind::NONE, true, true}
-                       : HybridJumpGuardCapability{HybridJumpGuardMethod::DISCARD, CrossingEvidenceKind::NONE, false, impact};
+                     ? HybridJumpGuardCapability{HybridJumpGuardMethod::DIRECTED_BOUNDARY, CrossingEvidenceKind::NONE, true, true}
+                     : HybridJumpGuardCapability{HybridJumpGuardMethod::DISCARD, CrossingEvidenceKind::NONE, false, impact};
         case CrossingGeometry::NEGATIVE:
         case CrossingGeometry::POSITIVE:
         case CrossingGeometry::DECREASING:
@@ -343,8 +343,8 @@ HybridInitialGuardActivation classify_initial_guard(
     HybridEnclosure candidate = invariant_valid_source;
     candidate.new_activation(transition.event, transition.guard_function);
     return definitely(candidate.is_empty())
-               ? HybridInitialGuardActivation::EXCLUDED
-               : HybridInitialGuardActivation::UNRESOLVED;
+             ? HybridInitialGuardActivation::EXCLUDED
+             : HybridInitialGuardActivation::UNRESOLVED;
 }
 
 bool permits_initial_reset(HybridInitialGuardActivation activation, Semantics semantics) {

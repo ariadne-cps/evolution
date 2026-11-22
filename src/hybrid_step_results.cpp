@@ -38,7 +38,7 @@ HybridStepPublication publish_step_contributions(
     LOGGING_SCOPE_CREATE;
     HybridStepPublication publication;
     if (timing_data.finishing_kind == FinishingKind::AT_FINAL_TIME) {
-        for (const auto& branch : branches) {
+        for (const auto& branch: branches) {
             const HybridEnclosure& evolve_set = branch.reported;
             if (!definitely(evolve_set.is_empty())) {
                 LOGGING_PRINTLN_AT(1, "final_set=" << evolve_set);
@@ -52,7 +52,7 @@ HybridStepPublication publish_step_contributions(
             result.record_reach(reach_set);
         }
     } else { // (timing_data.finishing_kind!=AT_FINAL_TIME)
-        for (auto& branch : branches) {
+        for (auto& branch: branches) {
             HybridEnclosure& evolve_set = branch.reported;
             HybridEnclosure& next_working_set = branch.continuation;
             UpperIntervalType evolve_set_time_range = evolve_set.time_range();

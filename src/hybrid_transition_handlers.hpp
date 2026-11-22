@@ -28,9 +28,9 @@ HybridTransitionPolicy transition_policy(EventKind);
  *  it never certifies a LOWER transition. This is not a collective tree check.
  */
 enum class HybridInitialGuardActivation : std::uint8_t {
-    EXCLUDED,    //!< Intersection with the active side is definitely empty.
-    UNRESOLVED,  //!< A candidate may activate, but not the whole source is certified.
-    FULL_SOURCE  //!< The entire represented source satisfies the guard.
+    EXCLUDED,   //!< Intersection with the active side is definitely empty.
+    UNRESOLVED, //!< A candidate may activate, but not the whole source is certified.
+    FULL_SOURCE //!< The entire represented source satisfies the guard.
 };
 
 /** @brief Use guard intersection for possibility and universal satisfaction for coverage. */

@@ -1,8 +1,10 @@
 # Hybrid transition handlers
 
 The hybrid evolver separates numerical capabilities, event policy, crossing
-analysis, geometric guard operations and orchestration. Refactoring these
-responsibilities precedes further ODAI event support. Event policies, guard handlers and crossing analysis are separate private
+analysis, geometric guard operations and orchestration. The broader
+[four-family roadmap](system_families_design.md) places this work before the
+remaining continuous capabilities, discrete hybrid systems and simulators.
+Event policies, guard handlers and crossing analysis are separate private
 components. Public crossing data distinguish geometry from typed numerical
 evidence while retaining the numerical rules and constraint order of the
 equation path.
@@ -187,8 +189,9 @@ and `.cpp`. The protected `_apply_guard` and `_apply_guard_step` hooks are remov
 all repository callers use the private operations directly. There are no naming
 aliases or compatibility wrappers for those removed hooks. Crossing analysis
 and typed evidence are implemented in the dedicated crossing components. Timing decomposition, paired continuation results and the capability
-audit have since been implemented. ODAI event capabilities remain unavailable
-without mathematical certificates.
+audit have since been implemented. ODAI UPPER events use conservative outer
+guard intersections; first-entry/trajectory capabilities and LOWER integration
+remain unavailable without further mathematical certificates.
 
 The Debug build treats warnings as errors. Validation passes all 30 Evolution
 CTest targets, including Python, and the 13 System C++ targets in the consuming
@@ -295,23 +298,24 @@ does not imply tangency, and `UNRESOLVED` does not imply degeneracy.
 | Mode | UPPER | LOWER | Events / guards / invariants |
 | --- | --- | --- | --- |
 | Autonomous state-only ODAE, no fixed parameters | Existing validated local equation method | Existing equation method (no new inner claim) | Existing event policy and crossing classifier, subject to certified local flow layout |
-| Autonomous ODAI, no fixed parameters | Explicit structured or box method; necessary invariant restrictions and conservative urgent/permissive jump candidates | Rejected, including at time zero | State invariants, PROGRESS blockers and UPPER urgent/permissive guards; IMPACT still rejected |
+| Autonomous ODAI, no fixed parameters | Explicit structured or box method; necessary blocking restrictions and conservative urgent/permissive/impact jump candidates | Rejected, including at time zero | State invariants and PROGRESS/URGENT/IMPACT blockers; UPPER urgent/permissive active-side and impact-boundary candidates |
 | Explicit-time or fixed-parameter ODAE/ODAI modes | Rejected by current hybrid mode validation | Rejected | Not reached |
 
 ODAI with arbitrary measurable input functions lacks, at present, a
 certified trajectory-level guard derivative and first-entry/maximum
 analysis compatible with this equation classifier. Neither an outer box
 nor an independent endpoint certificate supplies these properties.
-Conservative UPPER ODAI transitions and PROGRESS restrictions can use outer reach/guard intersection without such certificates; certified-first-entry and LOWER transitions still require new evidence. Future support
-requires an *explicit, solver-provided validated event capability* and
-a separate proof of the semantics it supports; changing only a dispatch
-switch is mathematically unsound.
+Conservative UPPER ODAI transitions and blockers can use outer reach/guard
+intersection without such certificates. IMPACT uses the full closed boundary
+without directional exclusion, as detailed below. Certified first entry and
+LOWER transitions require an explicit compatible numerical capability and a
+separate proof of the semantics it supports.
 
 The focused handler contracts exercise geometric witnesses, root-time
 maps, ambiguous sampled/discard behavior, impact direction, branch order,
-and incompatible certificate rejection. The inclusion gate tests reject
-each kind of declared source event before attempting integration, and
-verify that event-free autonomous ODAI remains supported as before.
+and incompatible certificate rejection. The inclusion tests exercise state-only
+event restrictions and conservative UPPER jumps with both explicit integration choices; unsupported LOWER, time
+and fixed-parameter capabilities are rejected before integration.
 
 ## Initial ODAI capability: state invariants under UPPER
 
@@ -379,9 +383,9 @@ enclosures. The same initial-event and invariant filtering phases apply.
 `EventKind::PROGRESS` is supported as a blocking state constraint
 on the validated outer reach and endpoint, without reset and without a
 first-hit certificate. The initial/zero-horizon source is not
-retroactively constrained by PROGRESS. `EventKind::IMPACT` remains
-unsupported because its directional condition requires additional
-proof. ODAI LOWER remains explicitly rejected.
+retroactively constrained by PROGRESS. IMPACT support is described separately
+below: it uses only the necessary boundary condition and does not claim a
+directional certificate. ODAI LOWER remains explicitly rejected.
 
 The analytic regression covers `x'=u`, `u in [-1,1]`,
 guard `x>=1/32`, and reset `x'=0`, with both URGENT and
@@ -394,8 +398,8 @@ terminal source slice before initial event processing and does not schedule
 a transition. The zero-horizon regression checks termination, not an
 urgent reset. LOWER/PROGRESS/IMPACT are not expanded by this change.
 
-Do not reuse the ODAE first-entry, concavity or impact machinery for
-ODAI without a compatible numerical certificate from the integrator.
+Do not reuse the ODAE first-entry, concavity or directional impact machinery
+for ODAI without a compatible numerical certificate from the integrator.
 
 ## Single-source initial guard activation and deferred collective LOWER verification
 
@@ -498,3 +502,72 @@ not prevent the source branch from reaching the horizon. Neither
 test claims the two simultaneous jumps can both occur along one
 concrete execution. The implementation retains their conservative
 UPPER alternatives and does not add a collective LOWER guard check.
+
+## Conservative UPPER ODAI IMPACT boundary candidates
+
+An admissible impact under the existing blocking event policy lies on the
+closed guard boundary `g(x)=0`. Intersecting a validated outer reach with that
+boundary and the closed time horizon contains every feasible impact state/time.
+As with the urgent/permissive path, it may also contain spurious candidates.
+This necessary-condition construction is sufficient for UPPER possibility;
+it does not certify an actual impact, crossing direction, first entry, smooth
+event-time map or whole-source coverage.
+
+`inclusion_upper_transitions` now extracts IMPACT resets using the common event
+policy. The reach and independent endpoint respect all blocking guards,
+including IMPACT, while each impact candidate explicitly adds `new_guard`
+(`g=0`) before reset. This explicit equality also preserves the helper's
+boundary contract independently of prior flow filtering. No single-valued
+`dynamic_function` or Lie derivative is queried for inclusion modes. The
+ordinary ODAE directional handlers retain their existing numerical rules.
+
+No directional exclusion is applied to these UPPER candidates: measurable
+inputs need not supply a unique velocity or derivative at contact. In
+particular, a tangency with zero guard derivative is retained. Inward contacts,
+repeated boundary contacts and post-first-contact candidates can remain
+spurious; their presence does not assert realizability. The ordinary finite
+event budget still limits reset sequences. LOWER remains rejected, even at
+zero horizon. The terminal zero-horizon phase continues to retain the
+invariant-valid source without scheduling a reset.
+
+Competing invariant, progress, urgent and impact conditions remain on the
+pre-reset enclosure; permissive events do not block. Closed simultaneous
+boundaries preserve separate impact/urgent alternatives without imposing an
+event priority. Candidates retain the original state/time chart until reset,
+then the existing reset operation changes state/auxiliary labels and clears
+dwell time. Transition provenance records IMPACT with no crossing certificate
+and unresolved full-source resolution.
+
+Five analytic regression cases check:
+
+- The exact witness `x(t)=t-2`, `y(t)=0` touches `g=-x^2` at absolute `t=2`
+  with zero derivative. Every post-reset constraint admits the witness;
+  off-boundary points are excluded. Reset dimension, auxiliary output, clock,
+  dwell and event provenance are checked.
+- A horizon before that contact excludes it; the closed horizon at contact
+  retains it.
+- A preceding PROGRESS blocker excludes a later contact, while simultaneous
+  IMPACT and URGENT boundaries retain both reset alternatives.
+- For `x'=1`, `y'=u`, `u in [-1/8,1/8]`, the genuine `u=0` tangency survives
+  both structured and box integration on the flat and tree backends. Zero
+  horizon and unsupported LOWER behavior remain explicit.
+- An ODE reset enters that inclusion at a parameter-dependent arrival time;
+  the subsequent contact retains event order, feasible reset states and the
+  full analytic contact-time interval, including the final horizon.
+
+Arrival and local time can be correlated: a raw time-range box need not itself
+lie below the horizon even when the constrained enclosure does. The regression
+proves the bound from the retained constraints, using `c<=u` and
+`c-time+T>=u` to establish `time<=T`, rather than discarding that correlation or
+relaxing the horizon. Exact analytic contact witnesses separately check the
+closed boundary and exclusion of future/off-boundary points.
+
+
+Validation of this extension uses the macOS Debug build with warnings as errors:
+44/44 integrated CTest targets (31 Evolution including Python and 13 System C++),
+the installed standalone C++ tutorial and the existing Python tutorial.
+`apply-format` and `check-format` pass on all 90 tracked C++ files, also correcting
+formatting accumulated in the preceding hybrid refactoring commits. The remote
+functional CI of the new commit must be checked independently of these local
+results and the five successful functional workflows of predecessor `85c0781`.
+The four-family roadmap and full Python/C++ tutorial parity remain open.

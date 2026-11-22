@@ -244,8 +244,10 @@ class TestHybridInclusions : public Testing::ContextFixture {
             else
                 evolver.set_integrator(base, ZeroApproximation(), ConstantApproximation());
             evolver.configuration().set_maximum_step_size(0.03125);
-            auto initial = evolver.enclosure(HybridExactBox(q, RealSpace({x}),
-                                                             ExactBoxType({{0, 0}})));
+            auto initial = evolver.enclosure(HybridExactBox(q, RealSpace({
+                                                                   x
+            }),
+                                                            ExactBoxType({{0, 0}})));
             const auto orbit = evolver.orbit(initial, HybridTime(0.125_x, 1), Semantics::UPPER);
             ARIADNE_TESTING_REQUIRE(orbit.final().size() > 0u);
             ARIADNE_TESTING_REQUIRE(orbit.reach().size() > 0u);
@@ -273,7 +275,9 @@ class TestHybridInclusions : public Testing::ContextFixture {
         system.new_invariant(q, x <= 0, DiscreteEvent("bound"));
         HybridContinuousTimeEvolver evolver(system);
         evolver.set_integrator(FirstOrderMultifunctionIntegrator());
-        const auto crossing = evolver.orbit(HybridExactBox(q, RealSpace({x}),
+        const auto crossing = evolver.orbit(HybridExactBox(q, RealSpace({
+                                                                  x
+        }),
                                                            ExactBoxType({{-0.125_x, 0.125_x}})),
                                             HybridTime(0u, 1), Semantics::UPPER);
         ARIADNE_TESTING_REQUIRE(crossing.final().size() > 0u);
@@ -302,8 +306,10 @@ class TestHybridInclusions : public Testing::ContextFixture {
                 else
                     evolver.set_integrator(base, ZeroApproximation(), ConstantApproximation());
                 evolver.configuration().set_maximum_step_size(0.03125);
-                const auto orbit = evolver.orbit(HybridExactBox(source, RealSpace({x}),
-                                                               ExactBoxType({{0, 0}})),
+                const auto orbit = evolver.orbit(HybridExactBox(source, RealSpace({
+                                                                            x
+                }),
+                                                                ExactBoxType({{0, 0}})),
                                                  HybridTime(0.125_x, 1), Semantics::UPPER);
                 // Both kinds admit a feasible crossing witness u=1 at t=1/32,
                 // but an outer candidate is not a first-entry certificate.
@@ -314,7 +320,10 @@ class TestHybridInclusions : public Testing::ContextFixture {
                         ARIADNE_TESTING_EXPECT_EQUAL(final.previous_events().size(), 1u);
                         ARIADNE_TESTING_EXPECT_EQUAL(final.previous_events().back(), event);
                         ARIADNE_TESTING_PROVE(definitely(final.inside(
-                            HybridExactBox(target, RealSpace({x}), ExactBoxType({{-0x1p-10_x, 0x1p-10_x}})))));
+                            HybridExactBox(target, RealSpace({
+                                                       x
+                        }),
+                                           ExactBoxType({{-0x1p-10_x, 0x1p-10_x}})))));
                     }
                 }
                 ARIADNE_TESTING_PROVE(jumped);
@@ -346,7 +355,10 @@ class TestHybridInclusions : public Testing::ContextFixture {
                 evolver.set_integrator(base, ZeroApproximation(), ConstantApproximation());
             evolver.configuration().set_maximum_step_size(0.03125);
             const auto initial = evolver.enclosure(
-                HybridExactBox(q, RealSpace({x}), ExactBoxType({{0, 0}})));
+                HybridExactBox(q, RealSpace({
+                                      x
+            }),
+                               ExactBoxType({{0, 0}})));
             const auto orbit = evolver.orbit(initial, HybridTime(0.125_x, 1), Semantics::UPPER);
             ARIADNE_TESTING_REQUIRE(orbit.reach().size() > 0u);
             for (const auto& reach: orbit.reach()) {
@@ -387,9 +399,11 @@ class TestHybridInclusions : public Testing::ContextFixture {
             else
                 evolver.set_integrator(base, ZeroApproximation(), ConstantApproximation());
             evolver.configuration().set_maximum_step_size(0.03125);
-            const auto orbit = evolver.orbit(HybridExactBox(source, RealSpace({x}),
-                                                             ExactBoxType({{0, 0}})),
-                                            HybridTime(0.125_x, 1), Semantics::UPPER);
+            const auto orbit = evolver.orbit(HybridExactBox(source, RealSpace({
+                                                                        x
+            }),
+                                                            ExactBoxType({{0, 0}})),
+                                             HybridTime(0.125_x, 1), Semantics::UPPER);
             bool found_first = false, found_second = false;
             for (const auto& final: orbit.final()) {
                 if (final.location() == left) {
@@ -423,9 +437,11 @@ class TestHybridInclusions : public Testing::ContextFixture {
             else
                 evolver.set_integrator(base, ZeroApproximation(), ConstantApproximation());
             evolver.configuration().set_maximum_step_size(0.03125);
-            const auto orbit = evolver.orbit(HybridExactBox(source, RealSpace({x}),
-                                                             ExactBoxType({{0, 0}})),
-                                            HybridTime(0.125_x, 1), Semantics::UPPER);
+            const auto orbit = evolver.orbit(HybridExactBox(source, RealSpace({
+                                                                        x
+            }),
+                                                            ExactBoxType({{0, 0}})),
+                                             HybridTime(0.125_x, 1), Semantics::UPPER);
             bool source_final = false, target_final = false;
             for (const auto& final: orbit.final()) {
                 source_final = source_final || final.location() == source;
@@ -459,8 +475,8 @@ class TestHybridInclusions : public Testing::ContextFixture {
         const auto initially_valid = guarded.orbit(initial, HybridTime(0u, 1), Semantics::UPPER);
         ARIADNE_TESTING_PROVE(initially_valid.final().size() > 0u);
         ARIADNE_TESTING_EXPECT_THROWS(std::invalid_argument, guarded.orbit(initial, HybridTime(0u, 1), Semantics::LOWER));
-        // A state invariant does not establish entry-time, progress or reset
-        // capabilities; in particular an ODAI jump remains unsupported.
+        // A state invariant does not establish a certified entry time or
+        // LOWER reset capability; possible UPPER jumps use guarded reach.
         const DiscreteLocation target(2);
         HybridAutomaton jumping;
         jumping.new_mode(q, OrdinaryDifferentialAlgebraicInclusion(
@@ -468,9 +484,9 @@ class TestHybridInclusions : public Testing::ContextFixture {
         jumping.new_mode(target, OrdinaryDifferentialAlgebraicEquation({dot(x) = 0}));
         jumping.new_transition(q, DiscreteEvent("jump"), target, {next(x) = x},
                                x >= 0, EventKind::URGENT);
-        HybridContinuousTimeEvolver cannot_jump(jumping);
-        cannot_jump.set_integrator(FirstOrderMultifunctionIntegrator());
-        const auto at_zero = cannot_jump.orbit(initial, HybridTime(0u, 1), Semantics::UPPER);
+        HybridContinuousTimeEvolver possible_jump(jumping);
+        possible_jump.set_integrator(FirstOrderMultifunctionIntegrator());
+        const auto at_zero = possible_jump.orbit(initial, HybridTime(0u, 1), Semantics::UPPER);
         // The initial urgent phase is allowed in UPPER. Its result is a
         // conservative event candidate, never a coverage certificate.
         ARIADNE_TESTING_PROVE(at_zero.final().size() > 0u);

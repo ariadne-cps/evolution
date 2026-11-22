@@ -16,10 +16,11 @@ Void validate_inclusion_event_kinds(const HybridAutomatonInterface& system, Disc
     for (const auto& event: system.events(location)) {
         const auto kind = system.event_kind(location, event);
         if (kind != EventKind::INVARIANT && kind != EventKind::PROGRESS &&
-            kind != EventKind::URGENT && kind != EventKind::PERMISSIVE)
+            kind != EventKind::URGENT && kind != EventKind::PERMISSIVE &&
+            kind != EventKind::IMPACT)
             throw std::invalid_argument(
                 "Hybrid inclusion UPPER currently supports state invariants, PROGRESS blockers and "
-                "conservative URGENT/PERMISSIVE jumps; IMPACT requires dedicated event certificates");
+                "conservative URGENT/PERMISSIVE/IMPACT jumps");
     }
 }
 
@@ -36,8 +37,7 @@ Map<DiscreteEvent, TransitionData> inclusion_upper_transitions(
         } else {
             transition.guard_function = system.guard_function(location, event);
             // A PROGRESS guard blocks continuous flow; it is not a reset.
-            if (transition.event_kind == EventKind::URGENT ||
-                transition.event_kind == EventKind::PERMISSIVE) {
+            if (transition_policy(transition.event_kind).activates_reset) {
                 transition.target = system.target(location, event);
                 transition.target_space = system.continuous_state_space(transition.target);
                 transition.reset_function = system.reset_function(location, event);
@@ -69,7 +69,7 @@ Void apply_inclusion_flow_blockers(
         const auto& transition = item.second;
         // This must match the ODAE event policy: a validated UPPER
         // continuous branch cannot lie strictly beyond an URGENT or
-        // PROGRESS boundary before taking a transition. PERMISSIVE
+        // PROGRESS/IMPACT boundary before taking a transition. PERMISSIVE
         // never blocks flow. Guard intersections remain outer filters.
         if (transition.event_kind != EventKind::INVARIANT &&
             transition_policy(transition.event_kind).blocks_flow &&
@@ -88,11 +88,18 @@ Void publish_inclusion_jump_candidates(
     // nor a full-source urgent transition is inferred from such an intersection.
     for (const auto& item: transitions) {
         const auto& transition = item.second;
-        if (transition.event_kind != EventKind::URGENT &&
-            transition.event_kind != EventKind::PERMISSIVE)
+        if (!transition_policy(transition.event_kind).activates_reset)
             continue;
         HybridEnclosure candidate = reach;
-        candidate.new_activation(transition.event, transition.guard_function);
+        if (transition.event_kind == EventKind::IMPACT) {
+            // Every admissible impact, including a zero-derivative contact,
+            // lies on g=0. Retain the entire boundary intersection: arbitrary
+            // measurable inputs need not supply a unique directional value.
+            // Inward or repeated contacts may remain spurious UPPER jumps.
+            candidate.new_guard(transition.event, transition.guard_function);
+        } else {
+            candidate.new_activation(transition.event, transition.guard_function);
+        }
         if (possibly(candidate.time_range().upper_bound() > final_time))
             candidate.bound_time(final_time);
         if (definitely(candidate.is_empty()))

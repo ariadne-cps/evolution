@@ -44,8 +44,8 @@
 #include "hybrid_crossing_analysis.hpp"
 #include "hybrid_inclusion_invariants.hpp"
 #include "hybrid_step_results.hpp"
-#include "hybrid_transition_handlers.hpp"
 #include "hybrid_timing.hpp"
+#include "hybrid_transition_handlers.hpp"
 #include "integration/integrator.hpp"
 #include "integration/selected_inclusion_integrator.hpp"
 #include "integration/validated_step_integrator.hpp"
@@ -341,8 +341,8 @@ Void HybridContinuousTimeEvolverBase::_validate_mode(DiscreteLocation location, 
         if (inclusion->has_explicit_time() || inclusion->parameter_space().dimension() != 0u)
             throw std::invalid_argument("Hybrid inclusion modes currently require autonomous dynamics without fixed parameters");
         // UPPER may restrict reach by PROGRESS boundaries and construct
-        // conservative URGENT/PERMISSIVE candidates. IMPACT still needs a
-        // dedicated policy; LOWER integration remains unsupported.
+        // conservative URGENT/PERMISSIVE/IMPACT candidates. Boundary-only
+        // impact filtering retains tangencies; LOWER remains unsupported.
         EvolutionDetail::validate_inclusion_event_kinds(this->system(), location);
         if (!this->_inclusion_integrator_ptr && !this->_box_integrator_ptr)
             throw std::invalid_argument("Select an explicit integration method for hybrid inclusion modes");
@@ -893,7 +893,7 @@ Void HybridContinuousTimeEvolverBase::_evolve_inclusion(
                                   : EvolutionDetail::IntegrationStepRepresentation::REQUIRE_STRUCTURED);
     HybridEnclosure endpoint = initial;
     endpoint.replace_continuous_set(applied.evolved);
-    // Necessary state restrictions include invariants, PROGRESS and URGENT
+    // Necessary state restrictions include invariants, PROGRESS, URGENT and IMPACT
     // blockers. They do not certify an inclusion crossing time.
     EvolutionDetail::apply_inclusion_flow_blockers(endpoint, invariants);
     const auto endpoint_time = endpoint.time_range();

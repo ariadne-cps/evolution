@@ -523,9 +523,13 @@ class TestHybridEvolutionBackend : public Testing::ContextFixture {
             StepProbe probe(system);
             HybridTime horizon(1, 1);
             const auto fully_active = probe.enclosure(
-                HybridExactBox(source, space, ExactBoxType({{0.25_x, 0.5_x}})));
+                HybridExactBox(source, space, ExactBoxType({
+                                                  {0.25_x, 0.5_x}
+            })));
             const auto partially_active = probe.enclosure(
-                HybridExactBox(source, space, ExactBoxType({{-0.25_x, 0.25_x}})));
+                HybridExactBox(source, space, ExactBoxType({
+                                                  {-0.25_x, 0.25_x}
+            })));
 
             const auto full = probe._process_working_set(
                 {fully_active, HybridEvolutionPhase::PROCESS_STARTING_EVENTS},
@@ -538,7 +542,7 @@ class TestHybridEvolutionBackend : public Testing::ContextFixture {
                     ARIADNE_TESTING_EXPECT_EQUAL(successor.event_kind, kind);
                     if (kind == EventKind::URGENT)
                         ARIADNE_TESTING_EXPECT_EQUAL(successor.resolution,
-                                                    HybridEvolutionTransitionResolution::FULL_SOURCE);
+                                                     HybridEvolutionTransitionResolution::FULL_SOURCE);
                 }
             }
             ARIADNE_TESTING_PROVE(full_transition);
@@ -558,7 +562,7 @@ class TestHybridEvolutionBackend : public Testing::ContextFixture {
                 if (successor.kind == HybridEvolutionSuccessorKind::TRANSITION) {
                     possible_transition = true;
                     ARIADNE_TESTING_EXPECT_EQUAL(successor.resolution,
-                                                HybridEvolutionTransitionResolution::UNRESOLVED);
+                                                 HybridEvolutionTransitionResolution::UNRESOLVED);
                 }
             }
             ARIADNE_TESTING_PROVE(possible_transition);

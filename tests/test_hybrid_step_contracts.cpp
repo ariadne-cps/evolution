@@ -26,8 +26,8 @@
  *  @brief Test hybrid step contracts behavior and numerical invariants.
  */
 
-#include "../src/hybrid_transition_handlers.hpp"
 #include "../src/hybrid_step_results.hpp"
+#include "../src/hybrid_transition_handlers.hpp"
 #include "evolution/hybrid_continuous_time_evolver.hpp"
 #include "integration/integrator.hpp"
 #include "integration/validated_integration_step.hpp"
@@ -249,8 +249,9 @@ class TestHybridStepContracts : public Testing::ContextFixture {
         // This is a single-source contract, not collective tree certification.
         LinearGuardScenario scenario(ExactBoxType({
                                          {-0.25_x, 0.25_x},
-                                         {       0,      0}
-        }), Dyadic(0.25_x));
+                                         {      0,      0}
+        }),
+                                     Dyadic(0.25_x));
         const auto excluded_guard = scenario.transition(EventKind::URGENT, scenario.x - 1);
         const auto partial_guard = scenario.transition(EventKind::URGENT, scenario.x);
         const auto full_guard = scenario.transition(EventKind::URGENT, scenario.x + 1);
@@ -689,7 +690,8 @@ class TestHybridStepContracts : public Testing::ContextFixture {
         LinearGuardScenario scenario(ExactBoxType({
                                          {-1, -0.5_x},
                                          { 0,      0}
-        }), Dyadic(1));
+        }),
+                                     Dyadic(1));
         auto evolved = scenario.initial;
         evolved.apply_parameter_evolve_step(scenario.flow, scenario.timing.parameter_dependent_evolution_time);
         List<HybridEnclosure> endpoints{evolved};
@@ -724,7 +726,8 @@ class TestHybridStepContracts : public Testing::ContextFixture {
         LinearGuardScenario scenario(ExactBoxType({
                                          {-1, -0.5_x},
                                          { 0,      0}
-        }), Dyadic(1));
+        }),
+                                     Dyadic(1));
         auto evolved = scenario.initial;
         evolved.apply_parameter_evolve_step(scenario.flow, scenario.timing.parameter_dependent_evolution_time);
         List<HybridEnclosure> endpoints{evolved};

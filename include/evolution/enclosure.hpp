@@ -30,6 +30,7 @@
 #define ARIADNE_ENCLOSURE_HPP
 
 #include <iosfwd>
+#include <optional>
 
 #include "algebra/vector.hpp"
 #include "drawing/drawer_interface.hpp"
@@ -127,12 +128,22 @@ class Enclosure
     ValidatedVectorMultivariateFunctionPatch _state_function;
     ValidatedScalarMultivariateFunctionPatch _time_function;
     ValidatedScalarMultivariateFunctionPatch _dwell_time_function;
+    struct ConstantParameterBinding {
+        List<Identifier> names;
+        ExactBoxType domain;
+        ValidatedVectorMultivariateFunctionPatch function;
+    };
+    std::optional<ConstantParameterBinding> _constant_parameters;
     List<ValidatedConstraintModel> _constraints;
     mutable ExactBoxType _reduced_domain;
 
     List<EnclosureVariableKind> _variable_kinds;
 
     EnclosureConfiguration _configuration;
+
+    List<Bool> _protected_parameter_axes() const;
+    Bool _expose_constant_parameter_errors();
+    Void _constrain_constant_parameters();
 
   public:
     typedef EnclosureConfiguration ConfigurationType;
@@ -199,9 +210,20 @@ class Enclosure
     //! \brief The declared number of fixed parameter arguments in the auxiliary mapping.
     SizeType auxiliary_parameter_count() const;
     ValidatedVectorMultivariateFunctionPatch argument_function(EnclosureFunctionArguments, SizeType parameter_count = 0u) const;
-    //! \brief Select the last count PARAMETER coordinates in their declared order.
-    //! These physical intervals are protected during reconditioning.
+    //! \brief Select the last count physical parameter values. Unbound generic
+    //! enclosures use their PARAMETER coordinates in declared order.
     ValidatedVectorMultivariateFunctionPatch constant_parameter_function(SizeType count) const;
+    Bool has_constant_parameter_binding() const;
+    RealSpace constant_parameter_space() const;
+    const ExactBoxType& constant_parameter_domain() const;
+    SizeType constant_parameter_count() const;
+    SizeType number_of_protected_parameters() const;
+    //! \brief Bind a named physical parameter map, intersecting its values with
+    //! the declared domain. Uniform map errors become persistent coordinates.
+    Void bind_constant_parameters(const RealSpace&, const ExactBoxType&,
+                                  const ValidatedVectorMultivariateFunctionPatch&);
+    //! \brief Adjoin and bind a model declaration's physical coordinates once.
+    Void adjoin_constant_parameters(const RealSpace&, const ExactBoxType&);
     //! \brief Get the auxiliary function.
     const EffectiveVectorMultivariateFunction& auxiliary_mapping() const;
 

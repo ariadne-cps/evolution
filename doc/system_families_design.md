@@ -88,6 +88,9 @@ records the implemented event capabilities and their mathematical boundaries.
 Ordinary validated equations also support [auxiliary outputs depending on fixed
 parameters](constant_parameter_auxiliaries_design.md), with explicit argument
 layouts and rejection of conversions that cannot preserve those bindings.
+Named [physical parameter maps](constant_parameter_maps_design.md) now support
+recombination and compatible ordinary continuation without resampling. Paving
+decoupling is developed on the separate `decoupling` branch.
 
 
 ## Implemented paradigm axis

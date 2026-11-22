@@ -756,10 +756,7 @@ Void HybridContinuousTimeEvolverBase<ValidatedTag>::
     const ExactBoxType starting_bounding_box = cast_exact_box(starting_set.state_bounding_box());
     LOGGING_PRINTLN_AT(2, "starting_bounding_box=" << starting_bounding_box);
 
-    SizeType protected_parameters = 0u;
-    for (const auto kind: starting_set.continuous_set().variable_kinds())
-        if (kind == EnclosureVariableKind::PARAMETER)
-            ++protected_parameters;
+    const SizeType protected_parameters = starting_set.continuous_set().number_of_protected_parameters();
     // Allow the error axes introduced by reconditioning state, absolute time
     // and dwell time, so a structural step can actually relieve the pressure.
     const SizeType parameter_limit =

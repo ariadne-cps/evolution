@@ -126,13 +126,15 @@ The `multifunction` branch uses the ordinary dynamics declarations
 `OrdinaryDifferentialAlgebraicInclusion` (`system/odai.hpp`).
 `ContinuousTimeEvolver<ValidatedTag>` accepts autonomous and explicit-time equations and inclusions, including
 trajectory-constant parameters under `Semantics::UPPER`. Each parameter retains
-the same enclosure coordinate across integration steps, subdivision and
+its physical values and correlations across integration steps, subdivision and
 reconditioning; parameters and time are not added to the physical state.
 Auxiliary outputs may depend on the separate enclosure clock and fixed model
 parameters. Explicit argument layouts retain their correlation with state,
 time and physical parameter intervals through subdivision and reconditioning.
-State-only augmented pavings and multi-source recombination reject these
-parameter-dependent outputs until they can preserve the required bindings;
+Named physical parameter maps also survive normalization and multi-source
+recombination. Continuation retains existing values for compatible declarations
+instead of adjoining fresh parameters. Unbound PARAMETER axes require explicit
+binding before multi-source recombination;
 see [constant-parameter auxiliary outputs](doc/constant_parameter_auxiliaries_design.md).
 Timed/parameterised preconditioning remains unsupported.
 `Semantics::LOWER` is rejected for parameterised equations and for all inclusions.

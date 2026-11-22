@@ -276,11 +276,18 @@ auto ContinuousTimeEvolver<ValidatedTag>::orbit(const EnclosureType& initial_set
         throw std::invalid_argument("Continuous inclusion evolution requires UPPER semantics");
     }
     EnclosureType initial = initial_set;
+    if (initial.has_constant_parameter_binding()) {
+        if (initial.constant_parameter_space() != this->system().parameter_space())
+            throw std::invalid_argument("Continuous evolution cannot resume different physical parameter names or ordering");
+        if (!definitely(subset(initial.constant_parameter_domain(), this->system().constant_parameter_domain())))
+            throw std::invalid_argument("Continuous evolution cannot resume physical parameters outside its declared domain");
+    }
     if (this->system().parameter_space().dimension() != 0u) {
         if (semantics == Semantics::LOWER) {
             throw std::invalid_argument("Parameterised continuous evolution currently requires UPPER semantics");
         }
-        initial.adjoin_parameters(this->system().constant_parameter_domain(), EnclosureVariableKind::PARAMETER);
+        if (!initial.has_constant_parameter_binding())
+            initial.adjoin_constant_parameters(this->system().parameter_space(), this->system().constant_parameter_domain());
     }
     if (this->system().auxiliary_space().size() != 0u) {
         const SizeType count = this->system().parameter_space().dimension();
@@ -379,8 +386,7 @@ Void ContinuousTimeEvolver<ValidatedTag>::
     // The preconditioned integrator carries the local-initial Taylor mapping
     // across steps. Standard reconditioning would deliberately discard part of
     // that dependence, so it is bypassed on this specialised path.
-    const SizeType protected_parameters = static_cast<SizeType>(std::count(
-        current_set.variable_kinds().begin(), current_set.variable_kinds().end(), EnclosureVariableKind::PARAMETER));
+    const SizeType protected_parameters = current_set.number_of_protected_parameters();
     const SizeType parameter_limit =
         (current_set.configuration().reconditioning_num_blocks() + 1u) * current_set.state_dimension() +
         protected_parameters;

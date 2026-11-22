@@ -1,5 +1,5 @@
 /***************************************************************************
- *            hybrid_continuous_time_evolver.cpp
+ *            hybrid_continuous_time_validated_evolver.cpp
  *
  *  Copyright  2009-20  Pieter Collins
  *
@@ -22,11 +22,11 @@
  *  along with Ariadne Evolution. If not, see <https://www.gnu.org/licenses/>.
  */
 
-/** @file src/hybrid_continuous_time_evolver.cpp
+/** @file src/hybrid_continuous_time_validated_evolver.cpp
  *  @brief Implement hybrid evolver evolution operations.
  */
 
-#include "evolution/hybrid_continuous_time_evolver.hpp"
+#include "evolution/hybrid_continuous_time_validated_evolver.hpp"
 
 #include <algorithm>
 #include <typeinfo>
@@ -34,7 +34,7 @@
 #include "algebra/polynomial.hpp"
 #include "algebra/vector.hpp"
 #include "continuous_integration.hpp"
-#include "evolution/hybrid_continuous_time_evolver.hpp"
+#include "evolution/hybrid_continuous_time_validated_evolver.hpp"
 #include "evolution/hybrid_time.hpp"
 #include "evolution/orbit.hpp"
 #include "evolution_time.hpp"
@@ -215,7 +215,7 @@ Void set_auxiliary(const HybridAutomatonInterface& system, HybridEnclosure& encl
 }
 
 Orbit<HybridEnclosure>
-    HybridContinuousTimeEvolverBase::
+    HybridContinuousTimeEvolverBase<ValidatedTag>::
         orbit(const HybridExactBoxType& initial_box,
               const HybridTerminationCriterion& termination,
               Semantics semantics) const {
@@ -228,7 +228,7 @@ Orbit<HybridEnclosure>
 }
 
 Orbit<HybridEnclosure>
-    HybridContinuousTimeEvolverBase::
+    HybridContinuousTimeEvolverBase<ValidatedTag>::
         orbit(const HybridBoxSet& initial_box,
               const HybridTerminationCriterion& termination,
               Semantics semantics) const {
@@ -241,7 +241,7 @@ Orbit<HybridEnclosure>
 }
 
 Orbit<HybridEnclosure>
-    HybridContinuousTimeEvolverBase::
+    HybridContinuousTimeEvolverBase<ValidatedTag>::
         orbit(const HybridBoundedConstraintSet& initial_set,
               const HybridTerminationCriterion& termination,
               Semantics semantics) const {
@@ -254,7 +254,7 @@ Orbit<HybridEnclosure>
 }
 
 Orbit<HybridEnclosure>
-    HybridContinuousTimeEvolverBase::
+    HybridContinuousTimeEvolverBase<ValidatedTag>::
         orbit(const HybridEnclosure& initial,
               const HybridTerminationCriterion& termination,
               Semantics semantics) const {
@@ -270,16 +270,16 @@ Orbit<HybridEnclosure>
     return backend->release_orbit();
 }
 
-HybridContinuousTimeEvolverBase::HybridContinuousTimeEvolverBase(const SystemType& system) {
+HybridContinuousTimeEvolverBase<ValidatedTag>::HybridContinuousTimeEvolverBase(const SystemType& system) {
     this->_create(system, FunctionFactoryType(make_taylor_function_patch_factory()));
 }
 
-HybridContinuousTimeEvolverBase::HybridContinuousTimeEvolverBase(const SystemType& system,
-                                                                 const FunctionFactoryType& factory) {
+HybridContinuousTimeEvolverBase<ValidatedTag>::HybridContinuousTimeEvolverBase(const SystemType& system,
+                                                                               const FunctionFactoryType& factory) {
     this->_create(system, factory);
 }
 
-Void HybridContinuousTimeEvolverBase::_create(
+Void HybridContinuousTimeEvolverBase<ValidatedTag>::_create(
     const SystemType& system,
     const FunctionFactoryType& factory) {
     this->_sys_ptr = std::shared_ptr<SystemType>(system.clone());
@@ -290,38 +290,38 @@ Void HybridContinuousTimeEvolverBase::_create(
     this->ALLOW_UNWIND = false;
 }
 
-const HybridContinuousTimeEvolverBase::SystemType&
-    HybridContinuousTimeEvolverBase::system() const {
+const HybridContinuousTimeEvolverBase<ValidatedTag>::SystemType&
+    HybridContinuousTimeEvolverBase<ValidatedTag>::system() const {
     return *this->_sys_ptr;
 }
 
-HybridContinuousTimeEvolverBase::ConfigurationType&
-    HybridContinuousTimeEvolverBase::configuration() {
+HybridContinuousTimeEvolverBase<ValidatedTag>::ConfigurationType&
+    HybridContinuousTimeEvolverBase<ValidatedTag>::configuration() {
     return *this->_configuration_ptr;
 }
 
-const HybridContinuousTimeEvolverBase::ConfigurationType&
-    HybridContinuousTimeEvolverBase::configuration() const {
+const HybridContinuousTimeEvolverBase<ValidatedTag>::ConfigurationType&
+    HybridContinuousTimeEvolverBase<ValidatedTag>::configuration() const {
     return *this->_configuration_ptr;
 }
 
-Void HybridContinuousTimeEvolverBase::set_function_factory(const FunctionFactoryType& factory) {
+Void HybridContinuousTimeEvolverBase<ValidatedTag>::set_function_factory(const FunctionFactoryType& factory) {
     this->_function_factory_ptr = factory.managed_pointer();
 }
 
-const HybridContinuousTimeEvolverBase::FunctionFactoryType
-    HybridContinuousTimeEvolverBase::function_factory() const {
+const HybridContinuousTimeEvolverBase<ValidatedTag>::FunctionFactoryType
+    HybridContinuousTimeEvolverBase<ValidatedTag>::function_factory() const {
     return FunctionFactoryType(this->_function_factory_ptr);
 }
 
-Void HybridContinuousTimeEvolverBase::set_integrator(const IntegratorInterface& integrator) {
+Void HybridContinuousTimeEvolverBase<ValidatedTag>::set_integrator(const IntegratorInterface& integrator) {
     this->_integrator_ptr = std::shared_ptr<IntegratorInterface>(integrator.clone());
     this->_inclusion_integrator_ptr.reset();
     this->_box_integrator_ptr.reset();
 }
 
-Void HybridContinuousTimeEvolverBase::set_integrator(const IntegratorBase& base, const InputApproximation& reach,
-                                                     const InputApproximation& evolve) {
+Void HybridContinuousTimeEvolverBase<ValidatedTag>::set_integrator(const IntegratorBase& base, const InputApproximation& reach,
+                                                                   const InputApproximation& evolve) {
     if (dynamic_cast<const PreconditionedGradedTaylorSeriesIntegrator*>(&base) != nullptr)
         throw std::invalid_argument("Hybrid inclusion input approximations do not support preconditioning");
     auto selected = std::make_shared<SelectedParametricMultifunctionIntegrator>(base, reach, evolve);
@@ -329,12 +329,12 @@ Void HybridContinuousTimeEvolverBase::set_integrator(const IntegratorBase& base,
     this->_inclusion_integrator_ptr = std::move(selected);
 }
 
-Void HybridContinuousTimeEvolverBase::set_integrator(const FirstOrderMultifunctionIntegrator& boxes) {
+Void HybridContinuousTimeEvolverBase<ValidatedTag>::set_integrator(const FirstOrderMultifunctionIntegrator& boxes) {
     this->_box_integrator_ptr = std::make_shared<FirstOrderMultifunctionIntegrator>(boxes);
     this->_inclusion_integrator_ptr.reset();
 }
 
-Void HybridContinuousTimeEvolverBase::_validate_mode(DiscreteLocation location, Semantics semantics) const {
+Void HybridContinuousTimeEvolverBase<ValidatedTag>::_validate_mode(DiscreteLocation location, Semantics semantics) const {
     if (this->system().time_variable(location)) {
         if (semantics != Semantics::UPPER)
             throw std::invalid_argument("Timed hybrid dynamics/events currently require UPPER semantics");
@@ -361,23 +361,23 @@ Void HybridContinuousTimeEvolverBase::_validate_mode(DiscreteLocation location, 
     }
 }
 
-Void HybridContinuousTimeEvolverBase::set_solver(const EquationSolverInterface& solver) {
+Void HybridContinuousTimeEvolverBase<ValidatedTag>::set_solver(const EquationSolverInterface& solver) {
     this->_solver_ptr = std::shared_ptr<EquationSolverInterface>(solver.clone());
 }
 
-Void HybridContinuousTimeEvolverBase::set_evolution_backend_factory(const HybridEvolutionBackendFactoryInterface& factory) {
+Void HybridContinuousTimeEvolverBase<ValidatedTag>::set_evolution_backend_factory(const HybridEvolutionBackendFactoryInterface& factory) {
     _backend_factory_ptr = std::shared_ptr<const HybridEvolutionBackendFactoryInterface>(factory.clone());
 }
 
-HybridContinuousTimeEvolverBase::EnclosureType
-    HybridContinuousTimeEvolverBase::enclosure(const HybridExactBox& initial_box) const {
+HybridContinuousTimeEvolverBase<ValidatedTag>::EnclosureType
+    HybridContinuousTimeEvolverBase<ValidatedTag>::enclosure(const HybridExactBox& initial_box) const {
     HybridEnclosure result(initial_box, EnclosureConfiguration(this->function_factory()));
     set_auxiliary(this->system(), result);
     return result;
 }
 
-HybridContinuousTimeEvolverBase::EnclosureType
-    HybridContinuousTimeEvolverBase::enclosure(const HybridBoundedConstraintSet& initial_set) const {
+HybridContinuousTimeEvolverBase<ValidatedTag>::EnclosureType
+    HybridContinuousTimeEvolverBase<ValidatedTag>::enclosure(const HybridBoundedConstraintSet& initial_set) const {
     HybridEnclosure result(initial_set, this->system().continuous_state_space(initial_set.location()), EnclosureConfiguration(this->function_factory()));
     set_auxiliary(this->system(), result);
     return result;
@@ -390,7 +390,7 @@ struct EvolutionStepData {
     Set<DiscreteEvent> events;
 };
 
-Void HybridContinuousTimeEvolverBase::
+Void HybridContinuousTimeEvolverBase<ValidatedTag>::
     _log_summary(const HybridEnclosure& starting_set, const HybridEvolutionStatistics& statistics) const {
     UpperBoxType starting_bounding_box = starting_set.state_bounding_box();
     UpperIntervalType starting_time_range = starting_set.time_range();
@@ -416,7 +416,7 @@ Void HybridContinuousTimeEvolverBase::
 }
 
 Map<DiscreteEvent, TransitionData>
-    HybridContinuousTimeEvolverBase::
+    HybridContinuousTimeEvolverBase<ValidatedTag>::
         _extract_transitions(const DiscreteLocation& location) const {
     LOGGING_SCOPE_CREATE;
     Map<DiscreteEvent, TransitionData> transitions;
@@ -463,7 +463,7 @@ Map<DiscreteEvent, TransitionData>
     return transitions;
 }
 
-Void HybridContinuousTimeEvolverBase::
+Void HybridContinuousTimeEvolverBase<ValidatedTag>::
     _apply_invariants(HybridEnclosure& initial_set,
                       const Map<DiscreteEvent, TransitionData>& transitions) const {
     LOGGING_SCOPE_CREATE;
@@ -472,7 +472,7 @@ Void HybridContinuousTimeEvolverBase::
     EvolutionDetail::apply_state_invariants(initial_set, transitions);
 }
 
-Void HybridContinuousTimeEvolverBase::
+Void HybridContinuousTimeEvolverBase<ValidatedTag>::
     _process_starting_events(const HybridEnclosure& initial_set,
                              const Map<DiscreteEvent, TransitionData>& transitions,
                              Semantics semantics,
@@ -538,7 +538,7 @@ Void HybridContinuousTimeEvolverBase::
 }
 
 ValidatedIntegrationStep
-    HybridContinuousTimeEvolverBase::
+    HybridContinuousTimeEvolverBase<ValidatedTag>::
         _compute_integration_step(EffectiveVectorMultivariateFunction dynamic,
                                   const ExactBoxType& initial_box,
                                   const StepSizeType& maximum_step_size) const {
@@ -554,7 +554,7 @@ ValidatedIntegrationStep
 }
 
 Set<DiscreteEvent>
-    HybridContinuousTimeEvolverBase::
+    HybridContinuousTimeEvolverBase<ValidatedTag>::
         _compute_active_events(const EffectiveVectorMultivariateFunction& dynamic,
                                const Map<DiscreteEvent, EffectiveScalarMultivariateFunction>& guards,
                                const ValidatedVectorMultivariateFunctionPatch& flow,
@@ -592,26 +592,26 @@ Set<DiscreteEvent>
 }
 
 Map<DiscreteEvent, CrossingData>
-    HybridContinuousTimeEvolverBase::_compute_crossings(
+    HybridContinuousTimeEvolverBase<ValidatedTag>::_compute_crossings(
         const Set<DiscreteEvent>& active_events, const EffectiveVectorMultivariateFunction& dynamic,
         const Map<DiscreteEvent, EffectiveScalarMultivariateFunction>& guards,
         const FlowFunctionModel& flow, const HybridEnclosure& initial_set) const {
     return EvolutionDetail::analyze_crossings(active_events, dynamic, guards, flow, initial_set, *this->_solver_ptr);
 }
 
-Void HybridContinuousTimeEvolverBase::
+Void HybridContinuousTimeEvolverBase<ValidatedTag>::
     _recondition(HybridEnclosure& set) const {
     set.recondition();
 }
 
-Void HybridContinuousTimeEvolverBase::
+Void HybridContinuousTimeEvolverBase<ValidatedTag>::
     _apply_reach_step(HybridEnclosure& set,
                       const ValidatedVectorMultivariateFunctionPatch& flow,
                       const TimingData& timing_data) const {
     set.apply_parameter_reach_step(flow, timing_data.parameter_dependent_evolution_time);
 }
 
-Void HybridContinuousTimeEvolverBase::
+Void HybridContinuousTimeEvolverBase<ValidatedTag>::
     _apply_evolve_step(HybridEnclosure& set,
                        const ValidatedVectorMultivariateFunctionPatch& flow,
                        const TimingData& timing_data) const {
@@ -633,7 +633,7 @@ Void HybridContinuousTimeEvolverBase::
     }
 }
 
-Void HybridContinuousTimeEvolverBase::
+Void HybridContinuousTimeEvolverBase<ValidatedTag>::
     _process_jumped_set(const HybridEnclosure& jumped_set,
                         const TerminationType& termination,
                         Semantics semantics,
@@ -701,7 +701,7 @@ Void HybridContinuousTimeEvolverBase::
     this->_process_starting_events(initial_set, transitions, semantics, result);
 }
 
-HybridEvolutionStepResult HybridContinuousTimeEvolverBase::
+HybridEvolutionStepResult HybridContinuousTimeEvolverBase<ValidatedTag>::
     _process_working_set(const HybridEvolutionWorkItem& working_set,
                          const HybridTerminationCriterion& termination,
                          const Semantics& semantics,
@@ -726,7 +726,7 @@ HybridEvolutionStepResult HybridContinuousTimeEvolverBase::
     return result;
 }
 
-Void HybridContinuousTimeEvolverBase::
+Void HybridContinuousTimeEvolverBase<ValidatedTag>::
     _evolution_step(const HybridEnclosure& set,
                     const Real& final_time,
                     const Semantics& semantics,
@@ -883,7 +883,7 @@ Void HybridContinuousTimeEvolverBase::
     this->_apply_evolution_step(starting_set, step, flow_model, timing_data, crossings, dynamic, transitions, semantics, result);
 }
 
-Void HybridContinuousTimeEvolverBase::_evolve_inclusion(
+Void HybridContinuousTimeEvolverBase<ValidatedTag>::_evolve_inclusion(
     const HybridEnclosure& initial, const Real& final_time, HybridEvolutionStepResult& result) const {
     const auto& inclusion = *this->system().inclusion(initial.location());
     // Inclusion candidates use only validated outer reach and state guards.
@@ -917,7 +917,7 @@ Void HybridContinuousTimeEvolverBase::_evolve_inclusion(
                                                  std::min(step.time_step().get_d(), remaining.get_d()));
 }
 
-Void HybridContinuousTimeEvolverBase::_evolve_clocked_equation(
+Void HybridContinuousTimeEvolverBase<ValidatedTag>::_evolve_clocked_equation(
     const HybridEnclosure& initial, const Real& final_time, HybridEvolutionStepResult& result) const {
     const auto remaining = StepSizeType(FloatDPBounds(final_time, dp).upper_raw()) -
                            StepSizeType(initial.time_range().lower_bound().raw());
@@ -931,7 +931,7 @@ Void HybridContinuousTimeEvolverBase::_evolve_clocked_equation(
                                                  std::min(numerical.step.time_step().get_d(), remaining.get_d()));
 }
 
-Void HybridContinuousTimeEvolverBase::
+Void HybridContinuousTimeEvolverBase<ValidatedTag>::
     _apply_evolution_step(const HybridEnclosure& starting_set,
                           const ValidatedIntegrationStep& step,
                           const ValidatedVectorMultivariateFunctionPatch& flow,
@@ -1093,7 +1093,7 @@ Void HybridContinuousTimeEvolverBase::
 }
 
 TimingData
-    HybridContinuousTimeEvolverBase::
+    HybridContinuousTimeEvolverBase<ValidatedTag>::
         _estimate_timing(Set<DiscreteEvent>&,
                          Real final_time,
                          const FlowFunctionModel& flow,
@@ -1115,7 +1115,7 @@ TimingData
     return result;
 }
 
-HybridContinuousTimeEvolverBaseConfiguration::HybridContinuousTimeEvolverBaseConfiguration(HybridContinuousTimeEvolverBase& evolver)
+HybridContinuousTimeEvolverBaseConfiguration<ValidatedTag>::HybridContinuousTimeEvolverBaseConfiguration(HybridContinuousTimeEvolverBase<ValidatedTag>& evolver)
     : _evolver(evolver) {
     set_flow_accuracy(1e-5);
     set_maximum_step_size(1.0);
@@ -1125,14 +1125,14 @@ HybridContinuousTimeEvolverBaseConfiguration::HybridContinuousTimeEvolverBaseCon
     set_enable_subdivisions(true);
 }
 
-Void HybridContinuousTimeEvolverBaseConfiguration::set_flow_accuracy(const ApproximateRealType value) {
+Void HybridContinuousTimeEvolverBaseConfiguration<ValidatedTag>::set_flow_accuracy(const ApproximateRealType value) {
     _evolver._integrator_ptr = std::shared_ptr<GradedTaylorSeriesIntegrator>(new GradedTaylorSeriesIntegrator(StepMaximumError(cast_exact(value))));
     _flow_accuracy = cast_exact(value);
 }
 
 OutputStream&
-    HybridContinuousTimeEvolverBaseConfiguration::_write(OutputStream& os) const {
-    os << "HybridContinuousTimeEvolverBaseConfiguration"
+    HybridContinuousTimeEvolverBaseConfiguration<ValidatedTag>::_write(OutputStream& os) const {
+    os << "HybridContinuousTimeEvolverBaseConfiguration<ValidatedTag>"
        << "(\n  flow_accuracy=" << flow_accuracy()
        << ",\n  maximum_step_size=" << maximum_step_size()
        << ",\n  maximum_enclosure_radius=" << maximum_enclosure_radius()
@@ -1143,24 +1143,24 @@ OutputStream&
     return os;
 }
 
-HybridContinuousTimeEvolver::HybridContinuousTimeEvolver(const SystemType& system)
-    : HybridContinuousTimeEvolverBase(system) {
-    this->_configuration_ptr.reset(new HybridContinuousTimeEvolverConfiguration(*this));
+HybridContinuousTimeEvolver<ValidatedTag>::HybridContinuousTimeEvolver(const SystemType& system)
+    : HybridContinuousTimeEvolverBase<ValidatedTag>(system) {
+    this->_configuration_ptr.reset(new HybridContinuousTimeEvolverConfiguration<ValidatedTag>(*this));
 }
 
-HybridContinuousTimeEvolver::HybridContinuousTimeEvolver(
+HybridContinuousTimeEvolver<ValidatedTag>::HybridContinuousTimeEvolver(
     const SystemType& system,
     const FunctionFactoryType& factory)
-    : HybridContinuousTimeEvolverBase(system, factory) {
-    this->_configuration_ptr.reset(new HybridContinuousTimeEvolverConfiguration(*this));
+    : HybridContinuousTimeEvolverBase<ValidatedTag>(system, factory) {
+    this->_configuration_ptr.reset(new HybridContinuousTimeEvolverConfiguration<ValidatedTag>(*this));
 }
 
-HybridContinuousTimeEvolver::HybridContinuousTimeEvolver(const HybridContinuousTimeEvolver& other)
-    : HybridContinuousTimeEvolverBase(other.system(), other.function_factory()) {
+HybridContinuousTimeEvolver<ValidatedTag>::HybridContinuousTimeEvolver(const HybridContinuousTimeEvolver<ValidatedTag>& other)
+    : HybridContinuousTimeEvolverBase<ValidatedTag>(other.system(), other.function_factory()) {
     this->_copy_configuration_from(other);
 }
 
-HybridContinuousTimeEvolver& HybridContinuousTimeEvolver::operator=(const HybridContinuousTimeEvolver& other) {
+HybridContinuousTimeEvolver<ValidatedTag>& HybridContinuousTimeEvolver<ValidatedTag>::operator=(const HybridContinuousTimeEvolver<ValidatedTag>& other) {
     if (this != &other) {
         this->_sys_ptr.reset(other.system().clone());
         this->set_function_factory(other.function_factory());
@@ -1169,12 +1169,12 @@ HybridContinuousTimeEvolver& HybridContinuousTimeEvolver::operator=(const Hybrid
     return *this;
 }
 
-Void HybridContinuousTimeEvolver::_copy_configuration_from(const HybridContinuousTimeEvolver& other) {
+Void HybridContinuousTimeEvolver<ValidatedTag>::_copy_configuration_from(const HybridContinuousTimeEvolver<ValidatedTag>& other) {
     // The configuration stores its owning evolver by reference. Rebuild that
     // relationship so copies remain independent and outlive the original.
     auto integrator = std::shared_ptr<IntegratorInterface>(other._integrator_ptr->clone());
     auto solver = std::shared_ptr<EquationSolverInterface>(other._solver_ptr->clone());
-    this->_configuration_ptr.reset(new HybridContinuousTimeEvolverConfiguration(*this));
+    this->_configuration_ptr.reset(new HybridContinuousTimeEvolverConfiguration<ValidatedTag>(*this));
     const auto& source = other.configuration();
     auto& target = this->configuration();
     target.set_flow_accuracy(source.flow_accuracy());
@@ -1192,7 +1192,7 @@ Void HybridContinuousTimeEvolver::_copy_configuration_from(const HybridContinuou
 }
 
 TimingData
-    HybridContinuousTimeEvolver::
+    HybridContinuousTimeEvolver<ValidatedTag>::
         _estimate_timing(Set<DiscreteEvent>&,
                          Real final_time,
                          const FlowFunctionModel& flow,
@@ -1204,21 +1204,21 @@ TimingData
         this->function_factory(), *this->_solver_ptr, ALLOW_CREEP, ALLOW_UNWIND);
 }
 
-HybridContinuousTimeEvolverConfiguration::HybridContinuousTimeEvolverConfiguration(HybridContinuousTimeEvolver& evolver)
-    : HybridContinuousTimeEvolverBaseConfiguration(evolver) {
+HybridContinuousTimeEvolverConfiguration<ValidatedTag>::HybridContinuousTimeEvolverConfiguration(HybridContinuousTimeEvolver<ValidatedTag>& evolver)
+    : HybridContinuousTimeEvolverBaseConfiguration<ValidatedTag>(evolver) {
 }
 
-HybridContinuousTimeEvolverFactory::HybridContinuousTimeEvolverFactory()
-    : HybridContinuousTimeEvolverFactory(ValidatedFunctionPatchFactory(make_taylor_function_patch_factory())) {
+HybridContinuousTimeEvolverFactory<ValidatedTag>::HybridContinuousTimeEvolverFactory()
+    : HybridContinuousTimeEvolverFactory<ValidatedTag>(ValidatedFunctionPatchFactory(make_taylor_function_patch_factory())) {
 }
 
-HybridContinuousTimeEvolverFactory::HybridContinuousTimeEvolverFactory(const ValidatedFunctionPatchFactory& factory)
+HybridContinuousTimeEvolverFactory<ValidatedTag>::HybridContinuousTimeEvolverFactory(const ValidatedFunctionPatchFactory& factory)
     : _function_factory_ptr(factory.managed_pointer()) {
 }
 
-HybridContinuousTimeEvolver*
-    HybridContinuousTimeEvolverFactory::create(const HybridAutomatonInterface& system) const {
-    return new HybridContinuousTimeEvolver(system, ValidatedFunctionPatchFactory(_function_factory_ptr));
+HybridContinuousTimeEvolver<ValidatedTag>*
+    HybridContinuousTimeEvolverFactory<ValidatedTag>::create(const HybridAutomatonInterface& system) const {
+    return new HybridContinuousTimeEvolver<ValidatedTag>(system, ValidatedFunctionPatchFactory(_function_factory_ptr));
 }
 
 } // namespace Ariadne

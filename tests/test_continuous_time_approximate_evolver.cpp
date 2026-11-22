@@ -1,5 +1,5 @@
 /***************************************************************************
- *            test_continuous_time_simulator.cpp
+ *            test_continuous_time_approximate_evolver.cpp
  *
  *  Copyright  2006-20  Luca Geretti, Mirko Albanese
  *
@@ -22,7 +22,7 @@
  *  along with Ariadne Evolution. If not, see <https://www.gnu.org/licenses/>.
  */
 
-/** @file tests/test_continuous_time_simulator.cpp
+/** @file tests/test_continuous_time_approximate_evolver.cpp
  *  @brief Test vector field simulator behavior and numerical invariants.
  */
 
@@ -34,7 +34,7 @@
 #include "algebra/algebra.hpp"
 #include "algebra/matrix.hpp"
 #include "algebra/vector.hpp"
-#include "evolution/continuous_time_simulator.hpp"
+#include "evolution/continuous_time_approximate_evolver.hpp"
 #include "evolution/enclosure.hpp"
 #include "evolution/orbit.hpp"
 #include "function/constraint.hpp"
@@ -54,7 +54,7 @@
 using namespace Ariadne;
 using namespace std;
 
-class TestContinuousTimeSimulator : public Ariadne::Testing::ContextFixture {
+class TestContinuousTimeApproximateEvolver : public Ariadne::Testing::ContextFixture {
   public:
     using Ariadne::Testing::ContextFixture::ContextFixture;
 
@@ -62,10 +62,10 @@ class TestContinuousTimeSimulator : public Ariadne::Testing::ContextFixture {
     Void test_linear_flow_and_input_labels() {
         RealVariable x("x"), y("y"), z("z"), missing("missing");
         OrdinaryDifferentialAlgebraicEquation field({dot(x) = 1, dot(y) = 0}, {let(z) = x + 2 * y});
-        ContinuousTimeSimulator simulator(field);
+        ContinuousTimeEvolver<ApproximateTag> simulator(field);
         simulator.configuration().set_step_size(0.25);
-        using PointType = ContinuousTimeSimulator::ApproximatePointType;
-        using Points = ContinuousTimeSimulator::ApproximateListPointType;
+        using PointType = ContinuousTimeEvolver<ApproximateTag>::ApproximatePointType;
+        using Points = ContinuousTimeEvolver<ApproximateTag>::ApproximateListPointType;
         PointType start(RealSpace({x, y}), FloatDPApproximationPoint({0.0_x, 2.0_x}, dp));
         PointType reordered(RealSpace({y, x}), FloatDPApproximationPoint({2.0_x, 0.0_x}, dp));
         for (unsigned verbosity: {0u, 100u}) {
@@ -89,7 +89,7 @@ class TestContinuousTimeSimulator : public Ariadne::Testing::ContextFixture {
     Void test_configuration_and_sampling() {
         RealVariable x("x"), y("y"), unknown("unknown");
         OrdinaryDifferentialAlgebraicEquation field({dot(x) = 0, dot(y) = 0});
-        ContinuousTimeSimulator simulator(field);
+        ContinuousTimeEvolver<ApproximateTag> simulator(field);
         auto& config = simulator.configuration();
         ARIADNE_TESTING_EXPECT_EXCEPTION(config.set_step_size(0.0));
         ARIADNE_TESTING_EXPECT_EXCEPTION(config.set_step_size(-1.0));
@@ -130,12 +130,12 @@ class TestContinuousTimeSimulator : public Ariadne::Testing::ContextFixture {
             std::ostringstream description;
             const ConfigurationInterface& base = config;
             description << base;
-            ARIADNE_TESTING_PROVE(description.str().find("ContinuousTimeSimulatorConfiguration") != std::string::npos);
+            ARIADNE_TESTING_PROVE(description.str().find("ContinuousTimeEvolverConfiguration<ApproximateTag>") != std::string::npos);
         }
     }
 
     Void test_multiple_trajectories_x() {
-        typedef ContinuousTimeSimulator::ApproximateListPointType ListPointType;
+        typedef ContinuousTimeEvolver<ApproximateTag>::ApproximateListPointType ListPointType;
 
         Real mu = Dyadic(0.5_x);
         RealVariable x("x"), y("y"), z("z");
@@ -147,7 +147,7 @@ class TestContinuousTimeSimulator : public Ariadne::Testing::ContextFixture {
 
         Real time = 1.0_dec;
 
-        ContinuousTimeSimulator simulator(vanderpol);
+        ContinuousTimeEvolver<ApproximateTag> simulator(vanderpol);
         simulator.configuration().set_step_size(0.05);
         simulator.configuration().set_num_subdivisions(0);
         simulator.configuration().set_discretisation_type(DiscretisationType::Mince);
@@ -169,7 +169,7 @@ class TestContinuousTimeSimulator : public Ariadne::Testing::ContextFixture {
     }
 
     Void test_multiple_trajectories_xy() {
-        typedef ContinuousTimeSimulator::ApproximateListPointType ListPointType;
+        typedef ContinuousTimeEvolver<ApproximateTag>::ApproximateListPointType ListPointType;
 
         Real mu = Dyadic(0.5_x);
         RealVariable x("x"), y("y"), z("z");
@@ -181,7 +181,7 @@ class TestContinuousTimeSimulator : public Ariadne::Testing::ContextFixture {
 
         Real time = 1.0_dec;
 
-        ContinuousTimeSimulator simulator(vanderpol);
+        ContinuousTimeEvolver<ApproximateTag> simulator(vanderpol);
         simulator.configuration().set_step_size(0.05);
         simulator.configuration().set_num_subdivisions(0);
         simulator.configuration().set_discretisation_type(DiscretisationType::Mince);
@@ -206,7 +206,7 @@ class TestContinuousTimeSimulator : public Ariadne::Testing::ContextFixture {
     }
 
     Void test_multiple_real_expr_vdp_cycle() {
-        typedef ContinuousTimeSimulator::ApproximateListPointType ListPointType;
+        typedef ContinuousTimeEvolver<ApproximateTag>::ApproximateListPointType ListPointType;
 
         Real mu = Dyadic(0.5_x);
         RealVariable x("x"), y("y"), z("z");
@@ -218,7 +218,7 @@ class TestContinuousTimeSimulator : public Ariadne::Testing::ContextFixture {
 
         Real time = 6.3_dec;
 
-        ContinuousTimeSimulator simulator(vanderpol);
+        ContinuousTimeEvolver<ApproximateTag> simulator(vanderpol);
         simulator.configuration().set_step_size(0.05);
         simulator.configuration().set_num_subdivisions(0);
         simulator.configuration().set_discretisation_type(DiscretisationType::Mince);
@@ -239,7 +239,7 @@ class TestContinuousTimeSimulator : public Ariadne::Testing::ContextFixture {
     }
 
     Void test_multiple_real_box_vdp_cycle() {
-        typedef ContinuousTimeSimulator::ApproximateListPointType ListPointType;
+        typedef ContinuousTimeEvolver<ApproximateTag>::ApproximateListPointType ListPointType;
 
         Real mu = Dyadic(0.5_x);
         RealVariable x("x"), y("y"), z("z");
@@ -251,7 +251,7 @@ class TestContinuousTimeSimulator : public Ariadne::Testing::ContextFixture {
 
         Real time = 6.3_dec;
 
-        ContinuousTimeSimulator simulator(vanderpol);
+        ContinuousTimeEvolver<ApproximateTag> simulator(vanderpol);
         simulator.configuration().set_step_size(0.05);
         simulator.configuration().set_num_subdivisions(0);
         simulator.configuration().set_discretisation_type(DiscretisationType::Mince);
@@ -273,12 +273,12 @@ class TestContinuousTimeSimulator : public Ariadne::Testing::ContextFixture {
 };
 
 int main(int argc, const char* argv[]) {
-    ARIADNE_TESTING_SUITE("test_continuous_time_simulator");
-    ARIADNE_TESTING_ADD_TEST(TestContinuousTimeSimulator, test_linear_flow_and_input_labels);
-    ARIADNE_TESTING_ADD_TEST(TestContinuousTimeSimulator, test_configuration_and_sampling);
-    ARIADNE_TESTING_ADD_TEST(TestContinuousTimeSimulator, test_multiple_real_expr_vdp_cycle);
-    ARIADNE_TESTING_ADD_TEST(TestContinuousTimeSimulator, test_multiple_real_box_vdp_cycle);
-    ARIADNE_TESTING_ADD_TEST(TestContinuousTimeSimulator, test_multiple_trajectories_x);
-    ARIADNE_TESTING_ADD_TEST(TestContinuousTimeSimulator, test_multiple_trajectories_xy);
+    ARIADNE_TESTING_SUITE("test_continuous_time_approximate_evolver");
+    ARIADNE_TESTING_ADD_TEST(TestContinuousTimeApproximateEvolver, test_linear_flow_and_input_labels);
+    ARIADNE_TESTING_ADD_TEST(TestContinuousTimeApproximateEvolver, test_configuration_and_sampling);
+    ARIADNE_TESTING_ADD_TEST(TestContinuousTimeApproximateEvolver, test_multiple_real_expr_vdp_cycle);
+    ARIADNE_TESTING_ADD_TEST(TestContinuousTimeApproximateEvolver, test_multiple_real_box_vdp_cycle);
+    ARIADNE_TESTING_ADD_TEST(TestContinuousTimeApproximateEvolver, test_multiple_trajectories_x);
+    ARIADNE_TESTING_ADD_TEST(TestContinuousTimeApproximateEvolver, test_multiple_trajectories_xy);
     return Ariadne::Testing::run_logging_suite(ariadne_test_suite, argc, argv);
 }

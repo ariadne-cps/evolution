@@ -27,7 +27,7 @@ class TestContinuousInclusions : public Ariadne::Testing::ContextFixture {
         for (const auto& reach: List<InputApproximation>{ZeroApproximation(), ConstantApproximation()}) {
             for (const auto& evolve: List<InputApproximation>{ZeroApproximation(), ConstantApproximation(),
                                                               AffineApproximation(), SinusoidalApproximation(), PiecewiseApproximation()}) {
-                ContinuousTimeEvolver evolver(system, integrator, reach, evolve);
+                ContinuousTimeEvolver<ValidatedTag> evolver(system, integrator, reach, evolve);
                 evolver.configuration().set_maximum_step_size(0.03125);
                 const auto result = evolver.orbit(RealVariablesBox({-0.125_dec <= x <= 0.125_dec}),
                                                   Real(0.03125_x), Semantics::UPPER);
@@ -44,7 +44,7 @@ class TestContinuousInclusions : public Ariadne::Testing::ContextFixture {
         }
         for (const auto& invalid: List<InputApproximation>{AffineApproximation(), SinusoidalApproximation(), PiecewiseApproximation()}) {
             ARIADNE_TESTING_EXPECT_THROWS(std::invalid_argument,
-                                          ContinuousTimeEvolver(system, integrator, invalid, ConstantApproximation()));
+                                          ContinuousTimeEvolver<ValidatedTag>(system, integrator, invalid, ConstantApproximation()));
         }
     }
 
@@ -52,7 +52,7 @@ class TestContinuousInclusions : public Ariadne::Testing::ContextFixture {
         RealVariable x("x"), u("u");
         const OrdinaryDifferentialAlgebraicInclusion system({dot(x) = u}, RealVariablesBox({-1 <= u <= 1}));
         TaylorPicardIntegrator integrator(step_maximum_error = 1e-6);
-        ContinuousTimeEvolver evolver(system, integrator, ZeroApproximation(), AffineApproximation());
+        ContinuousTimeEvolver<ValidatedTag> evolver(system, integrator, ZeroApproximation(), AffineApproximation());
         evolver.configuration().set_maximum_step_size(0.03125);
         const auto result = evolver.orbit(RealVariablesBox({-0.125_dec <= x <= 0.125_dec}), Real(0.25_x), Semantics::UPPER);
         const auto final = cast_exact_box(result.final().bounding_box().euclidean_set());
@@ -71,7 +71,7 @@ class TestContinuousInclusions : public Ariadne::Testing::ContextFixture {
         const OrdinaryDifferentialAlgebraicInclusion system({dot(x) = u - x}, RealVariablesBox({0.5_dec <= u <= 1.5_dec}));
         TaylorPicardIntegrator integrator(step_maximum_error = 1e-6);
         for (const auto& method: List<InputApproximation>{ConstantApproximation(), AffineApproximation()}) {
-            ContinuousTimeEvolver evolver(system, integrator, ConstantApproximation(), method);
+            ContinuousTimeEvolver<ValidatedTag> evolver(system, integrator, ConstantApproximation(), method);
             evolver.configuration().set_maximum_step_size(0.03125);
             const auto result = evolver.orbit(RealVariablesBox({-0.03125_dec <= x <= 0.03125_dec}), Real(0.125_x), Semantics::UPPER);
             const FloatDPBounds decay = exp(FloatDPBounds(-0.125_x, dp));
@@ -90,7 +90,7 @@ class TestContinuousInclusions : public Ariadne::Testing::ContextFixture {
         RealVariable x("x"), y("y"), u("u");
         const OrdinaryDifferentialAlgebraicInclusion system({dot(x) = u, dot(y) = x}, RealVariablesBox({-1 <= u <= 1}));
         TaylorPicardIntegrator integrator(step_maximum_error = 1e-6);
-        ContinuousTimeEvolver evolver(system, integrator, ConstantApproximation(), ConstantApproximation());
+        ContinuousTimeEvolver<ValidatedTag> evolver(system, integrator, ConstantApproximation(), ConstantApproximation());
         evolver.configuration().set_maximum_step_size(0.0625);
         evolver.configuration().set_enable_reconditioning(false);
         const auto result = evolver.orbit(RealVariablesBox({x == 0, y == 0}), Real(0.125_x), Semantics::UPPER);
@@ -110,7 +110,7 @@ class TestContinuousInclusions : public Ariadne::Testing::ContextFixture {
         RealVariable x("x"), u("u");
         const OrdinaryDifferentialAlgebraicInclusion system({dot(x) = u}, RealVariablesBox({-1 <= u <= 1}));
         TaylorPicardIntegrator integrator(step_maximum_error = 1e-6);
-        ContinuousTimeEvolver evolver(system, integrator, ZeroApproximation(), ConstantApproximation());
+        ContinuousTimeEvolver<ValidatedTag> evolver(system, integrator, ZeroApproximation(), ConstantApproximation());
         evolver.configuration().set_enable_reconditioning(false);
         evolver.configuration().set_maximum_step_size(0.03125);
         const ExactBoxType domain({
@@ -135,7 +135,7 @@ class TestContinuousInclusions : public Ariadne::Testing::ContextFixture {
         const OrdinaryDifferentialAlgebraicInclusion system({dot(x) = t + p + u},
                                                             RealVariablesBox({-0.125_dec <= u <= 0.125_dec}), RealVariablesBox({0.125_dec <= p <= 0.25_dec}), t);
         TaylorPicardIntegrator integrator(step_maximum_error = 1e-6);
-        ContinuousTimeEvolver evolver(system, integrator, ZeroApproximation(), ConstantApproximation());
+        ContinuousTimeEvolver<ValidatedTag> evolver(system, integrator, ZeroApproximation(), ConstantApproximation());
         // Input-approximation errors are certified separately from the ODE
         // solver's Taylor error. Resolve them with a smaller maximum step;
         // retain the same analytical endpoint and tight outer tolerance.
@@ -169,7 +169,7 @@ class TestContinuousInclusions : public Ariadne::Testing::ContextFixture {
         const OrdinaryDifferentialAlgebraicInclusion system({dot(x) = p + u},
                                                             RealVariablesBox({-1 <= u <= 1}), RealVariablesBox({-0.5_dec <= p <= 0.5_dec}));
         TaylorPicardIntegrator integrator(step_maximum_error = 1e-6);
-        ContinuousTimeEvolver evolver(system, integrator, ZeroApproximation(), ConstantApproximation());
+        ContinuousTimeEvolver<ValidatedTag> evolver(system, integrator, ZeroApproximation(), ConstantApproximation());
         evolver.configuration().set_maximum_step_size(0.0078125);
         evolver.configuration().set_enable_reconditioning(false);
         const auto result = evolver.orbit(RealVariablesBox({x == 0}), Real(0.09375_x), Semantics::UPPER);
@@ -192,7 +192,7 @@ class TestContinuousInclusions : public Ariadne::Testing::ContextFixture {
         const FirstOrderMultifunctionIntegrator integrator;
         const OrdinaryDifferentialAlgebraicInclusion system({dot(x) = t + p + u},
                                                             RealVariablesBox({-0.125_dec <= u <= 0.125_dec}), RealVariablesBox({0.125_dec <= p <= 0.25_dec}), t);
-        ContinuousTimeEvolver evolver(system, integrator);
+        ContinuousTimeEvolver<ValidatedTag> evolver(system, integrator);
         evolver.configuration().set_maximum_step_size(0.0625);
         const auto result = evolver.orbit(RealVariablesBox({x == 0}), Real(0.09375_x), Semantics::UPPER);
         const auto box = cast_exact_box(result.final().bounding_box().euclidean_set());
@@ -204,7 +204,7 @@ class TestContinuousInclusions : public Ariadne::Testing::ContextFixture {
                                               {0.0_x, 0.044921875_x}
         })));
         const OrdinaryDifferentialAlgebraicInclusion deterministic({dot(x) = 1}, RealVariablesBox{});
-        ContinuousTimeEvolver deterministic_evolver(deterministic, integrator);
+        ContinuousTimeEvolver<ValidatedTag> deterministic_evolver(deterministic, integrator);
         const auto deterministic_result = deterministic_evolver.orbit(RealVariablesBox({x == 0}), Real(0.0625_x), Semantics::UPPER);
         ARIADNE_TESTING_PROVE(subset(ExactBoxType({
                                          {0.0625_x, 0.0625_x}
@@ -224,7 +224,7 @@ class TestContinuousInclusions : public Ariadne::Testing::ContextFixture {
         const OrdinaryDifferentialAlgebraicInclusion system(RealSpace({x}),
                                                             ValidatedVectorIntervalTaylorFunctionModel<FloatDP>({uncertain}));
         const FirstOrderMultifunctionIntegrator boxes;
-        ContinuousTimeEvolver evolver(system, boxes);
+        ContinuousTimeEvolver<ValidatedTag> evolver(system, boxes);
         evolver.configuration().set_maximum_step_size(0.0625);
         const auto result = evolver.orbit(RealVariablesBox({x == 0}), Real(0.09375_x), Semantics::UPPER);
         const auto box = cast_exact_box(result.final().bounding_box().euclidean_set());
@@ -238,7 +238,7 @@ class TestContinuousInclusions : public Ariadne::Testing::ContextFixture {
         ARIADNE_TESTING_EXPECT_THROWS(std::invalid_argument,
                                       evolver.orbit(RealVariablesBox({x == 2}), Real(0.03125_x), Semantics::UPPER));
         TaylorPicardIntegrator base(step_maximum_error = 1e-6);
-        ContinuousTimeEvolver structured(system, base, ZeroApproximation(), ConstantApproximation());
+        ContinuousTimeEvolver<ValidatedTag> structured(system, base, ZeroApproximation(), ConstantApproximation());
         structured.configuration().set_maximum_step_size(0.0625);
         const auto structured_result = structured.orbit(RealVariablesBox({x == 0}), Real(0.09375_x), Semantics::UPPER);
         const auto structured_box = cast_exact_box(structured_result.final().bounding_box().euclidean_set());
@@ -256,10 +256,10 @@ class TestContinuousInclusions : public Ariadne::Testing::ContextFixture {
         const auto make = [&]() {
             OrdinaryDifferentialAlgebraicInclusion system({dot(x) = u}, RealVariablesBox({-1 <= u <= 1}));
             TaylorPicardIntegrator integrator(step_maximum_error = 1e-6);
-            return ContinuousTimeEvolver(system, integrator, ZeroApproximation(), ConstantApproximation());
+            return ContinuousTimeEvolver<ValidatedTag>(system, integrator, ZeroApproximation(), ConstantApproximation());
         };
         const auto evolver = make();
-        std::unique_ptr<ContinuousTimeEvolver> clone(evolver.clone());
+        std::unique_ptr<ContinuousTimeEvolver<ValidatedTag>> clone(evolver.clone());
         clone->configuration().set_maximum_step_size(0.03125);
         const auto result = clone->orbit(RealVariablesBox({x == 0}), Real(0.0625_x), Semantics::UPPER);
         ARIADNE_TESTING_EXPECT_EQUAL(result.reach().size(), 2u);
@@ -281,9 +281,9 @@ class TestContinuousInclusions : public Ariadne::Testing::ContextFixture {
     }
 
     Void test_interval_bound_covers_the_selected_numerical_field() {
-        struct Probe : ContinuousTimeEvolver {
-            using ContinuousTimeEvolver::_inclusion_step;
-            using ContinuousTimeEvolver::ContinuousTimeEvolver;
+        struct Probe : ContinuousTimeEvolver<ValidatedTag> {
+            using ContinuousTimeEvolver<ValidatedTag>::_inclusion_step;
+            using ContinuousTimeEvolver<ValidatedTag>::ContinuousTimeEvolver;
         };
         RealVariable x("x");
         const ExactBoxType domain({

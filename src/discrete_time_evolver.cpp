@@ -58,28 +58,28 @@ List<ES> subdivide(const ES& enclosure) {
 
 } // namespace
 
-DiscreteTimeEvolver::DiscreteTimeEvolver(const SystemType& system)
+DiscreteTimeEvolver<ValidatedTag>::DiscreteTimeEvolver(const SystemType& system)
     : _system(system.clone()), _configuration(new ConfigurationType()) {
 }
 
-const typename DiscreteTimeEvolver::FunctionFactoryType DiscreteTimeEvolver::function_factory() const {
+const typename DiscreteTimeEvolver<ValidatedTag>::FunctionFactoryType DiscreteTimeEvolver<ValidatedTag>::function_factory() const {
     return ValidatedFunctionPatchFactory(make_taylor_function_patch_factory());
 }
 
-typename DiscreteTimeEvolver::EnclosureType DiscreteTimeEvolver::enclosure(const ExactBoxType& box) const {
+typename DiscreteTimeEvolver<ValidatedTag>::EnclosureType DiscreteTimeEvolver<ValidatedTag>::enclosure(const ExactBoxType& box) const {
     return EnclosureType(box, this->system().state_space(), EnclosureConfiguration(this->function_factory()));
 }
 
-Orbit<DiscreteTimeEvolver::EnclosureType>
-    DiscreteTimeEvolver::
+Orbit<DiscreteTimeEvolver<ValidatedTag>::EnclosureType>
+    DiscreteTimeEvolver<ValidatedTag>::
         orbit(const RealExpressionBoundedConstraintSet& initial_set,
               const TerminationType& termination,
               Semantics semantics) const {
     return orbit(EnclosureType(initial_set.euclidean_set(this->system().state_space()), this->system().state_space(), EnclosureConfiguration(this->function_factory())), termination, semantics);
 }
 
-Orbit<DiscreteTimeEvolver::EnclosureType>
-    DiscreteTimeEvolver::
+Orbit<DiscreteTimeEvolver<ValidatedTag>::EnclosureType>
+    DiscreteTimeEvolver<ValidatedTag>::
         orbit(const EnclosureType& initial_set,
               const TerminationType& termination,
               Semantics semantics) const {
@@ -96,7 +96,7 @@ Orbit<DiscreteTimeEvolver::EnclosureType>
     return orbit;
 }
 
-Void DiscreteTimeEvolver::
+Void DiscreteTimeEvolver<ValidatedTag>::
     _evolution(EnclosureListType& final_sets,
                EnclosureListType& reach_sets,
                EnclosureListType& intermediate_sets,
@@ -141,7 +141,7 @@ Void DiscreteTimeEvolver::
     }
 }
 
-Void DiscreteTimeEvolver::
+Void DiscreteTimeEvolver<ValidatedTag>::
     _evolution_step(List<TimedEnclosureType>& working_sets,
                     EnclosureListType&,
                     EnclosureListType& reach_sets,
@@ -177,15 +177,15 @@ Void DiscreteTimeEvolver::
     working_sets.push_back(make_pair(final_time, final_enclosure));
 }
 
-DiscreteTimeEvolverConfiguration::DiscreteTimeEvolverConfiguration() {
+DiscreteTimeEvolverConfiguration<ValidatedTag>::DiscreteTimeEvolverConfiguration() {
     set_maximum_enclosure_radius(100);
     set_enable_subdivisions(false);
     set_enable_premature_termination(false);
 }
 
 OutputStream&
-    DiscreteTimeEvolverConfiguration::_write(OutputStream& os) const {
-    os << "DiscreteTimeEvolverConfiguration"
+    DiscreteTimeEvolverConfiguration<ValidatedTag>::_write(OutputStream& os) const {
+    os << "DiscreteTimeEvolverConfiguration<ValidatedTag>"
        << ",\n  maximum_enclosure_radius=" << maximum_enclosure_radius()
        << ",\n  enable_subdivisions=" << enable_subdivisions()
        << ",\n  enable_premature_termination=" << enable_premature_termination()

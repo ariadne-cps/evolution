@@ -1,5 +1,5 @@
 /***************************************************************************
- *            continuous_time_simulator.hpp
+ *            continuous_time_approximate_evolver.hpp
  *
  *  Copyright  2009-21  Luca Geretti, Mirko Albanese
  *
@@ -22,14 +22,16 @@
  *  along with Ariadne Evolution. If not, see <https://www.gnu.org/licenses/>.
  */
 
-/** @file evolution/continuous_time_simulator.hpp
+/** @file evolution/continuous_time_approximate_evolver.hpp
  *  @brief Numerical simulation of continuous vector-field systems.
  */
 
-#ifndef ARIADNE_CONTINUOUS_TIME_SIMULATOR_HPP
-#define ARIADNE_CONTINUOUS_TIME_SIMULATOR_HPP
+#ifndef ARIADNE_CONTINUOUS_TIME_APPROXIMATE_EVOLVER_HPP
+#define ARIADNE_CONTINUOUS_TIME_APPROXIMATE_EVOLVER_HPP
 
 #include "evolution/configuration_interface.hpp"
+#include "evolution/evolver.decl.hpp"
+#include "evolution/evolver_interface.hpp"
 #include "evolution/orbit.hpp"
 #include "geometry/point.hpp"
 #include "logging/logging.hpp"
@@ -62,8 +64,9 @@ inline OutputStream& operator<<(OutputStream& os, const DiscretisationType& dtyp
 
 /** @brief OrdinaryDifferentialAlgebraicEquation: numerical simulation of continuous vector-field systems. */
 class OrdinaryDifferentialAlgebraicEquation;
-/** @brief ContinuousTimeSimulatorConfiguration: numerical simulation of continuous vector-field systems. */
-class ContinuousTimeSimulatorConfiguration;
+/** @brief ContinuousTimeEvolverConfiguration<ApproximateTag>: numerical simulation of continuous vector-field systems. */
+template<>
+class ContinuousTimeEvolverConfiguration<ApproximateTag>;
 
 /** @brief RealExpressionBoundedConstraintSet: numerical simulation of continuous vector-field systems. */
 class RealExpressionBoundedConstraintSet;
@@ -76,8 +79,12 @@ using subspace = Map<RealVariable, Nat>;
 
 /*! \brief A class for computing the simulated evolution of a continuous system.
  */
-class ContinuousTimeSimulator {
+template<>
+class ContinuousTimeEvolver<ApproximateTag>
+    : public EvolverInterface<ApproximateTag, OrdinaryDifferentialAlgebraicEquation, List<LabelledPoint<FloatDPApproximation>>, Real> {
   public:
+    using Paradigm = ApproximateTag;
+    using Interface = EvolverInterface<ApproximateTag, OrdinaryDifferentialAlgebraicEquation, List<LabelledPoint<FloatDPApproximation>>, Real>;
     typedef FloatDPApproximation ApproximateTimeType;
     typedef LabelledPoint<FloatDPApproximation> ApproximatePointType;
     typedef List<ApproximatePointType> ApproximateListPointType;
@@ -86,7 +93,7 @@ class ContinuousTimeSimulator {
     typedef RealVariablesBox RealBoxType;
     typedef Real TerminationType;
     typedef OrdinaryDifferentialAlgebraicEquation SystemType;
-    typedef ContinuousTimeSimulatorConfiguration ConfigurationType;
+    typedef ContinuousTimeEvolverConfiguration<ApproximateTag> ConfigurationType;
     typedef Orbit<ApproximateListPointType> OrbitType;
 
     //! \brief Synchronised wrapping of orbit to allow concurrent adjoining
@@ -106,7 +113,9 @@ class ContinuousTimeSimulator {
   public:
     //! \brief Construct from an autonomous or nonautonomous ODAE without fixed parameters.
     //! \throws std::invalid_argument if constant model parameters are declared.
-    ContinuousTimeSimulator(const SystemType& system);
+    ContinuousTimeEvolver(const SystemType& system);
+    ContinuousTimeEvolver* clone() const override { return new ContinuousTimeEvolver(*this); }
+    const SystemType& system() const override { return *_system; }
 
     //!@{
     //! \name Configuration for the class.
@@ -121,7 +130,7 @@ class ContinuousTimeSimulator {
     /** @brief Perform the specified evolution operation. */
     OrbitType orbit(const RealExpressionBoundedConstraintSet& initial_set, const TerminationType& termination) const;
     /** @brief Perform the specified evolution operation. */
-    OrbitType orbit(const ApproximateListPointType& initial_list, const TerminationType& termination) const;
+    OrbitType orbit(const ApproximateListPointType& initial_list, const TerminationType& termination) const override;
     /** @brief Perform the specified evolution operation. */
     OrbitType orbit(UpperBoxType& initial_box, const TerminationType& termination) const;
 
@@ -134,13 +143,15 @@ class ContinuousTimeSimulator {
     SharedPointer<ConfigurationType> _configuration;
 };
 
-//! \brief Configuration for a ContinuousTimeSimulator, essentially to control accuracy of evolution.
-class ContinuousTimeSimulatorConfiguration : public ConfigurationInterface {
+//! \brief Configuration for a ContinuousTimeEvolver<ApproximateTag>, essentially to control accuracy of evolution.
+template<>
+class ContinuousTimeEvolverConfiguration<ApproximateTag> : public ConfigurationInterface {
   public:
+    using Paradigm = ApproximateTag;
     //! \brief Default constructor gives reasonable values.
-    ContinuousTimeSimulatorConfiguration();
+    ContinuousTimeEvolverConfiguration();
 
-    virtual ~ContinuousTimeSimulatorConfiguration() = default;
+    virtual ~ContinuousTimeEvolverConfiguration() = default;
 
   private:
     //! \brief The fixed integration step size to use.
@@ -194,4 +205,4 @@ class ContinuousTimeSimulatorConfiguration : public ConfigurationInterface {
 
 } // namespace Ariadne
 
-#endif // ARIADNE_CONTINUOUS_TIME_SIMULATOR_HPP
+#endif // ARIADNE_CONTINUOUS_TIME_APPROXIMATE_EVOLVER_HPP

@@ -40,12 +40,12 @@
 using namespace Ariadne;
 using namespace Ariadne::EvolutionDetail;
 
-class StepProbe : public HybridContinuousTimeEvolver {
+class StepProbe : public HybridContinuousTimeEvolver<ValidatedTag> {
   public:
-    using HybridContinuousTimeEvolver::_estimate_timing;
-    using HybridContinuousTimeEvolver::HybridContinuousTimeEvolver;
-    using HybridContinuousTimeEvolverBase::_apply_evolve_step;
-    using HybridContinuousTimeEvolverBase::_compute_integration_step;
+    using HybridContinuousTimeEvolver<ValidatedTag>::_estimate_timing;
+    using HybridContinuousTimeEvolver<ValidatedTag>::HybridContinuousTimeEvolver;
+    using HybridContinuousTimeEvolverBase<ValidatedTag>::_apply_evolve_step;
+    using HybridContinuousTimeEvolverBase<ValidatedTag>::_compute_integration_step;
 };
 
 // An exact analytic flow x(t)=x0+t, y(t)=y0 isolates guard mathematics
@@ -97,7 +97,7 @@ struct LinearGuardScenario {
 
 // Both certificates enclose x'=1, but the tube deliberately carries a wider
 // uniform error. Its endpoint slice must not replace the independent endpoint.
-class CertificateProbe : public HybridContinuousTimeEvolver {
+class CertificateProbe : public HybridContinuousTimeEvolver<ValidatedTag> {
   public:
     enum class Shape { STRUCTURED,
                        MULTIPATCH,
@@ -105,8 +105,8 @@ class CertificateProbe : public HybridContinuousTimeEvolver {
                        INPUT_COORDINATE };
     Shape shape = Shape::STRUCTURED;
     mutable std::optional<ExactBoxType> certified_domain;
-    using HybridContinuousTimeEvolver::HybridContinuousTimeEvolver;
-    using HybridContinuousTimeEvolverBase::_evolution_step;
+    using HybridContinuousTimeEvolver<ValidatedTag>::HybridContinuousTimeEvolver;
+    using HybridContinuousTimeEvolverBase<ValidatedTag>::_evolution_step;
 
   protected:
     ValidatedIntegrationStep _compute_integration_step(EffectiveVectorMultivariateFunction,

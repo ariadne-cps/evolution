@@ -1,10 +1,10 @@
 import pyariadne_evolution as a
 
 def test_evolution_bindings():
-    names = ("Semantics", "Enclosure", "ContinuousTimeSimulator",
+    names = ("Semantics", "Enclosure", "ContinuousTimeEvolver", "ApproximateTag", "ValidatedTag",
              "OrdinaryDifferentialAlgebraicEquation", "OrdinaryDifferentialAlgebraicInclusion",
-             "DiscreteTimeEvolver", "DiscreteTimeEvolverConfiguration", "ContinuousTimeEvolver", "HybridTime",
-             "HybridEnclosure", "HybridContinuousTimeSimulator", "recombine",
+             "DiscreteTimeEvolver", "DiscreteTimeValidatedEvolverConfiguration", "HybridTime",
+             "HybridEnclosure", "HybridContinuousTimeEvolver", "recombine",
              "EnclosureRecombinerInterface", "EnclosureRecombiner",
              "ReferenceEnclosureRecombiner", "EnclosureRecombinationContext",
              "EnclosureRecombinationResult", "EnclosureRecombinationOutput")
@@ -17,10 +17,33 @@ def test_evolution_bindings():
         assert not hasattr(a, old_name)
 
 
+def test_paradigm_contracts():
+    import unittest
+    approximate = a.ContinuousTimeEvolver[a.ApproximateTag]
+    validated = a.ContinuousTimeEvolver[a.ValidatedTag]
+    assert approximate is not validated
+    assert a.DiscreteTimeEvolver[a.ValidatedTag] is a.DiscreteTimeValidatedEvolver
+    assert a.HybridContinuousTimeEvolver[a.ApproximateTag] is a.HybridContinuousTimeApproximateEvolver
+    for old_name in ("ContinuousTimeSimulator", "HybridContinuousTimeSimulator"):
+        assert not hasattr(a, old_name)
+    case = unittest.TestCase()
+    with case.assertRaises(KeyError):
+        a.DiscreteTimeEvolver[a.ApproximateTag]
+    x = a.RealVariable("x")
+    equation = a.OrdinaryDifferentialAlgebraicEquation([a.dot(x) << x])
+    initial = a.RealExpressionBoundedConstraintSet([(a.dec_(0.9) <= x) & (x <= a.dec_(1.1))], [])
+    sampled = approximate(equation)
+    with case.assertRaises(TypeError):
+        sampled.orbit(initial, a.Real(1)/16, a.Semantics.UPPER)
+    certified = validated(equation, a.TaylorPicardIntegrator(1e-5))
+    with case.assertRaises(TypeError):
+        certified.orbit(initial, a.Real(1)/16)
+
+
 def test_iterated_map_configuration():
-    from pyariadne_evolution import IteratedMap, DiscreteTimeEvolver, RealVariable, next
+    from pyariadne_evolution import IteratedMap, DiscreteTimeEvolver, ValidatedTag, RealVariable, next
     x = RealVariable("x")
-    evolver = DiscreteTimeEvolver(IteratedMap([next(x) << x / 2]))
+    evolver = DiscreteTimeEvolver[ValidatedTag](IteratedMap([next(x) << x / 2]))
     config = evolver.configuration()
     config.set_maximum_enclosure_radius(1.0)
     config.set_enable_subdivisions(False)
@@ -29,7 +52,7 @@ def test_iterated_map_configuration():
 
 def test_continuous_recombination():
     x = a.RealVariable("x")
-    evolver = a.DiscreteTimeEvolver(a.IteratedMap([a.next(x) << x / 2]))
+    evolver = a.DiscreteTimeEvolver[a.ValidatedTag](a.IteratedMap([a.next(x) << x / 2]))
     evolver.configuration().set_maximum_enclosure_radius(1.0)
     initial = a.RealExpressionBoundedConstraintSet(
         [(a.dec_(0.9) <= x) & (x <= a.dec_(1.1))], [])
@@ -74,35 +97,35 @@ def test_ordinary_equation_consumers():
     equation = a.OrdinaryDifferentialAlgebraicEquation(
         [a.dot(x) << 1], [a.let(output) << (2*x)])
     integrator = a.TaylorPicardIntegrator(1e-5)
-    evolver = a.ContinuousTimeEvolver(equation, integrator)
+    evolver = a.ContinuousTimeEvolver[a.ValidatedTag](equation, integrator)
     initial = a.RealExpressionBoundedConstraintSet([(0 <= x) & (x <= 0)], [])
     orbit = evolver.orbit(initial, a.Real(1)/16, a.Semantics.UPPER)
     assert orbit.final().size() > 0
     assert orbit.final()[0].state_set().dimension() == 1
     assert orbit.final()[0].state_auxiliary_set().dimension() == 2
-    assert isinstance(a.ContinuousTimeSimulator(equation), a.ContinuousTimeSimulator)
+    assert isinstance(a.ContinuousTimeEvolver[a.ApproximateTag](equation), a.ContinuousTimeEvolver[a.ApproximateTag])
     timed = a.OrdinaryDifferentialAlgebraicEquation(
         [a.dot(x) << (t - x)], a.RealVariablesBox({}), time=t)
-    timed_evolver = a.ContinuousTimeEvolver(timed, integrator)
+    timed_evolver = a.ContinuousTimeEvolver[a.ValidatedTag](timed, integrator)
     timed_evolver.configuration().set_maximum_step_size(0.03125)
     timed_orbit = timed_evolver.orbit(initial, a.Real(1)/16, a.Semantics.UPPER)
     assert timed_orbit.final().size() > 0
     assert timed_orbit.reach().size() >= 2
     parameterised = a.OrdinaryDifferentialAlgebraicEquation(
         [a.dot(x) << (p - x)], a.RealVariablesBox({p: (0, 1)}))
-    parameterised_evolver = a.ContinuousTimeEvolver(parameterised, integrator)
+    parameterised_evolver = a.ContinuousTimeEvolver[a.ValidatedTag](parameterised, integrator)
     parameterised_evolver.configuration().set_maximum_step_size(0.03125)
     parameterised_orbit = parameterised_evolver.orbit(initial, a.Real(1)/16, a.Semantics.UPPER)
     assert parameterised_orbit.final().size() > 0
     assert parameterised_orbit.reach().size() >= 2
     with unittest.TestCase().assertRaises(ValueError):
         parameterised_evolver.orbit(initial, a.Real(1)/16, a.Semantics.LOWER)
-    timed_simulator = a.ContinuousTimeSimulator(timed)
+    timed_simulator = a.ContinuousTimeEvolver[a.ApproximateTag](timed)
     timed_simulator.configuration().set_step_size(0.03125)
     timed_simulator.orbit(initial, a.Real(1)/16)
     for field in (parameterised,):
         with unittest.TestCase().assertRaises(ValueError):
-            a.ContinuousTimeSimulator(field)
+            a.ContinuousTimeEvolver[a.ApproximateTag](field)
 
 
 def test_common_inclusion_consumers():
@@ -112,10 +135,10 @@ def test_common_inclusion_consumers():
         [a.dot(x) << (t + p + u)], a.RealVariablesBox({u: (-1, 1)}),
         a.RealVariablesBox({p: (0, 1)}), time=t)
     integrator = a.TaylorPicardIntegrator(1e-6)
-    selected = a.ContinuousTimeEvolver(
+    selected = a.ContinuousTimeEvolver[a.ValidatedTag](
         system, integrator, a.InputApproximation(a.ZeroApproximation()),
         a.InputApproximation(a.ConstantApproximation()))
-    boxes = a.ContinuousTimeEvolver(system, a.FirstOrderMultifunctionIntegrator())
+    boxes = a.ContinuousTimeEvolver[a.ValidatedTag](system, a.FirstOrderMultifunctionIntegrator())
     initial = a.RealExpressionBoundedConstraintSet([(0 <= x) & (x <= 0)], [])
     for evolver in (selected, boxes):
         evolver.configuration().set_maximum_step_size(0.03125)
@@ -129,6 +152,7 @@ def test_common_inclusion_consumers():
 
 if __name__ == "__main__":
     test_evolution_bindings()
+    test_paradigm_contracts()
     test_iterated_map_configuration()
     test_continuous_recombination()
     test_ordinary_equation_consumers()

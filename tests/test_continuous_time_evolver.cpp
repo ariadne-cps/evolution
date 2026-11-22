@@ -1,5 +1,5 @@
 /***************************************************************************
- *            test_continuous_time_evolver.cpp
+ *            test_continuous_time_validated_evolver.cpp
  *
  *  Copyright  2006-21  Pieter Collins
  *
@@ -22,7 +22,7 @@
  *  along with Ariadne Evolution. If not, see <https://www.gnu.org/licenses/>.
  */
 
-/** @file tests/test_continuous_time_evolver.cpp
+/** @file tests/test_continuous_time_validated_evolver.cpp
  *  @brief Test vector field evolver behavior and numerical invariants.
  */
 
@@ -67,7 +67,7 @@ class TestContinuousTimeEvolver : public Ariadne::Testing::ContextFixture {
             {dot(x) = p, dot(y) = q * x},
             RealVariablesBox({-1 <= p <= 1, 0.5_dec <= q <= 1}));
         TaylorPicardIntegrator integrator(step_maximum_error = 1e-8);
-        ContinuousTimeEvolver evolver(equation, integrator);
+        ContinuousTimeEvolver<ValidatedTag> evolver(equation, integrator);
         evolver.configuration().set_enable_reconditioning(false);
         evolver.configuration().set_maximum_step_size(0.0625);
         const auto result = evolver.orbit(RealVariablesBox({x == 0, y == 0}),
@@ -101,7 +101,7 @@ class TestContinuousTimeEvolver : public Ariadne::Testing::ContextFixture {
         const OrdinaryDifferentialAlgebraicEquation equation(
             {dot(x) = p * (2 * t - Real(0.09375_x))}, RealVariablesBox({-1 <= p <= 1}), t);
         TaylorPicardIntegrator integrator(step_maximum_error = 1e-8);
-        ContinuousTimeEvolver evolver(equation, integrator);
+        ContinuousTimeEvolver<ValidatedTag> evolver(equation, integrator);
         evolver.configuration().set_maximum_step_size(0.0625);
         evolver.configuration().set_maximum_spacial_error(0x1p-18);
         evolver.configuration().set_enable_subdivisions(true);
@@ -142,7 +142,7 @@ class TestContinuousTimeEvolver : public Ariadne::Testing::ContextFixture {
         const OrdinaryDifferentialAlgebraicEquation equation(
             {dot(x) = t}, RealVariablesBox{}, t);
         TaylorPicardIntegrator integrator(step_maximum_error = 1e-6);
-        ContinuousTimeEvolver evolver(equation, integrator);
+        ContinuousTimeEvolver<ValidatedTag> evolver(equation, integrator);
         evolver.configuration().set_enable_reconditioning(false);
         evolver.configuration().set_maximum_step_size(0.0625);
         const auto result = evolver.orbit(RealVariablesBox({x == 0}),
@@ -206,7 +206,7 @@ class TestContinuousTimeEvolver : public Ariadne::Testing::ContextFixture {
         RealVariable x("x");
         OrdinaryDifferentialAlgebraicEquation field(List<DottedRealAssignment>{dot(x) = 0});
         TaylorPicardIntegrator integrator(step_maximum_error = 1e-6);
-        ContinuousTimeEvolver evolver(field, integrator);
+        ContinuousTimeEvolver<ValidatedTag> evolver(field, integrator);
         evolver.configuration().set_enable_reconditioning(false);
         evolver.configuration().set_maximum_enclosure_radius(0.75);
         for (const auto& constraint: List<ContinuousPredicate>{x <= 0.25_dec, x >= 1.75_dec}) {
@@ -228,14 +228,14 @@ class TestContinuousTimeEvolver : public Ariadne::Testing::ContextFixture {
             PreconditionedGradedTaylorSeriesIntegrator integrator(step_maximum_error = 1e-6);
             integrator.set_preconditioning(mode);
             integrator.set_diagnostics(true);
-            ContinuousTimeEvolver evolver(field, integrator);
+            ContinuousTimeEvolver<ValidatedTag> evolver(field, integrator);
             evolver.configuration().set_maximum_step_size(0.03125);
             evolver.configuration().set_enable_reconditioning(false);
             auto initial = evolver.enclosure(ExactBoxType({
                 {-0.03125_x, 0.03125_x}
             }));
-            std::unique_ptr<ContinuousTimeEvolver> clone(evolver.clone());
-            const ContinuousTimeEvolver& immutable = *clone;
+            std::unique_ptr<ContinuousTimeEvolver<ValidatedTag>> clone(evolver.clone());
+            const ContinuousTimeEvolver<ValidatedTag>& immutable = *clone;
             ARIADNE_TESTING_EXPECT_EQUAL(immutable.configuration().maximum_step_size(), 0.03125_x);
             auto result = immutable.orbit(initial, Real(1), Semantics::UPPER);
             ARIADNE_TESTING_PROVE(result.final().size() > 0u);
@@ -256,7 +256,7 @@ class TestContinuousTimeEvolver : public Ariadne::Testing::ContextFixture {
         OrdinaryDifferentialAlgebraicEquation field(List<DottedRealAssignment>{dot(x) = 0});
         PreconditionedGradedTaylorSeriesIntegrator integrator(step_maximum_error = 1e-6);
         integrator.set_carried_expansion_diagnostics(true);
-        ContinuousTimeEvolver evolver(field, integrator);
+        ContinuousTimeEvolver<ValidatedTag> evolver(field, integrator);
         evolver.configuration().set_maximum_step_size(1.0 / 2048.0);
         auto result = evolver.orbit(RealVariablesBox({0.9_dec <= x <= 1.1_dec}), Real(1), Semantics::UPPER);
         ARIADNE_TESTING_EXPECT_EQUAL(result.reach().size(), 2048u);
@@ -267,7 +267,7 @@ class TestContinuousTimeEvolver : public Ariadne::Testing::ContextFixture {
     }
 
     Void test_single_trajectory() {
-        typedef ContinuousTimeEvolver::EnclosureType EnclosureType;
+        typedef ContinuousTimeEvolver<ValidatedTag>::EnclosureType EnclosureType;
 
         // Set up the evolution parameters and grid
         Real time(2.0_dec);
@@ -297,7 +297,7 @@ class TestContinuousTimeEvolver : public Ariadne::Testing::ContextFixture {
 
         Semantics semantics = Semantics::LOWER;
 
-        ContinuousTimeEvolver evolver(vanderpol, integrator);
+        ContinuousTimeEvolver<ValidatedTag> evolver(vanderpol, integrator);
         evolver.configuration().set_maximum_enclosure_radius(enclosure_radius);
         evolver.configuration().set_maximum_step_size(step_size);
         ARIADNE_TESTING_NOTE(evolver.configuration());
@@ -357,7 +357,7 @@ class TestContinuousTimeEvolver : public Ariadne::Testing::ContextFixture {
                                           minimum_temporal_order = 0, maximum_temporal_order = 8);
 
         OrdinaryDifferentialAlgebraicEquation fail_vf({dot(x) = 1, dot(y) = y * y * 100});
-        ContinuousTimeEvolver evolver(fail_vf, integrator);
+        ContinuousTimeEvolver<ValidatedTag> evolver(fail_vf, integrator);
         evolver.configuration().set_maximum_enclosure_radius(enclosure_radius);
         evolver.configuration().set_maximum_step_size(maximum_step_size);
         //        evolver.configuration().set_minimum_step_size(minimum_step_size);
@@ -380,7 +380,7 @@ class TestContinuousTimeEvolver : public Ariadne::Testing::ContextFixture {
 
         TaylorPicardIntegrator integrator(max_err);
 
-        ContinuousTimeEvolver evolver(dynamics, integrator);
+        ContinuousTimeEvolver<ValidatedTag> evolver(dynamics, integrator);
         evolver.configuration().set_maximum_enclosure_radius(0.1);
         evolver.configuration().set_maximum_step_size(0.1);
         evolver.configuration().set_maximum_spacial_error(1e-5);
@@ -409,7 +409,7 @@ class TestContinuousTimeEvolver : public Ariadne::Testing::ContextFixture {
 
         TaylorPicardIntegrator integrator(max_err);
 
-        ContinuousTimeEvolver evolver(dynamics, integrator);
+        ContinuousTimeEvolver<ValidatedTag> evolver(dynamics, integrator);
         evolver.configuration().set_maximum_enclosure_radius(0.1);
         evolver.configuration().set_maximum_step_size(0.1);
         evolver.configuration().set_maximum_spacial_error(1e-5);

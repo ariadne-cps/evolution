@@ -29,6 +29,10 @@
 #ifndef ARIADNE_EVOLVER_INTERFACE_HPP
 #define ARIADNE_EVOLVER_INTERFACE_HPP
 
+#include <cstdint>
+
+#include "evolution/evolver.decl.hpp"
+
 namespace Ariadne {
 
 template<class ES>
@@ -44,57 +48,54 @@ enum class Semantics : std::uint8_t {
     UPPER  //!< Over-approximations with all possibilities included as spacial discontinuities.
 };
 
-//! \ingroup DynamicsModule
-//! \brief Interface for evolving a dynamic system.
-//! \sa HybridContinuousTimeEvolverInterface
-//! \sa ReachabilityAnalyserInterface
+/** @brief Paradigm-specific evolution contract. Unsupported paradigms are incomplete. */
+template<class P, class SYS, class ST, class TRM>
+class EvolverInterface;
+
+/** @brief Validated evolution returns enclosures under explicit set semantics. */
 template<class SYS, class ES, class TRM>
-/** @brief EvolverInterface: interfaces and semantics of time evolution. */
-class EvolverInterface {
+class EvolverInterface<ValidatedTag, SYS, ES, TRM> {
   public:
-    //! \brief The type of system the evolver can compute the behaviour of.
-    typedef SYS SystemType;
-    //! \brief The type used to represent the evolution time of the system.
-    typedef typename SystemType::TimeType TimeType;
-    //! \brief The type used to represent conditions under which system evolution may be terminated.
-    typedef TRM TerminationType;
-    //! \brief The type of set used to enclose the flow tubes.
-    typedef ES EnclosureType;
-    //! \brief The type of a list of enclosure sets.
-    typedef ListSet<EnclosureType> EnclosureListType;
-
-    //! \brief Virtual destructor.
+    using Paradigm = ValidatedTag;
+    using SystemType = SYS;
+    using TimeType = typename SYS::TimeType;
+    using TerminationType = TRM;
+    using InitialType = ES;
+    using EnclosureType = ES;
+    using EnclosureListType = ListSet<ES>;
+    using OrbitType = Orbit<ES>;
+    using ResultType = OrbitType;
     virtual ~EvolverInterface() = default;
-
-    //! \brief Cloning operator.
-    virtual EvolverInterface<SystemType, EnclosureType, TerminationType>* clone() const = 0;
-
-    //! \brief Gets the system associated with the evolver.
+    virtual EvolverInterface* clone() const = 0;
     virtual const SystemType& system() const = 0;
-
-  public:
-    //!@{
-    //! \name Main evolution functions.
-
-    //! \brief Compute an approximation to the evolved set under the given semantics.
-    virtual Orbit<EnclosureType> orbit(const EnclosureType& initial_set, const TerminationType& time, Semantics semantics) const = 0;
-
-    //!@}
+    virtual OrbitType orbit(const InitialType&, const TerminationType&, Semantics) const = 0;
 };
 
-//! \brief Factory for evolver interface classes.
-template<class SYS, class ES, class TRM>
-/** @brief EvolverFactoryInterface: interfaces and semantics of time evolution. */
+/** @brief Approximate evolution returns sampled trajectories without set semantics. */
+template<class SYS, class PT, class TRM>
+class EvolverInterface<ApproximateTag, SYS, PT, TRM> {
+  public:
+    using Paradigm = ApproximateTag;
+    using SystemType = SYS;
+    using TimeType = typename SYS::TimeType;
+    using TerminationType = TRM;
+    using InitialType = PT;
+    using OrbitType = Orbit<PT>;
+    using ResultType = OrbitType;
+    virtual ~EvolverInterface() = default;
+    virtual EvolverInterface* clone() const = 0;
+    virtual const SystemType& system() const = 0;
+    virtual OrbitType orbit(const InitialType&, const TerminationType&) const = 0;
+};
+
+/** @brief Factory retaining the paradigm-specific input and result contract. */
+template<class P, class SYS, class ST, class TRM>
 class EvolverFactoryInterface {
   public:
     virtual ~EvolverFactoryInterface() = default;
-
-    //! \brief Create a copy of the factory.
     virtual EvolverFactoryInterface* clone() const = 0;
-    //! \brief Create an evolver interface object around a \a system.
-    virtual EvolverInterface<SYS, ES, TRM>* create(const SYS& system) const = 0;
+    virtual EvolverInterface<P, SYS, ST, TRM>* create(const SYS&) const = 0;
 };
 
 } // namespace Ariadne
-
 #endif // ARIADNE_EVOLVER_INTERFACE_HPP

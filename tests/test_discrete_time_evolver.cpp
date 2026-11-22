@@ -64,11 +64,11 @@ class TestDiscreteTimeEvolver : public Ariadne::Testing::ContextFixture {
     Void test_stopping_policies() {
         RealVariable x("x"), other("other");
         IteratedMap map(List<PrimedRealAssignment>{next(x) = x + 1});
-        DiscreteTimeEvolver evolver(map);
+        DiscreteTimeEvolver<ValidatedTag> evolver(map);
         auto initial = evolver.enclosure(ExactBoxType({
             {-1.0_x, 1.0_x}
         }));
-        std::unique_ptr<DiscreteTimeEvolver> clone(evolver.clone());
+        std::unique_ptr<DiscreteTimeEvolver<ValidatedTag>> clone(evolver.clone());
         const auto& const_evolver = *clone;
         ARIADNE_TESTING_EXPECT_EQUAL(const_evolver.configuration().maximum_enclosure_radius(), 100.0);
         ARIADNE_TESTING_EXPECT_EQUAL(clone->system().state_space(), RealSpace({x}));
@@ -147,7 +147,7 @@ class TestDiscreteTimeEvolver : public Ariadne::Testing::ContextFixture {
         IteratedMap::TimeType time(6);
 
         // Set up the evaluators
-        DiscreteTimeEvolver evolver(henon);
+        DiscreteTimeEvolver<ValidatedTag> evolver(henon);
         evolver.configuration().set_maximum_enclosure_radius(0.25);
 
         ARIADNE_TESTING_NOTE(evolver.configuration());
@@ -180,7 +180,7 @@ class TestDiscreteTimeEvolver : public Ariadne::Testing::ContextFixture {
 
         IteratedMap::TimeType time(6);
 
-        DiscreteTimeEvolver evolver(henon);
+        DiscreteTimeEvolver<ValidatedTag> evolver(henon);
         evolver.configuration().set_maximum_enclosure_radius(0.1);
         evolver.configuration().set_enable_subdivisions(true);
 

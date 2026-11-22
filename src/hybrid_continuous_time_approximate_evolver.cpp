@@ -1,5 +1,5 @@
 /***************************************************************************
- *            hybrid_continuous_time_simulator.cpp
+ *            hybrid_continuous_time_approximate_evolver.cpp
  *
  *  Copyright  2008-20  Luca Geretti, Mirko Albanese
  *
@@ -22,11 +22,11 @@
  *  along with Ariadne Evolution. If not, see <https://www.gnu.org/licenses/>.
  */
 
-/** @file src/hybrid_continuous_time_simulator.cpp
+/** @file src/hybrid_continuous_time_approximate_evolver.cpp
  *  @brief Implement hybrid simulator operations.
  */
 
-#include "evolution/hybrid_continuous_time_simulator.hpp"
+#include "evolution/hybrid_continuous_time_approximate_evolver.hpp"
 
 #include <stdexcept>
 
@@ -67,12 +67,12 @@ void validate_simulation_mode(const HybridAutomatonInterface& system, DiscreteLo
 }
 } // namespace
 
-HybridContinuousTimeSimulator::HybridContinuousTimeSimulator(const SystemType& system)
+HybridContinuousTimeEvolver<ApproximateTag>::HybridContinuousTimeEvolver(const SystemType& system)
     : _sys_ptr(system.clone()), _configuration(new ConfigurationType()) {
 }
 
 Map<DiscreteEvent, EffectiveScalarMultivariateFunction>
-    HybridContinuousTimeSimulator::_guard_functions(const DiscreteLocation& location) const {
+    HybridContinuousTimeEvolver<ApproximateTag>::_guard_functions(const DiscreteLocation& location) const {
     Set<DiscreteEvent> events = _sys_ptr->events(location);
     Map<DiscreteEvent, EffectiveScalarMultivariateFunction> guards;
     for (Set<DiscreteEvent>::ConstIterator iter = events.begin(); iter != events.end(); ++iter) {
@@ -83,7 +83,7 @@ Map<DiscreteEvent, EffectiveScalarMultivariateFunction>
     return guards;
 }
 
-Bool HybridContinuousTimeSimulator::_satisfies_invariants(const DiscreteLocation& location, const Point<FloatDPApproximation>& point, const FloatDPApproximation& time) const {
+Bool HybridContinuousTimeEvolver<ApproximateTag>::_satisfies_invariants(const DiscreteLocation& location, const Point<FloatDPApproximation>& point, const FloatDPApproximation& time) const {
     Set<DiscreteEvent> events = _sys_ptr->events(location);
     for (const auto& event: events) {
         EventKind kind = _sys_ptr->event_kind(location, event);
@@ -190,7 +190,7 @@ inline FloatDPApproximation evaluate(const EffectiveScalarMultivariateFunction& 
 inline Vector<FloatDPApproximation> evaluate(const EffectiveVectorMultivariateFunction& f, const Vector<FloatDPApproximation>& x) { return f(x); }
 
 /*
-auto HybridContinuousTimeSimulator::orbit(const HybridBoundedConstraintSet& initial_set, const TerminationType& termination) const
+auto HybridContinuousTimeEvolver<ApproximateTag>::orbit(const HybridBoundedConstraintSet& initial_set, const TerminationType& termination) const
     -> Orbit<HybridApproximatePointType>
 {
     DiscreteLocation first_location = *initial_set.locations().begin();
@@ -200,13 +200,13 @@ auto HybridContinuousTimeSimulator::orbit(const HybridBoundedConstraintSet& init
 }
 */
 
-auto HybridContinuousTimeSimulator::orbit(const HybridRealPoint& init_pt, const TerminationType& termination) const
+auto HybridContinuousTimeEvolver<ApproximateTag>::orbit(const HybridRealPoint& init_pt, const TerminationType& termination) const
     -> Orbit<HybridApproximatePointType> {
     return orbit(HybridApproximatePointType(init_pt, dp), termination);
 }
 
-auto HybridContinuousTimeSimulator::orbit(const HybridApproximatePointType& init_pt,
-                                          const TerminationType& termination) const
+auto HybridContinuousTimeEvolver<ApproximateTag>::orbit(const HybridApproximatePointType& init_pt,
+                                                        const TerminationType& termination) const
     -> Orbit<HybridApproximatePointType> {
     LOGGING_SCOPE_CREATE;
 
@@ -296,7 +296,7 @@ auto HybridContinuousTimeSimulator::orbit(const HybridApproximatePointType& init
     return orbit;
 }
 
-auto HybridContinuousTimeSimulator::orbit(const HybridBoundedConstraintSet& initial_set, const TerminationType& termination) const
+auto HybridContinuousTimeEvolver<ApproximateTag>::orbit(const HybridBoundedConstraintSet& initial_set, const TerminationType& termination) const
     -> OrbitListType {
     DiscreteLocation first_location = *initial_set.locations().begin();
     RealSpace spc = this->_sys_ptr->continuous_state_space(first_location);
@@ -305,7 +305,7 @@ auto HybridContinuousTimeSimulator::orbit(const HybridBoundedConstraintSet& init
     return orbit(Hbox, first_location, this->_sys_ptr->state_space(), termination);
 }
 /*
-auto HybridContinuousTimeSimulator::orbit(const Vector<HybridRealPoint>& initial_set, const TerminationType& termination) const
+auto HybridContinuousTimeEvolver<ApproximateTag>::orbit(const Vector<HybridRealPoint>& initial_set, const TerminationType& termination) const
     -> Orbit<HybridApproximateListPointType>
 {
     HybridApproximateListPointType point_list = HybridApproximateListPointType(initial_set.size(),HybridApproximatePointType(initial_set.at(0),dp));
@@ -317,7 +317,7 @@ auto HybridContinuousTimeSimulator::orbit(const Vector<HybridRealPoint>& initial
 }
 */
 
-auto HybridContinuousTimeSimulator::orbit(const HybridUpperBox& initial_box, DiscreteLocation loc, HybridSpace space, const TerminationType& termination) const
+auto HybridContinuousTimeEvolver<ApproximateTag>::orbit(const HybridUpperBox& initial_box, DiscreteLocation loc, HybridSpace space, const TerminationType& termination) const
     -> Orbit<HybridApproximateListPointType> {
     auto box = initial_box.euclidean_set(space[loc]);
     auto lengths = box.widths();
@@ -343,8 +343,8 @@ auto HybridContinuousTimeSimulator::orbit(const HybridUpperBox& initial_box, Dis
     return orbit(pointList, termination);
 }
 
-auto HybridContinuousTimeSimulator::orbit(const HybridApproximateListPointType& init_list,
-                                          const TerminationType& termination) const
+auto HybridContinuousTimeEvolver<ApproximateTag>::orbit(const HybridApproximateListPointType& init_list,
+                                                        const TerminationType& termination) const
     -> Orbit<HybridApproximateListPointType> {
     LOGGING_SCOPE_CREATE;
 
@@ -449,10 +449,10 @@ auto HybridContinuousTimeSimulator::orbit(const HybridApproximateListPointType& 
     return orbitList;
 }
 
-HybridContinuousTimeSimulatorConfiguration::HybridContinuousTimeSimulatorConfiguration() : _step_size(0.125, double_precision), _fineness(0), _discretization_type(DiscretizationHybridType::HMince) {}
+HybridContinuousTimeEvolverConfiguration<ApproximateTag>::HybridContinuousTimeEvolverConfiguration() : _step_size(0.125, double_precision), _fineness(0), _discretization_type(DiscretizationHybridType::HMince) {}
 
-OutputStream& HybridContinuousTimeSimulatorConfiguration::_write(OutputStream& os) const {
-    os << "HybridContinuousTimeSimulatorConfiguration("
+OutputStream& HybridContinuousTimeEvolverConfiguration<ApproximateTag>::_write(OutputStream& os) const {
+    os << "HybridContinuousTimeEvolverConfiguration<ApproximateTag>("
        << "\n  step_size=" << step_size()
        << "\n  fineness=" << fineness()
        << "\n  discretization type=" << d_type()

@@ -1,5 +1,5 @@
 /***************************************************************************
- *            hybrid_continuous_time_simulator.hpp
+ *            hybrid_continuous_time_approximate_evolver.hpp
  *
  *  Copyright  2009-20  Luca Geretti, Mirko Albanese
  *
@@ -22,14 +22,16 @@
  *  along with Ariadne Evolution. If not, see <https://www.gnu.org/licenses/>.
  */
 
-/** @file evolution/hybrid_continuous_time_simulator.hpp
+/** @file evolution/hybrid_continuous_time_approximate_evolver.hpp
  *  @brief Simulation algorithms for hybrid dynamical systems.
  */
 
-#ifndef ARIADNE_HYBRID_CONTINUOUS_TIME_SIMULATOR_HPP
-#define ARIADNE_HYBRID_CONTINUOUS_TIME_SIMULATOR_HPP
+#ifndef ARIADNE_HYBRID_CONTINUOUS_TIME_APPROXIMATE_EVOLVER_HPP
+#define ARIADNE_HYBRID_CONTINUOUS_TIME_APPROXIMATE_EVOLVER_HPP
 
 #include "evolution/configuration_interface.hpp"
+#include "evolution/evolver.decl.hpp"
+#include "evolution/hybrid_continuous_time_evolver_interface.hpp"
 #include "hybrid/hybrid_paving.hpp"
 #include "hybrid/hybrid_set.hpp"
 #include "logging/logging.hpp"
@@ -63,23 +65,26 @@ class DiscreteEvent;
 /** @brief DiscreteLocation represents simulation algorithms for hybrid dynamical systems. */
 class DiscreteLocation;
 
-/** @brief HybridContinuousTimeSimulatorConfiguration represents simulation algorithms for hybrid dynamical systems. */
-class HybridContinuousTimeSimulatorConfiguration;
+/** @brief HybridContinuousTimeEvolverConfiguration<ApproximateTag> represents simulation algorithms for hybrid dynamical systems. */
+template<>
+class HybridContinuousTimeEvolverConfiguration<ApproximateTag>;
 
 template<class T>
 class Orbit;
 
 /*! \brief A class for computing the evolution of a hybrid system.
  */
-class HybridContinuousTimeSimulator {
+template<>
+class HybridContinuousTimeEvolver<ApproximateTag> : public HybridContinuousTimeEvolverInterface<ApproximateTag> {
   public:
+    using Paradigm = ApproximateTag;
+    using Interface = HybridContinuousTimeEvolverInterface<ApproximateTag>;
     typedef HybridPoint<FloatDPApproximation> HybridApproximatePointType;
     typedef Vector<HybridApproximatePointType> HybridApproximateListPointType;
     typedef Point<FloatDPApproximation> ApproximatePointType;
     typedef Vector<ApproximatePointType> ApproximatePointListType;
-    typedef HybridContinuousTimeSimulatorConfiguration ConfigurationType;
+    typedef HybridContinuousTimeEvolverConfiguration<ApproximateTag> ConfigurationType;
     typedef HybridAutomatonInterface SystemType;
-    typedef HybridApproximatePointType EnclosureType;
     typedef Orbit<HybridApproximatePointType> OrbitType;
     typedef HybridTerminationCriterion TerminationType;
     typedef Orbit<HybridApproximateListPointType> OrbitListType;
@@ -90,7 +95,9 @@ class HybridContinuousTimeSimulator {
 
   public:
     //! \brief Default constructor.
-    HybridContinuousTimeSimulator(const SystemType& system);
+    HybridContinuousTimeEvolver(const SystemType& system);
+    HybridContinuousTimeEvolver* clone() const override { return new HybridContinuousTimeEvolver(*this); }
+    const SystemType& system() const override { return *_sys_ptr; }
 
     //!@{
     //! \name Configuration for the class.
@@ -101,7 +108,7 @@ class HybridContinuousTimeSimulator {
     //!@{
     //! \name Evolution using abstract sets.
     //! \brief Compute an approximation to the orbit set using upper semantics.
-    Orbit<HybridApproximatePointType> orbit(const HybridApproximatePointType& initial_point, const TerminationType& termination) const;
+    Orbit<HybridApproximatePointType> orbit(const HybridApproximatePointType& initial_point, const TerminationType& termination) const override;
     /** @brief Compute or update evolution information. */
     Orbit<HybridApproximatePointType> orbit(const HybridRealPoint& initial_point, const TerminationType& termination) const;
     //! \brief Currently simulates from the midpoint of the set in the first location only.
@@ -119,13 +126,15 @@ class HybridContinuousTimeSimulator {
     Bool _satisfies_invariants(const DiscreteLocation& location, const Point<FloatDPApproximation>& point, const FloatDPApproximation& time) const;
 };
 
-/** @brief HybridContinuousTimeSimulatorConfiguration represents simulation algorithms for hybrid dynamical systems. */
-class HybridContinuousTimeSimulatorConfiguration : public ConfigurationInterface {
+/** @brief HybridContinuousTimeEvolverConfiguration<ApproximateTag> represents simulation algorithms for hybrid dynamical systems. */
+template<>
+class HybridContinuousTimeEvolverConfiguration<ApproximateTag> : public ConfigurationInterface {
   public:
+    using Paradigm = ApproximateTag;
     //! \brief Default constructor gives reasonable values.
-    HybridContinuousTimeSimulatorConfiguration();
+    HybridContinuousTimeEvolverConfiguration();
 
-    virtual ~HybridContinuousTimeSimulatorConfiguration() = default;
+    virtual ~HybridContinuousTimeEvolverConfiguration() = default;
 
   private:
     //! \brief The step size for integration.
@@ -151,4 +160,4 @@ class HybridContinuousTimeSimulatorConfiguration : public ConfigurationInterface
 
 } // namespace Ariadne
 
-#endif // ARIADNE_HYBRID_CONTINUOUS_TIME_SIMULATOR_HPP
+#endif // ARIADNE_HYBRID_CONTINUOUS_TIME_APPROXIMATE_EVOLVER_HPP

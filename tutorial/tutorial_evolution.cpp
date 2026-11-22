@@ -44,7 +44,7 @@ int main() {
     List<DottedRealAssignment> dynamics;
     dynamics.append(dot(x) = -x);
     OrdinaryDifferentialAlgebraicEquation decay(dynamics);
-    ContinuousTimeSimulator simulator(decay);
+    ContinuousTimeEvolver<ApproximateTag> simulator(decay);
     simulator.configuration().set_step_size(0.05);
     simulator.configuration().set_num_subdivisions(0);
     simulator.configuration().insert_subspace(x, 1);
@@ -60,11 +60,11 @@ int main() {
     // Validated continuous evolution: an enclosure, not a sampled trajectory.
     // The short time horizon keeps the demonstration inexpensive.
     TaylorPicardIntegrator integrator(StepMaximumError(1e-5));
-    ContinuousTimeEvolver validated(decay, integrator);
+    ContinuousTimeEvolver<ValidatedTag> validated(decay, integrator);
     validated.configuration().set_maximum_step_size(0.05);
     validated.configuration().set_maximum_enclosure_radius(1.0);
     auto validated_orbit = validated.orbit(initial, Real(0.05_dec), Semantics::UPPER);
-    std::cout << "ContinuousTimeEvolver: " << validated_orbit.final().size()
+    std::cout << "ContinuousTimeEvolver<ValidatedTag>: " << validated_orbit.final().size()
               << " final enclosure(s)\n";
 
     // The same evolver and Orbit type handle measurable uncertain inputs.
@@ -72,7 +72,7 @@ int main() {
     RealVariable u("u");
     OrdinaryDifferentialAlgebraicInclusion disturbed(
         {dot(x) = u - x}, RealVariablesBox({-1 <= u <= 1}));
-    ContinuousTimeEvolver inclusion(disturbed, integrator, ZeroApproximation(), ConstantApproximation());
+    ContinuousTimeEvolver<ValidatedTag> inclusion(disturbed, integrator, ZeroApproximation(), ConstantApproximation());
     inclusion.configuration().set_maximum_step_size(0.03125);
     const auto inclusion_orbit = inclusion.orbit(initial, Real(0.0625_x), Semantics::UPPER);
     std::cout << "Continuous inclusion: " << inclusion_orbit.final().size() << " final enclosure(s)\n";
@@ -81,7 +81,7 @@ int main() {
     List<PrimedRealAssignment> updates;
     updates.append(next(x) = 0.5_dec * x);
     IteratedMap contraction(updates);
-    DiscreteTimeEvolver evolver(contraction);
+    DiscreteTimeEvolver<ValidatedTag> evolver(contraction);
     evolver.configuration().set_maximum_enclosure_radius(1.0);
     auto discrete = evolver.orbit(initial, IteratedMap::TimeType(1), Semantics::UPPER);
     std::cout << "Discrete evolution: " << discrete.final().size()
@@ -101,7 +101,7 @@ int main() {
         automaton.target(active, deactivate) != idle) {
         throw std::runtime_error("Hybrid transition relation is incorrect");
     }
-    HybridContinuousTimeSimulator hybrid_continuous_time_simulator(automaton);
+    HybridContinuousTimeEvolver<ApproximateTag> hybrid_continuous_time_simulator(automaton);
     HybridTime budget(1.0_x, 2);
     if (budget.discrete_time() != Integer(2)) {
         throw std::runtime_error("Incorrect hybrid jump budget");
@@ -117,7 +117,7 @@ int main() {
     List<DottedRealAssignment> hybrid_dynamics;
     hybrid_dynamics.append(dot(x) = -x);
     flow_automaton.new_mode(idle, hybrid_dynamics);
-    HybridContinuousTimeEvolver hybrid_continuous_time_evolver(flow_automaton);
+    HybridContinuousTimeEvolver<ValidatedTag> hybrid_continuous_time_evolver(flow_automaton);
     hybrid_continuous_time_evolver.set_integrator(TaylorPicardIntegrator(StepMaximumError(1e-5)));
     hybrid_continuous_time_evolver.configuration().set_maximum_step_size(0.05);
     hybrid_continuous_time_evolver.configuration().set_maximum_enclosure_radius(1.0);
@@ -128,14 +128,14 @@ int main() {
                                       {0.875_x, 1.125_x}
     });
     auto hybrid_orbit = hybrid_continuous_time_evolver.orbit(hybrid_initial, HybridTime(Real(1 / 20_q), Integer(1)), Semantics::UPPER);
-    std::cout << "HybridContinuousTimeEvolver: " << hybrid_orbit.final().size()
+    std::cout << "HybridContinuousTimeEvolver<ValidatedTag>: " << hybrid_orbit.final().size()
               << " final enclosure(s)\n";
 
     // Inclusion modes use the same hybrid evolver and explicit numerical choices.
     // This mode has no outgoing events; its inputs may vary measurably in time.
     HybridAutomaton inclusion_automaton;
     inclusion_automaton.new_mode(idle, disturbed);
-    HybridContinuousTimeEvolver hybrid_inclusion(inclusion_automaton);
+    HybridContinuousTimeEvolver<ValidatedTag> hybrid_inclusion(inclusion_automaton);
     hybrid_inclusion.set_integrator(integrator, ZeroApproximation(), ConstantApproximation());
     hybrid_inclusion.configuration().set_maximum_step_size(0.03125);
     auto hybrid_included = hybrid_inclusion.orbit(hybrid_initial, HybridTime(0.0625_x, 1), Semantics::UPPER);

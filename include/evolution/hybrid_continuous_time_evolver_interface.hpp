@@ -29,6 +29,7 @@
 #ifndef ARIADNE_HYBRID_CONTINUOUS_TIME_EVOLVER_INTERFACE_HPP
 #define ARIADNE_HYBRID_CONTINUOUS_TIME_EVOLVER_INTERFACE_HPP
 
+#include "evolution/evolver.decl.hpp"
 #include "evolution/evolver_interface.hpp"
 #include "evolution/hybrid_orbit.hpp"
 #include "evolution/hybrid_time.hpp"
@@ -44,15 +45,24 @@ class HybridAutomatonInterface;
 /** @brief HybridEnclosure represents interface for numerical hybrid evolution. */
 class HybridEnclosure;
 
+/** @brief Approximate hybrid evolution uses points and sampled trajectories. */
+template<>
+class HybridContinuousTimeEvolverInterface<ApproximateTag>
+    : public EvolverInterface<ApproximateTag, HybridAutomatonInterface, HybridPoint<FloatDPApproximation>, HybridTerminationCriterion> {
+  public:
+    virtual HybridContinuousTimeEvolverInterface* clone() const override = 0;
+};
+
 //! \ingroup AnalysisModule
 //! \ingroup HybridDynamicsSubModule
 //! \brief Interface for hybrid evolvers using HybridEnclosure as the enclosure type.
 //! \details The class is loggable in order to allow verbosity tuning at the analyser layer.
-class HybridContinuousTimeEvolverInterface
-    : public EvolverInterface<HybridAutomatonInterface, HybridEnclosure, HybridTerminationCriterion> {
+template<>
+class HybridContinuousTimeEvolverInterface<ValidatedTag>
+    : public EvolverInterface<ValidatedTag, HybridAutomatonInterface, HybridEnclosure, HybridTerminationCriterion> {
   public:
     //! \brief Make a dynamically-allocated copy.
-    virtual HybridContinuousTimeEvolverInterface* clone() const = 0;
+    virtual HybridContinuousTimeEvolverInterface<ValidatedTag>* clone() const = 0;
 
     //!@{
     //! \name Main evolution functions.
@@ -84,15 +94,16 @@ class HybridContinuousTimeEvolverInterface
 //! \ingroup AnalysisModule
 //! \ingroup HybridDynamicsSubModule
 //! \brief Factory for hybrid evolver interface classes.
-class HybridContinuousTimeEvolverFactoryInterface
-    : public EvolverFactoryInterface<HybridAutomatonInterface, HybridEnclosure, HybridTerminationCriterion> {
+template<>
+class HybridContinuousTimeEvolverFactoryInterface<ValidatedTag>
+    : public EvolverFactoryInterface<ValidatedTag, HybridAutomatonInterface, HybridEnclosure, HybridTerminationCriterion> {
   public:
-    ~HybridContinuousTimeEvolverFactoryInterface() override = default;
+    ~HybridContinuousTimeEvolverFactoryInterface<ValidatedTag>() override = default;
 
     //! \brief Create a copy of the factory.
-    virtual HybridContinuousTimeEvolverFactoryInterface* clone() const override = 0;
+    virtual HybridContinuousTimeEvolverFactoryInterface<ValidatedTag>* clone() const override = 0;
     //! \brief Create a hybrid evolver interface object around a \a system.
-    virtual HybridContinuousTimeEvolverInterface* create(const HybridAutomatonInterface& system) const override = 0;
+    virtual HybridContinuousTimeEvolverInterface<ValidatedTag>* create(const HybridAutomatonInterface& system) const override = 0;
 };
 
 } // namespace Ariadne

@@ -52,7 +52,7 @@ struct ContactScenario {
         return reach;
     }
 
-    void configure(HybridContinuousTimeEvolver& evolver, bool boxes, bool tree = false) const {
+    void configure(HybridContinuousTimeEvolver<ValidatedTag>& evolver, bool boxes, bool tree = false) const {
         if (boxes)
             evolver.set_integrator(FirstOrderMultifunctionIntegrator());
         else
@@ -196,7 +196,7 @@ class TestHybridInclusionImpacts : public Testing::ContextFixture {
         const auto system = scenario.system(scenario.y - sqr(scenario.x));
         for (bool boxes: {false, true}) {
             for (bool tree: {false, true}) {
-                HybridContinuousTimeEvolver evolver(system);
+                HybridContinuousTimeEvolver<ValidatedTag> evolver(system);
                 scenario.configure(evolver, boxes, tree);
                 const auto initial = evolver.enclosure(HybridExactBox(scenario.source,
                                                                       RealSpace({
@@ -250,7 +250,7 @@ class TestHybridInclusionImpacts : public Testing::ContextFixture {
                               {next(scenario.x) = -0.0625_x, next(scenario.y) = 0}, s >= 0, EventKind::URGENT);
         for (bool boxes: {false, true}) {
             for (bool tree: {false, true}) {
-                HybridContinuousTimeEvolver evolver(system);
+                HybridContinuousTimeEvolver<ValidatedTag> evolver(system);
                 scenario.configure(evolver, boxes, tree);
                 const auto orbit = evolver.orbit(HybridExactBox(entry, RealSpace({
                                                                            s

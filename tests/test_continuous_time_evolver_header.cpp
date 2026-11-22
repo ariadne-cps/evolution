@@ -33,8 +33,8 @@
 
 #include "ariadne-testing.hpp"
 
-static_assert(std::is_base_of_v<Ariadne::ContinuousTimeEvolver::Interface,
-                                Ariadne::ContinuousTimeEvolver>);
+static_assert(std::is_base_of_v<Ariadne::ContinuousTimeEvolver<Ariadne::ValidatedTag>::Interface,
+                                Ariadne::ContinuousTimeEvolver<Ariadne::ValidatedTag>>);
 
 class TestContinuousTimeEvolverHeader : public Ariadne::Testing::ContextFixture {
   public:

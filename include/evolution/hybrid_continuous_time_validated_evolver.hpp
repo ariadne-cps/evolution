@@ -1,0 +1,678 @@
+/***************************************************************************
+ *            hybrid_continuous_time_validated_evolver.hpp
+ *
+ *  Copyright  2009-20  Pieter Collins
+ *
+ ****************************************************************************/
+
+/*
+ *  This file is part of Ariadne Evolution.
+ *
+ *  Ariadne Evolution is free software: you can redistribute it and/or modify
+ *  it under the terms of the GNU General Public License as published by
+ *  the Free Software Foundation, either version 3 of the License, or
+ *  (at your option) any later version.
+ *
+ *  Ariadne Evolution is distributed in the hope that it will be useful,
+ *  but WITHOUT ANY WARRANTY; without even the implied warranty of
+ *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ *  GNU General Public License for more details.
+ *
+ *  You should have received a copy of the GNU General Public License
+ *  along with Ariadne Evolution. If not, see <https://www.gnu.org/licenses/>.
+ */
+
+/** @file evolution/hybrid_continuous_time_validated_evolver.hpp
+ *  @brief Hybrid evolution strategies, transitions and timing.
+ */
+
+#ifndef ARIADNE_HYBRID_CONTINUOUS_TIME_VALIDATED_EVOLVER_HPP
+#define ARIADNE_HYBRID_CONTINUOUS_TIME_VALIDATED_EVOLVER_HPP
+
+#include <iostream>
+#include <list>
+#include <string>
+#include <vector>
+
+#include "evolution/configuration_interface.hpp"
+#include "evolution/evolver.decl.hpp"
+#include "evolution/hybrid_continuous_time_evolver_interface.hpp"
+#include "evolution/hybrid_crossing.hpp"
+#include "evolution/hybrid_enclosure.hpp"
+#include "evolution/hybrid_evolution_backend.hpp"
+#include "evolution/hybrid_orbit.hpp"
+#include "evolution/hybrid_time.hpp"
+#include "hybrid/hybrid_set.hpp"
+#include "logging/logging.hpp"
+#include "system/hybrid_automaton_interface.hpp"
+#include "utility/tuple.hpp"
+
+namespace Ariadne {
+
+typedef Map<DiscreteLocation, Vector<FloatDP>> HybridExactFloatVector;
+typedef Dyadic StepSizeType;
+
+using Mutex = std::mutex;
+template<class T>
+using LockGuard = std::lock_guard<T>;
+
+/** @brief IntegratorInterface represents hybrid evolution strategies, transitions and timing. */
+class IntegratorInterface;
+class ValidatedIntegrationStep;
+class IntegratorBase;
+class InputApproximation;
+class FirstOrderMultifunctionIntegrator;
+class SelectedParametricMultifunctionIntegrator;
+/** @brief EquationSolverInterface represents hybrid evolution strategies, transitions and timing. */
+class EquationSolverInterface;
+/** @brief HybridContinuousTimeEvolverBaseConfiguration<ValidatedTag> represents hybrid evolution strategies, transitions and timing. */
+template<>
+class HybridContinuousTimeEvolverBaseConfiguration<ValidatedTag>;
+/** @brief HybridContinuousTimeEvolverConfiguration<ValidatedTag> represents hybrid evolution strategies, transitions and timing. */
+template<>
+class HybridContinuousTimeEvolverConfiguration<ValidatedTag>;
+
+//! \relates HybridEnclosure
+//! \brief <p/>
+using HybridOrbit = Orbit<HybridEnclosure>;
+
+//! \ingroup FunctionModule
+//! \brief A class representing the flow \f$\phi(x,t)\f$ of a differential equation \f$\frac{dx}{dt}=f(x)\f$.
+class FlowFunctionModel
+    : public ValidatedVectorMultivariateFunctionPatch {
+  public:
+    FlowFunctionModel(const ValidatedVectorMultivariateFunctionPatch& f) : ValidatedVectorMultivariateFunctionPatch(f) {}
+    StepSizeType step_size() const { return static_cast<StepSizeType>(this->time_domain().upper_bound()); }
+    ExactIntervalType time_domain() const { return this->domain()[this->domain().size() - 1]; }
+    ExactBoxType space_domain() const { return ExactBoxType(project(this->domain(), Ariadne::range(0, this->domain().size() - 1))); }
+    const ExactBoxType codomain() const { return this->ValidatedVectorMultivariateFunctionPatch::codomain(); }
+};
+
+/** @brief TransitionData represents hybrid evolution strategies, transitions and timing. */
+struct TransitionData;
+/** @brief CrossingData represents hybrid evolution strategies, transitions and timing. */
+class CrossingData;
+/** @brief TimingData represents hybrid evolution strategies, transitions and timing. */
+struct TimingData;
+
+//! \ingroup AnalysisModule
+//! \ingroup HybridDynamicsSubModule
+//! \brief Base routines for hybrid evolution.
+//! Includes routines for extracting system information in a mode,
+//! applying initial events, computing crossing times,
+//! computing the evolution time, and applying a time step.
+//!
+//! \sa The \link hybrid_evolution_page Hybrid Evolution Methods \endlink page
+//! for details of the basic algorithm.
+//!
+//! NOTE: This class currently contains both a skeleton for hybrid evolution,
+//! and default implementations of many of the routines. It would be cleaner
+//! to have an interface class without these default implementations.
+//! However, which operations are needed may depend on the higher-level
+//! operations involved, so these methods should also not go in the
+//! interface.
+template<>
+class HybridContinuousTimeEvolverBase<ValidatedTag>
+    : public HybridContinuousTimeEvolverInterface<ValidatedTag> {
+    friend class HybridContinuousTimeEvolverBaseConfiguration<ValidatedTag>;
+
+  public:
+    typedef HybridContinuousTimeEvolverInterface<ValidatedTag> Interface;
+    typedef HybridContinuousTimeEvolverBaseConfiguration<ValidatedTag> ConfigurationType;
+    typedef ValidatedFunctionPatchFactory FunctionFactoryType;
+    typedef HybridAutomatonInterface SystemType;
+    typedef SystemType::TimeType TimeType;
+    typedef TimeType::ContinuousTimeType ContinuousTimeType;
+    typedef List<DiscreteEvent> EventListType;
+    typedef HybridEnclosure EnclosureType;
+    typedef Orbit<EnclosureType> OrbitType;
+    typedef ListSet<HybridEnclosure> EnclosureListType;
+
+  public:
+    //! \brief Default constructor.
+    HybridContinuousTimeEvolverBase(const SystemType& system);
+
+    //! \brief Construct from parameters using a default integrator.
+    HybridContinuousTimeEvolverBase(
+        const SystemType& system,
+        const FunctionFactoryType& factory);
+
+    //! \brief Make a dynamically-allocated copy.
+    HybridContinuousTimeEvolverBase<ValidatedTag>* clone() const = 0;
+
+    //! \brief Get the internal system.
+    const SystemType& system() const;
+
+    //!@{
+    //! \name Settng and configuration for the class.
+
+    //! \brief A reference to the evolver's configuration parameters.
+    ConfigurationType& configuration();
+    /** @brief Return the requested evolution property. */
+    const ConfigurationType& configuration() const;
+
+    //! \brief Change the configuration from a \a domain and \a lengths (NOT IMPLEMENTED).
+    virtual Void reconfigure(const HybridExactBoxes&, const HybridExactFloatVector&) { ARIADNE_NOT_IMPLEMENTED; }
+
+    //! \brief The class which constructs functions for the enclosures.
+    const FunctionFactoryType function_factory() const;
+    //! \brief Set the class which constructs functions for the enclosures.
+    Void set_function_factory(const FunctionFactoryType& factory);
+
+    //! \brief Set the class which integrates the continuous dynamics.
+    Void set_integrator(const IntegratorInterface& integrator);
+    //! \brief Select one reach and one endpoint method for inclusion modes.
+    Void set_integrator(const IntegratorBase&, const InputApproximation& reach, const InputApproximation& evolve);
+    //! \brief Explicitly select outer box certificates for inclusion modes.
+    Void set_integrator(const FirstOrderMultifunctionIntegrator&);
+    //! \brief Set the class which integrates the continuous dynamics.
+    Void set_solver(const EquationSolverInterface& solver);
+
+    /** @brief Select a backend factory by cloning its settings; each orbit call creates a fresh run.
+     *  @note Set configuration before invoking orbit; concurrent reconfiguration is unsupported.
+     */
+    Void set_evolution_backend_factory(const HybridEvolutionBackendFactoryInterface& factory);
+
+    Bool ALLOW_CREEP;  //!< If true, a less-than-full evolution step may be taken to avoid splitting due to partially crossing a guard.
+    Bool ALLOW_UNWIND; //!< If true, a less-than-full evolution step may be taken to try to restore all time values over the parameter domain to the same value.
+    //!@}
+
+    //!@{
+    //! \name Main evolution functions.
+
+    /** @brief Compute or update evolution information. */
+    Orbit<EnclosureType> orbit(const HybridExactBoxType& initial_box, const TerminationType& termination, Semantics semantics) const;
+    /** @brief Compute or update evolution information. */
+    Orbit<EnclosureType> orbit(const HybridBoxSet& initial_box, const TerminationType& termination, Semantics semantics) const;
+    /** @brief Compute or update evolution information. */
+    Orbit<EnclosureType> orbit(const HybridBoundedConstraintSet& initial_set, const TerminationType& termination, Semantics semantics) const;
+
+    //! \brief Compute an approximation to the orbit set using the given semantics, starting from an initial enclosure.
+    Orbit<EnclosureType> orbit(const EnclosureType& initial_enclosure, const TerminationType& termination, Semantics semantics) const;
+
+    //!@}
+
+    //!@{
+    //! \name Auxiliary set conversion functionality
+
+    //! \brief Set construct an enclosure from a box, such as one obtained from a grid.
+    virtual EnclosureType enclosure(const HybridExactBox& initial_box) const;
+    //! \brief Set construct an enclosure from a user-provided set.
+    virtual EnclosureType enclosure(const HybridBoundedConstraintSet& initial_set) const;
+
+    //!@}
+
+  protected:
+    //! \brief Compute one local outcome without scheduling or publishing shared results.
+    //! \details The processing phase selects starting-event handling or a continuous
+    //! step. The backend owns the returned contributions and successors.
+    virtual HybridEvolutionStepResult
+        _process_working_set(const HybridEvolutionWorkItem& working_set,
+                             const TerminationType& termination,
+                             const Semantics& semantics,
+                             const HybridEvolutionStatistics& statistics) const;
+
+    //! \brief Performs an evolution step on an \a enclosure, where initially active
+    //! events have already been processed and only the continuous \a final_time is necessary.
+    virtual Void
+        _evolution_step(const HybridEnclosure& enclosure,
+                        const Real& final_time,
+                        const Semantics& semantics,
+                        HybridEvolutionStepResult& result) const;
+
+    //! \brief Extracts the transitions valid in \a location of \a system.
+    //! \details For some systems, extracting the information about the
+    //! guard and reset functions may be expensive. This routine collects all
+    //! information in one place
+    virtual Map<DiscreteEvent, TransitionData>
+        /** @brief Perform the specified evolution operation. */
+        _extract_transitions(const DiscreteLocation& location) const;
+
+    //! \brief Compute independent reach and endpoint certificates with a capped duration.
+    //! The current event analysis requires a single autonomous reach patch
+    //! on [state, local time], without extra numerical input coordinates.
+    virtual ValidatedIntegrationStep
+        _compute_integration_step(EffectiveVectorMultivariateFunction vector_field,
+                                  const ExactBoxType& initial_set,
+                                  const StepSizeType& maximum_step_size) const;
+
+    //! \brief Compute the active events for the \a flow \f$\phi\f$ with
+    //! time step \f$h\f$ starting in the given \a starting_set \f$S\f$.
+    //! A event \f$e\f$ is \em active if \f$g_e(\phi(x,t))\geq0\f$
+    //! for some \f$x\in S\f$ and \f$t\in[0,h]\f$.
+    //! The result is allowed to contain events which are not active
+    //! during the time step, since the exact set may be too difficult to
+    //! compute.
+    virtual Set<DiscreteEvent>
+        _compute_active_events(const EffectiveVectorMultivariateFunction& dynamic,
+                               const Map<DiscreteEvent, EffectiveScalarMultivariateFunction>& guards,
+                               const ValidatedVectorMultivariateFunctionPatch& flow,
+                               const HybridEnclosure& starting_set) const;
+
+    //! \brief Compute data on how trajectories of the \a flow
+    //! cross the given \a guards.
+    //! For example, trajectories may have a crossing where the guard value is strictly increasing
+    //! which has a crossing_time as a function of the initial state.
+    //!
+    //! \details The \a dynamic is given explicitly to facilitate computation
+    //! of crossing times.
+    //! A crossing_time computed must be valid over the \a initial_set, though
+    //! will often be computed over the entire bounding box.
+    //!
+    //! Geometry and available numerical evidence are independent. A
+    //! CrossingTimeCertificate supplies the first-entry map gamma satisfying
+    //! g(phi(x,gamma(x)))=0. A GuardMaximumCertificate supplies the concave
+    //! critical-time map mu satisfying L_f g(phi(x,mu(x)))=0 and its bounds.
+    //! Either solve may fail while the certified geometry remains available.
+    virtual Map<DiscreteEvent, CrossingData>
+        _compute_crossings(const Set<DiscreteEvent>& active_events,
+                           const EffectiveVectorMultivariateFunction& dynamic,
+                           const Map<DiscreteEvent, EffectiveScalarMultivariateFunction>& guards,
+                           const FlowFunctionModel& flow,
+                           const HybridEnclosure& initial_set) const;
+
+    //! \brief Compute data related to the time of evolution related to the
+    //! maximum time step allowed by the flow, the event times, and the
+    //! final time which should be attained at the end of the evolution.
+    //!
+    //! \post
+    //! If the step_kind is SPACETIME_DEPENDENT_EVOLUTION_TIME, then the evolution_time must evaluate
+    //!   a value in [0,h] over the initial_set, where \f$h\f$ is
+    //!   the \a step_size. In other words, \f$\varepsilon(\xi(s),\tau(s))\in[0,h]\f$
+    //!   whenever \f$s\f$ is a valid parameter.
+    //! If the step_kind is PARAMETER_DEPENDENT_FINISHING_TIME, then \f$(\omega(s)-\tau(s))\in[0,h]\f$
+    //!   whenever \f$s\f$ is a valid parameter.
+    //! If the step_kind is CONSTANT_FINISHING_TIME, then \f$t_{\max}-\tau(s)\leq h\f$
+    //!   whenever \f$s\f$ is a valid parameter.
+    //!
+    //! TODO: By reducing the step time, some events may become inactive.
+    //! It should be possible to reflect this in the output.
+    //!
+    //! TODO: The CONSTANT_FINISHING_TIME choice might be inappropriate; maybe this should
+    //! be replaced with an extra flag representing whether the final time
+    //! could possibly be reached. However, it might be simpler to just check
+    //! the final conditions latex, or
+    virtual TimingData
+        _estimate_timing(Set<DiscreteEvent>& active_events,
+                         Real final_time,
+                         const FlowFunctionModel& flow,
+                         Map<DiscreteEvent, CrossingData>& crossings,
+                         const Map<DiscreteEvent, TransitionData>& transitions,
+                         const HybridEnclosure& initial_set) const;
+
+    //! \brief Simplify the description of a set or allow for reconditioning
+    //! of numerical error.
+    virtual Void
+        /** @brief Perform the specified evolution operation. */
+        _recondition(HybridEnclosure& set) const;
+
+    virtual Void
+        _process_jumped_set(const HybridEnclosure& jumped_set,
+                            const TerminationType& termination,
+                            Semantics semantics,
+                            HybridEvolutionStepResult& result) const;
+
+    //! \brief Process the \a starting_set to find any
+    //!  <em>immediately active</em> events, and compute the relevant \em jump sets
+    //!  and the <em>flowable</em> or <em>progress</em> set.
+    //!
+    //! First, and \em invariants \f$i_e(x)\leq0\f$ are processed to give
+    //! an \em allowable or \em invariant
+    //! \f$I=\{ x\in S \mid \forall e\in E_{\mathrm{inv}},\ i_e(x)\leq0\}\f$.
+    //! Then for each urgent or permissive transition, the \em active set
+    //! \f$A_e = \{ x\in I \mid g_e(x)\geq 0\}\f$ and jump set
+    //! \f$ _e = r_e(A_e)\f$ are computed.
+    //! Finally, any progress predicates \f$p_e(x)\leq0\f$ are processed
+    //! (including those derived from urgent events),
+    //! to give the flowable set
+    //! \f$P=\{ x\in I \mid \forall e\in E_{\mathrm{tcp}},\ p_e(x)\leq0\}\f$.
+    virtual Void
+        _process_starting_events(const HybridEnclosure& starting_set,
+                                 const Map<DiscreteEvent, TransitionData>& transitions,
+                                 Semantics semantics,
+                                 HybridEvolutionStepResult& result) const;
+
+    //! \brief Apply the \a flow to the \a set up to the time specified by \a timing_data
+    //! to obtain the single-step unconstrained reachable set.
+    virtual Void
+        _apply_reach_step(HybridEnclosure& set,
+                          const ValidatedVectorMultivariateFunctionPatch& flow,
+                          const TimingData& timing_data) const;
+
+    //! \brief Apply the \a flow to the \a set for the time specified by \a timing_data
+    //! to obtain the single-step unconstrained evolved set.
+    virtual Void
+        _apply_evolve_step(HybridEnclosure& set,
+                           const ValidatedVectorMultivariateFunctionPatch& flow,
+                           const TimingData& timing_data) const;
+
+    //! \brief Apply the invariants in \a transition_data to the set \a set.
+    //! \callgraph
+    virtual Void
+        _apply_invariants(HybridEnclosure& set,
+                          const Map<DiscreteEvent, TransitionData>& transition_data) const;
+
+    //! \brief Process the \a starting_set \f$S\f$
+    //! based on the previously computed \a flow, \a timing_data
+    //! and \a crossing_data to compute the successor sets in the evolution.
+    //! Compute the resulting \a jump, \a finishing, \a final and \a reach
+    //! sets after a single time step.
+    //!
+    //! \pre \f$p_e(x)\leq0\f$ for any invariant or progress predicate
+    //! and any \f$x\in S\f$
+    //! \pre The step time \f$\delta(s)\f$ in terms of the flow
+    //! parameters satisfies \f$\delta(s)\in[0,h]\f$ whenever \f$\rho(s)\in C\f$.
+    //!
+    //! The evolution time (in terms of the flow parameters) is given by
+    //! \f$\delta(s)=\varepsilon(\xi(s))\f$ for a \a SPACE_DEPENDENT_EVOLUTION_TIME
+    //! or \f$\delta(s)=\omega(s)-\tau(s)\f$ for an \a PARAMETER_DEPENDENT_FINISHING_TIME.
+    //!
+    //! Let \f$E_\mathrm{blk}\f$ be set set of events \em blocking
+    //! continuous evolution.
+    //! - The \em reach set is given by
+    //!   \f[ R=\{ \phi(\xi(s),t);\;\tau(s)+t \mid (x,t)\in D\times[0,h]
+    //!       \mid \rho(s)\in C \ \wedge\ t\leq\delta(s)
+    //!       \ \wedge\ \tau(s)+t\leq t_{\max}
+    //!          \ \wedge\ \forall e\in E_{\mathrm{blk}},
+    //!         \,\max_{u\in[0,t]} g_e(\phi(x,u))\leq 0 \} \f]
+    //! - The \em finishing set \f$E\f$ is given by the additional constraint
+    //!   \f$t=\delta(s)\f$ on the reach set,
+    //!   or equivalently, \f$\tau(s)+t=\omega(s)\f$.
+    //! - The \em final set \f$F\f$ is given by the additional constraint
+    //!   \f$\tau(s)+t=t_{\max}\f$ on the reach set.
+    //! - The \em active sets \f$A_e\f$ are given by the additional constraint
+    //!   \f$g(\phi(\xi(s),t))=0\f$, and the jump sets by \f$J_e=r_e(A_e)\f$.
+    //! In the implementation, these sets are simplified to reduce the number
+    //! of extra variables and the number of constraints.
+    //!
+    //! \note The \a jump, \a finishing, \a final and \a reach sets may need to
+    //! be constructed as unions of Enclosure sets. The is because when dealing
+    //! with #CrossingGeometry::CONCAVE events, it may be the case that these sets are split into
+    //! two.
+    //!
+    //! TODO: This method might be better split into even simpler events.
+    virtual Void
+        _apply_evolution_step(const HybridEnclosure& starting_set,
+                              const ValidatedIntegrationStep& step,
+                              const ValidatedVectorMultivariateFunctionPatch& flow,
+                              const TimingData& timing_data,
+                              const Map<DiscreteEvent, CrossingData>& crossing_data,
+                              const EffectiveVectorMultivariateFunction& dynamic,
+                              const Map<DiscreteEvent, TransitionData>& transitions,
+                              const Semantics& semantics,
+                              HybridEvolutionStepResult& result) const;
+
+    //! \brief Output a one-line summary of the current evolution state to the logging stream.
+    virtual Void
+        /** @brief Perform the specified evolution operation. */
+        _log_summary(const HybridEnclosure& starting_set, const HybridEvolutionStatistics& statistics) const;
+
+  protected:
+    /** @brief Perform the specified evolution operation. */
+    Void _create(const SystemType& system, const FunctionFactoryType& factory);
+    Void _validate_mode(DiscreteLocation, Semantics) const;
+    Void _evolve_inclusion(const HybridEnclosure&, const Real& final_time, HybridEvolutionStepResult&) const;
+    Void _evolve_clocked_equation(const HybridEnclosure&, const Real& final_time, HybridEvolutionStepResult&) const;
+    std::shared_ptr<IntegratorInterface> _integrator_ptr;
+    std::shared_ptr<const SelectedParametricMultifunctionIntegrator> _inclusion_integrator_ptr;
+    std::shared_ptr<const FirstOrderMultifunctionIntegrator> _box_integrator_ptr;
+
+  private:
+    std::shared_ptr<FunctionFactoryType::Interface> _function_factory_ptr;
+    std::shared_ptr<const HybridEvolutionBackendFactoryInterface> _backend_factory_ptr;
+
+  protected:
+    std::shared_ptr<EquationSolverInterface> _solver_ptr;
+    std::shared_ptr<SystemType> _sys_ptr;
+
+  protected:
+    std::shared_ptr<ConfigurationType> _configuration_ptr;
+};
+
+/** @brief Return the requested evolution property. */
+Bool is_blocking(EventKind evk);
+/** @brief Return the requested evolution property. */
+Bool is_activating(EventKind evk);
+
+//! \ingroup HybridDynamicsSubModule
+//! \brief A data type used to store information about a transition of a hybrid system.
+//! \relates HybridContinuousTimeEvolverBase<ValidatedTag>
+struct TransitionData {
+    //! \brief The event label.
+    DiscreteEvent event;
+    //! \brief The kind of event (invariant, urgent, etc) determining what
+    //! happens when the event is active.
+    EventKind event_kind;
+    //! \brief The guard function of the event, the event being active when
+    //! \f$g(x)\geq0\f$.
+    EffectiveScalarMultivariateFunction guard_function;
+    //! \brief The Lie derivative of the guard function along the flow.
+    EffectiveScalarMultivariateFunction guard_flow_derivative_function;
+    //! \brief The target location of the transition.
+    DiscreteLocation target;
+    //! \brief The reset function \f$x'=r(x)\f$ of the transition.
+    EffectiveVectorMultivariateFunction reset_function;
+    //! \brief The state space in the target location.
+    RealSpace target_space;
+    //! \brief The auxliary mapping in the target location.
+    EffectiveVectorMultivariateFunction target_auxiliary_function;
+    //! \brief The auxliary space in the target location.
+    RealSpace target_auxiliary_space;
+    EnclosureFunctionArguments source_arguments = EnclosureFunctionArguments::STATE;
+    EnclosureFunctionArguments target_auxiliary_arguments = EnclosureFunctionArguments::STATE;
+    // TransitionData() { }
+    // TransitionData(DiscreteLocation t, ValidatedScalarMultivariateFunction g, ValidatedVectorMultivariateFunction r)
+    //     : target(t), guard_function(g), reset_function(r) { }
+};
+/** @brief Apply the requested operation. */
+OutputStream& operator<<(OutputStream& os, const TransitionData& transition);
+
+//! \ingroup HybridDynamicsSubModule
+//! \brief The kind of step taken in the evolution. Determines how the evolution time is specified.
+//! \details Assumes that the starting set and time is given as a subset of \f$\{ \xi(s); \tau(s) \mid s\in D\}\f$
+//! where \f$s\in D\f$ is a parameter, \f$x=\xi(s)\f$ is the state corresponding to parameter \f$s\f$, and \f$t=\tau(s)\f$
+//! is the time the point has so far been evolved for. Assumes that the flow is given by a function \f$x'=\phi(x,t)\f$,
+//! typically only defined over a bounded set of space and time.
+//! \see TimingData
+enum class StepKind : std::uint8_t {
+    CONSTANT_EVOLUTION_TIME,            //!< The step is taken for a fixed time \f$h\f$. The actual step length depends only on the starting state.
+                                        //! After the step, we have \f$\xi'(s) = \phi(\xi(s),h)\f$ and \f$\tau'(s)=\tau(s)+h\f$.
+    SPACE_DEPENDENT_EVOLUTION_TIME,     //!< The step is taken for a time \f$\varepsilon(x)\f$ depending only on the starting state.
+                                        //! After the step, we have \f$\xi'(s) = \phi(\xi(s),\varepsilon(\xi(s)))\f$ and \f$\tau'(s)=\tau(s)+\varepsilon(\xi(s))\f$.
+    TIME_DEPENDENT_EVOLUTION_TIME,      //!< The step is taken for a time \f$\varepsilon(t)\f$ depending only on the starting time.
+                                        //! After the step, we have \f$\xi'(s) = \phi(\xi(s),\varepsilon(\tau(s)))\f$ and \f$\tau'(s)=\tau(s)+\varepsilon(\tau(s))\f$.
+    SPACETIME_DEPENDENT_EVOLUTION_TIME, //!< The step is taken for a time \f$\varepsilon(x,t)\f$ depending only on the current state (space and time).
+                                        //! After the step, we have \f$\xi'(s) = \phi(\xi(s),\varepsilon(\xi(s),\tau(s)))\f$ and \f$\tau'(s)=\tau(s)+\varepsilon(\xi(s),\tau(s))\f$.
+    PARAMETER_DEPENDENT_EVOLUTION_TIME, //!< The step is taken for a time \f$\delta(s)\f$ depending on the parameterisation of the set.
+                                        //! After the step, we have \f$\xi'(s) = \phi(\xi(s),\delta(s))\f$ and \f$\tau'(s)=\tau(s)+\delta(s)\f$.
+    PARAMETER_DEPENDENT_FINISHING_TIME, //!< The step is taken up to a time \f$\omega(s)\f$ depending on the parameterisation of the starting set.
+                                        //! After the step, we have \f$\xi'(s) = \phi(\xi(s),\omega(s)-\tau(s))\f$ and \f$\tau'(s)=\omega(s)\f$.
+    SPACETIME_DEPENDENT_FINISHING_TIME, //!< The step is taken up to a time \f$\omega(x,t)\f$ depending only on the current state (space and time).
+                                        //! After the step, we have \f$\xi'(s) = \phi(\xi(s),\omega(\xi(s),\tau(s)-\tau(s)))\f$ and \f$\tau'(s)=\omega(\xi(s),\tau(s))\f$.
+    CONSTANT_FINISHING_TIME,            //!< The step is taken up to the specified evolution time \f$t_{\max}\f$. The actual step length depends on the parameterisation.
+                                        //! After the step, we have \f$\xi'(s) = \phi(\xi(s),t_{\max}-\tau(s))\f$ and \f$\tau'(s)=t_{\max}\f$.
+};
+/** @brief Apply the requested operation. */
+OutputStream& operator<<(OutputStream& os, const StepKind& crk);
+
+//! \ingroup HybridDynamicsSubModule
+//! \brief The way in which the step interacts with the final evolution time.
+//! \details Used to control whether final time constraints need to be added,
+//! whether further evolution is possible, and whether and how sets should be put in the list of final sets.
+//! Needed since the final time may be an arbitrary real number, at it may not be possible to determine
+//! whether a given enclosure is exactly at the final time or not
+//! \see TimingData
+enum class FinishingKind : std::uint8_t {
+    BEFORE_FINAL_TIME,   //!< At the end of the step, the final time has definitely not been reached by any point.
+    AT_FINAL_TIME,       //!< At the end of the step, the final time is reached exactly. No more evolution is possible.
+    AFTER_FINAL_TIME,    //!< At the end of the step, the final time has definitely been passed by every point. No more evolution is possible.
+    STRADDLE_FINAL_TIME, //!< At the end of the step, some points may have passed the final time, and some may not reached it.
+                         //!< Usable as a default value.
+};
+/** @brief Apply the requested operation. */
+OutputStream& operator<<(OutputStream& os, const FinishingKind& crk);
+
+//! \ingroup HybridDynamicsSubModule
+//! \brief A data type used to store information about the kind of time step taken during hybrid evolution.
+//! \relates HybridContinuousTimeEvolverBase<ValidatedTag>
+struct TimingData {
+    TimingData() {}
+    StepKind step_kind;           //!< The kind of step taken in the evolution
+    FinishingKind finishing_kind; //!< The relationship between the finishing time of the step, and the final time of the evolution trace.
+    Real final_time;              //!< The time \f$t_{\max}\f$ specified as the final time of the evolution trace.
+    Dyadic step_size;             //!< The maximum step size \f$h\f$ allowed by the computed flow function.
+    ValidatedScalarMultivariateFunctionPatch spacetime_dependent_evolution_time;
+    //!< The evolution time \f$\varepsilon(x,t)\f$ used in a \a SPACETIME_DEPENDENT_EVOLUTION_TIME step.
+    ValidatedScalarMultivariateFunctionPatch spacetime_dependent_finishing_time;
+    //!< The final time \f$\omega(x,t)\f$ used in a \a SPACETIME_DEPENDENT_FINISHING_TIME step.
+    ValidatedScalarMultivariateFunctionPatch parameter_dependent_finishing_time;
+    //!< The time \f$\omega(s)\f$ reached after an \a PARAMETER_DEPENDENT_FINISHING_TIME as a function of the parameters.
+    ValidatedScalarMultivariateFunctionPatch parameter_dependent_evolution_time;
+    //!< The time \f$\delta(s)\f$ used in a \a PARAMETER_DEPENDENT_EVOLUTION_TIME step.
+    //! Set equal to \f$\varepsilon(\xi(s))\f$ for a \a SPACE_DEPENDENT_EVOLUTION_TIME
+    //! and \f$\omega(s)-\varepsilon(s)\f$ for an \a PARAMETER_DEPENDENT_FINISHING_TIME.
+    ExactIntervalType evolution_time_domain;                            //!< The time domain of the flow function, equal to \f$[0,h]\f$.
+    ValidatedScalarMultivariateFunctionPatch evolution_time_coordinate; //!< The time coordinate of the flow function, equal to the identity on \f$[0,h]\f$.
+};
+/** @brief Apply the requested operation. */
+OutputStream& operator<<(OutputStream& os, const TimingData& timing);
+
+//! \relates HybridContinuousTimeEvolverBase<ValidatedTag>
+//! \brief Configuration for HybridContinuousTimeEvolverBase<ValidatedTag>, for controlling the accuracy of continuous evolution methods.
+template<>
+class HybridContinuousTimeEvolverBaseConfiguration<ValidatedTag> : public ConfigurationInterface {
+  public:
+    using Paradigm = ValidatedTag;
+    typedef Nat UnsignedIntType;
+    typedef ExactDouble RealType;
+    typedef ApproximateDouble ApproximateRealType;
+
+  protected:
+    /** @brief Construct the object. */
+    HybridContinuousTimeEvolverBaseConfiguration(HybridContinuousTimeEvolverBase<ValidatedTag>& evolver);
+
+  private:
+    HybridContinuousTimeEvolverBase<ValidatedTag>& _evolver;
+
+  private:
+    //! \brief The accuracy required for integration.
+    //! Decreasing this value increases the accuracy of the computation.
+    RealType _flow_accuracy;
+
+    //! \brief The maximum allowable step size for integration.
+    //! Decreasing this value increases the accuracy of the computation.
+    RealType _maximum_step_size;
+
+    //! \brief The maximum allowable radius of a basic set during integration.
+    //! Decreasing this value increases the accuracy of the computation of an over-approximation.
+    //! Decreasing this value reduces the actual evolution time of a lower-approximation.
+    RealType _maximum_enclosure_radius;
+
+    //! \brief The maximum allowable approximation error in the parameter-to-space mapping of an enclosure set.
+    //! Decreasing this value increases the accuracy of the computation of an over-approximation.
+    RealType _maximum_spacial_error;
+
+    //! \brief Enable reconditioning of basic sets (false by default).
+    Bool _enable_reconditioning;
+
+    //! \brief Enable subdivision of basic sets (false by default), only for upper semantics.
+    Bool _enable_subdivisions;
+
+  public:
+    const RealType& flow_accuracy() const { return _flow_accuracy; }
+    //! \brief Construct the _integrator of the evolver, then set the _flow_accuracy.
+    Void set_flow_accuracy(const ApproximateRealType value);
+
+    const RealType& maximum_step_size() const { return _maximum_step_size; }
+    Void set_maximum_step_size(const ApproximateRealType value) { _maximum_step_size = cast_exact(value); }
+
+    const RealType& maximum_enclosure_radius() const { return _maximum_enclosure_radius; }
+    Void set_maximum_enclosure_radius(const ApproximateRealType value) { _maximum_enclosure_radius = cast_exact(value); }
+
+    const RealType& maximum_spacial_error() const { return _maximum_spacial_error; }
+    Void set_maximum_spacial_error(const ApproximateRealType value) { _maximum_spacial_error = cast_exact(value); }
+
+    const Bool& enable_reconditioning() const { return _enable_reconditioning; }
+    Void set_enable_reconditioning(const Bool value) { _enable_reconditioning = value; }
+
+    const Bool& enable_subdivisions() const { return _enable_subdivisions; }
+    Void set_enable_subdivisions(const Bool value) { _enable_subdivisions = value; }
+
+  public:
+    /** @brief Perform the specified evolution operation. */
+    virtual OutputStream& _write(OutputStream& os) const;
+};
+
+//! \ingroup AnalysisModule
+//! \ingroup HybridDynamicsSubModule
+//! \brief A class for computing the evolution of a general hybrid system as
+//! efficiently as possible. In particular, crossing times are computed
+//! explicitly, and the number of additional constraints is minimised.
+//!
+//! This class is still under development and may not work properly.
+template<>
+class HybridContinuousTimeEvolver<ValidatedTag>
+    : public HybridContinuousTimeEvolverBase<ValidatedTag> {
+  public:
+    /** @brief Construct the object. */
+    HybridContinuousTimeEvolver(const SystemType& system);
+    /** @brief Construct the object. */
+    HybridContinuousTimeEvolver(const HybridContinuousTimeEvolver<ValidatedTag>& other);
+    /** @brief Apply the requested operation. */
+    HybridContinuousTimeEvolver<ValidatedTag>& operator=(const HybridContinuousTimeEvolver<ValidatedTag>& other);
+    HybridContinuousTimeEvolver(const SystemType& system,
+                                const FunctionFactoryType& factory);
+    virtual HybridContinuousTimeEvolver<ValidatedTag>* clone() const { return new HybridContinuousTimeEvolver<ValidatedTag>(*this); }
+    virtual OutputStream& _write(OutputStream& os) const { return os << "HybridContinuousTimeEvolver<ValidatedTag>( " << this->configuration() << ")"; }
+
+  protected:
+    virtual TimingData
+        _estimate_timing(Set<DiscreteEvent>& active_events,
+                         Real final_time,
+                         const FlowFunctionModel& flow,
+                         Map<DiscreteEvent, CrossingData>& crossings,
+                         const Map<DiscreteEvent, TransitionData>& transitions,
+                         const HybridEnclosure& initial_set) const;
+
+  private:
+    /** @brief Perform the specified evolution operation. */
+    Void _copy_configuration_from(const HybridContinuousTimeEvolver<ValidatedTag>& other);
+};
+
+//! \brief Configuration for HybridContinuousTimeEvolver<ValidatedTag>, for controlling the accuracy of continuous evolution methods.
+//! \relates HybridContinuousTimeEvolver<ValidatedTag>
+template<>
+class HybridContinuousTimeEvolverConfiguration<ValidatedTag> : public HybridContinuousTimeEvolverBaseConfiguration<ValidatedTag> {
+  public:
+    using Paradigm = ValidatedTag;
+    /** @brief Construct the object. */
+    HybridContinuousTimeEvolverConfiguration(HybridContinuousTimeEvolver<ValidatedTag>& evolver);
+
+    virtual ~HybridContinuousTimeEvolverConfiguration() = default;
+};
+
+//! \brief Factory for HybridContinuousTimeEvolver<ValidatedTag> objects.
+//! \deprecated Use cloning instead
+//! \relates HybridContinuousTimeEvolver<ValidatedTag>
+template<>
+class HybridContinuousTimeEvolverFactory<ValidatedTag>
+    : public HybridContinuousTimeEvolverFactoryInterface<ValidatedTag> {
+  private:
+    std::shared_ptr<ValidatedFunctionPatchFactory::Interface> _function_factory_ptr;
+
+  public:
+    /** @brief Construct the object. */
+    HybridContinuousTimeEvolverFactory();
+
+    /** @brief Construct the object. */
+    HybridContinuousTimeEvolverFactory(const ValidatedFunctionPatchFactory& factory);
+
+    virtual HybridContinuousTimeEvolverFactory<ValidatedTag>* clone() const { return new HybridContinuousTimeEvolverFactory<ValidatedTag>(*this); }
+
+    //! \brief Create an hybrid evolver around a \a system.
+    virtual HybridContinuousTimeEvolver<ValidatedTag>* create(const HybridAutomatonInterface& system) const;
+};
+
+} // namespace Ariadne
+
+#endif // ARIADNE_HYBRID_CONTINUOUS_TIME_VALIDATED_EVOLVER_HPP

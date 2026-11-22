@@ -1,5 +1,5 @@
 /***************************************************************************
- *            test_hybrid_continuous_time_simulator.cpp
+ *            test_hybrid_continuous_time_approximate_evolver.cpp
  *
  *  Copyright  2026  Luca Geretti
  *
@@ -22,14 +22,14 @@
  *  along with Ariadne Evolution. If not, see <https://www.gnu.org/licenses/>.
  */
 
-/** @file tests/test_hybrid_continuous_time_simulator.cpp
+/** @file tests/test_hybrid_continuous_time_approximate_evolver.cpp
  *  @brief Test hybrid simulator behavior and numerical invariants.
  */
 
 #include <cmath>
 #include <sstream>
 
-#include "evolution/hybrid_continuous_time_simulator.hpp"
+#include "evolution/hybrid_continuous_time_approximate_evolver.hpp"
 #include "evolution/hybrid_orbit.hpp"
 #include "evolution/hybrid_time.hpp"
 #include "log_verbosity_scope.hpp"
@@ -50,15 +50,15 @@ class ProgressAutomaton : public HybridAutomaton {
     }
 };
 
-class TestHybridContinuousTimeSimulator : public Ariadne::Testing::ContextFixture {
+class TestHybridContinuousTimeApproximateEvolver : public Ariadne::Testing::ContextFixture {
   public:
     using Ariadne::Testing::ContextFixture::ContextFixture;
 
     RealVariable x{"x"}, y{"y"}, z{"z"};
     DiscreteLocation q{1}, target{2};
     DiscreteEvent jump{"jump"};
-    using PointType = HybridContinuousTimeSimulator::HybridApproximatePointType;
-    using PointList = HybridContinuousTimeSimulator::HybridApproximateListPointType;
+    using PointType = HybridContinuousTimeEvolver<ApproximateTag>::HybridApproximatePointType;
+    using PointList = HybridContinuousTimeEvolver<ApproximateTag>::HybridApproximateListPointType;
     PointType point(double xv = 0.0) const {
         return PointType(q, RealSpace({x, y}), FloatDPApproximationPoint({ExactDouble(xv), 2.0_x}, dp));
     }
@@ -78,7 +78,7 @@ class TestHybridContinuousTimeSimulator : public Ariadne::Testing::ContextFixtur
 
   public:
     Void test_labelled_flow() {
-        HybridContinuousTimeSimulator simulator(flow_system());
+        HybridContinuousTimeEvolver<ApproximateTag> simulator(flow_system());
         simulator.configuration().set_step_size(0.25);
         PointType reordered(q, RealSpace({y, x}), FloatDPApproximationPoint({2.0_x, 0.0_x}, dp));
         HybridRealPoint real(q, RealSpace({x, y}), RealPoint({Real(0), Real(2)}));
@@ -108,7 +108,7 @@ class TestHybridContinuousTimeSimulator : public Ariadne::Testing::ContextFixtur
         auto system = flow_system();
         system.new_mode(target, {dot(x) = 0, dot(y) = 0}, {let(z) = x + 2 * y});
         system.new_transition(q, jump, target, {next(x) = 0, next(y) = y}, x >= Real(1 / 4_q), EventKind::URGENT);
-        HybridContinuousTimeSimulator simulator(system);
+        HybridContinuousTimeEvolver<ApproximateTag> simulator(system);
         simulator.configuration().set_step_size(0.25);
         for (unsigned verbosity: {0u, 100u}) {
             LogVerbosityScope logging(verbosity);
@@ -135,9 +135,9 @@ class TestHybridContinuousTimeSimulator : public Ariadne::Testing::ContextFixtur
             ProgressAutomaton progress;
             progress.new_mode(q, {dot(x) = 1, dot(y) = 0}, {let(z) = x + 2 * y});
             progress.new_invariant(q, x <= 1, block);
-            HybridContinuousTimeSimulator simulator(kind == EventKind::INVARIANT
-                                                        ? static_cast<const HybridAutomatonInterface&>(base)
-                                                        : static_cast<const HybridAutomatonInterface&>(progress));
+            HybridContinuousTimeEvolver<ApproximateTag> simulator(kind == EventKind::INVARIANT
+                                                                      ? static_cast<const HybridAutomatonInterface&>(base)
+                                                                      : static_cast<const HybridAutomatonInterface&>(progress));
             for (unsigned verbosity: {0u, 100u}) {
                 LogVerbosityScope logging(verbosity);
                 auto stopped = simulator.orbit(point(2.0), HybridTime(1.0_x, 3));
@@ -152,7 +152,7 @@ class TestHybridContinuousTimeSimulator : public Ariadne::Testing::ContextFixtur
     }
     Void test_box_sampling() {
         auto system = flow_system();
-        HybridContinuousTimeSimulator simulator(system);
+        HybridContinuousTimeEvolver<ApproximateTag> simulator(system);
         simulator.configuration().set_fineness(1u);
         HybridUpperBox box(q, RealSpace({
                                   x, y
@@ -189,10 +189,10 @@ class TestHybridContinuousTimeSimulator : public Ariadne::Testing::ContextFixtur
 };
 
 int main(int argc, char* argv[]) {
-    ARIADNE_TESTING_SUITE("test_hybrid_continuous_time_simulator");
-    ARIADNE_TESTING_ADD_TEST(TestHybridContinuousTimeSimulator, test_labelled_flow);
-    ARIADNE_TESTING_ADD_TEST(TestHybridContinuousTimeSimulator, test_transitions_and_termination);
-    ARIADNE_TESTING_ADD_TEST(TestHybridContinuousTimeSimulator, test_invariant_and_progress_stopping);
-    ARIADNE_TESTING_ADD_TEST(TestHybridContinuousTimeSimulator, test_box_sampling);
+    ARIADNE_TESTING_SUITE("test_hybrid_continuous_time_approximate_evolver");
+    ARIADNE_TESTING_ADD_TEST(TestHybridContinuousTimeApproximateEvolver, test_labelled_flow);
+    ARIADNE_TESTING_ADD_TEST(TestHybridContinuousTimeApproximateEvolver, test_transitions_and_termination);
+    ARIADNE_TESTING_ADD_TEST(TestHybridContinuousTimeApproximateEvolver, test_invariant_and_progress_stopping);
+    ARIADNE_TESTING_ADD_TEST(TestHybridContinuousTimeApproximateEvolver, test_box_sampling);
     return Ariadne::Testing::run_logging_suite(ariadne_test_suite, argc, argv);
 }

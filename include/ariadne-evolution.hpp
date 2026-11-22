@@ -30,8 +30,8 @@
 #define ARIADNE_ARIADNE_EVOLUTION_HPP
 
 #include "evolution/configuration_interface.hpp"
+#include "evolution/continuous_time_approximate_evolver.hpp"
 #include "evolution/continuous_time_evolver.hpp"
-#include "evolution/continuous_time_simulator.hpp"
 #include "evolution/discrete_time_evolver.hpp"
 #include "evolution/enclosure.hpp"
 #include "evolution/enclosure_augmented_paving.hpp"
@@ -40,9 +40,9 @@
 #include "evolution/evolver_interface.hpp"
 #include "evolution/first_order_pde.hpp"
 #include "evolution/flowtube.hpp"
+#include "evolution/hybrid_continuous_time_approximate_evolver.hpp"
 #include "evolution/hybrid_continuous_time_evolver.hpp"
 #include "evolution/hybrid_continuous_time_evolver_interface.hpp"
-#include "evolution/hybrid_continuous_time_simulator.hpp"
 #include "evolution/hybrid_crossing.hpp"
 #include "evolution/hybrid_enclosure.hpp"
 #include "evolution/hybrid_evolution_backend.hpp"

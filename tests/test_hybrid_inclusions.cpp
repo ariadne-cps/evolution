@@ -29,7 +29,7 @@ class TestHybridInclusions : public Testing::ContextFixture {
         HybridAutomaton system;
         system.new_mode(q, OrdinaryDifferentialAlgebraicInclusion({dot(x) = u}, RealVariablesBox({-1 <= u <= 1})));
         for (bool box_method: {false, true}) {
-            HybridContinuousTimeEvolver evolver(system);
+            HybridContinuousTimeEvolver<ValidatedTag> evolver(system);
             TaylorPicardIntegrator base(step_maximum_error = 1e-6);
             if (box_method)
                 evolver.set_integrator(FirstOrderMultifunctionIntegrator());
@@ -67,7 +67,7 @@ class TestHybridInclusions : public Testing::ContextFixture {
         const RealVariable x("x"), u("u");
         HybridAutomaton system;
         system.new_mode(q, OrdinaryDifferentialAlgebraicInclusion({dot(x) = u}, RealVariablesBox({-1 <= u <= 1})));
-        HybridContinuousTimeEvolver evolver(system);
+        HybridContinuousTimeEvolver<ValidatedTag> evolver(system);
         TaylorPicardIntegrator base(step_maximum_error = 1e-6);
         evolver.set_integrator(base, ZeroApproximation(), AffineApproximation());
         evolver.configuration().set_maximum_step_size(0.03125);
@@ -121,7 +121,7 @@ class TestHybridInclusions : public Testing::ContextFixture {
         for (const Dyadic& horizon: {Dyadic(0.125_x), Dyadic(0.5_x)}) {
             const auto radius = horizon - Dyadic(0.03125_x);
             for (bool tree: {false, true}) {
-                HybridContinuousTimeEvolver evolver(system);
+                HybridContinuousTimeEvolver<ValidatedTag> evolver(system);
                 TaylorPicardIntegrator base(step_maximum_error = 1e-6);
                 evolver.set_integrator(base, ZeroApproximation(), ConstantApproximation());
                 evolver.configuration().set_maximum_step_size(0.03125);
@@ -164,7 +164,7 @@ class TestHybridInclusions : public Testing::ContextFixture {
         system.new_mode(q, OrdinaryDifferentialAlgebraicInclusion(RealSpace({x}),
                                                                   ValidatedVectorIntervalTaylorFunctionModel<FloatDP>({field})));
         for (bool boxes: {false, true}) {
-            HybridContinuousTimeEvolver evolver(system);
+            HybridContinuousTimeEvolver<ValidatedTag> evolver(system);
             TaylorPicardIntegrator base(step_maximum_error = 1e-6);
             if (boxes)
                 evolver.set_integrator(FirstOrderMultifunctionIntegrator());
@@ -202,13 +202,13 @@ class TestHybridInclusions : public Testing::ContextFixture {
         auto make = [&]() {
             HybridAutomaton system;
             system.new_mode(q, OrdinaryDifferentialAlgebraicInclusion({dot(x) = 1}, RealVariablesBox({})));
-            HybridContinuousTimeEvolver evolver(system);
+            HybridContinuousTimeEvolver<ValidatedTag> evolver(system);
             evolver.set_integrator(FirstOrderMultifunctionIntegrator());
             evolver.configuration().set_maximum_step_size(0.03125);
             return evolver;
         };
         auto original = make();
-        std::unique_ptr<HybridContinuousTimeEvolver> clone(original.clone());
+        std::unique_ptr<HybridContinuousTimeEvolver<ValidatedTag>> clone(original.clone());
         original = make();
         const auto orbit = clone->orbit(HybridExactBox(q, RealSpace({
                                                               x
@@ -237,7 +237,7 @@ class TestHybridInclusions : public Testing::ContextFixture {
                                {dot(x) = u}, RealVariablesBox({-1 <= u <= 1})));
         system.new_invariant(q, x <= 0, bound);
         for (bool box_method: {false, true}) {
-            HybridContinuousTimeEvolver evolver(system);
+            HybridContinuousTimeEvolver<ValidatedTag> evolver(system);
             TaylorPicardIntegrator base(step_maximum_error = 1e-6);
             if (box_method)
                 evolver.set_integrator(FirstOrderMultifunctionIntegrator());
@@ -273,7 +273,7 @@ class TestHybridInclusions : public Testing::ContextFixture {
         system.new_mode(q, OrdinaryDifferentialAlgebraicInclusion(
                                {dot(x) = u}, RealVariablesBox({-1 <= u <= 1})));
         system.new_invariant(q, x <= 0, DiscreteEvent("bound"));
-        HybridContinuousTimeEvolver evolver(system);
+        HybridContinuousTimeEvolver<ValidatedTag> evolver(system);
         evolver.set_integrator(FirstOrderMultifunctionIntegrator());
         const auto crossing = evolver.orbit(HybridExactBox(q, RealSpace({
                                                                   x
@@ -299,7 +299,7 @@ class TestHybridInclusions : public Testing::ContextFixture {
             const DiscreteEvent event(kind == EventKind::URGENT ? "urgent" : "permissive");
             system.new_transition(source, event, target, {next(x) = 0}, x >= 0.03125_x, kind);
             for (bool boxes: {false, true}) {
-                HybridContinuousTimeEvolver evolver(system);
+                HybridContinuousTimeEvolver<ValidatedTag> evolver(system);
                 TaylorPicardIntegrator base(step_maximum_error = 1e-6);
                 if (boxes)
                     evolver.set_integrator(FirstOrderMultifunctionIntegrator());
@@ -347,7 +347,7 @@ class TestHybridInclusions : public Testing::ContextFixture {
                                {dot(x) = u}, RealVariablesBox({-1 <= u <= 1})));
         system.new_guard(q, progress, x >= 0.03125_x, EventKind::PROGRESS);
         for (bool boxes: {false, true}) {
-            HybridContinuousTimeEvolver evolver(system);
+            HybridContinuousTimeEvolver<ValidatedTag> evolver(system);
             TaylorPicardIntegrator base(step_maximum_error = 1e-6);
             if (boxes)
                 evolver.set_integrator(FirstOrderMultifunctionIntegrator());
@@ -392,7 +392,7 @@ class TestHybridInclusions : public Testing::ContextFixture {
         system.new_transition(source, first, left, {next(x) = 0}, x >= 0.03125_x, EventKind::URGENT);
         system.new_transition(source, second, right, {next(x) = 0}, x >= 0.03125_x, EventKind::URGENT);
         for (bool boxes: {false, true}) {
-            HybridContinuousTimeEvolver evolver(system);
+            HybridContinuousTimeEvolver<ValidatedTag> evolver(system);
             TaylorPicardIntegrator base(step_maximum_error = 1e-6);
             if (boxes)
                 evolver.set_integrator(FirstOrderMultifunctionIntegrator());
@@ -430,7 +430,7 @@ class TestHybridInclusions : public Testing::ContextFixture {
         system.new_transition(source, event, target, {next(x) = 0},
                               x >= 0.03125_x, EventKind::PERMISSIVE);
         for (bool boxes: {false, true}) {
-            HybridContinuousTimeEvolver evolver(system);
+            HybridContinuousTimeEvolver<ValidatedTag> evolver(system);
             TaylorPicardIntegrator base(step_maximum_error = 1e-6);
             if (boxes)
                 evolver.set_integrator(FirstOrderMultifunctionIntegrator());
@@ -461,7 +461,7 @@ class TestHybridInclusions : public Testing::ContextFixture {
                                             ExactBoxType({{0, 0}}));
         HybridAutomaton system;
         system.new_mode(q, OrdinaryDifferentialAlgebraicInclusion({dot(x) = u}, RealVariablesBox({-1 <= u <= 1})));
-        HybridContinuousTimeEvolver evolver(system);
+        HybridContinuousTimeEvolver<ValidatedTag> evolver(system);
         ARIADNE_TESTING_EXPECT_THROWS(std::invalid_argument, evolver.orbit(initial, HybridTime(0u, 1), Semantics::UPPER));
         evolver.set_integrator(FirstOrderMultifunctionIntegrator());
         ARIADNE_TESTING_EXPECT_THROWS(std::invalid_argument, evolver.orbit(initial, HybridTime(0u, 1), Semantics::LOWER));
@@ -470,7 +470,7 @@ class TestHybridInclusions : public Testing::ContextFixture {
         // State-only invariants are now supported as necessary outer
         // restrictions. They need neither an entry time nor a Lie derivative.
         system.new_invariant(q, x <= 1, DiscreteEvent("bound"));
-        HybridContinuousTimeEvolver guarded(system);
+        HybridContinuousTimeEvolver<ValidatedTag> guarded(system);
         guarded.set_integrator(FirstOrderMultifunctionIntegrator());
         const auto initially_valid = guarded.orbit(initial, HybridTime(0u, 1), Semantics::UPPER);
         ARIADNE_TESTING_PROVE(initially_valid.final().size() > 0u);
@@ -484,7 +484,7 @@ class TestHybridInclusions : public Testing::ContextFixture {
         jumping.new_mode(target, OrdinaryDifferentialAlgebraicEquation({dot(x) = 0}));
         jumping.new_transition(q, DiscreteEvent("jump"), target, {next(x) = x},
                                x >= 0, EventKind::URGENT);
-        HybridContinuousTimeEvolver possible_jump(jumping);
+        HybridContinuousTimeEvolver<ValidatedTag> possible_jump(jumping);
         possible_jump.set_integrator(FirstOrderMultifunctionIntegrator());
         const auto at_zero = possible_jump.orbit(initial, HybridTime(0u, 1), Semantics::UPPER);
         // The initial urgent phase is allowed in UPPER. Its result is a
@@ -494,7 +494,7 @@ class TestHybridInclusions : public Testing::ContextFixture {
         HybridAutomaton timed;
         timed.new_mode(q, OrdinaryDifferentialAlgebraicInclusion({dot(x) = t + p + u}, RealVariablesBox({-1 <= u <= 1}),
                                                                  RealVariablesBox({0 <= p <= 1}), t));
-        HybridContinuousTimeEvolver timed_evolver(timed);
+        HybridContinuousTimeEvolver<ValidatedTag> timed_evolver(timed);
         timed_evolver.set_integrator(FirstOrderMultifunctionIntegrator());
         ARIADNE_TESTING_EXPECT_THROWS(std::invalid_argument, timed_evolver.orbit(initial, HybridTime(0u, 1), Semantics::UPPER));
     }

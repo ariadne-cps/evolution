@@ -15,11 +15,14 @@ Although independently maintained and usable, this repository is also part of th
 
 Public headers: `include/evolution`; C++ implementations: `src`; C++ tests: `tests`; Python bindings and smoke tests: `python`; pinned dependencies: `ss`. The umbrella header is `include/ariadne-evolution.hpp`.
 
-The concrete evolvers are `ContinuousTimeEvolver` (`continuous_time_evolver.hpp`),
-`DiscreteTimeEvolver` (`discrete_time_evolver.hpp`) and
-`HybridContinuousTimeEvolver` (`hybrid_continuous_time_evolver.hpp`). The previous
-class names and headers are removed. Discrete maps retain their own evolution
-step; numerical integration is shared by continuous evolution and hybrid modes.
+The canonical `ContinuousTimeEvolver<P>` and `HybridContinuousTimeEvolver<P>`
+select approximate sampled trajectories with `ApproximateTag` or validated
+set evolution with `ValidatedTag`. `DiscreteTimeEvolver<ValidatedTag>` retains
+discrete map evolution; its approximate specialization is planned. There is no
+default paradigm. The former simulator names and headers are removed.
+See [paradigm contracts](doc/evolver_paradigms_design.md) for inputs, results,
+interfaces and Python template subscriptions. Numerical integration is shared
+by continuous validated evolution and hybrid modes where certificates agree.
 
 Ordinary and hybrid flows use `ValidatedIntegrationRequest` and consume
 `ValidatedIntegrationStep`. The continuous enclosure bridge applies
@@ -40,13 +43,13 @@ loss of structure. Any available structured component is retained. Box
 application preserves the original feasible parameter coordinates and time
 maps, and never claims an inner reachability or correlated trajectory model.
 The ordinary equation paths continue to require structured certificates.
-Equations and inclusions now share `ContinuousTimeEvolver`, `LabelledEnclosure`
+Equations and inclusions now share `ContinuousTimeEvolver<ValidatedTag>`, `LabelledEnclosure`
 and the same workload, time, subdivision and reconditioning loop. The separate
 inclusion evolver and its competitive approximation scheduler have been removed.
 
 Hybrid evolution separates numerical step results from execution and Orbit
 accumulation. The default `FlatHybridEvolutionBackendFactory` retains the current
-workload scheduling; `HybridContinuousTimeEvolverBase::set_evolution_backend_factory()` selects
+workload scheduling; `HybridContinuousTimeEvolverBase<ValidatedTag>::set_evolution_backend_factory()` selects
 another factory without changing the `orbit()` overloads or return type.
 `TreeHybridEvolutionBackendFactory` records trajectory histories and genealogy
 backed by `DerivationTree`. Its single checkpoint scheduler supports parent,
@@ -76,7 +79,7 @@ input coordinates, explicit-time or fixed-parameter metadata and box-only
 certificates are rejected explicitly for that event analysis.
 
 `HybridAutomaton::new_mode(location, equation_or_inclusion)` retains an owned copy
-of the original ODAE or ODAI declaration. `HybridContinuousTimeEvolver` supports
+of the original ODAE or ODAI declaration. `HybridContinuousTimeEvolver<ValidatedTag>` supports
 autonomous and nonautonomous inclusion modes without fixed model parameters, under `UPPER`
 semantics. State invariants and PROGRESS/URGENT/IMPACT guards restrict outer
 reach and endpoint; URGENT/PERMISSIVE/IMPACT can produce conservative reset
@@ -87,7 +90,7 @@ Select their numerical capability explicitly:
 ```cpp
 HybridAutomaton automaton;
 automaton.new_mode(mode, inclusion);
-HybridContinuousTimeEvolver evolver(automaton);
+HybridContinuousTimeEvolver<ValidatedTag> evolver(automaton);
 evolver.set_integrator(integrator, ZeroApproximation(), ConstantApproximation());
 // Alternatively: evolver.set_integrator(FirstOrderMultifunctionIntegrator());
 ```
@@ -121,7 +124,7 @@ back to the ordinary integrator overload clears the inclusion solver choice.
 The `multifunction` branch uses the ordinary dynamics declarations
 `OrdinaryDifferentialAlgebraicEquation` (`system/odae.hpp`) and
 `OrdinaryDifferentialAlgebraicInclusion` (`system/odai.hpp`).
-`ContinuousTimeEvolver` accepts autonomous and explicit-time equations and inclusions, including
+`ContinuousTimeEvolver<ValidatedTag>` accepts autonomous and explicit-time equations and inclusions, including
 trajectory-constant parameters under `Semantics::UPPER`. Each parameter retains
 the same enclosure coordinate across integration steps, subdivision and
 reconditioning; parameters and time are not added to the physical state.
@@ -140,7 +143,7 @@ RealVariable x("x"), p("p");
 OrdinaryDifferentialAlgebraicEquation equation(
     {dot(x) = p}, RealVariablesBox({-1 <= p <= 1}));
 TaylorPicardIntegrator integrator(step_maximum_error = 1e-6);
-ContinuousTimeEvolver evolver(equation, integrator);
+ContinuousTimeEvolver<ValidatedTag> evolver(equation, integrator);
 evolver.configuration().set_maximum_step_size(0.0625);
 auto result = evolver.orbit(RealVariablesBox({x == 0}), Real(0.09375_x), Semantics::UPPER);
 ```
@@ -152,7 +155,7 @@ and one endpoint approximation when constructing the same evolver:
 RealVariable u("u");
 OrdinaryDifferentialAlgebraicInclusion inclusion(
     {dot(x) = u - x}, RealVariablesBox({-1 <= u <= 1}));
-ContinuousTimeEvolver included(inclusion, integrator,
+ContinuousTimeEvolver<ValidatedTag> included(inclusion, integrator,
                              ZeroApproximation(), ConstantApproximation());
 included.configuration().set_maximum_step_size(0.03125);
 auto tube = included.orbit(RealVariablesBox({x == 0}), Real(0.0625_x), Semantics::UPPER);
@@ -165,7 +168,7 @@ the common enclosure policy and parameter count, without winner statistics.
 The input-approximation remainder is separate from the underlying ODE solver's
 Taylor error: reduce the maximum step when tighter inclusion bounds are needed.
 
-Selecting `ContinuousTimeEvolver(inclusion, FirstOrderMultifunctionIntegrator())`
+Selecting `ContinuousTimeEvolver<ValidatedTag>(inclusion, FirstOrderMultifunctionIntegrator())`
 explicitly requests outer box certificates. This path also supports structured
 ODAI declarations without free inputs. Interval-Taylor inclusions retain
 pointwise, time-varying coefficient semantics and remain inside the declared
@@ -174,10 +177,11 @@ provider with free input coordinates; interval coefficients can supply these
 as time-varying numerical inputs. Its bound covers the provider's possibly
 wider extension. Unsupported capabilities fail explicitly.
 
-`ContinuousTimeSimulator` simulates autonomous and nonautonomous equations
-without fixed model parameters; `HybridContinuousTimeSimulator` also evaluates
+`ContinuousTimeEvolver<ApproximateTag>` simulates autonomous and nonautonomous equations
+without fixed model parameters; `HybridContinuousTimeEvolver<ApproximateTag>` also evaluates
 timed equation modes, guards, invariants, resets and auxiliary outputs. These
-names also apply to their configuration classes, headers and Python exports.
+paradigms also select their configuration classes. Python selects specializations
+with `ContinuousTimeEvolver[ApproximateTag]` and `[ValidatedTag]`.
 Simulator input sampling for inclusions and constant model parameters remains
 planned. The [four-family design](doc/system_families_design.md) also plans native
 discrete and hybrid discrete-time simulation/evolution, shared infrastructure,

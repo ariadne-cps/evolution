@@ -28,11 +28,11 @@
 
 #include <vector>
 
+#include "evolution/continuous_time_approximate_evolver.hpp"
 #include "evolution/continuous_time_evolver.hpp"
-#include "evolution/continuous_time_simulator.hpp"
 #include "evolution/discrete_time_evolver.hpp"
 #include "evolution/enclosure_recombiner.hpp"
-#include "evolution/hybrid_continuous_time_simulator.hpp"
+#include "evolution/hybrid_continuous_time_approximate_evolver.hpp"
 #include "evolution/hybrid_enclosure.hpp"
 #include "evolution/hybrid_time.hpp"
 #include "evolution/orbit.hpp"
@@ -129,11 +129,11 @@ template<class SIM>
 Void export_simulator(pybind11::module& module, const char* name);
 
 template<>
-Void export_simulator<ContinuousTimeSimulator>(pybind11::module& module, const char* name) {
-    typedef ContinuousTimeSimulator::TerminationType TerminationType;
-    typedef ContinuousTimeSimulator::ApproximateListPointType ApproximateListPointType;
-    typedef ContinuousTimeSimulator::OrbitType OrbitType;
-    typedef ContinuousTimeSimulator::RealBoxType RealBoxType;
+Void export_simulator<ContinuousTimeEvolver<ApproximateTag>>(pybind11::module& module, const char* name) {
+    typedef ContinuousTimeEvolver<ApproximateTag>::TerminationType TerminationType;
+    typedef ContinuousTimeEvolver<ApproximateTag>::ApproximateListPointType ApproximateListPointType;
+    typedef ContinuousTimeEvolver<ApproximateTag>::OrbitType OrbitType;
+    typedef ContinuousTimeEvolver<ApproximateTag>::RealBoxType RealBoxType;
 
     const auto& reference_internal = pybind11::return_value_policy::reference_internal;
 
@@ -142,16 +142,16 @@ Void export_simulator<ContinuousTimeSimulator>(pybind11::module& module, const c
     pybind11::class_<OrbitType, pybind11::bases<LabelledDrawable2dInterface>> simulator_orbit_class(module, "ApproximatePointOrbit");
     simulator_orbit_class.def("curves", &OrbitType::curves);
 
-    pybind11::class_<ContinuousTimeSimulator> simulator_class(module, name);
-    simulator_class.def(pybind11::init<const ContinuousTimeSimulator::SystemType&>());
-    simulator_class.def("configuration", pybind11::overload_cast<>(&ContinuousTimeSimulator::configuration), reference_internal);
-    simulator_class.def("orbit", (OrbitType (ContinuousTimeSimulator::*)(const ApproximateListPointType&, const TerminationType&) const) & ContinuousTimeSimulator::orbit);
-    simulator_class.def("orbit", pybind11::overload_cast<const ApproximateListPointType&, const TerminationType&>(&ContinuousTimeSimulator::orbit, pybind11::const_));
-    simulator_class.def("orbit", pybind11::overload_cast<const RealExpressionBoundedConstraintSet&, const TerminationType&>(&ContinuousTimeSimulator::orbit, pybind11::const_));
-    simulator_class.def("orbit", pybind11::overload_cast<const RealBoxType&, const TerminationType&>(&ContinuousTimeSimulator::orbit, pybind11::const_));
+    pybind11::class_<ContinuousTimeEvolver<ApproximateTag>> simulator_class(module, name);
+    simulator_class.def(pybind11::init<const ContinuousTimeEvolver<ApproximateTag>::SystemType&>());
+    simulator_class.def("configuration", pybind11::overload_cast<>(&ContinuousTimeEvolver<ApproximateTag>::configuration), reference_internal);
+    simulator_class.def("orbit", (OrbitType (ContinuousTimeEvolver<ApproximateTag>::*)(const ApproximateListPointType&, const TerminationType&) const) & ContinuousTimeEvolver<ApproximateTag>::orbit);
+    simulator_class.def("orbit", pybind11::overload_cast<const ApproximateListPointType&, const TerminationType&>(&ContinuousTimeEvolver<ApproximateTag>::orbit, pybind11::const_));
+    simulator_class.def("orbit", pybind11::overload_cast<const RealExpressionBoundedConstraintSet&, const TerminationType&>(&ContinuousTimeEvolver<ApproximateTag>::orbit, pybind11::const_));
+    simulator_class.def("orbit", pybind11::overload_cast<const RealBoxType&, const TerminationType&>(&ContinuousTimeEvolver<ApproximateTag>::orbit, pybind11::const_));
 
-    typedef typename ContinuousTimeSimulator::ConfigurationType ConfigurationType;
-    pybind11::class_<ConfigurationType> simulator_configuration_class(module, "ContinuousTimeSimulatorConfiguration");
+    typedef typename ContinuousTimeEvolver<ApproximateTag>::ConfigurationType ConfigurationType;
+    pybind11::class_<ConfigurationType> simulator_configuration_class(module, "ContinuousTimeApproximateEvolverConfiguration");
     simulator_configuration_class.def("set_step_size", &ConfigurationType::set_step_size);
     simulator_configuration_class.def("set_discretisation_type", &ConfigurationType::set_discretisation_type);
     simulator_configuration_class.def("set_num_subdivisions", &ConfigurationType::set_num_subdivisions);
@@ -183,9 +183,9 @@ auto export_evolver(pybind11::module& module, const char* name) {
 }
 
 Void export_continuous_time_evolver_configuration(pybind11::module& module) {
-    typedef typename ContinuousTimeEvolver::ConfigurationType ConfigurationType;
+    typedef typename ContinuousTimeEvolver<ValidatedTag>::ConfigurationType ConfigurationType;
 
-    pybind11::class_<ConfigurationType> continuous_time_evolver_configuration_class(module, "ContinuousTimeEvolverConfiguration");
+    pybind11::class_<ConfigurationType> continuous_time_evolver_configuration_class(module, "ContinuousTimeValidatedEvolverConfiguration");
     continuous_time_evolver_configuration_class.def("set_maximum_step_size", &ConfigurationType::set_maximum_step_size);
     continuous_time_evolver_configuration_class.def("set_maximum_enclosure_radius", &ConfigurationType::set_maximum_enclosure_radius);
     continuous_time_evolver_configuration_class.def("set_maximum_spacial_error", &ConfigurationType::set_maximum_spacial_error);
@@ -195,8 +195,8 @@ Void export_continuous_time_evolver_configuration(pybind11::module& module) {
 }
 
 Void export_discrete_time_evolver_configuration(pybind11::module& module) {
-    typedef DiscreteTimeEvolver::ConfigurationType ConfigurationType;
-    pybind11::class_<ConfigurationType> configuration_class(module, "DiscreteTimeEvolverConfiguration");
+    typedef DiscreteTimeEvolver<ValidatedTag>::ConfigurationType ConfigurationType;
+    pybind11::class_<ConfigurationType> configuration_class(module, "DiscreteTimeValidatedEvolverConfiguration");
     configuration_class.def("set_maximum_enclosure_radius", &ConfigurationType::set_maximum_enclosure_radius);
     configuration_class.def("set_enable_subdivisions", &ConfigurationType::set_enable_subdivisions);
     configuration_class.def("set_enable_premature_termination", &ConfigurationType::set_enable_premature_termination);
@@ -205,6 +205,8 @@ Void export_discrete_time_evolver_configuration(pybind11::module& module) {
 
 Void evolution_submodule(pybind11::module& module) {
     export_labelled_drawable_2d_interface(module);
+    pybind11::class_<ApproximateTag>(module, "ApproximateTag");
+    pybind11::class_<ValidatedTag>(module, "ValidatedTag");
 
     export_semantics(module);
 
@@ -213,15 +215,15 @@ Void evolution_submodule(pybind11::module& module) {
 
     export_list_set<LabelledEnclosure>(module, "LabelledEnclosureListSet");
 
-    export_simulator<ContinuousTimeSimulator>(module, "ContinuousTimeSimulator");
+    export_simulator<ContinuousTimeEvolver<ApproximateTag>>(module, "ContinuousTimeApproximateEvolver");
 
-    export_evolver_interface<DiscreteTimeEvolver::Interface>(module, "DiscreteTimeEvolverInterface");
-    export_evolver_interface<ContinuousTimeEvolver::Interface>(module, "ContinuousTimeEvolverInterface");
+    export_evolver_interface<DiscreteTimeEvolver<ValidatedTag>::Interface>(module, "DiscreteTimeEvolverInterface");
+    export_evolver_interface<ContinuousTimeEvolver<ValidatedTag>::Interface>(module, "ContinuousTimeEvolverInterface");
 
-    export_orbit<ContinuousTimeEvolver::OrbitType>(module, "LabelledEnclosureOrbit");
+    export_orbit<ContinuousTimeEvolver<ValidatedTag>::OrbitType>(module, "LabelledEnclosureOrbit");
 
-    export_evolver<DiscreteTimeEvolver, IteratedMap>(module, "DiscreteTimeEvolver");
-    auto continuous = export_evolver<ContinuousTimeEvolver, OrdinaryDifferentialAlgebraicEquation, const IntegratorInterface&>(module, "ContinuousTimeEvolver");
+    export_evolver<DiscreteTimeEvolver<ValidatedTag>, IteratedMap>(module, "DiscreteTimeValidatedEvolver");
+    auto continuous = export_evolver<ContinuousTimeEvolver<ValidatedTag>, OrdinaryDifferentialAlgebraicEquation, const IntegratorInterface&>(module, "ContinuousTimeValidatedEvolver");
     continuous.def(pybind11::init<const OrdinaryDifferentialAlgebraicInclusion&, const IntegratorBase&,
                                   const InputApproximation&, const InputApproximation&>());
     continuous.def(pybind11::init<const OrdinaryDifferentialAlgebraicInclusion&, const FirstOrderMultifunctionIntegrator&>());
@@ -237,12 +239,19 @@ Void evolution_submodule(pybind11::module& module) {
     pybind11::class_<HybridEnclosure>(module, "HybridEnclosure")
         .def("location", &HybridEnclosure::location)
         .def("state_space", &HybridEnclosure::state_space);
-    pybind11::class_<HybridContinuousTimeSimulator>(module, "HybridContinuousTimeSimulator")
-        .def(pybind11::init<const HybridContinuousTimeSimulator::SystemType&>())
+    pybind11::class_<HybridContinuousTimeEvolver<ApproximateTag>>(module, "HybridContinuousTimeApproximateEvolver")
+        .def(pybind11::init<const HybridContinuousTimeEvolver<ApproximateTag>::SystemType&>())
         // HybridAutomaton is exported by System without a Python base-class
         // declaration; provide the concrete model overload explicitly.
         .def(pybind11::init([](const HybridAutomaton& automaton) {
-            return std::make_unique<HybridContinuousTimeSimulator>(
+            return std::make_unique<HybridContinuousTimeEvolver<ApproximateTag>>(
                 static_cast<const HybridAutomatonInterface&>(automaton));
         }));
+    template_<ContinuousTimeEvolver> continuousTime_template(module, "ContinuousTimeEvolver");
+    continuousTime_template.instantiate("ApproximateTag", "ContinuousTimeApproximateEvolver");
+    continuousTime_template.instantiate("ValidatedTag", "ContinuousTimeValidatedEvolver");
+    template_<HybridContinuousTimeEvolver> hybridContinuousTime_template(module, "HybridContinuousTimeEvolver");
+    hybridContinuousTime_template.instantiate("ApproximateTag", "HybridContinuousTimeApproximateEvolver");
+    template_<DiscreteTimeEvolver> discreteTime_template(module, "DiscreteTimeEvolver");
+    discreteTime_template.instantiate("ValidatedTag", "DiscreteTimeValidatedEvolver");
 }

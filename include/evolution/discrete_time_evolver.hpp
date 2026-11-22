@@ -36,6 +36,7 @@
 
 #include "evolution/configuration_interface.hpp"
 #include "evolution/enclosure.hpp"
+#include "evolution/evolver.decl.hpp"
 #include "evolution/evolver_interface.hpp"
 #include "function/function_interface.hpp"
 #include "logging/logging.hpp"
@@ -51,16 +52,19 @@ class IteratedMap;
 template<class ES>
 class Orbit;
 
-/** @brief DiscreteTimeEvolverConfiguration represents evolution by iteration of discrete-time maps. */
-class DiscreteTimeEvolverConfiguration;
+/** @brief DiscreteTimeEvolverConfiguration<ValidatedTag> represents evolution by iteration of discrete-time maps. */
+template<>
+class DiscreteTimeEvolverConfiguration<ValidatedTag>;
 
 /*! \brief A class for computing the evolution of an iterated map.
  */
-class DiscreteTimeEvolver
-    : public EvolverInterface<IteratedMap, LabelledEnclosure, Integer> {
+template<>
+class DiscreteTimeEvolver<ValidatedTag>
+    : public EvolverInterface<ValidatedTag, IteratedMap, LabelledEnclosure, Integer> {
   public:
-    typedef EvolverInterface<IteratedMap, LabelledEnclosure, Integer> Interface;
-    typedef DiscreteTimeEvolverConfiguration ConfigurationType;
+    using Paradigm = ValidatedTag;
+    typedef EvolverInterface<ValidatedTag, IteratedMap, LabelledEnclosure, Integer> Interface;
+    typedef DiscreteTimeEvolverConfiguration<ValidatedTag> ConfigurationType;
     typedef IteratedMap SystemType;
     typedef Integer TimeType;
     typedef Integer TerminationType;
@@ -75,7 +79,7 @@ class DiscreteTimeEvolver
     DiscreteTimeEvolver(const SystemType& system);
 
     /*! \brief Make a dynamically-allocated copy. */
-    DiscreteTimeEvolver* clone() const { return new DiscreteTimeEvolver(*this); }
+    DiscreteTimeEvolver<ValidatedTag>* clone() const { return new DiscreteTimeEvolver<ValidatedTag>(*this); }
 
     /* \brief Get the internal system. */
     virtual const SystemType& system() const { return *_system; }
@@ -117,9 +121,11 @@ class DiscreteTimeEvolver
     SharedPointer<ConfigurationType> _configuration;
 };
 
-//! \brief Configuration for a DiscreteTimeEvolver, essentially to control accuracy of evolution.
-class DiscreteTimeEvolverConfiguration : public ConfigurationInterface {
+//! \brief Configuration for a DiscreteTimeEvolver<ValidatedTag>, essentially to control accuracy of evolution.
+template<>
+class DiscreteTimeEvolverConfiguration<ValidatedTag> : public ConfigurationInterface {
   public:
+    using Paradigm = ValidatedTag;
     typedef double RealType;
 
     //! \brief Default constructor gives reasonable values.

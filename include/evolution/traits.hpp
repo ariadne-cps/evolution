@@ -31,6 +31,8 @@
 
 // Associations between systems and their evolution algorithms belong to evolution,
 // never to the system-description classes.
+#include "evolution/evolver.decl.hpp"
+
 namespace Ariadne {
 
 /** @brief IteratedMap: compile-time correspondence between systems, evolvers and enclosures. */
@@ -42,50 +44,63 @@ class OrdinaryDifferentialAlgebraicInclusion;
 /** @brief HybridAutomatonInterface: compile-time correspondence between systems, evolvers and enclosures. */
 class HybridAutomatonInterface;
 
-/** @brief DiscreteTimeEvolver: compile-time correspondence between systems, evolvers and enclosures. */
-class DiscreteTimeEvolver;
-/** @brief ContinuousTimeEvolver: compile-time correspondence between systems, evolvers and enclosures. */
-class ContinuousTimeEvolver;
+/** @brief DiscreteTimeEvolver<ValidatedTag>: compile-time correspondence between systems, evolvers and enclosures. */
+template<>
+class DiscreteTimeEvolver<ValidatedTag>;
+/** @brief ContinuousTimeEvolver<ValidatedTag>: compile-time correspondence between systems, evolvers and enclosures. */
+template<>
+class ContinuousTimeEvolver<ValidatedTag>;
 class ContinuousDynamics;
-/** @brief HybridContinuousTimeEvolverInterface: compile-time correspondence between systems, evolvers and enclosures. */
-class HybridContinuousTimeEvolverInterface;
+/** @brief HybridContinuousTimeEvolverInterface<ValidatedTag>: compile-time correspondence between systems, evolvers and enclosures. */
+template<>
+class HybridContinuousTimeEvolverInterface<ValidatedTag>;
 
 /** @brief LabelledEnclosure: compile-time correspondence between systems, evolvers and enclosures. */
 class LabelledEnclosure;
 /** @brief HybridEnclosure: compile-time correspondence between systems, evolvers and enclosures. */
 class HybridEnclosure;
 
-template<class SYS>
+template<class P, class SYS>
 struct EvolutionTraits;
 
 template<>
-struct EvolutionTraits<IteratedMap> {
-    using EvolverType = DiscreteTimeEvolver;
+struct EvolutionTraits<ValidatedTag, IteratedMap> {
+    using EvolverType = DiscreteTimeEvolver<ValidatedTag>;
     using EnclosureType = LabelledEnclosure;
 };
 
 template<>
-struct EvolutionTraits<OrdinaryDifferentialAlgebraicEquation> {
-    using EvolverType = ContinuousTimeEvolver;
+struct EvolutionTraits<ValidatedTag, OrdinaryDifferentialAlgebraicEquation> {
+    using EvolverType = ContinuousTimeEvolver<ValidatedTag>;
     using EnclosureType = LabelledEnclosure;
 };
 
 template<>
-struct EvolutionTraits<OrdinaryDifferentialAlgebraicInclusion> {
-    using EvolverType = ContinuousTimeEvolver;
+struct EvolutionTraits<ValidatedTag, OrdinaryDifferentialAlgebraicInclusion> {
+    using EvolverType = ContinuousTimeEvolver<ValidatedTag>;
     using EnclosureType = LabelledEnclosure;
 };
 
 template<>
-struct EvolutionTraits<ContinuousDynamics> {
-    using EvolverType = ContinuousTimeEvolver;
+struct EvolutionTraits<ValidatedTag, ContinuousDynamics> {
+    using EvolverType = ContinuousTimeEvolver<ValidatedTag>;
     using EnclosureType = LabelledEnclosure;
 };
 
 template<>
-struct EvolutionTraits<HybridAutomatonInterface> {
-    using EvolverType = HybridContinuousTimeEvolverInterface;
+struct EvolutionTraits<ValidatedTag, HybridAutomatonInterface> {
+    using EvolverType = HybridContinuousTimeEvolverInterface<ValidatedTag>;
     using EnclosureType = HybridEnclosure;
+};
+
+template<>
+struct EvolutionTraits<ApproximateTag, OrdinaryDifferentialAlgebraicEquation> {
+    using EvolverType = ContinuousTimeEvolver<ApproximateTag>;
+};
+
+template<>
+struct EvolutionTraits<ApproximateTag, HybridAutomatonInterface> {
+    using EvolverType = HybridContinuousTimeEvolverInterface<ApproximateTag>;
 };
 
 } // namespace Ariadne

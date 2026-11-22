@@ -8,8 +8,8 @@
 #include <stdexcept>
 #include <type_traits>
 
+#include "evolution/continuous_time_approximate_evolver.hpp"
 #include "evolution/continuous_time_evolver.hpp"
-#include "evolution/continuous_time_simulator.hpp"
 #include "evolution/traits.hpp"
 #include "function/taylor_model.hpp"
 #include "integration/integrator.hpp"
@@ -21,12 +21,12 @@
 
 using namespace Ariadne;
 
-static_assert(std::is_same_v<ContinuousTimeEvolver::SystemType, ContinuousDynamics>);
-static_assert(std::is_same_v<ContinuousTimeSimulator::SystemType, OrdinaryDifferentialAlgebraicEquation>);
-static_assert(std::is_same_v<EvolutionTraits<OrdinaryDifferentialAlgebraicEquation>::EvolverType,
-                             EvolutionTraits<OrdinaryDifferentialAlgebraicInclusion>::EvolverType>);
-static_assert(std::is_same_v<EvolutionTraits<ContinuousTimeEvolver::SystemType>::EnclosureType,
-                             ContinuousTimeEvolver::EnclosureType>);
+static_assert(std::is_same_v<ContinuousTimeEvolver<ValidatedTag>::SystemType, ContinuousDynamics>);
+static_assert(std::is_same_v<ContinuousTimeEvolver<ApproximateTag>::SystemType, OrdinaryDifferentialAlgebraicEquation>);
+static_assert(std::is_same_v<EvolutionTraits<ValidatedTag, OrdinaryDifferentialAlgebraicEquation>::EvolverType,
+                             EvolutionTraits<ValidatedTag, OrdinaryDifferentialAlgebraicInclusion>::EvolverType>);
+static_assert(std::is_same_v<EvolutionTraits<ValidatedTag, ContinuousTimeEvolver<ValidatedTag>::SystemType>::EnclosureType,
+                             ContinuousTimeEvolver<ValidatedTag>::EnclosureType>);
 
 class TestOrdinaryDynamicsContract : public Ariadne::Testing::ContextFixture {
   public:
@@ -41,29 +41,29 @@ class TestOrdinaryDynamicsContract : public Ariadne::Testing::ContextFixture {
         ARIADNE_TESTING_EXPECT_EQUAL(timed.dimension(), 1u);
         ARIADNE_TESTING_EXPECT_EQUAL(timed.function().argument_size(), 2u);
         ARIADNE_TESTING_EXPECT_EQUAL(parameterised.function().argument_size(), 2u);
-        ContinuousTimeEvolver timed_evolver(timed, integrator);
+        ContinuousTimeEvolver<ValidatedTag> timed_evolver(timed, integrator);
         ARIADNE_TESTING_PROVE(timed_evolver.system().has_explicit_time());
         ARIADNE_TESTING_EXPECT_EQUAL(timed.auxiliary_space().size(), 0u);
         // Time-aware auxiliary outputs use the separate clock argument.
         RealVariable output("output");
         const OrdinaryDifferentialAlgebraicEquation timed_auxiliary(
             {dot(x) = t - x}, RealVariablesBox{}, t, {let(output) = t + x});
-        ContinuousTimeEvolver timed_output(timed_auxiliary, integrator);
+        ContinuousTimeEvolver<ValidatedTag> timed_output(timed_auxiliary, integrator);
         ARIADNE_TESTING_PROVE(timed_output.system().has_explicit_time());
-        ContinuousTimeEvolver parameterised_evolver(parameterised, integrator);
+        ContinuousTimeEvolver<ValidatedTag> parameterised_evolver(parameterised, integrator);
         ARIADNE_TESTING_EXPECT_EQUAL(parameterised_evolver.system().parameter_space().dimension(), 1u);
         ARIADNE_TESTING_EXPECT_THROWS(std::invalid_argument,
                                       parameterised_evolver.orbit(RealVariablesBox({x == 0}), Real(0.125_x), Semantics::LOWER));
         const OrdinaryDifferentialAlgebraicEquation parameterised_auxiliary(
             {dot(x) = p - x}, RealVariablesBox({0 <= p <= 1}), std::nullopt, {let(output) = p + x});
         ARIADNE_TESTING_EXPECT_THROWS(std::invalid_argument,
-                                      ContinuousTimeEvolver(parameterised_auxiliary, integrator));
+                                      ContinuousTimeEvolver<ValidatedTag>(parameterised_auxiliary, integrator));
         PreconditionedGradedTaylorSeriesIntegrator preconditioned(step_maximum_error = 1e-5);
         ARIADNE_TESTING_EXPECT_THROWS(std::invalid_argument,
-                                      ContinuousTimeEvolver(parameterised, preconditioned));
-        ContinuousTimeSimulator timed_simulator(timed);
+                                      ContinuousTimeEvolver<ValidatedTag>(parameterised, preconditioned));
+        ContinuousTimeEvolver<ApproximateTag> timed_simulator(timed);
         ARIADNE_TESTING_PROVE(timed_simulator.configuration().step_size().raw().get_d() > 0);
-        ARIADNE_TESTING_EXPECT_THROWS(std::invalid_argument, (void)ContinuousTimeSimulator(parameterised));
+        ARIADNE_TESTING_EXPECT_THROWS(std::invalid_argument, (void)ContinuousTimeEvolver<ApproximateTag>(parameterised));
     }
 
     Void test_inclusion_consumer_rejects_unsupported_arguments() {
@@ -75,7 +75,7 @@ class TestOrdinaryDynamicsContract : public Ariadne::Testing::ContextFixture {
         for (const auto& inclusion: {timed, parameterised}) {
             ARIADNE_TESTING_EXPECT_EQUAL(inclusion.dimension(), 1u);
             ARIADNE_TESTING_EXPECT_EQUAL(inclusion.function().argument_size(), 3u);
-            ContinuousTimeEvolver evolver(inclusion, integrator, ZeroApproximation(), ConstantApproximation());
+            ContinuousTimeEvolver<ValidatedTag> evolver(inclusion, integrator, ZeroApproximation(), ConstantApproximation());
             ARIADNE_TESTING_EXPECT_EQUAL(evolver.system().dimension(), 1u);
             ARIADNE_TESTING_EXPECT_THROWS(std::invalid_argument,
                                           evolver.orbit(RealVariablesBox({x == 0}), Real(0.0625_x), Semantics::LOWER));
@@ -95,7 +95,7 @@ class TestOrdinaryDynamicsContract : public Ariadne::Testing::ContextFixture {
         TaylorPicardIntegrator integrator(step_maximum_error = 1e-5);
         ARIADNE_TESTING_PROVE(!inclusion.has_input_function());
         ARIADNE_TESTING_EXPECT_EQUAL(inclusion.number_of_inputs(), 0u);
-        ContinuousTimeEvolver evolver(inclusion, integrator, ZeroApproximation(), ConstantApproximation());
+        ContinuousTimeEvolver<ValidatedTag> evolver(inclusion, integrator, ZeroApproximation(), ConstantApproximation());
         ARIADNE_TESTING_EXPECT_EQUAL(evolver.system().state_space(), RealSpace({x}));
     }
 };

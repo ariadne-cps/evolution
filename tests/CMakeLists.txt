@@ -1,5 +1,6 @@
 include(CTest)
 set(UNIT_TESTS
+    test_evolver_paradigms
     test_orbit_collections
     test_scalings
     test_hybrid_time
@@ -13,7 +14,7 @@ set(UNIT_TESTS
     test_hybrid_crossing
     test_hybrid_inclusions
     test_hybrid_inclusion_impacts
-    test_hybrid_continuous_time_simulator
+    test_hybrid_continuous_time_approximate_evolver
     test_first_order_pde
     test_first_order_pde_evolution_header
     test_flowtube_header
@@ -27,7 +28,7 @@ set(UNIT_TESTS
     test_discrete_time_evolver
     test_continuous_time_evolver
     test_continuous_time_evolver_header
-    test_continuous_time_simulator
+    test_continuous_time_approximate_evolver
     test_evolution_dependency_boundary
     test_ordinary_dynamics_contract
     test_continuous_integration

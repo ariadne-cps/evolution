@@ -5,10 +5,10 @@ This is the implementation roadmap adopted in design v6.20 on 22 November
 
 | Native family | Validated evolution | Numerical simulation | Current status |
 | --- | --- | --- | --- |
-| Discrete time (`IteratedMap`) | `DiscreteTimeEvolver` | `DiscreteTimeSimulator` | Evolver exists; simulator planned |
-| Continuous time (ODAE / ODAI) | `ContinuousTimeEvolver` | `ContinuousTimeSimulator` | Evolver accepts both with explicit time; simulator accepts autonomous/nonautonomous ODAE |
-| Hybrid discrete time | `HybridDiscreteTimeEvolver` | `HybridDiscreteTimeSimulator` | Native System model and both algorithms planned |
-| Hybrid continuous time | `HybridContinuousTimeEvolver` | `HybridContinuousTimeSimulator` | ODAE/ODAI timed UPPER evolution; equation simulator supports external time; other extensions planned |
+| Discrete time (`IteratedMap`) | `DiscreteTimeEvolver<ValidatedTag>` | `DiscreteTimeEvolver<ApproximateTag>` | Validated exists; approximate planned |
+| Continuous time (ODAE / ODAI) | `ContinuousTimeEvolver<ValidatedTag>` | `ContinuousTimeEvolver<ApproximateTag>` | Validated accepts both with explicit time; approximate accepts autonomous/nonautonomous ODAE |
+| Hybrid discrete time | `HybridDiscreteTimeEvolver<ValidatedTag>` | `HybridDiscreteTimeEvolver<ApproximateTag>` | Native System model and both algorithms planned |
+| Hybrid continuous time | `HybridContinuousTimeEvolver<ValidatedTag>` | `HybridContinuousTimeEvolver<ApproximateTag>` | ODAE/ODAI timed UPPER evolution; approximate equation evolution supports external time; other extensions planned |
 
 `IteratedMap` keeps its existing name and contract. Hybrid discrete time needs
 its own native model in `ariadne-cps/system` before either algorithm is added.
@@ -65,10 +65,10 @@ contract, with its limitations visible to the caller.
 3. Define and test the native hybrid discrete-time system in System.
 4. Extract compatible hybrid infrastructure and implement the discrete hybrid
    evolver with declared UPPER/LOWER capabilities.
-5. Add `DiscreteTimeSimulator`; extend `ContinuousTimeSimulator` with ODAI,
+5. Add `DiscreteTimeEvolver<ApproximateTag>`; extend `ContinuousTimeEvolver<ApproximateTag>` with ODAI,
    explicit time, trajectory-constant parameters and reproducible input policies.
-6. Implement `HybridDiscreteTimeSimulator` using the same native tick model;
-   extend `HybridContinuousTimeSimulator` with the corresponding continuous
+6. Implement `HybridDiscreteTimeEvolver<ApproximateTag>` using the same native tick model;
+   extend `HybridContinuousTimeEvolver<ApproximateTag>` with the corresponding continuous
    capabilities and contact handling.
 7. Implement the optional converters with separate simulation/validated
    contracts, testing within-step events and rejection of lost guarantees.
@@ -86,16 +86,12 @@ and the native hybrid discrete-time model remain unimplemented. The detailed
 records the implemented event capabilities and their mathematical boundaries.
 
 
-## Proposed paradigm axis (not yet implemented)
+## Implemented paradigm axis
 
-The proposed API migration makes the numerical paradigm part of each evolver
-type, using `ApproximateTag` and `ValidatedTag`, for example
-`ContinuousTimeEvolver<ApproximateTag>` and
-`ContinuousTimeEvolver<ValidatedTag>`, and corresponding hybrid/discrete types.
-The paradigm must select actual input/result types and available operations,
-not just change a name. Approximate trajectories and validated enclosures
-remain distinct; UPPER/LOWER is a separate semantic axis with explicit numerical
-capabilities. Shared interfaces and compatible infrastructure should not force
-the same step algorithm or certificates. The present canonical classes have
-not been renamed in the global-time implementation; this proposal needs an
-atomic API/consumer migration, with Python tutorial parity still the final task.
+The explicit paradigm migration is implemented in the existing continuous,
+hybrid continuous and validated discrete algorithms. See
+[evolver paradigm contracts](evolver_paradigms_design.md) for actual input/result
+interfaces, supported template specializations, Python registrations and tests.
+This changes the naming of the planned algorithms above; it does not implement
+missing discrete models, sampling policies or converters. Python tutorial
+parity remains the final Evolution activity.

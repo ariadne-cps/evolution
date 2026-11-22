@@ -4,10 +4,10 @@
  *  SPDX-License-Identifier: GPL-3.0-or-later
  ****************************************************************************/
 #include "../src/continuous_integration.hpp"
+#include "evolution/continuous_time_approximate_evolver.hpp"
 #include "evolution/continuous_time_evolver.hpp"
-#include "evolution/continuous_time_simulator.hpp"
+#include "evolution/hybrid_continuous_time_approximate_evolver.hpp"
 #include "evolution/hybrid_continuous_time_evolver.hpp"
-#include "evolution/hybrid_continuous_time_simulator.hpp"
 #include "evolution/hybrid_evolution_tree.hpp"
 #include "integration/integrator.hpp"
 #include "integration/selected_inclusion_integrator.hpp"
@@ -60,7 +60,7 @@ class TestGlobalTime : public Testing::ContextFixture {
         const auto pieces = conditioned.split();
         check_auxiliary(pieces.first);
         check_auxiliary(pieces.second);
-        ContinuousTimeEvolver ordinary(OrdinaryDifferentialAlgebraicEquation({dot(x) = t}), integrator);
+        ContinuousTimeEvolver<ValidatedTag> ordinary(OrdinaryDifferentialAlgebraicEquation({dot(x) = t}), integrator);
         ordinary.configuration().set_maximum_step_size(0.03125);
         auto labelled = ordinary.enclosure(ExactBoxType({
             {-0.0625_x, 0.0625_x}
@@ -78,7 +78,7 @@ class TestGlobalTime : public Testing::ContextFixture {
         const OrdinaryDifferentialAlgebraicEquation equation({dot(x) = t}, {let(a) = x + t});
         ARIADNE_TESTING_PROVE(equation.has_explicit_time());
         TaylorPicardIntegrator integrator(step_maximum_error = 1e-7);
-        ContinuousTimeEvolver continuous(equation, integrator);
+        ContinuousTimeEvolver<ValidatedTag> continuous(equation, integrator);
         continuous.configuration().set_maximum_step_size(0.03125);
         const auto ordinary = continuous.orbit(RealVariablesBox({x == 0}), Real(0.125_x), Semantics::UPPER);
         ARIADNE_TESTING_REQUIRE(ordinary.final().size() > 0u);
@@ -91,7 +91,7 @@ class TestGlobalTime : public Testing::ContextFixture {
         HybridAutomaton system;
         system.new_mode(q, equation);
         for (bool tree: {false, true}) {
-            HybridContinuousTimeEvolver hybrid(system);
+            HybridContinuousTimeEvolver<ValidatedTag> hybrid(system);
             hybrid.set_integrator(integrator);
             hybrid.configuration().set_maximum_step_size(0.03125);
             if (tree)
@@ -124,7 +124,7 @@ class TestGlobalTime : public Testing::ContextFixture {
         HybridAutomaton system;
         system.new_mode(q, inclusion);
         for (bool boxes: {false, true}) {
-            HybridContinuousTimeEvolver evolver(system);
+            HybridContinuousTimeEvolver<ValidatedTag> evolver(system);
             TaylorPicardIntegrator base(step_maximum_error = 1e-7);
             if (boxes)
                 evolver.set_integrator(FirstOrderMultifunctionIntegrator());
@@ -174,7 +174,7 @@ class TestGlobalTime : public Testing::ContextFixture {
         system.new_transition(source, jump, target, {next(x) = 1 + t}, t >= Real(0.0625_x), EventKind::URGENT);
         system.check_mode(source);
         for (bool tree: {false, true}) {
-            HybridContinuousTimeEvolver evolver(system);
+            HybridContinuousTimeEvolver<ValidatedTag> evolver(system);
             evolver.configuration().set_maximum_step_size(0.03125);
             if (tree)
                 evolver.set_evolution_backend_factory(TreeHybridEvolutionBackendFactory());
@@ -206,9 +206,9 @@ class TestGlobalTime : public Testing::ContextFixture {
             }
             ARIADNE_TESTING_PROVE(reset_found);
         }
-        HybridContinuousTimeSimulator approximate(system);
+        HybridContinuousTimeEvolver<ApproximateTag> approximate(system);
         approximate.configuration().set_step_size(0.03125);
-        const HybridContinuousTimeSimulator::HybridApproximatePointType point(source, RealSpace({x}), FloatDPApproximationPoint({0.0_x}, dp));
+        const HybridContinuousTimeEvolver<ApproximateTag>::HybridApproximatePointType point(source, RealSpace({x}), FloatDPApproximationPoint({0.0_x}, dp));
         auto single = approximate.orbit(point, HybridTime(0.125_x, 2));
         ARIADNE_TESTING_REQUIRE(single.curves().size() == 2u);
         const auto& target_path = single.curves()[1u];
@@ -217,7 +217,7 @@ class TestGlobalTime : public Testing::ContextFixture {
         // first positive sample is 3/32. Reset reads that global time.
         ARIADNE_TESTING_EXPECT_WITHIN(target_path.euclidean_set().end()->second[target_path.space()[x]].raw().get_d(), 1.09375, 1e-14);
         ARIADNE_TESTING_EXPECT_WITHIN(target_path.euclidean_set().end()->second[target_path.space()[a]].raw().get_d(), 1.21875, 1e-14);
-        auto multiple = approximate.orbit(HybridContinuousTimeSimulator::HybridApproximateListPointType{point}, HybridTime(0.125_x, 2));
+        auto multiple = approximate.orbit(HybridContinuousTimeEvolver<ApproximateTag>::HybridApproximateListPointType{point}, HybridTime(0.125_x, 2));
         ARIADNE_TESTING_REQUIRE(multiple.curves(0u).size() == 2u);
         const auto& list_target = multiple.curves(0u)[1u];
         ARIADNE_TESTING_EXPECT_WITHIN(list_target.euclidean_set().end()->second[list_target.space()[x]].raw().get_d(), 1.09375, 1e-14);
@@ -235,7 +235,7 @@ class TestGlobalTime : public Testing::ContextFixture {
             system.new_transition(source, jump, target, {next(x) = x + t}, t >= Real(0.0625_x), EventKind::URGENT);
             for (bool boxes: {false, true}) {
                 for (bool tree: {false, true}) {
-                    HybridContinuousTimeEvolver evolver(system);
+                    HybridContinuousTimeEvolver<ValidatedTag> evolver(system);
                     TaylorPicardIntegrator integrator(step_maximum_error = 1e-7);
                     if (boxes)
                         evolver.set_integrator(FirstOrderMultifunctionIntegrator());
@@ -272,10 +272,10 @@ class TestGlobalTime : public Testing::ContextFixture {
 
     void test_approximate_equation_evolution_uses_external_time() {
         const OrdinaryDifferentialAlgebraicEquation equation({dot(x) = t}, {let(a) = x + t});
-        ContinuousTimeSimulator simulator(equation);
+        ContinuousTimeEvolver<ApproximateTag> simulator(equation);
         simulator.configuration().set_step_size(0.03125);
-        const ContinuousTimeSimulator::ApproximatePointType initial(RealSpace({x}), FloatDPApproximationPoint({0.0_x}, dp));
-        auto orbit = simulator.orbit(ContinuousTimeSimulator::ApproximateListPointType{initial}, Real(0.1_dec));
+        const ContinuousTimeEvolver<ApproximateTag>::ApproximatePointType initial(RealSpace({x}), FloatDPApproximationPoint({0.0_x}, dp));
+        auto orbit = simulator.orbit(ContinuousTimeEvolver<ApproximateTag>::ApproximateListPointType{initial}, Real(0.1_dec));
         const auto& curve = orbit.curve(0u);
         ARIADNE_TESTING_EXPECT_WITHIN(curve.end()->first.get_d(), 0.1, 1e-15);
         ARIADNE_TESTING_EXPECT_WITHIN(curve.end()->second[curve.space()[x]].raw().get_d(), 0.005, 1e-14);
@@ -283,15 +283,15 @@ class TestGlobalTime : public Testing::ContextFixture {
         const DiscreteLocation q(1);
         HybridAutomaton system;
         system.new_mode(q, equation);
-        HybridContinuousTimeSimulator hybrid(system);
+        HybridContinuousTimeEvolver<ApproximateTag> hybrid(system);
         hybrid.configuration().set_step_size(0.03125);
-        const HybridContinuousTimeSimulator::HybridApproximatePointType point(q, RealSpace({x}), FloatDPApproximationPoint({0.0_x}, dp));
+        const HybridContinuousTimeEvolver<ApproximateTag>::HybridApproximatePointType point(q, RealSpace({x}), FloatDPApproximationPoint({0.0_x}, dp));
         const auto single = hybrid.orbit(point, HybridTime(Real(0.1_dec), 2));
         const auto& final_curve = single.curves()[0u];
         ARIADNE_TESTING_EXPECT_WITHIN(final_curve.euclidean_set().end()->first.get_d(), 0.1, 1e-15);
         ARIADNE_TESTING_EXPECT_WITHIN(final_curve.euclidean_set().end()->second[final_curve.space()[x]].raw().get_d(), 0.005, 1e-14);
         ARIADNE_TESTING_EXPECT_WITHIN(final_curve.euclidean_set().end()->second[final_curve.space()[a]].raw().get_d(), 0.105, 1e-14);
-        auto multiple = hybrid.orbit(HybridContinuousTimeSimulator::HybridApproximateListPointType{point, point}, HybridTime(Real(0.125_x), 2));
+        auto multiple = hybrid.orbit(HybridContinuousTimeEvolver<ApproximateTag>::HybridApproximateListPointType{point, point}, HybridTime(Real(0.125_x), 2));
         ARIADNE_TESTING_EXPECT_EQUAL(multiple.number_of_trajectories(), 2u);
         for (Nat i = 0u; i != 2u; ++i) {
             const auto& path = multiple.curves(i)[0u];

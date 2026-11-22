@@ -2,9 +2,9 @@
 """Bounded discrete and hybrid Evolution workflows using installed pyariadne_evolution."""
 
 from pyariadne_evolution import (
-    DiscreteEvent, DiscreteLocation, HybridAutomaton, HybridContinuousTimeSimulator,
+    DiscreteEvent, DiscreteLocation, HybridAutomaton, HybridContinuousTimeEvolver, ApproximateTag,
     HybridTime, Integer, Rational, Real, Semantics, RealVariable,
-    IteratedMap, DiscreteTimeEvolver, RealExpressionBoundedConstraintSet,
+    IteratedMap, DiscreteTimeEvolver, ValidatedTag, RealExpressionBoundedConstraintSet,
     next, dec_,
 )
 
@@ -14,10 +14,10 @@ def main():
     contraction = IteratedMap([next(x) << x / 2])
     initial = RealExpressionBoundedConstraintSet(
         [(dec_(0.9) <= x) & (x <= dec_(1.1))], [])
-    discrete_evolver = DiscreteTimeEvolver(contraction)
+    discrete_evolver = DiscreteTimeEvolver[ValidatedTag](contraction)
     discrete_evolver.configuration().set_maximum_enclosure_radius(1.0)
     orbit = discrete_evolver.orbit(initial, Integer(1), Semantics.UPPER)
-    print(f"DiscreteTimeEvolver: {len(orbit.final())} final enclosure(s)")
+    print(f"DiscreteTimeEvolver[ValidatedTag]: {len(orbit.final())} final enclosure(s)")
 
     idle, active = DiscreteLocation(0), DiscreteLocation(1)
     activate = DiscreteEvent("activate")
@@ -30,7 +30,7 @@ def main():
     assert automaton.has_transition(idle, activate)
     assert automaton.target(active, deactivate) == idle
 
-    simulator = HybridContinuousTimeSimulator(automaton)
+    simulator = HybridContinuousTimeEvolver[ApproximateTag](automaton)
     horizon = HybridTime(Real(Rational(1)), Integer(2))
     assert horizon.discrete_time() == Integer(2)
     assert Semantics.UPPER != Semantics.LOWER

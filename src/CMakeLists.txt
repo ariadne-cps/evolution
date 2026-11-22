@@ -5,12 +5,12 @@ add_library(EVOLUTION_SRC OBJECT
     enclosure_augmented_paving.cpp
     orbit.cpp
     discrete_time_evolver.cpp
-    continuous_time_evolver.cpp
-    continuous_time_simulator.cpp
+    continuous_time_validated_evolver.cpp
+    continuous_time_approximate_evolver.cpp
     first_order_pde.cpp
     hybrid_orbit.cpp
     hybrid_enclosure.cpp
-    hybrid_continuous_time_simulator.cpp
+    hybrid_continuous_time_approximate_evolver.cpp
     hybrid_evolution_backend.cpp
     hybrid_evolution_tree.cpp
     hybrid_crossing.cpp
@@ -19,6 +19,6 @@ add_library(EVOLUTION_SRC OBJECT
     hybrid_step_results.cpp
     hybrid_timing.cpp
     hybrid_outer_flow.cpp
-    hybrid_continuous_time_evolver.cpp
+    hybrid_continuous_time_validated_evolver.cpp
 )
 target_include_directories(EVOLUTION_SRC PRIVATE "${PROJECT_SOURCE_DIR}/include/evolution")

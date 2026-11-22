@@ -1,5 +1,5 @@
 /***************************************************************************
- *            continuous_time_simulator.cpp
+ *            continuous_time_approximate_evolver.cpp
  *
  *  Copyright  2008-21  Luca Geretti, Mirko Albanese
  *
@@ -22,11 +22,11 @@
  *  along with Ariadne Evolution. If not, see <https://www.gnu.org/licenses/>.
  */
 
-/** @file src/continuous_time_simulator.cpp
+/** @file src/continuous_time_approximate_evolver.cpp
  *  @brief Implement vector field simulator operations.
  */
 
-#include "evolution/continuous_time_simulator.hpp"
+#include "evolution/continuous_time_approximate_evolver.hpp"
 
 #include <stdexcept>
 
@@ -151,23 +151,23 @@ List<LabelledPoint<FloatDPApproximation>> create_point_list(BinaryTreePaving& pa
     return result;
 }
 
-ContinuousTimeSimulator::ContinuousTimeSimulator(const SystemType& system) : _system(system.clone()), _configuration(new ContinuousTimeSimulatorConfiguration()) {
+ContinuousTimeEvolver<ApproximateTag>::ContinuousTimeEvolver(const SystemType& system) : _system(system.clone()), _configuration(new ContinuousTimeEvolverConfiguration<ApproximateTag>()) {
     if (system.parameter_space().dimension() != 0u) {
-        throw std::invalid_argument("ContinuousTimeSimulator does not yet support constant model parameters");
+        throw std::invalid_argument("ContinuousTimeEvolver<ApproximateTag> does not yet support constant model parameters");
     }
 }
 
 inline FloatDPApproximation evaluate(const EffectiveScalarMultivariateFunction& f, const Vector<FloatDPApproximation>& x) { return f(x); }
 inline Vector<FloatDPApproximation> evaluate(const EffectiveVectorMultivariateFunction& f, const Vector<FloatDPApproximation>& x) { return f(x); }
 
-auto ContinuousTimeSimulator::orbit(const RealExpressionBoundedConstraintSet& init_set, const TerminationType& termination) const
+auto ContinuousTimeEvolver<ApproximateTag>::orbit(const RealExpressionBoundedConstraintSet& init_set, const TerminationType& termination) const
     -> OrbitType {
     auto spc = _system->state_space();
     UpperBoxType box = init_set.euclidean_set(spc).bounding_box();
     return orbit(box, termination);
 }
 
-auto ContinuousTimeSimulator::orbit(const RealBoxType& init_bx, const TerminationType& termination) const
+auto ContinuousTimeEvolver<ApproximateTag>::orbit(const RealBoxType& init_bx, const TerminationType& termination) const
     -> OrbitType {
     auto spc = _system->state_space();
     auto box = init_bx.euclidean_set(spc);
@@ -175,7 +175,7 @@ auto ContinuousTimeSimulator::orbit(const RealBoxType& init_bx, const Terminatio
     return orbit(ubox, termination);
 }
 
-auto ContinuousTimeSimulator::orbit(UpperBoxType& initial_box, const TerminationType& termination) const
+auto ContinuousTimeEvolver<ApproximateTag>::orbit(UpperBoxType& initial_box, const TerminationType& termination) const
     -> OrbitType {
     BinaryTreePaving gridPaving = create_paving(initial_box, _system->state_space(), _configuration->get_subspace());
     Nat subdivisions = _configuration->is_using_subspace() ? 0u : _configuration->num_subdivisions();
@@ -185,7 +185,7 @@ auto ContinuousTimeSimulator::orbit(UpperBoxType& initial_box, const Termination
     return orbit(pointList, termination);
 }
 
-auto ContinuousTimeSimulator::orbit(const ApproximateListPointType& initial_points, const TerminationType& termination) const -> OrbitType {
+auto ContinuousTimeEvolver<ApproximateTag>::orbit(const ApproximateListPointType& initial_points, const TerminationType& termination) const -> OrbitType {
     LOGGING_SCOPE_CREATE;
 
     LOGGING_PRINTLN("Simulating from " << initial_points.size() << " initial points")
@@ -208,7 +208,7 @@ auto ContinuousTimeSimulator::orbit(const ApproximateListPointType& initial_poin
     }
     auto result = std::make_shared<SynchronisedOrbit>(make_state_auxiliary_point(canonical_points, state_space, auxiliary_space, state_auxiliary_space, auxiliary_function, _system->has_explicit_time()));
 
-    WorkloadType workload(std::bind_front(&ContinuousTimeSimulator::_simulate_from_point, this), termination, result);
+    WorkloadType workload(std::bind_front(&ContinuousTimeEvolver<ApproximateTag>::_simulate_from_point, this), termination, result);
     for (SizeType i = 0; i < canonical_points.size(); ++i) {
         workload.append({i, canonical_points.at(i)});
     }
@@ -217,7 +217,7 @@ auto ContinuousTimeSimulator::orbit(const ApproximateListPointType& initial_poin
     return std::move(*result);
 }
 
-void ContinuousTimeSimulator::_simulate_from_point(Pair<SizeType, ApproximatePointType> indexed_initial, const TerminationType& termination, SharedPointer<SynchronisedOrbit> orbit) const {
+void ContinuousTimeEvolver<ApproximateTag>::_simulate_from_point(Pair<SizeType, ApproximatePointType> indexed_initial, const TerminationType& termination, SharedPointer<SynchronisedOrbit> orbit) const {
     LOGGING_SCOPE_CREATE
 
     const auto& curve_number = indexed_initial.first;
@@ -251,12 +251,12 @@ void ContinuousTimeSimulator::_simulate_from_point(Pair<SizeType, ApproximatePoi
     }
 }
 
-ContinuousTimeSimulatorConfiguration::ContinuousTimeSimulatorConfiguration() : _step_size(0.125_x, dp), _num_subdivisions(2), _discretisation_type(DiscretisationType::Recombine), _subspace() {
+ContinuousTimeEvolverConfiguration<ApproximateTag>::ContinuousTimeEvolverConfiguration() : _step_size(0.125_x, dp), _num_subdivisions(2), _discretisation_type(DiscretisationType::Recombine), _subspace() {
 }
 
 OutputStream&
-    ContinuousTimeSimulatorConfiguration::_write(OutputStream& os) const {
-    os << "ContinuousTimeSimulatorConfiguration("
+    ContinuousTimeEvolverConfiguration<ApproximateTag>::_write(OutputStream& os) const {
+    os << "ContinuousTimeEvolverConfiguration<ApproximateTag>("
        << "\n  step_size=" << step_size()
        << "\n  discretisation_type=" << discretisation_type()
        << "\n  num_subdivisions=" << num_subdivisions()

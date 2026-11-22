@@ -3,31 +3,31 @@
 The tutorials are non-graphical. The C++ tutorial exercises **five**
 evolution capabilities with bounded scenarios:
 
-1. **ContinuousTimeSimulator** — simulate a stable one-dimensional continuous
+1. `ContinuousTimeEvolver<ApproximateTag>` — simulate a stable one-dimensional continuous
    vector field for 0.1 time units.
-2. **ContinuousTimeEvolver** — compute a validated upper-semantics enclosure
+2. `ContinuousTimeEvolver<ValidatedTag>` — compute a validated upper-semantics enclosure
    for the same field over 0.05 time units, then evolve an inclusion with
    measurable uncertain inputs using one explicitly selected reach method
    and one endpoint method.
-3. **DiscreteTimeEvolver** — take one validated step of a contracting map.
-4. **HybridContinuousTimeSimulator and HybridContinuousTimeEvolver** — specify a two-mode
+3. `DiscreteTimeEvolver<ValidatedTag>` — take one validated step of a contracting map.
+4. `HybridContinuousTimeEvolver<ApproximateTag> and HybridContinuousTimeEvolver<ValidatedTag>` — specify a two-mode
    discrete-only automaton, create a simulator, then compute a short
    validated orbit for a separate continuous single-mode hybrid system,
    followed by an ODAI mode using explicit reach and endpoint approximations.
-5. **FirstOrderPDE** — construct a validated, owning PDE model using
+5. **FirstOrderPDE` — construct a validated, owning PDE model using
    `add_direction()` and run the actual two-dimensional first-order PDE
    solver and inspect its computed solution history. This is the most
    expensive section; the initial profile uses unit-frequency sinusoids.
 
 The Python program builds a contracting `IteratedMap`, computes one validated
-upper-semantics iteration using `DiscreteTimeEvolver`, and constructs the same
+upper-semantics iteration using `DiscreteTimeEvolver[ValidatedTag]`, and constructs the same
 discrete-only `HybridAutomaton` used in C++. Both examples use the installed
-`pyariadne_evolution` extension. `DiscreteTimeEvolverConfiguration` is exposed so that
+`pyariadne_evolution` extension. `DiscreteTimeValidatedEvolverConfiguration` is exposed so that
 its enclosure-radius and subdivision options can be configured.
 
 As the final Evolution migration task, the Python tutorial will execute the
-same workflows as C++, including `ContinuousTimeSimulator`,
-`ContinuousTimeEvolver`, `HybridContinuousTimeEvolver`, and the `FirstOrderPDE`
+same workflows as C++, including `ContinuousTimeEvolver<ApproximateTag>`,
+`ContinuousTimeEvolver<ValidatedTag>`, `HybridContinuousTimeEvolver<ValidatedTag>`, and the `FirstOrderPDE`
 solver. Any missing model, integrator or solver bindings will be added then,
 after the underlying APIs have settled.
 
@@ -43,7 +43,7 @@ cmake --install build --prefix install
 
 ## C++ tutorial
 
-Build **separately** against the installed library:
+Build `separately** against the installed library:
 
 ```bash
 cmake -S tutorial -B tutorial/build -DCMAKE_PREFIX_PATH="$PWD/install"

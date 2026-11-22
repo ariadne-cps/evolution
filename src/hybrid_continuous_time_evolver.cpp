@@ -41,6 +41,7 @@
 #include "function/function.hpp"
 #include "function/function_model.hpp"
 #include "function/function_patch.hpp"
+#include "hybrid_transition_handlers.hpp"
 #include "integration/integrator.hpp"
 #include "integration/selected_inclusion_integrator.hpp"
 #include "integration/validated_step_integrator.hpp"
@@ -82,7 +83,6 @@ inline auto operator>(FloatDPUpperBound x, Real r) -> decltype(x > declval<Float
 inline auto operator<=(FloatDPUpperBound x, Real r) -> decltype(x <= declval<FloatDPBounds>()) { return x <= FloatDPBounds(r, dp); }
 
 static const DiscreteEvent final_event("_tmax_");
-static const DiscreteEvent step_event("_h_");
 
 typedef Vector<FloatDP> ExactFloatVector;
 typedef Vector<ExactIntervalType> ExactIntervalVectorType;
@@ -259,34 +259,9 @@ inline OutputStream& operator<<(OutputStream& os, const LogOutput<CrossingData>&
 }
 
 // Test if an event 'blocks' continuous evolution.
-Bool is_blocking(EventKind evk) {
-    switch (evk) {
-        case EventKind::INVARIANT:
-        case EventKind::PROGRESS:
-        case EventKind::URGENT:
-        case EventKind::IMPACT:
-            return true;
-        case EventKind::PERMISSIVE:
-            return false;
-        default:
-            ARIADNE_FAIL_MSG("EventKind " << evk << " not recognised by is_blocking(...) predicate.");
-    }
-}
+Bool is_blocking(EventKind evk) { return EvolutionDetail::transition_policy(evk).blocks_flow; }
 
-// Test if an event 'activates' a discrete transition.
-Bool is_activating(EventKind evk) {
-    switch (evk) {
-        case EventKind::PERMISSIVE:
-        case EventKind::URGENT:
-        case EventKind::IMPACT:
-            return true;
-        case EventKind::INVARIANT:
-        case EventKind::PROGRESS:
-            return false;
-        default:
-            ARIADNE_FAIL_MSG("EventKind " << evk << " not recognised by is_activating(...) predicate.");
-    }
-}
+Bool is_activating(EventKind evk) { return EvolutionDetail::transition_policy(evk).activates_reset; }
 
 // Extract the blocking events.
 Set<DiscreteEvent> blocking_events(const Map<DiscreteEvent, TransitionData>& transitions) {
@@ -606,9 +581,10 @@ Void HybridContinuousTimeEvolverBase::
         // FIXME: Need to consider impact which really can occur immediately due to mapping to boundary.
         // TODO: The condition for an impact to occur is $L_{f}g>0$.
         //       Since this is now available, we should implement this!
-        if (transition.event_kind != EventKind::INVARIANT && transition.event_kind != EventKind::IMPACT) {
+        const auto policy = EvolutionDetail::transition_policy(transition.event_kind);
+        if (policy.inspect_initial_activation) {
             if (possibly(initial_set.satisfies(transition.guard_function >= 0))) {
-                if (transition.event_kind != EventKind::PROGRESS) {
+                if (policy.resets_initially) {
                     HybridEnclosure immediate_jump_set = invariant_set;
                     immediate_jump_set.new_activation(event, transition.guard_function);
                     if (!definitely(immediate_jump_set.is_empty())) {
@@ -620,14 +596,14 @@ Void HybridContinuousTimeEvolverBase::
                         result.record_intermediate(immediate_jump_set);
                         // Only a strict whole-source activation certifies an immediate
                         // urgent reset. Do not infer coverage from successor count.
-                        const auto resolution = transition.event_kind != EventKind::PERMISSIVE &&
+                        const auto resolution = policy.blocks_flow &&
                                                         definitely(invariant_set.continuous_set().satisfies(transition.guard_function))
                                                   ? HybridEvolutionTransitionResolution::FULL_SOURCE
                                                   : HybridEvolutionTransitionResolution::UNRESOLVED;
                         result.transition_to(immediate_jump_set, event, transition.event_kind, std::nullopt, resolution);
                     }
                 }
-                if (transition.event_kind != EventKind::PERMISSIVE) {
+                if (policy.blocks_flow) {
                     flowable_set.new_invariant(event, transition.guard_function);
                 }
             }
@@ -919,271 +895,6 @@ Void HybridContinuousTimeEvolverBase::
             break;
         default:
             ARIADNE_FAIL_MSG("Unhandled step kind " << timing_data.step_kind);
-    }
-}
-
-Void HybridContinuousTimeEvolverBase::
-    _apply_guard_step(HybridEnclosure& set,
-                      const EffectiveVectorMultivariateFunction& dynamic,
-                      const ValidatedVectorMultivariateFunctionPatch& flow,
-                      const TimingData& timing_data,
-                      const TransitionData& transition_data,
-                      const CrossingData& crossing_data,
-                      const Semantics semantics) const {
-    LOGGING_SCOPE_CREATE;
-    // Compute flow to guard set up to evolution time.
-    HybridEnclosure& jump_set = set;
-    const DiscreteEvent event = transition_data.event;
-    ValidatedVectorMultivariateFunctionPatch starting_state = set.state_function();
-    ValidatedVectorMultivariateFunctionPatch reach_starting_state = embed(starting_state, timing_data.evolution_time_domain);
-    ValidatedScalarMultivariateFunctionPatch reach_step_time = embed(starting_state.domain(), timing_data.evolution_time_coordinate);
-    ValidatedScalarMultivariateFunctionPatch step_time, step_critical_time;
-
-    LOGGING_PRINTLN("transition_data.event_kind=" << transition_data.event_kind);
-    switch (transition_data.event_kind) {
-        case EventKind::PERMISSIVE:
-            // The continuous evolution is just the same as a reachability step,
-            // so we need to embed the starting state and the step time function into one higher dimension.
-            jump_set.apply_parameter_reach_step(flow, timing_data.parameter_dependent_evolution_time);
-            jump_set.new_activation(event, transition_data.guard_function);
-            break;
-        case EventKind::URGENT:
-        case EventKind::IMPACT:
-            LOGGING_PRINTLN("crossing_data.crossing_kind=" << crossing_data.crossing_kind);
-            switch (crossing_data.crossing_kind) {
-                case CrossingKind::TRANSVERSE:
-                    // The jump set is given by \f$\xi'(s)=\phi(\xi(s),\gamma(s)),\ \tau'(s)=\tau(s)+\gamma(s)\f$ where \f$\gamma(s)\f$ is the crossing time.
-                    LOGGING_PRINTLN_AT(1, "crossing_time=" << crossing_data.crossing_time);
-                    step_time = unchecked_compose(crossing_data.crossing_time, starting_state);
-                    // If the jump step might occur after the final evolution time, then introduce constraint that this does not happen
-                    if (timing_data.step_kind != StepKind::CONSTANT_EVOLUTION_TIME && possibly((step_time - timing_data.parameter_dependent_evolution_time).range().upper_bound() > hybrid_zero)) {
-                        jump_set.new_parameter_constraint(step_event, step_time <= timing_data.parameter_dependent_evolution_time);
-                    }
-                    jump_set.apply_parameter_evolve_step(flow, unchecked_compose(crossing_data.crossing_time, starting_state));
-                    break;
-                case CrossingKind::INCREASING:
-                case CrossingKind::CONVEX:
-                    // The jump set is given by \f$\xi'(s,t)=\phi(\xi(s),t),\ \tau'(s)=\tau(s)+t\f$ where \f$t\in[0,h]\f$ and \f$g(\xi'(s,t))=0\f$.
-                    jump_set.apply_parameter_reach_step(flow, timing_data.parameter_dependent_evolution_time);
-                    jump_set.new_guard(event, transition_data.guard_function);
-                    break;
-                case CrossingKind::GRAZING:
-                    LOGGING_PRINTLN_AT(1, "critical_time=" << crossing_data.critical_time);
-                    // Fallthrough
-                case CrossingKind::CONCAVE:
-                    // The jump set is given by \f$\xi'(s,t)=\phi(\xi(s),t),\ \tau'(s)=\tau(s)+t\f$ where \f$t\in[0,h]\f$, \f$g(\xi'(s,t))=0\f$
-                    // and \f$L_f{g}(\xi'(s,t))>=0\f$ (equivalently, \f$t<=\gamma(\xi(s))\f$ where \f$\gamma(x)\f$ is the critical time
-                    // where \f$g(x(t))\f$ reaches a maximum.
-                    jump_set.apply_parameter_reach_step(flow, timing_data.parameter_dependent_evolution_time);
-                    jump_set.new_guard(event, transition_data.guard_function);
-                    jump_set.new_invariant(event, -lie_derivative(transition_data.guard_function, dynamic));
-                    break;
-                    /*
-                                    case CrossingKind::GRAZING:
-                                        LOGGING_PRINTLN_AT(1,"critical_time="<<crossing_data.critical_time);
-                                        LOGGING_PRINTLN_AT(9,"jump_set.domain()="<<jump_set.domain());
-                                        IntervalDomainType evolution_time_domain=timing_data.evolution_time_domain;
-                                        ValidatedScalarMultivariateFunctionPatch embedded_space_function=embed(set.space_function(),timing_data.evolution_time_domain);
-                                        jump_set.apply_parameter_reach_step(flow,timing_data.parameter_dependent_evolution_time);
-                                        ValidatedScalarMultivariateFunctionPatch embedded_time_step_function=factory(embedded_space_function).create_coordinate(jump_set.number_of_parameters()-1u);
-                                        jump_set.new_parameter_constraint(event,embedded_time_step_function<=compose(crossing_data.critical_time,embedded_space_function));
-                                        jump_set.new_guard(event,transition_data.guard_function);
-                                        jump_set.reduce(); // Reduce the size of the parameter domain to take guards into account
-                                        break;
-                    */
-                case CrossingKind::DEGENERATE: // Just check positive derivative in this case; NOT EXACT
-                    if (semantics == Semantics::UPPER) {
-                        jump_set.apply_parameter_reach_step(flow, timing_data.parameter_dependent_evolution_time);
-                        jump_set.new_guard(event, transition_data.guard_function);
-                        jump_set.new_invariant(event, -lie_derivative(transition_data.guard_function, dynamic));
-                    } else {
-                        // Make the empty set
-                        jump_set.new_invariant(event, transition_data.guard_function * 0 + 1);
-                    }
-                    break;
-                case CrossingKind::NEGATIVE:
-                case CrossingKind::POSITIVE:
-                case CrossingKind::DECREASING:
-                    // There is no future entry into a decreasing guard.
-                    // Only its initially active subset may jump. In the
-                    // constant-sign cases activation is either empty or all.
-                    jump_set.new_activation(event, transition_data.guard_function);
-                    break;
-                default:
-                    ARIADNE_FAIL_MSG("Unhandled crossing kind in " << crossing_data);
-            }
-            if (transition_data.event_kind == EventKind::IMPACT) {
-                // For an IMPACT event, also impose that the flow derivative is positive at the crossing.
-                EffectiveScalarMultivariateFunction flow_derivative_function = lie_derivative(transition_data.guard_function, dynamic);
-                LOGGING_PRINTLN_AT(1, "flow_derivative_function=" << flow_derivative_function);
-                LOGGING_PRINTLN_AT(1, "jump_set.state_bounding_box()=" << jump_set.state_bounding_box());
-                UpperIntervalType flow_derivative_range = apply(flow_derivative_function, jump_set.state_bounding_box());
-                LOGGING_PRINTLN_AT(1, "flow_derivative_range=" << flow_derivative_range);
-                if (possibly(flow_derivative_range.lower_bound() <= 0)) {
-                    jump_set.new_activation(event, flow_derivative_function);
-                }
-                LOGGING_PRINTLN_AT(1, "jump_set=" << jump_set);
-                if (definitely(jump_set.is_empty())) {
-                    return;
-                }
-            }
-            break;
-        default:
-            ARIADNE_FAIL_MSG("Invalid event kind " << transition_data.event_kind << " for transition.");
-    }
-}
-
-// Apply guard to a single set.
-// In the case of concave crossings, splits the set into two, one part
-// corresponding to points which actually hit the set (and stop on first crossing)
-// the other part corresponding to points which miss the set.
-Void HybridContinuousTimeEvolverBase::
-    _apply_guard(List<HybridEnclosure>& sets,
-                 const ValidatedScalarMultivariateFunctionPatch& elapsed_time_function,
-                 const HybridEnclosure& starting_set,
-                 const ValidatedVectorMultivariateFunctionPatch& flow,
-                 const TransitionData& transition_data,
-                 const CrossingData guard_crossing_data,
-                 const Semantics semantics) const {
-    LOGGING_SCOPE_CREATE;
-    LOGGING_PRINTLN("guard_crossing_data=" << log_output(guard_crossing_data));
-    // Multiple sets may be input, but they must all have the parametrised elapsed time function
-    static const Nat SUBDIVISIONS_FOR_DEGENERATE_CROSSING = 2;
-    const DiscreteEvent event = transition_data.event;
-    const ValidatedScalarMultivariateFunction& guard_function = transition_data.guard_function;
-
-    ValidatedVectorMultivariateFunctionPatch starting_state_function = starting_set.state_function();
-    if (elapsed_time_function.domain().dimension() > starting_set.parameter_domain().dimension()) {
-        IntervalDomainType elapsed_time_domain = elapsed_time_function.domain()[elapsed_time_function.argument_size() - 1u];
-        starting_state_function = embed(starting_state_function, elapsed_time_domain);
-    }
-
-    // List is vector-backed: appending invalidates end() and may invalidate all
-    // iterators/references. Process only the original sets, reacquiring each by
-    // index after any append in the previous iteration.
-    const SizeType original_size = sets.size();
-    for (SizeType set_index = 0; set_index != original_size; ++set_index) {
-        HybridEnclosure& set = sets[set_index];
-        LOGGING_PRINTLN_AT(1, "set.parameter_domain()=" << set.parameter_domain());
-        ARIADNE_PRECONDITION(set.parameter_domain() == elapsed_time_function.domain());
-        switch (guard_crossing_data.crossing_kind) {
-            case CrossingKind::TRANSVERSE:
-                ARIADNE_PRECONDITION(set.parameter_domain() == starting_state_function.domain());
-                set.new_parameter_constraint(event, elapsed_time_function <= unchecked_compose(guard_crossing_data.crossing_time, starting_state_function));
-                // Alternatively:
-                // set.new_invariant(event, guard_function);
-                // set.new_state_constraint(event, guard_function <= zero);
-                break;
-            case CrossingKind::CONVEX:
-            case CrossingKind::INCREASING:
-                // set.new_state_constraint(event, guard_function <= zero);
-                set.new_invariant(event, guard_function);
-                break;
-            case CrossingKind::GRAZING: {
-                ValidatedScalarMultivariateFunctionPatch critical_time_function = unchecked_compose(guard_crossing_data.critical_time, starting_state_function);
-                ValidatedScalarMultivariateFunctionPatch final_guard_function = compose(guard_function, unchecked_compose(flow, join(starting_state_function, elapsed_time_function)));
-                ValidatedScalarMultivariateFunctionPatch maximal_guard_function = compose(guard_function, unchecked_compose(flow, join(starting_state_function, critical_time_function)));
-                UpperIntervalType guard_range_at_critical_time = guard_crossing_data.guard_range_at_critical_time;
-                // Embedding above gives the starting map the elapsed-time
-                // domain; composition and join preserve that argument domain.
-                // The per-set domain check already establishes compatibility.
-
-                // If no points in the set arise from trajectories which will later leave the progress set,
-                // then we only need to look at the maximum value of the guard.
-                HybridEnclosure eventually_hitting_set = set;
-                // Test whether the trajectory can hit at any future time
-                // from its starting state. An endpoint already beyond the
-                // maximum may have crossed and returned; it is not a miss.
-                eventually_hitting_set.new_parameter_constraint(event, hybrid_zero <= critical_time_function);
-                eventually_hitting_set.new_parameter_constraint(event, maximal_guard_function >= hybrid_zero);
-                LOGGING_PRINTLN_AT(1, "eventually_hitting_set.is_empty()=" << eventually_hitting_set.is_empty());
-                if (definitely(eventually_hitting_set.is_empty())) {
-                    // NOTE: Constraint below should always be satisfied
-                    // set.new_parameter_constraint(event, maximal_guard_function <= zero);
-                    break;
-                }
-                // If no points in the set arise from trajectories which leave the progress set and
-                // later return, then we only need to look at the guard at the final value
-                HybridEnclosure returning_set = set;
-                returning_set.new_parameter_constraint(event, elapsed_time_function >= critical_time_function);
-                returning_set.new_parameter_constraint(event, final_guard_function <= hybrid_zero);
-                ValidatedLowerKleenean returning_set_empty = returning_set.is_empty();
-                LOGGING_PRINTLN_AT(1, "returning_set.is_empty()=" << returning_set_empty);
-                if (definitely(returning_set_empty)) {
-                    set.new_parameter_constraint(event, final_guard_function <= hybrid_zero);
-                    break;
-                }
-
-                // Split the set into three components,
-                //   hitting_set: points which hit the guard in the future
-                //   missing_set: points whose trajectories miss the guard completely
-                //   past_set: points which would have hit the guard in the past, but do not in the future
-                HybridEnclosure& missing_set = set;
-                HybridEnclosure hitting_set = set;
-                HybridEnclosure past_set = set;
-                missing_set.new_parameter_constraint(event, maximal_guard_function <= hybrid_zero);
-                hitting_set.new_parameter_constraint(event, maximal_guard_function >= hybrid_zero);
-                hitting_set.new_parameter_constraint(event, elapsed_time_function <= critical_time_function);
-                hitting_set.new_parameter_constraint(event, final_guard_function <= hybrid_zero);
-                past_set.new_parameter_constraint(event, maximal_guard_function >= hybrid_zero);
-                past_set.new_parameter_constraint(event, critical_time_function <= hybrid_zero);
-                hitting_set.reduce();
-                missing_set.reduce();
-                past_set.reduce();
-                LOGGING_PRINTLN_AT(1, "final_guard_range=" << final_guard_function.range());
-                LOGGING_PRINTLN_AT(1, "maximal_guard_function=" << maximal_guard_function);
-                LOGGING_PRINTLN_AT(1, "final_guard_function=" << final_guard_function);
-                LOGGING_PRINTLN_AT(1, "elapsed_time_function=" << elapsed_time_function);
-                LOGGING_PRINTLN_AT(1, "critical_time_function=" << critical_time_function);
-                LOGGING_PRINTLN_AT(1, "missing_set.is_empty()=" << missing_set.is_empty() << ", hitting_set.is_empty()=" << hitting_set.is_empty() << ", past_set.is_empty()=" << past_set.is_empty());
-                LOGGING_PRINTLN_AT(1, "hitting_set=" << hitting_set);
-                // FIXME: The guard range at the critical time may provide a stronger guarantee of emptiness than maximal_guard_function > zero, but we should ideally not rely on this
-                if (definitely(guard_range_at_critical_time > 0 || missing_set.is_empty())) {
-                    // swap out missing set
-                    std::swap(hitting_set, missing_set);
-                } else if (not definitely(hitting_set.is_empty())) {
-                    sets.append(hitting_set);
-                }
-                if (not definitely(past_set.is_empty())) {
-                    sets.append(past_set);
-                }
-                break;
-            }
-            case CrossingKind::DEGENERATE:
-            case CrossingKind::CONCAVE: {
-                // The crossing with the guard set is not one of the kinds handled above.
-                // We obtain an over-approximation by testing at finitely many time points
-                const Nat n = SUBDIVISIONS_FOR_DEGENERATE_CROSSING;
-                switch (semantics) {
-                    case Semantics::UPPER:
-                        for (Nat i = 0; i != n; ++i) {
-                            FloatDPBounds alpha = FloatDP(i + 1, dp) / n;
-                            ValidatedScalarMultivariateFunctionPatch intermediate_guard = compose(guard_function, unchecked_compose(flow, join(starting_state_function, alpha * elapsed_time_function)));
-                            set.new_parameter_constraint(event, intermediate_guard <= hybrid_zero);
-                        }
-                        break;
-                    case Semantics::LOWER:
-                        // Can't continue the evolution, so set a trivially-falsified constraint
-                        set.new_parameter_constraint(event, this->function_factory().create_constant(set.parameter_domain(), 1) <= hybrid_zero);
-                        break;
-                    default:
-                        ARIADNE_FAIL_MSG("Unhandled semantics.");
-                }
-                break;
-            }
-            case CrossingKind::POSITIVE:
-                // No need to do anything since all points are initially
-                // active and should have been handled already
-            case CrossingKind::NEGATIVE:
-                // No points are active
-            case CrossingKind::DECREASING:
-                // No need to do anything, since only initially active points
-                // become active during the evolution, and these have been
-                // handled already.
-                break;
-            default:
-                ARIADNE_FAIL_MSG("Unhandled crossing " << guard_crossing_data);
-        }
     }
 }
 
@@ -1565,19 +1276,11 @@ Void HybridContinuousTimeEvolverBase::
         const TransitionData& transition_data = transitions[*event_iter];
         const CrossingData& crossing_data = crossings[*event_iter];
 
-        this->_apply_guard(reach_sets, reach_step_time, starting_set, flow,
-                           transition_data, crossing_data, semantics);
-
-        switch (crossing_data.crossing_kind) {
-            case CrossingKind::INCREASING:
-            case CrossingKind::TRANSVERSE:
-                // Delay applying guard until all splittings due to non-increasing crossings have been processed.
-                // We can then test emptiness on sets with crossings, but not actually apply crossing immediately,
-                // since it will be introduced at the next time step anyway; this avoids duplication
-                break;
-            default:
-                this->_apply_guard(evolve_sets, evolve_step_time, starting_set, flow,
-                                   transition_data, crossing_data, semantics);
+        const EvolutionDetail::HybridGuardContext context{
+            starting_set, flow, transition_data, crossing_data, semantics, this->function_factory()};
+        EvolutionDetail::apply_flow_guard(reach_sets, context, reach_step_time);
+        if (!EvolutionDetail::defer_endpoint_guard(crossing_data.crossing_kind)) {
+            EvolutionDetail::apply_flow_guard(evolve_sets, context, evolve_step_time);
         }
     }
 
@@ -1588,14 +1291,10 @@ Void HybridContinuousTimeEvolverBase::
          event_iter != blocking_events.end(); ++event_iter) {
         const TransitionData& transition_data = transitions[*event_iter];
         const CrossingData& crossing_data = crossings[*event_iter];
-        switch (crossing_data.crossing_kind) {
-            case CrossingKind::INCREASING:
-            case CrossingKind::TRANSVERSE:
-                this->_apply_guard(evolve_sets, evolve_step_time, starting_set, flow,
-                                   transition_data, crossing_data, semantics);
-                break;
-            default:
-                break; // Constraint has already been handled
+        if (EvolutionDetail::defer_endpoint_guard(crossing_data.crossing_kind)) {
+            const EvolutionDetail::HybridGuardContext context{
+                starting_set, flow, transition_data, crossing_data, semantics, this->function_factory()};
+            EvolutionDetail::apply_flow_guard(evolve_sets, context, evolve_step_time);
         }
     }
 
@@ -1679,19 +1378,11 @@ Void HybridContinuousTimeEvolverBase::
         DiscreteEvent event = *event_iter;
 
         // Compute active set
-        List<HybridEnclosure> jump_sets = {starting_set};
-        HybridEnclosure& jump_set = jump_sets.front();
-        LOGGING_PRINTLN_AT(1, event << ": " << transitions[event].event_kind << ", " << crossings[event].crossing_kind);
-        _apply_guard_step(jump_set, dynamic, flow, timing_data, transitions[event], crossings[event], semantics);
-        ValidatedScalarMultivariateFunctionPatch jump_step_time = reach_step_time;
-        if (reach_step_time.argument_size() != jump_set.number_of_parameters()) {
-            // Guard steps either preserve the starting parameters or add
-            // exactly the reach-time parameter. Only a transverse crossing
-            // supplies its own time; all other crossings use the equation
-            // in _apply_guard below, which also rejects invalid kinds.
-            if (crossings[event].crossing_kind == CrossingKind::TRANSVERSE)
-                jump_step_time = unchecked_compose(crossings[event].crossing_time, starting_set.state_function());
-        }
+        const EvolutionDetail::HybridGuardContext context{
+            starting_set, flow, transitions[event], crossings[event], semantics, this->function_factory()};
+        auto candidate = EvolutionDetail::make_jump_candidate(context, dynamic, timing_data);
+        List<HybridEnclosure> jump_sets{std::move(candidate.enclosure)};
+        const auto jump_step_time = std::move(candidate.elapsed_time);
 
         // Apply maximum time bound, as this will be applied after the next flow step
         for (List<HybridEnclosure>::Iterator jump_set_iter = jump_sets.begin(); jump_set_iter != jump_sets.end(); ++jump_set_iter) {
@@ -1713,8 +1404,9 @@ Void HybridContinuousTimeEvolverBase::
             if (other_event != event) {
                 const TransitionData& other_transition_data = transitions[other_event];
                 const CrossingData& other_crossing_data = crossings[other_event];
-                _apply_guard(jump_sets, jump_step_time, starting_set, flow,
-                             other_transition_data, other_crossing_data, semantics);
+                const EvolutionDetail::HybridGuardContext other_context{
+                    starting_set, flow, other_transition_data, other_crossing_data, semantics, this->function_factory()};
+                EvolutionDetail::apply_flow_guard(jump_sets, other_context, jump_step_time);
             }
         }
 

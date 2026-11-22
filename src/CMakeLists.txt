@@ -13,6 +13,7 @@ add_library(EVOLUTION_SRC OBJECT
     hybrid_continuous_time_simulator.cpp
     hybrid_evolution_backend.cpp
     hybrid_evolution_tree.cpp
+    hybrid_transition_handlers.cpp
     hybrid_continuous_time_evolver.cpp
 )
 target_include_directories(EVOLUTION_SRC PRIVATE "${PROJECT_SOURCE_DIR}/include/evolution")

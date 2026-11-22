@@ -55,6 +55,12 @@ Both backends support sequential and concurrent execution through ThreadManager.
 Each call creates independent run state. See the [backend and trajectory-tree
 design](doc/evolution_tree_design.md) for the current API and deferred operations.
 
+Hybrid transitions use one event policy and separate geometric handlers for
+flow restrictions and jump construction. Jump candidates carry their own
+elapsed-time maps; blocking guards retain their explicit before/after-continuation
+order. See the [transition-handler design](doc/hybrid_transition_handlers_design.md)
+for the behavior matrix, numerical guarantees and remaining refactoring tasks.
+
 Hybrid numerical steps retain the common `ValidatedIntegrationStep` result.
 When an `UPPER` step uses its complete certified duration, reach and the
 independent endpoint are applied through the continuous enclosure bridge.

@@ -338,42 +338,11 @@ class HybridContinuousTimeEvolverBase
                            const ValidatedVectorMultivariateFunctionPatch& flow,
                            const TimingData& timing_data) const;
 
-    //! \brief Apply the \a flow to the \a set for to reach the
-    //! guard specified by \a transition_data using guidelines provided by \a crossing_data.
-    //!
-    //! \details
-    //! NOTE: The \a dynamic is used to compute the Lie derivative of
-    //! the flow to ensure positive crossing in the degenerate case. It should not really be necessary.
-    virtual Void
-        _apply_guard_step(HybridEnclosure& set,
-                          const EffectiveVectorMultivariateFunction& dynamic,
-                          const ValidatedVectorMultivariateFunctionPatch& flow,
-                          const TimingData& timing_data,
-                          const TransitionData& transition_data,
-                          const CrossingData& crossing_data,
-                          const Semantics semantics) const;
-
     //! \brief Apply the invariants in \a transition_data to the set \a set.
     //! \callgraph
     virtual Void
         _apply_invariants(HybridEnclosure& set,
                           const Map<DiscreteEvent, TransitionData>& transition_data) const;
-
-    //! \brief Apply \a guard_function for \a event to each set in \a sets, using the computed \a crossing_data.
-    //! \callgraph
-    //! \details The sets are updated with the extra constraints in-place for efficiency.
-    //! In the case of a concave tangency, it may be necessary to split the enclosure in two,
-    //! one part containing points which eventually cross the guard, the other points which miss the guard.
-    //! The extra sets are adjoined to the end of the list of sets to be constrained.
-    //! NOTE: The \a evolve_time should probably be in crossing_data, and should not really be necessary.
-    virtual Void
-        _apply_guard(List<HybridEnclosure>& sets,
-                     const ValidatedScalarMultivariateFunctionPatch& sets_elapsed_time,
-                     const HybridEnclosure& starting_set,
-                     const ValidatedVectorMultivariateFunctionPatch& flow,
-                     const TransitionData& transition_data,
-                     const CrossingData crossing_data,
-                     const Semantics semantics) const;
 
     //! \brief Process the \a starting_set \f$S\f$
     //! based on the previously computed \a flow, \a timing_data

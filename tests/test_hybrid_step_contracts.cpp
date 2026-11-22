@@ -26,6 +26,7 @@
  *  @brief Test hybrid step contracts behavior and numerical invariants.
  */
 
+#include "../src/hybrid_transition_handlers.hpp"
 #include "evolution/hybrid_continuous_time_evolver.hpp"
 #include "integration/integrator.hpp"
 #include "integration/validated_integration_step.hpp"
@@ -36,15 +37,61 @@
 #include "ariadne-testing.hpp"
 
 using namespace Ariadne;
+using namespace Ariadne::EvolutionDetail;
 
 class StepProbe : public HybridContinuousTimeEvolver {
   public:
     using HybridContinuousTimeEvolver::_estimate_timing;
     using HybridContinuousTimeEvolver::HybridContinuousTimeEvolver;
     using HybridContinuousTimeEvolverBase::_apply_evolve_step;
-    using HybridContinuousTimeEvolverBase::_apply_guard;
-    using HybridContinuousTimeEvolverBase::_apply_guard_step;
     using HybridContinuousTimeEvolverBase::_compute_integration_step;
+};
+
+// An exact analytic flow x(t)=x0+t, y(t)=y0 isolates guard mathematics
+// from adaptive integration and makes elapsed-time witnesses explicit.
+struct LinearGuardScenario {
+    const RealVariable x{"x"}, y{"y"};
+    const RealSpace space{x, y};
+    TaylorPicardIntegrator integrator{StepMaximumError(1e-6)};
+    ValidatedFunctionPatchFactory factory{integrator.function_factory()};
+    HybridEnclosure initial;
+    FlowFunctionModel flow;
+    EffectiveVectorMultivariateFunction dynamic;
+    TimingData timing;
+
+    static FlowFunctionModel make_flow(const ValidatedFunctionPatchFactory& patch_factory,
+                                       const ExactBoxType& box, const Dyadic& h) {
+        const auto domain = product(box, ExactIntervalType(0u, h));
+        auto model = patch_factory.create_zeros(2u, domain);
+        model[0u] = patch_factory.create_coordinate(domain, 0u) + patch_factory.create_coordinate(domain, 2u);
+        model[1u] = patch_factory.create_coordinate(domain, 1u);
+        return model;
+    }
+
+    LinearGuardScenario(const ExactBoxType& box, const Dyadic& h)
+        : initial(DiscreteLocation(1), space, Enclosure(box, EnclosureConfiguration(factory))),
+          flow(make_flow(factory, box, h)), dynamic(make_function(space, Vector<RealExpression>{1, 0})) {
+        initial.set_time_function(factory.create_constant(initial.parameter_domain(), Real(2)));
+        timing.step_size = h;
+        timing.step_kind = StepKind::CONSTANT_EVOLUTION_TIME;
+        timing.finishing_kind = FinishingKind::BEFORE_FINAL_TIME;
+        timing.final_time = Real(4);
+        timing.evolution_time_domain = ExactIntervalType(0u, h);
+        timing.evolution_time_coordinate = factory.create_coordinate({timing.evolution_time_domain}, 0u);
+        timing.parameter_dependent_evolution_time = factory.create_constant(initial.parameter_domain(), Real(h));
+    }
+
+    TransitionData transition(EventKind kind, const RealExpression& guard) const {
+        TransitionData result;
+        result.event = DiscreteEvent("guard");
+        result.event_kind = kind;
+        result.guard_function = make_function(space, guard);
+        return result;
+    }
+
+    HybridGuardContext context(const TransitionData& transition, const CrossingData& crossing, Semantics semantics) const {
+        return {initial, flow, transition, crossing, semantics, factory};
+    }
 };
 
 // Both certificates enclose x'=1, but the tube deliberately carries a wider
@@ -88,6 +135,183 @@ class CertificateProbe : public HybridContinuousTimeEvolver {
 class TestHybridStepContracts : public Testing::ContextFixture {
   public:
     using ContextFixture::ContextFixture;
+
+    void test_transverse_and_permissive_handlers_keep_distinct_time_maps() {
+        LinearGuardScenario scenario(ExactBoxType({
+                                         {-1, -0.5_x},
+                                         { 0,      0}
+        }),
+                                     Dyadic(1));
+        CrossingData crossing(CrossingKind::TRANSVERSE,
+                              -scenario.factory.create_coordinate(scenario.initial.parameter_domain(), 0u));
+        for (auto semantics: {Semantics::UPPER, Semantics::LOWER}) {
+            for (auto kind: {EventKind::URGENT, EventKind::IMPACT}) {
+                const auto event = scenario.transition(kind, scenario.x);
+                const auto candidate = make_jump_candidate(scenario.context(event, crossing, semantics),
+                                                           scenario.dynamic, scenario.timing);
+                ARIADNE_TESTING_EXPECT_EQUAL(candidate.elapsed_time.domain(), candidate.enclosure.parameter_domain());
+                ARIADNE_TESTING_EXPECT_EQUAL(candidate.enclosure.number_of_parameters(), 2u);
+                ARIADNE_TESTING_PROVE(subset(cast_exact_box(candidate.enclosure.state_bounding_box()),
+                                             ExactBoxType({
+                                                 {-0x1p-40_x, 0x1p-40_x},
+                                                 {         0,         0}
+                })));
+                ARIADNE_TESTING_PROVE(subset(ExactIntervalType(2.5_x, 3.0_x),
+                                             cast_exact_interval(candidate.enclosure.time_range())));
+                const auto clock_identity = candidate.enclosure.time_function() - candidate.elapsed_time - Real(2);
+                ARIADNE_TESTING_PROVE(subset(cast_exact_interval(clock_identity.range()),
+                                             ExactIntervalType(-0x1p-40_x, 0x1p-40_x)));
+            }
+            const auto event = scenario.transition(EventKind::PERMISSIVE, scenario.x);
+            const auto candidate = make_jump_candidate(scenario.context(event, crossing, semantics),
+                                                       scenario.dynamic, scenario.timing);
+            ARIADNE_TESTING_EXPECT_EQUAL(candidate.enclosure.number_of_parameters(), 3u);
+            ARIADNE_TESTING_EXPECT_EQUAL(candidate.elapsed_time.domain(), candidate.enclosure.parameter_domain());
+            // Optional activation includes the interior after entry, not just x=0.
+            const auto box = cast_exact_box(candidate.enclosure.state_bounding_box());
+            ARIADNE_TESTING_PROVE(subset(ExactBoxType({
+                                             {0, 0.5_x},
+                                             {0,     0}
+            }),
+                                         box));
+            ARIADNE_TESTING_PROVE(box[0u].upper_bound() <= FloatDP(0.50000095367431640625_x, dp));
+            const Vector<FloatDPBounds> admitted{FloatDPBounds(-0.75_x, dp), FloatDPBounds(0, dp), FloatDPBounds(1, dp)};
+            const Vector<FloatDPBounds> inactive{FloatDPBounds(-1, dp), FloatDPBounds(0, dp), FloatDPBounds(0.5_x, dp)};
+            bool rejects_inactive = false;
+            for (const auto& constraint: candidate.enclosure.constraints()) {
+                const FloatDPBounds lower(constraint.lower_bound(), dp);
+                const FloatDPBounds upper(constraint.upper_bound(), dp);
+                const auto value = constraint.function()(admitted);
+                ARIADNE_TESTING_PROVE(value.lower_raw() >= lower.upper_raw());
+                ARIADNE_TESTING_PROVE(value.upper_raw() <= upper.lower_raw());
+                const auto rejected = constraint.function()(inactive);
+                if (rejected.upper_raw() < lower.lower_raw() || rejected.lower_raw() > upper.upper_raw())
+                    rejects_inactive = true;
+            }
+            ARIADNE_TESTING_PROVE(rejects_inactive);
+            const auto state = candidate.enclosure.state_function()(admitted);
+            ARIADNE_TESTING_PROVE(refines(FloatDPBounds(0.25_x, dp), state[0u]));
+        }
+    }
+
+    void test_impact_direction_and_source_candidate_elapsed_time() {
+        LinearGuardScenario scenario(ExactBoxType({
+                                         {-1, -0.5_x},
+                                         { 0,      0}
+        }),
+                                     Dyadic(1));
+        const CrossingData active(CrossingKind::POSITIVE);
+        auto event = scenario.transition(EventKind::URGENT, -scenario.x);
+        const auto candidate = make_jump_candidate(scenario.context(event, active, Semantics::UPPER),
+                                                   scenario.dynamic, scenario.timing);
+        ARIADNE_TESTING_PROVE(!definitely(candidate.enclosure.is_empty()));
+        ARIADNE_TESTING_EXPECT_EQUAL(candidate.elapsed_time.domain(), candidate.enclosure.parameter_domain());
+        ARIADNE_TESTING_PROVE(subset(cast_exact_interval(candidate.elapsed_time.range()), ExactIntervalType(0, 0)));
+        ARIADNE_TESTING_PROVE(subset(cast_exact_interval(candidate.enclosure.time_range()), ExactIntervalType(2, 2)));
+        // The same active source cannot impact against a strictly negative direction.
+        event.event_kind = EventKind::IMPACT;
+        const auto impact = make_jump_candidate(scenario.context(event, active, Semantics::UPPER),
+                                                scenario.dynamic, scenario.timing);
+        ARIADNE_TESTING_PROVE(definitely(impact.enclosure.is_empty()));
+        // A competing blocking guard uses the returned zero-time map directly.
+        const auto other = scenario.transition(EventKind::INVARIANT, scenario.x - 2);
+        const CrossingData later(CrossingKind::TRANSVERSE,
+                                 scenario.factory.create_constant(scenario.initial.parameter_domain(), 0.25_x));
+        List<HybridEnclosure> guarded{candidate.enclosure};
+        apply_flow_guard(guarded, scenario.context(other, later, Semantics::UPPER), candidate.elapsed_time);
+        ARIADNE_TESTING_EXPECT_EQUAL(guarded.size(), 1u);
+        ARIADNE_TESTING_PROVE(!definitely(guarded.front().is_empty()));
+    }
+
+    void test_unresolved_geometry_preserves_upper_lower_rules() {
+        LinearGuardScenario scenario(ExactBoxType({
+                                         {-1, -0.5_x},
+                                         { 0,      0}
+        }),
+                                     Dyadic(1));
+        const auto event = scenario.transition(EventKind::URGENT, scenario.x);
+        const CrossingData unresolved(CrossingKind::DEGENERATE);
+        const auto upper = make_jump_candidate(scenario.context(event, unresolved, Semantics::UPPER),
+                                               scenario.dynamic, scenario.timing);
+        const auto lower = make_jump_candidate(scenario.context(event, unresolved, Semantics::LOWER),
+                                               scenario.dynamic, scenario.timing);
+        ARIADNE_TESTING_PROVE(!definitely(upper.enclosure.is_empty()));
+        ARIADNE_TESTING_PROVE(definitely(lower.enclosure.is_empty()));
+        auto endpoint = scenario.initial;
+        endpoint.apply_parameter_evolve_step(scenario.flow, scenario.timing.parameter_dependent_evolution_time);
+        for (auto kind: {CrossingKind::DEGENERATE, CrossingKind::CONCAVE}) {
+            const CrossingData uncertain(kind);
+            List<HybridEnclosure> outer{endpoint}, inner{endpoint};
+            apply_flow_guard(outer, scenario.context(event, uncertain, Semantics::UPPER),
+                             scenario.timing.parameter_dependent_evolution_time);
+            apply_flow_guard(inner, scenario.context(event, uncertain, Semantics::LOWER),
+                             scenario.timing.parameter_dependent_evolution_time);
+            ARIADNE_TESTING_PROVE(!definitely(outer.front().is_empty()));
+            ARIADNE_TESTING_PROVE(definitely(inner.front().is_empty()));
+            ARIADNE_TESTING_PROVE(definitely(outer.front().inside(HybridExactBox(
+                scenario.initial.location(), scenario.space,
+                ExactBoxType({
+                    {-0x1p-20_x, 0x1p-20_x},
+                    {-0x1p-40_x, 0x1p-40_x}
+            })))));
+        }
+    }
+
+    void test_grazing_split_keeps_primary_and_additional_branch_order() {
+        LinearGuardScenario scenario(ExactBoxType({
+                                         {      -1,       1},
+                                         {-0.125_x, 0.125_x}
+        }),
+                                     Dyadic(0.5_x));
+        const auto event = scenario.transition(EventKind::INVARIANT, scenario.y - sqr(scenario.x));
+        scenario.initial.new_invariant(event.event, event.guard_function);
+        CrossingData crossing(CrossingKind::GRAZING);
+        crossing.critical_time = -scenario.factory.create_coordinate(scenario.initial.parameter_domain(), 0u);
+        crossing.guard_range_at_critical_time = scenario.factory.create_coordinate(scenario.initial.parameter_domain(), 1u).range();
+        auto endpoint = scenario.initial;
+        endpoint.apply_parameter_evolve_step(scenario.flow, scenario.timing.parameter_dependent_evolution_time);
+        List<HybridEnclosure> branches{endpoint, endpoint};
+        apply_flow_guard(branches, scenario.context(event, crossing, Semantics::UPPER),
+                         scenario.timing.parameter_dependent_evolution_time);
+        ARIADNE_TESTING_EXPECT_EQUAL(branches.size(), 6u);
+        for (SizeType i = 0u; i != branches.size(); ++i) {
+            ARIADNE_TESTING_PROVE(!definitely(branches[i].is_empty()));
+            ExactBoxType bound(2u);
+            Vector<FloatDPBounds> witness(2u, dp);
+            if (i < 2u) {
+                bound = ExactBoxType({
+                    {-0.50000095367431640625_x, 1.50000095367431640625_x},
+                    {-0.12500095367431640625_x,                0x1p-20_x}
+                });
+                witness = Vector<FloatDPBounds>{FloatDPBounds(-0.75_x, dp), FloatDPBounds(-0.03125_x, dp)};
+            } else if (i % 2u == 0u) {
+                bound = ExactBoxType({
+                    {-0.50000095367431640625_x,                0x1p-20_x},
+                    {               -0x1p-20_x, 0.12500095367431640625_x}
+                });
+                witness = Vector<FloatDPBounds>{FloatDPBounds(-0.75_x, dp), FloatDPBounds(0.03125_x, dp)};
+            } else {
+                bound = ExactBoxType({
+                    {0.49999904632568359375_x, 1.50000095367431640625_x},
+                    {              -0x1p-20_x, 0.12500095367431640625_x}
+                });
+                witness = Vector<FloatDPBounds>{FloatDPBounds(0.75_x, dp), FloatDPBounds(0.03125_x, dp)};
+            }
+            ARIADNE_TESTING_PROVE(definitely(branches[i].inside(HybridExactBox(
+                scenario.initial.location(), scenario.space, bound))));
+            // Each ordered branch has a concrete feasible analytic trajectory.
+            for (const auto& constraint: branches[i].constraints()) {
+                const auto value = constraint.function()(witness);
+                const FloatDPBounds lower(constraint.lower_bound(), dp);
+                const FloatDPBounds upper(constraint.upper_bound(), dp);
+                ARIADNE_TESTING_PROVE(value.lower_raw() >= lower.upper_raw());
+                ARIADNE_TESTING_PROVE(value.upper_raw() <= upper.lower_raw());
+            }
+            const auto state = branches[i].state_function()(witness);
+            ARIADNE_TESTING_PROVE(refines(witness[0u] + FloatDPBounds(0.5_x, dp), state[0u]));
+            ARIADNE_TESTING_PROVE(refines(witness[1u], state[1u]));
+        }
+    }
 
     void test_full_steps_use_independent_endpoint_and_keep_hybrid_metadata() {
         const DiscreteLocation q(1);
@@ -231,8 +455,9 @@ class TestHybridStepContracts : public Testing::ContextFixture {
             RealExpression guard = kind == CrossingKind::DECREASING ? -RealExpression(x)
                                                                     : RealExpression(kind == CrossingKind::POSITIVE ? 1 : -1);
             transition.guard_function = make_function(space, guard);
-            auto jump = initial;
-            probe._apply_guard_step(jump, dynamic, flow, timing, transition, CrossingData(kind), Semantics::UPPER);
+            const auto candidate = make_jump_candidate(
+                {initial, flow, transition, CrossingData(kind), Semantics::UPPER, probe.function_factory()}, dynamic, timing);
+            const auto& jump = candidate.enclosure;
             ARIADNE_TESTING_EXPECT_EQUAL(jump.number_of_parameters(), initial.number_of_parameters());
             ARIADNE_TESTING_EXPECT_EQUAL(definitely(jump.is_empty()), kind == CrossingKind::NEGATIVE);
         }
@@ -354,32 +579,33 @@ class TestHybridStepContracts : public Testing::ContextFixture {
         transition.event_kind = static_cast<EventKind>(255u);
         transition.guard_function = make_function(space, x);
         CrossingData crossing(CrossingKind::DEGENERATE);
-        ARIADNE_TESTING_EXPECT_EXCEPTION(probe._apply_guard_step(
-            target, dynamic, flow, timing, transition, crossing, Semantics::UPPER));
+        ARIADNE_TESTING_EXPECT_EXCEPTION(make_jump_candidate(
+            {target, flow, transition, crossing, Semantics::UPPER, probe.function_factory()}, dynamic, timing));
         transition.event_kind = EventKind::URGENT;
         crossing.crossing_kind = static_cast<CrossingKind>(255u);
-        ARIADNE_TESTING_EXPECT_EXCEPTION(probe._apply_guard_step(
-            target, dynamic, flow, timing, transition, crossing, Semantics::UPPER));
+        ARIADNE_TESTING_EXPECT_EXCEPTION(make_jump_candidate(
+            {target, flow, transition, crossing, Semantics::UPPER, probe.function_factory()}, dynamic, timing));
 
         auto elapsed = probe.function_factory().create_constant(initial.parameter_domain(), 0.5_x);
         List<HybridEnclosure> sets{initial};
-        ARIADNE_TESTING_EXPECT_EXCEPTION(probe._apply_guard(
-            sets, elapsed, initial, flow, transition, crossing, Semantics::UPPER));
+        ARIADNE_TESTING_EXPECT_EXCEPTION(apply_flow_guard(sets,
+                                                          {initial, flow, transition, crossing, Semantics::UPPER, probe.function_factory()}, elapsed));
         crossing.crossing_kind = CrossingKind::DEGENERATE;
-        ARIADNE_TESTING_EXPECT_EXCEPTION(probe._apply_guard(
-            sets, elapsed, initial, flow, transition, crossing, static_cast<Semantics>(255u)));
+        ARIADNE_TESTING_EXPECT_EXCEPTION(apply_flow_guard(sets,
+                                                          {initial, flow, transition, crossing, static_cast<Semantics>(255u), probe.function_factory()}, elapsed));
         for (auto kind: {CrossingKind::NEGATIVE, CrossingKind::POSITIVE, CrossingKind::DECREASING}) {
             crossing.crossing_kind = kind;
             auto untouched = sets;
-            probe._apply_guard(untouched, elapsed, initial, flow, transition, crossing, Semantics::UPPER);
+            apply_flow_guard(untouched,
+                             {initial, flow, transition, crossing, Semantics::UPPER, probe.function_factory()}, elapsed);
             ARIADNE_TESTING_EXPECT_EQUAL(untouched[0].number_of_constraints(), initial.number_of_constraints());
         }
         auto wrong_elapsed = probe.function_factory().create_constant(ExactBoxType({
                                                                           {-1, 1}
         }),
                                                                       0.5_x);
-        ARIADNE_TESTING_EXPECT_EXCEPTION(probe._apply_guard(
-            sets, wrong_elapsed, initial, flow, transition, crossing, Semantics::UPPER));
+        ARIADNE_TESTING_EXPECT_EXCEPTION(apply_flow_guard(sets,
+                                                          {initial, flow, transition, crossing, Semantics::UPPER, probe.function_factory()}, wrong_elapsed));
     }
 
     void test_grazing_whose_maximum_is_in_the_past() {
@@ -410,7 +636,8 @@ class TestHybridStepContracts : public Testing::ContextFixture {
         CrossingData crossing(CrossingKind::GRAZING);
         crossing.critical_time = -factory.create_coordinate(flow.space_domain(), 0u);
         crossing.guard_range_at_critical_time = factory.create_coordinate(flow.space_domain(), 1u).range();
-        probe._apply_guard(sets, elapsed, initial, flow, transition, crossing, Semantics::UPPER);
+        apply_flow_guard(sets,
+                         {initial, flow, transition, crossing, Semantics::UPPER, probe.function_factory()}, elapsed);
         // x only increases from x>=1, so y-x^2 stays strictly negative.
         ARIADNE_TESTING_EXPECT_EQUAL(sets.size(), 1u);
         ARIADNE_TESTING_PROVE(!definitely(sets[0].is_empty()));
@@ -424,6 +651,10 @@ class TestHybridStepContracts : public Testing::ContextFixture {
 
 int main(int argc, char** argv) {
     ARIADNE_TESTING_SUITE("test_hybrid_step_contracts");
+    ARIADNE_TESTING_ADD_TEST(TestHybridStepContracts, test_transverse_and_permissive_handlers_keep_distinct_time_maps);
+    ARIADNE_TESTING_ADD_TEST(TestHybridStepContracts, test_impact_direction_and_source_candidate_elapsed_time);
+    ARIADNE_TESTING_ADD_TEST(TestHybridStepContracts, test_unresolved_geometry_preserves_upper_lower_rules);
+    ARIADNE_TESTING_ADD_TEST(TestHybridStepContracts, test_grazing_split_keeps_primary_and_additional_branch_order);
     ARIADNE_TESTING_ADD_TEST(TestHybridStepContracts, test_full_steps_use_independent_endpoint_and_keep_hybrid_metadata);
     ARIADNE_TESTING_ADD_TEST(TestHybridStepContracts, test_shortened_steps_use_the_tube_at_the_stopping_time);
     ARIADNE_TESTING_ADD_TEST(TestHybridStepContracts, test_constrained_source_stays_inside_the_certified_composition_domain);

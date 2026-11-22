@@ -295,14 +295,14 @@ does not imply tangency, and `UNRESOLVED` does not imply degeneracy.
 | Mode | UPPER | LOWER | Events / guards / invariants |
 | --- | --- | --- | --- |
 | Autonomous state-only ODAE, no fixed parameters | Existing validated local equation method | Existing equation method (no new inner claim) | Existing event policy and crossing classifier, subject to certified local flow layout |
-| Autonomous ODAI, no fixed parameters | Explicit structured or box method | Rejected, including at time zero | Rejected, including at time zero |
+| Autonomous ODAI, no fixed parameters | Explicit structured or box method, with optional state-invariant outer filtering | Rejected, including at time zero | State invariants only; all transition, progress and impact events remain rejected |
 | Explicit-time or fixed-parameter ODAE/ODAI modes | Rejected by current hybrid mode validation | Rejected | Not reached |
 
 ODAI with arbitrary measurable input functions lacks, at present, a
 certified trajectory-level guard derivative and first-entry/maximum
 analysis compatible with this equation classifier. Neither an outer box
 nor an independent endpoint certificate supplies these properties.
-Consequently no ODAI handler is enabled by this refactor. Future support
+Consequently no ODAI *transition* handler is enabled by this refactor. Future support
 requires an *explicit, solver-provided validated event capability* and
 a separate proof of the semantics it supports; changing only a dispatch
 switch is mathematically unsound.
@@ -312,3 +312,40 @@ maps, ambiguous sampled/discard behavior, impact direction, branch order,
 and incompatible certificate rejection. The inclusion gate tests reject
 each kind of declared source event before attempting integration, and
 verify that event-free autonomous ODAI remains supported as before.
+
+## Initial ODAI capability: state invariants under UPPER
+
+The private `src/hybrid_inclusion_invariants.hpp/.cpp` component admits
+only `EventKind::INVARIANT` in autonomous ODAI modes under UPPER
+semantics with the already-supported explicit structured or box
+integration method. It rejects every other event kind before execution,
+even at zero horizon. No input trajectory, first-contact time, Lie
+derivative, or reset is constructed.
+
+An invariant `g(x) <= 0` is a *necessary pointwise condition* on
+every valid solution. The validated outer inclusion reach tube and the
+independent endpoint are each intersected with that state constraint.
+At the initial, stopping and post-reset phases the same state-only
+invariant restriction is reused, without querying a nonexistent
+single-valued vector field. The original state, time, dwell, auxiliary
+mapping and event-history representations remain unchanged.
+
+**Soundness boundary:** intersecting a validated outer tube with
+`g(x) <= 0` retains an outer approximation of solutions that stay
+in the invariant. It does **not** prove that each point in the
+intersection is dynamically realizable, that a whole trajectory
+respects the invariant between snapshots, or that the first hitting
+time is known. This capability therefore cannot safely be repurposed
+as a PROGRESS/URGENT/IMPACT/PERMISSIVE event handler; those cases
+remain explicitly unsupported for ODAI.
+
+Analytic regression cases exercise an autonomous inclusion `x' = u`,
+`u in [-1,1]`, under `x <= 0`, across structured and box
+integration, including both reach and endpoint state constraints.
+A closed zero-horizon source slice and rejection of ODAI urgent events
+and LOWER semantics are checked independently.
+
+The next numerical extension must be based on an explicit trajectory
+or crossing certificate from the inclusion solver, with separate
+justification for each event kind and semantics. Until then this
+capability is restricted to invariant intersection, not event handling.

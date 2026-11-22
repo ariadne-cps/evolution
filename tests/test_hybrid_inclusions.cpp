@@ -228,6 +228,62 @@ class TestHybridInclusions : public Testing::ContextFixture {
         }
     }
 
+    Void test_state_invariants_filter_inclusion_reach_and_endpoints() {
+        const DiscreteLocation q(1);
+        const RealVariable x("x"), u("u");
+        const DiscreteEvent bound("bound");
+        HybridAutomaton system;
+        system.new_mode(q, OrdinaryDifferentialAlgebraicInclusion(
+                               {dot(x) = u}, RealVariablesBox({-1 <= u <= 1})));
+        system.new_invariant(q, x <= 0, bound);
+        for (bool box_method: {false, true}) {
+            HybridContinuousTimeEvolver evolver(system);
+            TaylorPicardIntegrator base(step_maximum_error = 1e-6);
+            if (box_method)
+                evolver.set_integrator(FirstOrderMultifunctionIntegrator());
+            else
+                evolver.set_integrator(base, ZeroApproximation(), ConstantApproximation());
+            evolver.configuration().set_maximum_step_size(0.03125);
+            auto initial = evolver.enclosure(HybridExactBox(q, RealSpace({x}),
+                                                             ExactBoxType({{0, 0}})));
+            const auto orbit = evolver.orbit(initial, HybridTime(0.125_x, 1), Semantics::UPPER);
+            ARIADNE_TESTING_REQUIRE(orbit.final().size() > 0u);
+            ARIADNE_TESTING_REQUIRE(orbit.reach().size() > 0u);
+            for (const auto& final: orbit.final()) {
+                ARIADNE_TESTING_EXPECT_EQUAL(final.location(), q);
+                ARIADNE_TESTING_PROVE(final.previous_events().empty());
+                ARIADNE_TESTING_PROVE(final.number_of_constraints() > 0u);
+                ARIADNE_TESTING_PROVE(!definitely(final.is_empty()));
+                ARIADNE_TESTING_PROVE(subset(cast_exact_interval(final.time_range()),
+                                             ExactIntervalType(0.125_x, 0.125_x)));
+            }
+            for (const auto& reach: orbit.reach()) {
+                ARIADNE_TESTING_EXPECT_EQUAL(reach.location(), q);
+                ARIADNE_TESTING_PROVE(reach.number_of_constraints() > 0u);
+            }
+        }
+    }
+
+    Void test_inclusion_invariants_preserve_closed_zero_horizon() {
+        const DiscreteLocation q(1);
+        const RealVariable x("x"), u("u");
+        HybridAutomaton system;
+        system.new_mode(q, OrdinaryDifferentialAlgebraicInclusion(
+                               {dot(x) = u}, RealVariablesBox({-1 <= u <= 1})));
+        system.new_invariant(q, x <= 0, DiscreteEvent("bound"));
+        HybridContinuousTimeEvolver evolver(system);
+        evolver.set_integrator(FirstOrderMultifunctionIntegrator());
+        const auto crossing = evolver.orbit(HybridExactBox(q, RealSpace({x}),
+                                                           ExactBoxType({{-0.125_x, 0.125_x}})),
+                                            HybridTime(0u, 1), Semantics::UPPER);
+        ARIADNE_TESTING_REQUIRE(crossing.final().size() > 0u);
+        for (const auto& final: crossing.final()) {
+            ARIADNE_TESTING_PROVE(!definitely(final.is_empty()));
+            ARIADNE_TESTING_PROVE(final.number_of_constraints() > 0u);
+            ARIADNE_TESTING_PROVE(final.previous_events().empty());
+        }
+    }
+
     Void test_unsupported_capabilities_fail_explicitly() {
         const DiscreteLocation q(1);
         const RealVariable x("x"), u("u"), t("t"), p("p");
@@ -243,10 +299,28 @@ class TestHybridInclusions : public Testing::ContextFixture {
         ARIADNE_TESTING_EXPECT_THROWS(std::invalid_argument, evolver.orbit(initial, HybridTime(0u, 1), Semantics::LOWER));
         evolver.set_integrator(TaylorPicardIntegrator(step_maximum_error = 1e-6));
         ARIADNE_TESTING_EXPECT_THROWS(std::invalid_argument, evolver.orbit(initial, HybridTime(0.125_x, 1), Semantics::UPPER));
+        // State-only invariants are now supported as necessary outer
+        // restrictions. They need neither an entry time nor a Lie derivative.
         system.new_invariant(q, x <= 1, DiscreteEvent("bound"));
         HybridContinuousTimeEvolver guarded(system);
         guarded.set_integrator(FirstOrderMultifunctionIntegrator());
-        ARIADNE_TESTING_EXPECT_THROWS(std::invalid_argument, guarded.orbit(initial, HybridTime(0u, 1), Semantics::UPPER));
+        const auto initially_valid = guarded.orbit(initial, HybridTime(0u, 1), Semantics::UPPER);
+        ARIADNE_TESTING_PROVE(initially_valid.final().size() > 0u);
+        ARIADNE_TESTING_EXPECT_THROWS(std::invalid_argument, guarded.orbit(initial, HybridTime(0u, 1), Semantics::LOWER));
+        // A state invariant does not establish entry-time, progress or reset
+        // capabilities; in particular an ODAI jump remains unsupported.
+        const DiscreteLocation target(2);
+        HybridAutomaton jumping;
+        jumping.new_mode(q, OrdinaryDifferentialAlgebraicInclusion(
+                                {dot(x) = u}, RealVariablesBox({-1 <= u <= 1})));
+        jumping.new_mode(target, {dot(x) = 0});
+        jumping.new_transition(q, DiscreteEvent("jump"), target, {next(x) = x},
+                               x >= 0, EventKind::URGENT);
+        HybridContinuousTimeEvolver cannot_jump(jumping);
+        cannot_jump.set_integrator(FirstOrderMultifunctionIntegrator());
+        ARIADNE_TESTING_EXPECT_THROWS(std::invalid_argument,
+                                      cannot_jump.orbit(initial, HybridTime(0u, 1), Semantics::UPPER));
+
         HybridAutomaton timed;
         timed.new_mode(q, OrdinaryDifferentialAlgebraicInclusion({dot(x) = t + p + u}, RealVariablesBox({-1 <= u <= 1}),
                                                                  RealVariablesBox({0 <= p <= 1}), t));
@@ -263,6 +337,8 @@ int main(int argc, char** argv) {
     ARIADNE_TESTING_ADD_TEST(TestHybridInclusions, test_reset_into_inclusion_with_varying_arrival_time);
     ARIADNE_TESTING_ADD_TEST(TestHybridInclusions, test_interval_taylor_modes_use_the_same_cycle);
     ARIADNE_TESTING_ADD_TEST(TestHybridInclusions, test_box_horizon_slice_and_copy_ownership);
+    ARIADNE_TESTING_ADD_TEST(TestHybridInclusions, test_state_invariants_filter_inclusion_reach_and_endpoints);
+    ARIADNE_TESTING_ADD_TEST(TestHybridInclusions, test_inclusion_invariants_preserve_closed_zero_horizon);
     ARIADNE_TESTING_ADD_TEST(TestHybridInclusions, test_unsupported_capabilities_fail_explicitly);
     return Testing::run_logging_suite(ariadne_test_suite, argc, argv);
 }

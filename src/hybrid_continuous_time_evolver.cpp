@@ -42,6 +42,7 @@
 #include "function/function_model.hpp"
 #include "function/function_patch.hpp"
 #include "hybrid_crossing_analysis.hpp"
+#include "hybrid_inclusion_invariants.hpp"
 #include "hybrid_step_results.hpp"
 #include "hybrid_transition_handlers.hpp"
 #include "hybrid_timing.hpp"
@@ -339,8 +340,9 @@ Void HybridContinuousTimeEvolverBase::_validate_mode(DiscreteLocation location, 
             throw std::invalid_argument("Hybrid inclusion modes require UPPER semantics");
         if (inclusion->has_explicit_time() || inclusion->parameter_space().dimension() != 0u)
             throw std::invalid_argument("Hybrid inclusion modes currently require autonomous dynamics without fixed parameters");
-        if (!this->system().events(location).empty())
-            throw std::invalid_argument("Guards and invariants in inclusion modes require a dedicated event-analysis capability");
+        // State invariants need only necessary pointwise restrictions of a
+        // validated outer tube. Other events require pathwise certificates.
+        EvolutionDetail::validate_inclusion_event_kinds(this->system(), location);
         if (!this->_inclusion_integrator_ptr && !this->_box_integrator_ptr)
             throw std::invalid_argument("Select an explicit integration method for hybrid inclusion modes");
         if (this->_inclusion_integrator_ptr && inclusion->has_input_function() && inclusion->number_of_inputs() == 0u)
@@ -410,6 +412,11 @@ Map<DiscreteEvent, TransitionData>
     Set<DiscreteEvent> events = this->system().events(location);
     if (events.empty())
         return transitions;
+    // An inclusion has no single-valued vector field from which to form
+    // a Lie derivative. Its only supported events are state invariants.
+    if (this->system().inclusion(location) != nullptr)
+        return EvolutionDetail::inclusion_invariant_transitions(this->system(), location);
+
     const EffectiveVectorMultivariateFunction& dynamic = this->system().dynamic_function(location);
     for (Set<DiscreteEvent>::ConstIterator event_iter = events.begin();
          event_iter != events.end(); ++event_iter) {
@@ -447,22 +454,9 @@ Void HybridContinuousTimeEvolverBase::
     _apply_invariants(HybridEnclosure& initial_set,
                       const Map<DiscreteEvent, TransitionData>& transitions) const {
     LOGGING_SCOPE_CREATE;
-    HybridEnclosure& invariant_set = initial_set;
     LOGGING_PRINTLN_AT(1, "initial_set=" << initial_set);
     LOGGING_PRINTLN("transitions=" << transitions);
-
-    // Apply restrictions due to invariants
-    for (Map<DiscreteEvent, TransitionData>::ConstIterator transition_iter = transitions.begin();
-         transition_iter != transitions.end(); ++transition_iter) {
-        DiscreteEvent event = transition_iter->first;
-        LOGGING_PRINTLN_AT(1, "event=" << event);
-        const TransitionData& transition = transition_iter->second;
-        if (transition.event_kind == EventKind::INVARIANT) {
-            if (possibly(initial_set.satisfies(transition.guard_function >= 0))) {
-                invariant_set.new_invariant(event, transition.guard_function);
-            }
-        }
-    }
+    EvolutionDetail::apply_state_invariants(initial_set, transitions);
 }
 
 Void HybridContinuousTimeEvolverBase::
@@ -870,6 +864,9 @@ Void HybridContinuousTimeEvolverBase::
 Void HybridContinuousTimeEvolverBase::_evolve_inclusion(
     const HybridEnclosure& initial, const Real& final_time, HybridEvolutionStepResult& result) const {
     const auto& inclusion = *this->system().inclusion(initial.location());
+    // Every supported ODAI event is an invariant; no root or trajectory
+    // derivative is required. Reuse the same invariant predicate in all phases.
+    const auto invariants = this->_extract_transitions(initial.location());
     const auto horizon = FloatDPBounds(final_time, dp);
     const StepSizeType remaining = StepSizeType(horizon.upper_raw()) -
                                    StepSizeType(initial.time_range().lower_bound().raw());
@@ -890,6 +887,9 @@ Void HybridContinuousTimeEvolverBase::_evolve_inclusion(
                                   : EvolutionDetail::IntegrationStepRepresentation::REQUIRE_STRUCTURED);
     HybridEnclosure endpoint = initial;
     endpoint.replace_continuous_set(applied.evolved);
+    // This outer restriction is necessary for valid trajectories; it cannot
+    // prove that any particular input stayed inside the invariant before now.
+    EvolutionDetail::apply_state_invariants(endpoint, invariants);
     const auto endpoint_time = endpoint.time_range();
     const bool at_horizon = definitely(endpoint_time.lower_bound() >= final_time) &&
                             definitely(endpoint_time.upper_bound() <= final_time);
@@ -897,6 +897,9 @@ Void HybridContinuousTimeEvolverBase::_evolve_inclusion(
     for (const auto& continuous: applied.reach) {
         auto reach = initial;
         reach.replace_continuous_set(continuous);
+        // Apply the state invariant to every point of the certified outer tube,
+        // including the closed final-time slice when it intersects this step.
+        EvolutionDetail::apply_state_invariants(reach, invariants);
         if (!at_horizon && possibly(reach.time_range().upper_bound() >= final_time)) {
             auto final_slice = reach;
             final_slice.set_time(final_time);

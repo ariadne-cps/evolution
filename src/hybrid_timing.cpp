@@ -41,7 +41,7 @@ using ExactIntervalVectorType = Vector<ExactIntervalType>;
 /** @brief Choose the final-time strategy before consulting guard crossings. */
 ValidatedScalarMultivariateFunctionPatch select_temporal_evolution(
     TimingData& result, const FloatDP& step_size, const FloatDPBounds& final_time_bounds,
-    const UpperIntervalType& remaining_time_range,
+    const UpperIntervalType& remaining_time_range, const ExactIntervalType& time_domain,
     const ValidatedScalarMultivariateFunctionPatch& time_identity,
     const ValidatedFunctionPatchFactory& patch_factory, Bool allow_creep) {
     LOGGING_SCOPE_CREATE;
@@ -363,7 +363,7 @@ TimingData estimate_hybrid_timing(
     LOGGING_PRINTLN(std::fixed << "starting_time_range=" << starting_time_range << " step_size=" << step_size << " final_time=" << final_time);
 
     const auto temporal_evolution_time = select_temporal_evolution(
-        result, step_size, final_time_bounds, remaining_time_range,
+        result, step_size, final_time_bounds, remaining_time_range, time_domain,
         time_identity, patch_factory, allow_creep);
 
     ValidatedScalarMultivariateFunctionPatch spacial_evolution_time = patch_factory.create_constant(state_domain, FloatDP(step_size));

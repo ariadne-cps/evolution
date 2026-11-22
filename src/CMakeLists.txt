@@ -16,6 +16,7 @@ add_library(EVOLUTION_SRC OBJECT
     hybrid_crossing.cpp
     hybrid_crossing_analysis.cpp
     hybrid_transition_handlers.cpp
+    hybrid_timing.cpp
     hybrid_continuous_time_evolver.cpp
 )
 target_include_directories(EVOLUTION_SRC PRIVATE "${PROJECT_SOURCE_DIR}/include/evolution")

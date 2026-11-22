@@ -162,7 +162,7 @@ evidence and semantics they require, and reject unavailable capabilities.
 - [x] Separate geometric properties from typed crossing evidence, including
       explicit unavailable/unsupported states.
 - [x] Extract crossing analysis from the evolver and audit its solver fallbacks.
-- [ ] Decompose timing, creep and unwinding while preserving their strategies.
+- [x] Decompose timing, creep and unwinding while preserving their strategies.
 - [ ] Replace parallel endpoint/continuation lists with explicit paired branch
       results and make result publication a small orchestration phase.
 - [ ] Document and verify the supported capability matrix for each handler;
@@ -206,3 +206,24 @@ The complete consuming build passes 43/43 CTest targets. A fresh install support
 the independently built C++ tutorial and the existing Python tutorial.
 `apply-format` and `check-format` pass for all 83 tracked C++ files before commit.
 Full Python/C++ tutorial parity remains deferred to the final task.
+
+## Timing, creep and unwinding extraction
+
+`src/hybrid_timing.hpp/.cpp` owns horizon selection, guard creep and clock
+unwinding. The existing evolver `_estimate_timing` hook delegates with the
+configured function factory and solver, preserving the step strategy.
+
+Horizon selection retains the exact final-time combinatorial choice and
+halved time-scaling rule. The guard-creep eligibility test excludes permissive
+events and checks whether the full-step endpoint is empty. Solver-based creep
+preserves guard ordering, the 0.9375 default, clobbering, existing exception
+fallback and removal only of guards with successfully computed implicit creep
+times. Clock unwinding runs only after composing the time maps, and only with
+no remaining crossing, nonzero clock spread, a constant step and
+`BEFORE_FINAL_TIME`; both previous clock-narrowing formulas are unchanged.
+
+No result publication, backend selection, reset or workload scheduling moved
+into timing. The existing hybrid timing, creep, solver-budget, crossing,
+backend and tree suites are the regression criteria. This extraction does
+not change numerical guarantees or add ODAI event capabilities. Paired
+continuation branches and result publication remain the next task.

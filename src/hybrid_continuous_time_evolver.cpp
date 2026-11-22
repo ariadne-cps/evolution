@@ -893,8 +893,8 @@ Void HybridContinuousTimeEvolverBase::_evolve_inclusion(
                                   : EvolutionDetail::IntegrationStepRepresentation::REQUIRE_STRUCTURED);
     HybridEnclosure endpoint = initial;
     endpoint.replace_continuous_set(applied.evolved);
-    // Necessary state restrictions include invariants and PROGRESS
-    // blockers. They do not prove that an input stayed admissible earlier.
+    // Necessary state restrictions include invariants, PROGRESS and URGENT
+    // blockers. They do not certify an inclusion crossing time.
     EvolutionDetail::apply_inclusion_flow_blockers(endpoint, invariants);
     const auto endpoint_time = endpoint.time_range();
     const bool at_horizon = definitely(endpoint_time.lower_bound() >= final_time) &&
@@ -903,8 +903,9 @@ Void HybridContinuousTimeEvolverBase::_evolve_inclusion(
     for (const auto& continuous: applied.reach) {
         auto reach = initial;
         reach.replace_continuous_set(continuous);
-        // Restrict the certified outer tube by invariant and PROGRESS
-        // conditions, including closed final-time slices.
+        // Restrict the certified outer tube by invariant and every
+        // blocking guard, including competing URGENT events. The guard
+        // boundary is retained for conservative event candidates.
         EvolutionDetail::apply_inclusion_flow_blockers(reach, invariants);
         // Publish the pre-reset guard intersection, retaining the full
         // source-time chart. The reset is a separate successor; UPPER may

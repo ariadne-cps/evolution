@@ -476,3 +476,25 @@ LOWER inclusion modes or directional IMPACT. Focused tests use
 `x'=u, u in [-1,1]` and `x>=1/32` as PROGRESS, checking both
 structured and box integrators, constrained source reach, lack of
 spurious reset provenance, and preservation of the t=0 terminal set.
+
+## Concurrent UPPER ODAI blocking guards
+
+A validated inclusion outer reach and its independent endpoint are now
+filtered by every blocking guard, following the same event-kind policy
+used by ODAE: INVARIANT, PROGRESS and URGENT restrict the continuous
+branch to the non-active side; PERMISSIVE does not. This does not
+identify a first entry, nor justify LOWER reachability. Closed
+boundaries are retained for an urgent candidate, so simultaneous
+URGENT events with a common threshold are not ordered by declaration
+or silently dropped. Jump candidates are constructed separately from
+the guarded outer reach before resets, so competing blockers apply
+without requiring a single-valued Lie derivative.
+
+The regression uses `x'=u`, `u in [-1,1]`, two URGENT
+transitions with `x>=1/32` to distinct zero-dynamics targets, and
+checks that both target branches survive for the structured and box
+methods. A separate PERMISSIVE case checks that optional jumps do
+not prevent the source branch from reaching the horizon. Neither
+test claims the two simultaneous jumps can both occur along one
+concrete execution. The implementation retains their conservative
+UPPER alternatives and does not add a collective LOWER guard check.

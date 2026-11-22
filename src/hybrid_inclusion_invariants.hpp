@@ -29,9 +29,11 @@ Map<DiscreteEvent, TransitionData> inclusion_upper_transitions(
  */
 Void apply_state_invariants(HybridEnclosure&, const Map<DiscreteEvent, TransitionData>&);
 
-/** @brief Constrain an UPPER reach/endpoint to the admissible side of
- *  invariants and PROGRESS boundaries. Unlike invariants, PROGRESS is
- *  not imposed on already-terminal zero-horizon initial states.
+/** @brief Constrain UPPER reach/endpoint by all blocking event guards:
+ *  invariants, PROGRESS and URGENT, but never PERMISSIVE.
+ *  This is a necessary outer restriction, not certified first-entry timing.
+ *  Unlike invariants, transition and PROGRESS guards are not imposed
+ *  retroactively on an already-terminal zero-horizon initial state.
  */
 Void apply_inclusion_flow_blockers(HybridEnclosure&, const Map<DiscreteEvent, TransitionData>&);
 

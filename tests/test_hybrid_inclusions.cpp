@@ -368,6 +368,74 @@ class TestHybridInclusions : public Testing::ContextFixture {
         }
     }
 
+    Void test_upper_inclusion_competing_urgent_guards_keep_both_boundary_jumps() {
+        const DiscreteLocation source(1), left(2), right(3);
+        const RealVariable x("x"), u("u");
+        const DiscreteEvent first("first"), second("second");
+        HybridAutomaton system;
+        system.new_mode(source, OrdinaryDifferentialAlgebraicInclusion(
+                                    {dot(x) = u}, RealVariablesBox({-1 <= u <= 1})));
+        system.new_mode(left, OrdinaryDifferentialAlgebraicEquation({dot(x) = 0}));
+        system.new_mode(right, OrdinaryDifferentialAlgebraicEquation({dot(x) = 0}));
+        system.new_transition(source, first, left, {next(x) = 0}, x >= 0.03125_x, EventKind::URGENT);
+        system.new_transition(source, second, right, {next(x) = 0}, x >= 0.03125_x, EventKind::URGENT);
+        for (bool boxes: {false, true}) {
+            HybridContinuousTimeEvolver evolver(system);
+            TaylorPicardIntegrator base(step_maximum_error = 1e-6);
+            if (boxes)
+                evolver.set_integrator(FirstOrderMultifunctionIntegrator());
+            else
+                evolver.set_integrator(base, ZeroApproximation(), ConstantApproximation());
+            evolver.configuration().set_maximum_step_size(0.03125);
+            const auto orbit = evolver.orbit(HybridExactBox(source, RealSpace({x}),
+                                                             ExactBoxType({{0, 0}})),
+                                            HybridTime(0.125_x, 1), Semantics::UPPER);
+            bool found_first = false, found_second = false;
+            for (const auto& final: orbit.final()) {
+                if (final.location() == left) {
+                    found_first = true;
+                    ARIADNE_TESTING_EXPECT_EQUAL(final.previous_events().back(), first);
+                } else if (final.location() == right) {
+                    found_second = true;
+                    ARIADNE_TESTING_EXPECT_EQUAL(final.previous_events().back(), second);
+                }
+            }
+            ARIADNE_TESTING_PROVE(found_first && found_second);
+            ARIADNE_TESTING_REQUIRE(orbit.reach().size() > 0u);
+        }
+    }
+
+    Void test_upper_inclusion_permissive_guard_does_not_block_flow() {
+        const DiscreteLocation source(1), target(2);
+        const RealVariable x("x"), u("u");
+        const DiscreteEvent event("optional");
+        HybridAutomaton system;
+        system.new_mode(source, OrdinaryDifferentialAlgebraicInclusion(
+                                    {dot(x) = u}, RealVariablesBox({-1 <= u <= 1})));
+        system.new_mode(target, OrdinaryDifferentialAlgebraicEquation({dot(x) = 0}));
+        system.new_transition(source, event, target, {next(x) = 0},
+                              x >= 0.03125_x, EventKind::PERMISSIVE);
+        for (bool boxes: {false, true}) {
+            HybridContinuousTimeEvolver evolver(system);
+            TaylorPicardIntegrator base(step_maximum_error = 1e-6);
+            if (boxes)
+                evolver.set_integrator(FirstOrderMultifunctionIntegrator());
+            else
+                evolver.set_integrator(base, ZeroApproximation(), ConstantApproximation());
+            evolver.configuration().set_maximum_step_size(0.03125);
+            const auto orbit = evolver.orbit(HybridExactBox(source, RealSpace({x}),
+                                                             ExactBoxType({{0, 0}})),
+                                            HybridTime(0.125_x, 1), Semantics::UPPER);
+            bool source_final = false, target_final = false;
+            for (const auto& final: orbit.final()) {
+                source_final = source_final || final.location() == source;
+                target_final = target_final || final.location() == target;
+            }
+            ARIADNE_TESTING_PROVE(source_final);
+            ARIADNE_TESTING_PROVE(target_final);
+        }
+    }
+
     Void test_unsupported_capabilities_fail_explicitly() {
         const DiscreteLocation q(1);
         const RealVariable x("x"), u("u"), t("t"), p("p");
@@ -427,6 +495,8 @@ int main(int argc, char** argv) {
     ARIADNE_TESTING_ADD_TEST(TestHybridInclusions, test_state_invariants_filter_inclusion_reach_and_endpoints);
     ARIADNE_TESTING_ADD_TEST(TestHybridInclusions, test_inclusion_invariants_preserve_closed_zero_horizon);
     ARIADNE_TESTING_ADD_TEST(TestHybridInclusions, test_upper_inclusion_progress_blocks_flow_without_reset);
+    ARIADNE_TESTING_ADD_TEST(TestHybridInclusions, test_upper_inclusion_competing_urgent_guards_keep_both_boundary_jumps);
+    ARIADNE_TESTING_ADD_TEST(TestHybridInclusions, test_upper_inclusion_permissive_guard_does_not_block_flow);
     ARIADNE_TESTING_ADD_TEST(TestHybridInclusions, test_unsupported_capabilities_fail_explicitly);
     return Testing::run_logging_suite(ariadne_test_suite, argc, argv);
 }

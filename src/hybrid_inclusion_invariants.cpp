@@ -7,6 +7,7 @@
 
 #include <stdexcept>
 
+#include "hybrid_transition_handlers.hpp"
 #include "system/hybrid_automaton_interface.hpp"
 
 namespace Ariadne::EvolutionDetail {
@@ -66,7 +67,12 @@ Void apply_inclusion_flow_blockers(
     apply_state_invariants(set, transitions);
     for (const auto& item: transitions) {
         const auto& transition = item.second;
-        if (transition.event_kind == EventKind::PROGRESS &&
+        // This must match the ODAE event policy: a validated UPPER
+        // continuous branch cannot lie strictly beyond an URGENT or
+        // PROGRESS boundary before taking a transition. PERMISSIVE
+        // never blocks flow. Guard intersections remain outer filters.
+        if (transition.event_kind != EventKind::INVARIANT &&
+            transition_policy(transition.event_kind).blocks_flow &&
             possibly(set.satisfies(transition.guard_function >= 0))) {
             set.new_invariant(transition.event, transition.guard_function);
         }

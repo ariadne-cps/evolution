@@ -42,6 +42,7 @@
 #include "function/function_model.hpp"
 #include "function/function_patch.hpp"
 #include "hybrid_crossing_analysis.hpp"
+#include "hybrid_step_results.hpp"
 #include "hybrid_transition_handlers.hpp"
 #include "hybrid_timing.hpp"
 #include "integration/integrator.hpp"
@@ -1007,9 +1008,9 @@ Void HybridContinuousTimeEvolverBase::
         }
     }
 
-    // Make copy of evolve sets without transverse and increasing crossings which can be used for future evolution
-    List<HybridEnclosure> next_working_sets = evolve_sets;
-
+    // Every endpoint is coupled to its pre-deferred continuation checkpoint.
+    // Deferred constraints modify only the reported component.
+    auto endpoint_branches = EvolutionDetail::pair_endpoint_branches(evolve_sets);
     for (Set<DiscreteEvent>::ConstIterator event_iter = blocking_events.begin();
          event_iter != blocking_events.end(); ++event_iter) {
         const TransitionData& transition_data = transitions[*event_iter];
@@ -1017,81 +1018,15 @@ Void HybridContinuousTimeEvolverBase::
         if (EvolutionDetail::defer_endpoint_guard(crossing_data)) {
             const EvolutionDetail::HybridGuardContext context{
                 starting_set, flow, transition_data, crossing_data, semantics, this->function_factory()};
-            EvolutionDetail::apply_flow_guard(evolve_sets, context, evolve_step_time);
+            EvolutionDetail::restrict_reported_endpoints(endpoint_branches, context, evolve_step_time);
         }
     }
 
-    // Compute final set depending on whether the finishing kind is exactly AT_FINAL_TIME.
-    // Insert sets into workload as appropriate
-    if (timing_data.finishing_kind == FinishingKind::AT_FINAL_TIME) {
-        for (List<HybridEnclosure>::ConstIterator evolve_set_iter = evolve_sets.begin();
-             evolve_set_iter != evolve_sets.end(); ++evolve_set_iter) {
-            const HybridEnclosure& evolve_set = *evolve_set_iter;
-            if (!definitely(evolve_set.is_empty())) {
-                LOGGING_PRINTLN_AT(1, "final_set=" << evolve_set);
-                result.record_final(evolve_set);
-                _step_data.finishing = true;
-            }
-        }
-        for (List<HybridEnclosure>::ConstIterator reach_set_iter = reach_sets.begin();
-             reach_set_iter != reach_sets.end(); ++reach_set_iter) {
-            const HybridEnclosure& reach_set = *reach_set_iter;
-            result.record_reach(reach_set);
-        }
-    } else { // (timing_data.finishing_kind!=AT_FINAL_TIME)
-        List<HybridEnclosure>::Iterator next_working_set_iter = next_working_sets.begin();
-        for (List<HybridEnclosure>::Iterator evolve_set_iter = evolve_sets.begin();
-             evolve_set_iter != evolve_sets.end(); ++evolve_set_iter, ++next_working_set_iter) {
-            HybridEnclosure& evolve_set = *evolve_set_iter;
-            HybridEnclosure& next_working_set = *next_working_set_iter;
-            UpperIntervalType evolve_set_time_range = evolve_set.time_range();
-            if (definitely(evolve_set_time_range.lower_bound() > timing_data.final_time)) {
-                // Do nothing, since evolve set is past final time is definitely empty
-            } else if (definitely(evolve_set_time_range.upper_bound() <= timing_data.final_time)) {
-                // No need to introduce timing constraints
-                if (!definitely(evolve_set.is_empty())) {
-                    LOGGING_PRINTLN_AT(1, "evolve_set=" << evolve_set);
-                    LOGGING_PRINTLN_AT(1, "next_working_set=" << next_working_set);
-                    result.continue_with(next_working_set);
-                    result.record_intermediate(evolve_set);
-                    _step_data.progress = true;
-                }
-            } else {
-                // Bound time if necessary
-                // This arm is the negation of the preceding definite <=
-                // test, hence exceeding final_time is already possible.
-                evolve_set.bound_time(timing_data.final_time);
-                // Only continue evolution if the time-bounded evolve set is nonempty;
-                // However, continue evolution without adding time constraint,
-                // since this will be introduced in the next step
-                if (!definitely(evolve_set.is_empty())) {
-                    LOGGING_PRINTLN_AT(1, "evolve_set=" << evolve_set);
-                    LOGGING_PRINTLN_AT(1, "next_working_set=" << next_working_set);
-                    result.continue_with(next_working_set);
-                    result.record_intermediate(evolve_set);
-                    _step_data.progress = true;
-                }
-            }
-        }
-        for (List<HybridEnclosure>::Iterator reach_set_iter = reach_sets.begin();
-             reach_set_iter != reach_sets.end(); ++reach_set_iter) {
-            HybridEnclosure& reach_set = *reach_set_iter;
-            // reach_set.continuous_set().reduce();
-            //  The closed reach interval also contains the final time at its upper endpoint.
-            if (possibly(reach_set.time_range().upper_bound() >= FloatDPBounds(timing_data.final_time, dp))) {
-                HybridEnclosure final_set = reach_set;
-                final_set.set_time(timing_data.final_time);
-                if (timing_data.finishing_kind != FinishingKind::BEFORE_FINAL_TIME && !definitely(final_set.is_empty())) {
-                    // if(!definitely(final_set.is_empty())) {
-                    LOGGING_PRINTLN_AT(1, "final_set=" << final_set);
-                    result.record_final(final_set);
-                    _step_data.finishing = true;
-                }
-            }
-            reach_set.bound_time(timing_data.final_time);
-            result.record_reach(reach_set);
-        }
-    }
+    // Publish continuous contributions before transitions and their resets.
+    const auto publication = EvolutionDetail::publish_step_contributions(
+        reach_sets, endpoint_branches, timing_data, result);
+    _step_data.progress = publication.progress;
+    _step_data.finishing = publication.finishing;
 
     LOGGING_PRINTLN("Computing jump sets");
 

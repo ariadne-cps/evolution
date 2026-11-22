@@ -163,7 +163,7 @@ evidence and semantics they require, and reject unavailable capabilities.
       explicit unavailable/unsupported states.
 - [x] Extract crossing analysis from the evolver and audit its solver fallbacks.
 - [x] Decompose timing, creep and unwinding while preserving their strategies.
-- [ ] Replace parallel endpoint/continuation lists with explicit paired branch
+- [x] Replace parallel endpoint/continuation lists with explicit paired branch
       results and make result publication a small orchestration phase.
 - [ ] Document and verify the supported capability matrix for each handler;
       extend ODAI events only with corresponding mathematical certificates.
@@ -227,3 +227,25 @@ into timing. The existing hybrid timing, creep, solver-budget, crossing,
 backend and tree suites are the regression criteria. This extraction does
 not change numerical guarantees or add ODAI event capabilities. Paired
 continuation branches and result publication remain the next task.
+
+## Paired endpoint branches and continuous-result publication
+
+`src/hybrid_step_results.hpp/.cpp` introduces `HybridEndpointBranch`,
+pairing the reported endpoint with its continuation checkpoint. The pair is
+created after non-deferred blocking restrictions and before deferred
+first-entry/increasing restrictions. Deferred restrictions affect the reported
+member only. If a geometric handler splits a reported branch, the additional
+branches inherit the original, unmodified checkpoint; original primary
+branches precede the additional branches, matching guard handler order.
+No parallel list-position assumption remains.
+
+`publish_step_contributions` is the sole continuous-result publication
+phase of the hybrid equation step. It retains the prior exact-final-time
+case (final contributions before reach), the non-final case (intermediate
+and continuation per branch before reach), the unbounded continuation
+checkpoint when a reported endpoint must be horizon-bounded, and the
+closed reach-horizon final slices. Jump construction and reset still follow
+continuous publication and remain owned by the evolver. The private
+component publishes only into a local `HybridEvolutionStepResult`; backends
+remain responsible for orbit publication and scheduling. Numerical
+crossing/solver policy, LOWER limitations and ODAI capability are unchanged.

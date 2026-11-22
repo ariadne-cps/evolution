@@ -27,6 +27,7 @@
  */
 
 #include "../src/hybrid_transition_handlers.hpp"
+#include "../src/hybrid_step_results.hpp"
 #include "evolution/hybrid_continuous_time_evolver.hpp"
 #include "integration/integrator.hpp"
 #include "integration/validated_integration_step.hpp"
@@ -610,6 +611,74 @@ class TestHybridStepContracts : public Testing::ContextFixture {
                                                           {initial, flow, transition, crossing, Semantics::UPPER, probe.function_factory()}, wrong_elapsed));
     }
 
+    void test_reported_endpoint_keeps_its_own_unbounded_continuation() {
+        // For x'=1, x0 in [-1,-1/2], the first entry of x>=0
+        // occurs at t=-x0 in [1/2,1]. At elapsed time one,
+        // the reported endpoint must satisfy this first-entry constraint,
+        // but the checkpoint for the next step remains unrestricted.
+        LinearGuardScenario scenario(ExactBoxType({
+                                         {-1, -0.5_x},
+                                         { 0,      0}
+        }), Dyadic(1));
+        auto evolved = scenario.initial;
+        evolved.apply_parameter_evolve_step(scenario.flow, scenario.timing.parameter_dependent_evolution_time);
+        List<HybridEnclosure> endpoints{evolved};
+        auto branches = pair_endpoint_branches(endpoints);
+        ARIADNE_TESTING_EXPECT_EQUAL(branches.size(), 1u);
+        const auto crossing_time = -scenario.factory.create_coordinate(scenario.flow.space_domain(), 0u);
+        const CrossingData crossing(CrossingGeometry::INCREASING, CrossingTimeCertificate(crossing_time));
+        const auto transition = scenario.transition(EventKind::URGENT, scenario.x);
+        restrict_reported_endpoints(branches, scenario.context(transition, crossing, Semantics::UPPER),
+                                    scenario.timing.parameter_dependent_evolution_time);
+        ARIADNE_TESTING_EXPECT_EQUAL(branches.size(), 1u);
+        ARIADNE_TESTING_PROVE(branches[0].reported.number_of_constraints() >
+                              branches[0].continuation.number_of_constraints());
+        ARIADNE_TESTING_EXPECT_EQUAL(branches[0].continuation.number_of_constraints(), evolved.number_of_constraints());
+
+        List<HybridEnclosure> reach{scenario.initial};
+        reach.front().apply_parameter_reach_step(scenario.flow, scenario.timing.parameter_dependent_evolution_time);
+        HybridEvolutionStepResult result;
+        auto published = publish_step_contributions(reach, branches, scenario.timing, result);
+        ARIADNE_TESTING_PROVE(published.progress);
+        ARIADNE_TESTING_PROVE(!published.finishing);
+        ARIADNE_TESTING_EXPECT_EQUAL(result.successors.size(), 1u);
+        ARIADNE_TESTING_EXPECT_EQUAL(result.contributions.size(), 2u);
+        ARIADNE_TESTING_EXPECT_EQUAL(result.contributions[0].kind, HybridEvolutionSetKind::INTERMEDIATE);
+        ARIADNE_TESTING_EXPECT_EQUAL(result.contributions[1].kind, HybridEvolutionSetKind::REACH);
+        ARIADNE_TESTING_EXPECT_EQUAL(result.successors[0].work.enclosure.number_of_constraints(), evolved.number_of_constraints());
+        ARIADNE_TESTING_PROVE(result.contributions[0].enclosure.number_of_constraints() >
+                              result.successors[0].work.enclosure.number_of_constraints());
+    }
+
+    void test_horizon_publication_keeps_closed_reach_endpoint() {
+        LinearGuardScenario scenario(ExactBoxType({
+                                         {-1, -0.5_x},
+                                         { 0,      0}
+        }), Dyadic(1));
+        auto evolved = scenario.initial;
+        evolved.apply_parameter_evolve_step(scenario.flow, scenario.timing.parameter_dependent_evolution_time);
+        List<HybridEnclosure> endpoints{evolved};
+        auto branches = pair_endpoint_branches(endpoints);
+        List<HybridEnclosure> reach{scenario.initial};
+        reach.front().apply_parameter_reach_step(scenario.flow, scenario.timing.parameter_dependent_evolution_time);
+
+        // At t=5/2 the full-step endpoint is past the horizon, yet the
+        // closed reach tube contains the terminal slice at exactly t=5/2.
+        auto straddling = scenario.timing;
+        straddling.final_time = Real(2.5_x);
+        straddling.finishing_kind = FinishingKind::STRADDLE_FINAL_TIME;
+        HybridEvolutionStepResult result;
+        auto published = publish_step_contributions(reach, branches, straddling, result);
+        ARIADNE_TESTING_PROVE(!published.progress);
+        ARIADNE_TESTING_PROVE(published.finishing);
+        ARIADNE_TESTING_EXPECT_EQUAL(result.successors.size(), 0u);
+        ARIADNE_TESTING_EXPECT_EQUAL(result.contributions.size(), 2u);
+        ARIADNE_TESTING_EXPECT_EQUAL(result.contributions[0].kind, HybridEvolutionSetKind::FINAL);
+        ARIADNE_TESTING_EXPECT_EQUAL(result.contributions[1].kind, HybridEvolutionSetKind::REACH);
+        ARIADNE_TESTING_PROVE(subset(cast_exact_interval(result.contributions[0].enclosure.time_range()),
+                                     ExactIntervalType(2.5_x, 2.5_x)));
+    }
+
     void test_grazing_whose_maximum_is_in_the_past() {
         LogVerbosityScope logging(100u);
         DiscreteLocation q(1);
@@ -668,5 +737,7 @@ int main(int argc, char** argv) {
     ARIADNE_TESTING_ADD_TEST(TestHybridStepContracts, test_timing_straddles_final_time_without_unwinding);
     ARIADNE_TESTING_ADD_TEST(TestHybridStepContracts, test_rejected_step_and_guard_inputs);
     ARIADNE_TESTING_ADD_TEST(TestHybridStepContracts, test_grazing_whose_maximum_is_in_the_past);
+    ARIADNE_TESTING_ADD_TEST(TestHybridStepContracts, test_reported_endpoint_keeps_its_own_unbounded_continuation);
+    ARIADNE_TESTING_ADD_TEST(TestHybridStepContracts, test_horizon_publication_keeps_closed_reach_endpoint);
     return Ariadne::Testing::run_logging_suite(ariadne_test_suite, argc, argv);
 }

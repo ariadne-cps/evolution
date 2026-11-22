@@ -98,7 +98,7 @@ template<>
 class HybridContinuousTimeEvolverFactoryInterface<ValidatedTag>
     : public EvolverFactoryInterface<ValidatedTag, HybridAutomatonInterface, HybridEnclosure, HybridTerminationCriterion> {
   public:
-    ~HybridContinuousTimeEvolverFactoryInterface<ValidatedTag>() override = default;
+    ~HybridContinuousTimeEvolverFactoryInterface() override = default;
 
     //! \brief Create a copy of the factory.
     virtual HybridContinuousTimeEvolverFactoryInterface<ValidatedTag>* clone() const override = 0;

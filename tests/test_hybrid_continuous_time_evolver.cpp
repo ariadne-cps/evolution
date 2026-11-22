@@ -38,6 +38,7 @@
 #include "function/taylor_function.decl.hpp"
 #include "function/taylor_model.hpp"
 #include "integration/integrator.hpp"
+#include "integration/validated_integration_step.hpp"
 #include "log_verbosity_scope.hpp"
 #include "logging/test_runner.hpp"
 #include "system/hybrid_automata.hpp"
@@ -65,7 +66,7 @@ class CrossingProbeEvolver : public HybridContinuousTimeEvolver {
   public:
     using HybridContinuousTimeEvolver::HybridContinuousTimeEvolver;
     using HybridContinuousTimeEvolverBase::_compute_crossings;
-    using HybridContinuousTimeEvolverBase::_compute_flow;
+    using HybridContinuousTimeEvolverBase::_compute_integration_step;
 };
 
 class CountingEvolver : public HybridContinuousTimeEvolver {
@@ -531,7 +532,7 @@ Void TestHybridEvolver::test_correlated_near_miss() {
     mapping[1] = coordinates[0] - factory.create_constant(parameters, Real(0.251_dec)) + coordinates[1];
     HybridEnclosure initial(q, RealSpace({x, y}), Enclosure(parameters, mapping, EnclosureConfiguration(factory)));
     auto dynamic = system.dynamic_function(q);
-    auto flow = probe._compute_flow(dynamic, cast_exact_box(initial.state_bounding_box()), Dyadic(2));
+    auto flow = probe._compute_integration_step(dynamic, cast_exact_box(initial.state_bounding_box()), Dyadic(2)).reach_models()[0];
     const Set<DiscreteEvent> active = {e, second};
     Map<DiscreteEvent, EffectiveScalarMultivariateFunction> guards;
     guards.insert(e, system.guard_function(q, e));
@@ -766,7 +767,7 @@ Void TestHybridEvolver::test_solver_budget_fallback() {
     }),
                                                   ExactBoxType({{-ExactDouble(0.01), ExactDouble(0.01)}, {-ExactDouble(0.01), ExactDouble(0.01)}})));
     auto dynamic = system.dynamic_function(q);
-    auto flow = probe._compute_flow(dynamic, cast_exact_box(initial.state_bounding_box()), Dyadic(1));
+    auto flow = probe._compute_integration_step(dynamic, cast_exact_box(initial.state_bounding_box()), Dyadic(1)).reach_models()[0];
     Map<DiscreteEvent, EffectiveScalarMultivariateFunction> guards;
     guards.insert(e, system.guard_function(q, e));
     Bool received = false;
@@ -793,7 +794,7 @@ Void TestHybridEvolver::test_integrator_step_limit() {
     auto field = system.dynamic_function(q);
     auto available = integrator.flow_step(field, domain, suggest(Dyadic(1 / 4_q)));
     ARIADNE_TESTING_EXPECT_EQUAL(available.domain()[2].upper_bound(), FloatDP(0.5_x, dp));
-    FlowFunctionModel capped(evolver._compute_flow(field, domain, Dyadic(1 / 4_q)));
+    FlowFunctionModel capped(evolver._compute_integration_step(field, domain, Dyadic(1 / 4_q)).reach_models()[0]);
     ARIADNE_TESTING_EXPECT_EQUAL(capped.step_size(), Dyadic(1 / 4_q));
     auto orbit = evolver.orbit(HybridExactBox(q, RealSpace({x, y}), domain), HybridTime(0.5_x, 3), Semantics::UPPER);
     expect_final(orbit, ExactBoxType({

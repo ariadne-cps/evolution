@@ -56,6 +56,7 @@ using LockGuard = std::lock_guard<T>;
 
 /** @brief IntegratorInterface represents hybrid evolution strategies, transitions and timing. */
 class IntegratorInterface;
+class ValidatedIntegrationStep;
 /** @brief EquationSolverInterface represents hybrid evolution strategies, transitions and timing. */
 class EquationSolverInterface;
 /** @brief HybridContinuousTimeEvolverBaseConfiguration represents hybrid evolution strategies, transitions and timing. */
@@ -214,15 +215,13 @@ class HybridContinuousTimeEvolverBase
         /** @brief Perform the specified evolution operation. */
         _extract_transitions(const DiscreteLocation& location) const;
 
-    //! \brief Compute the flow of the \a vector_field, starting in the
-    //! given \a initial_set, and with a time step as large as
-    //! \a maximum_time_set if possible. The result is a function patch
-    //! defined on a domain \f$B\times [0,h]\f$, where \f$B\f$ is the bounding
-    //! box for the set, and \f$h\f$ is the step size actually used.
-    virtual ValidatedVectorMultivariateFunctionPatch
-        _compute_flow(EffectiveVectorMultivariateFunction vector_field,
-                      const ExactBoxType& initial_set,
-                      const StepSizeType& maximum_step_size) const;
+    //! \brief Compute independent reach and endpoint certificates with a capped duration.
+    //! The current event analysis requires a single autonomous reach patch
+    //! on [state, local time], without extra numerical input coordinates.
+    virtual ValidatedIntegrationStep
+        _compute_integration_step(EffectiveVectorMultivariateFunction vector_field,
+                                  const ExactBoxType& initial_set,
+                                  const StepSizeType& maximum_step_size) const;
 
     //! \brief Compute the active events for the \a flow \f$\phi\f$ with
     //! time step \f$h\f$ starting in the given \a starting_set \f$S\f$.
@@ -409,6 +408,7 @@ class HybridContinuousTimeEvolverBase
     //! TODO: This method might be better split into even simpler events.
     virtual Void
         _apply_evolution_step(const HybridEnclosure& starting_set,
+                              const ValidatedIntegrationStep& step,
                               const ValidatedVectorMultivariateFunctionPatch& flow,
                               const TimingData& timing_data,
                               const Map<DiscreteEvent, CrossingData>& crossing_data,

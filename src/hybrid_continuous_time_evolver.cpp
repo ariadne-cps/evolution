@@ -33,6 +33,7 @@
 
 #include "algebra/polynomial.hpp"
 #include "algebra/vector.hpp"
+#include "continuous_integration.hpp"
 #include "evolution/hybrid_continuous_time_evolver.hpp"
 #include "evolution/hybrid_time.hpp"
 #include "evolution/orbit.hpp"
@@ -594,11 +595,11 @@ Void HybridContinuousTimeEvolverBase::
     }
 }
 
-ValidatedVectorMultivariateFunctionPatch
+ValidatedIntegrationStep
     HybridContinuousTimeEvolverBase::
-        _compute_flow(EffectiveVectorMultivariateFunction dynamic,
-                      const ExactBoxType& initial_box,
-                      const StepSizeType& maximum_step_size) const {
+        _compute_integration_step(EffectiveVectorMultivariateFunction dynamic,
+                                  const ExactBoxType& initial_box,
+                                  const StepSizeType& maximum_step_size) const {
     LOGGING_SCOPE_CREATE;
 
     IntegratorInterface& integrator = *this->_integrator_ptr;
@@ -606,14 +607,8 @@ ValidatedVectorMultivariateFunctionPatch
     // The shared adapter preserves adaptive error control and caps the
     // certified interval at the requested maximum, even for overshooting solvers.
     const FlowStepIntegratorAdapter step_integrator(integrator);
-    const auto step = step_integrator.step(ValidatedIntegrationRequest(
+    return step_integrator.step(ValidatedIntegrationRequest(
         dynamic, initial_box, suggest(maximum_step_size)));
-    ValidatedVectorMultivariateFunctionPatch flow_model = step.reach_models()[0];
-    const StepSizeType step_size = step.time_step();
-    LOGGING_PRINTLN_AT(1, "flow_model=" << flow_model);
-    LOGGING_PRINTLN_AT(1, "flow_model: step_size=" << step_size << ", errors=" << std::scientific << flow_model.errors() << ", range=" << std::fixed << flow_model.range());
-    LOGGING_PRINTLN_AT(1, "flow_model=" << flow_model);
-    return flow_model;
 }
 
 Set<DiscreteEvent>
@@ -1321,7 +1316,31 @@ Void HybridContinuousTimeEvolverBase::
     LOGGING_PRINTLN_AT(1, "guards=" << guard_functions);
 
     // Compute flow and actual time step size used
-    const FlowFunctionModel flow_model = this->_compute_flow(dynamic, starting_bounding_box, this->configuration().maximum_step_size());
+    // The shared bridge composes a patch over the entire enclosure parameter
+    // domain. Certify that full state image, including points later excluded
+    // by guards, rather than extrapolating a patch outside its certified box.
+    const auto integration_domain = hull(starting_bounding_box,
+                                         cast_exact_box(UpperBoxType(starting_set.state_function().range())));
+    const auto step = this->_compute_integration_step(dynamic, integration_domain, this->configuration().maximum_step_size());
+    // Crossing times and Lie derivatives currently refer to a single local
+    // autonomous state flow. Do not discard patches or interpret input axes
+    // as state coordinates when that capability is unavailable.
+    const SizeType dimension = starting_set.state_function().result_size();
+    if (step.time_step() <= StepSizeType(0u) || step.time_step() > this->configuration().maximum_step_size() ||
+        step.reach_models().size() != 1u || !step.has_evolve_model() ||
+        step.has_explicit_time() || step.constant_parameter_domain().dimension() != 0u ||
+        step.initial_time() != StepSizeType(0u) || step.reach_time_offset() != StepSizeType(0u) ||
+        step.reach_time_index() != std::optional<SizeType>(dimension)) {
+        throw std::invalid_argument("Hybrid event analysis requires one structured autonomous local reach patch and endpoint");
+    }
+    const FlowFunctionModel flow_model(step.reach_models()[0]);
+    if (flow_model.argument_size() != dimension + 1u || flow_model.result_size() != dimension ||
+        flow_model.time_domain() != ExactIntervalType(0u, step.time_step()) ||
+        step.evolve_model().argument_size() != dimension ||
+        !subset(integration_domain, flow_model.space_domain()) ||
+        !subset(integration_domain, step.evolve_model().domain())) {
+        throw std::invalid_argument("Hybrid event analysis cannot interpret the integration step's coordinate layout");
+    }
     LOGGING_PRINTLN_AT(1, "flow_model.domain()=" << flow_model.domain() << " flow_model.range()=" << flow_model.range());
 
     // Compute possibly active events
@@ -1349,11 +1368,12 @@ Void HybridContinuousTimeEvolverBase::
 
     // Apply the time step
     HybridEnclosure reach_set, evolve_set;
-    this->_apply_evolution_step(starting_set, flow_model, timing_data, crossings, dynamic, transitions, semantics, result);
+    this->_apply_evolution_step(starting_set, step, flow_model, timing_data, crossings, dynamic, transitions, semantics, result);
 }
 
 Void HybridContinuousTimeEvolverBase::
     _apply_evolution_step(const HybridEnclosure& starting_set,
+                          const ValidatedIntegrationStep& step,
                           const ValidatedVectorMultivariateFunctionPatch& flow,
                           const TimingData& timing_data,
                           const Map<DiscreteEvent, CrossingData>& crossings,
@@ -1385,8 +1405,25 @@ Void HybridContinuousTimeEvolverBase::
     List<HybridEnclosure> reach_sets = {starting_set};
     List<HybridEnclosure> evolve_sets = {starting_set};
 
-    _apply_reach_step(reach_sets.front(), flow, timing_data);
-    _apply_evolve_step(evolve_sets.front(), flow, timing_data);
+    const auto elapsed = timing_data.parameter_dependent_evolution_time.range();
+    const FloatDP full_duration(step.time_step(), dp);
+    if (semantics == Semantics::UPPER &&
+        elapsed.lower_bound().raw() == full_duration && elapsed.upper_bound().raw() == full_duration) {
+        // At the certified endpoint use its independent map, rather than a
+        // slice of a possibly wider tube. Preserve hybrid labels and history.
+        const auto applied = EvolutionDetail::apply_integration_step(
+            starting_set.continuous_set(), step, EvolutionDetail::IntegrationStepCoordinates::STATE, semantics);
+        reach_sets.front().replace_continuous_set(applied.reach.front());
+        evolve_sets.front().replace_continuous_set(applied.evolved);
+        if (timing_data.finishing_kind == FinishingKind::AT_FINAL_TIME) {
+            evolve_sets.front().set_time(timing_data.final_time);
+        }
+    } else {
+        // Event-limited or parameter-dependent stopping times lie within the
+        // tube; the endpoint certificate only covers the complete duration.
+        _apply_reach_step(reach_sets.front(), flow, timing_data);
+        _apply_evolve_step(evolve_sets.front(), flow, timing_data);
+    }
 
     // This one continuous computation can publish several outputs or successors.
     // Credit its elapsed flow span once; structural steps never reach this path.

@@ -55,6 +55,21 @@ Both backends support sequential and concurrent execution through ThreadManager.
 Each call creates independent run state. See the [backend and trajectory-tree
 design](doc/evolution_tree_design.md) for the current API and deferred operations.
 
+Hybrid numerical steps retain the common `ValidatedIntegrationStep` result.
+When an `UPPER` step uses its complete certified duration, reach and the
+independent endpoint are applied through the continuous enclosure bridge.
+Event-limited and parameter-dependent stopping times use the reach tube at
+their actual stopping time. The numerical domain covers the entire state map
+over the enclosure parameter domain, including points excluded by constraints,
+so composition stays within the certified patch domain.
+
+Hybrid event analysis currently requires one structured autonomous reach patch
+on `[state, local time]` and a structured endpoint. Multipatch results, extra
+input coordinates, explicit-time or fixed-parameter metadata and box-only
+certificates are rejected explicitly. The hybrid system interface still exposes
+state-only equation fields per mode; accepting ODAI modes and extending event
+analysis remain subsequent tasks.
+
 ## Dependencies
 
 The `multifunction` branch uses the ordinary dynamics declarations

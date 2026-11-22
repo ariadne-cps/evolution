@@ -387,8 +387,10 @@ PERMISSIVE kinds and both existing structured and box integrators.
 The feasible witness `u=1` activates the guard at `t=1/32`.
 The test checks that target final states and source reach are
 retained without claiming all candidate transitions are realizable.
-A zero-horizon active urgent guard remains admissible in UPPER,
-while LOWER/PROGRESS/IMPACT are not expanded by this change.
+At zero horizon, the stopping-time phase records the invariant-valid
+terminal source slice before initial event processing and does not schedule
+a transition. The zero-horizon regression checks termination, not an
+urgent reset. LOWER/PROGRESS/IMPACT are not expanded by this change.
 
 Do not reuse the ODAE first-entry, concavity or impact machinery for
 ODAI without a compatible numerical certificate from the integrator.
@@ -434,3 +436,21 @@ separate numerical policies. The inclusion bridge still rejects
 LOWER modes: the present UPPER integration methods do not furnish a
 LOWER reachable-set representation merely because a guard is fully
 active. No claim of such support is made here.
+
+## Single-source activation decision contracts
+
+A focused analytic contract distinguishes a guard that is impossible on
+the source, a guard active on only a subset, and a guard satisfied by
+every point of the source. On the closed parameter interval
+`[-1/4,1/4]`, the constraints `x>=1`, `x>=0` and `x>=-1`
+exercise `EXCLUDED`, `UNRESOLVED` and `FULL_SOURCE`, respectively.
+UPPER is permitted for unresolved candidates; LOWER only for whole-source
+activation. Both reject excluded candidates. Invalid semantics must not
+silently select either branch. These tests do not claim inner ODAI
+reachability or a collective full-partition check.
+
+The ODAE first-entry certificates used during a continuous step must
+not be confused with the simple initial-source predicate: a certified
+parameter-dependent entry time may establish valid per-trajectory
+crossings even where a fixed-time reach slice activates only a subset.
+Changing such numerical handlers requires separate proof and tests.

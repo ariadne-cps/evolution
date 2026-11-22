@@ -243,6 +243,34 @@ class TestHybridStepContracts : public Testing::ContextFixture {
         ARIADNE_TESTING_PROVE(!definitely(guarded.front().is_empty()));
     }
 
+    void test_initial_guard_activation_classifies_the_complete_source() {
+        // On x in [-1/4,1/4], the three guards respectively exclude
+        // every source point, enable a strict subset, or enable all points.
+        // This is a single-source contract, not collective tree certification.
+        LinearGuardScenario scenario(ExactBoxType({
+                                         {-0.25_x, 0.25_x},
+                                         {       0,      0}
+        }), Dyadic(0.25_x));
+        const auto excluded_guard = scenario.transition(EventKind::URGENT, scenario.x - 1);
+        const auto partial_guard = scenario.transition(EventKind::URGENT, scenario.x);
+        const auto full_guard = scenario.transition(EventKind::URGENT, scenario.x + 1);
+        const auto excluded = classify_initial_guard(scenario.initial, excluded_guard);
+        const auto partial = classify_initial_guard(scenario.initial, partial_guard);
+        const auto full = classify_initial_guard(scenario.initial, full_guard);
+
+        ARIADNE_TESTING_EXPECT_EQUAL(excluded, HybridInitialGuardActivation::EXCLUDED);
+        ARIADNE_TESTING_EXPECT_EQUAL(partial, HybridInitialGuardActivation::UNRESOLVED);
+        ARIADNE_TESTING_EXPECT_EQUAL(full, HybridInitialGuardActivation::FULL_SOURCE);
+        ARIADNE_TESTING_PROVE(!permits_initial_reset(excluded, Semantics::UPPER));
+        ARIADNE_TESTING_PROVE(!permits_initial_reset(excluded, Semantics::LOWER));
+        ARIADNE_TESTING_PROVE(permits_initial_reset(partial, Semantics::UPPER));
+        ARIADNE_TESTING_PROVE(!permits_initial_reset(partial, Semantics::LOWER));
+        ARIADNE_TESTING_PROVE(permits_initial_reset(full, Semantics::UPPER));
+        ARIADNE_TESTING_PROVE(permits_initial_reset(full, Semantics::LOWER));
+        ARIADNE_TESTING_EXPECT_EXCEPTION(
+            permits_initial_reset(full, static_cast<Semantics>(255u)));
+    }
+
     void test_unresolved_geometry_preserves_upper_lower_rules() {
         LinearGuardScenario scenario(ExactBoxType({
                                          {-1, -0.5_x},
@@ -768,6 +796,7 @@ int main(int argc, char** argv) {
     ARIADNE_TESTING_SUITE("test_hybrid_step_contracts");
     ARIADNE_TESTING_ADD_TEST(TestHybridStepContracts, test_transverse_and_permissive_handlers_keep_distinct_time_maps);
     ARIADNE_TESTING_ADD_TEST(TestHybridStepContracts, test_impact_direction_and_source_candidate_elapsed_time);
+    ARIADNE_TESTING_ADD_TEST(TestHybridStepContracts, test_initial_guard_activation_classifies_the_complete_source);
     ARIADNE_TESTING_ADD_TEST(TestHybridStepContracts, test_unresolved_geometry_preserves_upper_lower_rules);
     ARIADNE_TESTING_ADD_TEST(TestHybridStepContracts, test_grazing_split_keeps_primary_and_additional_branch_order);
     ARIADNE_TESTING_ADD_TEST(TestHybridStepContracts, test_full_steps_use_independent_endpoint_and_keep_hybrid_metadata);

@@ -496,7 +496,11 @@ class TestHybridInclusions : public Testing::ContextFixture {
                                                                  RealVariablesBox({0 <= p <= 1}), t));
         HybridContinuousTimeEvolver<ValidatedTag> timed_evolver(timed);
         timed_evolver.set_integrator(FirstOrderMultifunctionIntegrator());
-        ARIADNE_TESTING_EXPECT_THROWS(std::invalid_argument, timed_evolver.orbit(initial, HybridTime(0u, 1), Semantics::UPPER));
+        const auto timed_parameters = timed_evolver.orbit(initial, HybridTime(0u, 1), Semantics::UPPER);
+        ARIADNE_TESTING_REQUIRE(timed_parameters.final().size() == 1u);
+        ARIADNE_TESTING_EXPECT_EQUAL(timed_parameters.final()[0u].continuous_set().constant_parameter_space(), RealSpace({p}));
+        ARIADNE_TESTING_PROVE(subset(cast_exact_interval(timed_parameters.final()[0u].continuous_set().constant_parameter_function(1u).get(0u).range()), ExactIntervalType(0, 1)));
+        ARIADNE_TESTING_EXPECT_THROWS(std::invalid_argument, timed_evolver.orbit(initial, HybridTime(0u, 1), Semantics::LOWER));
     }
 };
 

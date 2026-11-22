@@ -36,8 +36,9 @@ explicit reconciliation policy when either carries a binding.
 
 Numerical field/provider domain checks and existing integrator capability
 gates still apply. Compatible declaration metadata alone cannot validate
-evaluation outside a certified interval/Taylor model domain. Hybrid parameter
-evolution, approximate input/parameter policies, converters, and final Python
+evaluation outside a certified interval/Taylor model domain. Hybrid UPPER parameter evolution now uses
+[the same binding](hybrid_constant_parameters_design.md) across mode changes.
+Approximate input/parameter policies, converters, and final Python
 tutorial parity remain separate roadmap activities.
 
 The implemented regressions verify analytic continuation after normalization on non-unit

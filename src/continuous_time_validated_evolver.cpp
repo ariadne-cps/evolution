@@ -62,26 +62,6 @@ inline PositiveValidatedUpperNumber abs(PositiveValidatedUpperNumber y) { return
 
 namespace {
 
-EffectiveVectorMultivariateFunction equation_field(const OrdinaryDifferentialAlgebraicEquation& system) {
-    if (system.has_explicit_time() || system.parameter_space().dimension() == 0u) {
-        return system.function();
-    }
-    // The numerical timed-parameter overload expects [state,time,parameters].
-    // An autonomous parameterised field ignores that argument; no clock or
-    // parameter is added to the physical state or differentiated.
-    const SizeType n = system.dimension();
-    const SizeType np = system.parameter_space().dimension();
-    const auto coordinates = EffectiveScalarMultivariateFunction::coordinates(n + 1u + np);
-    List<EffectiveScalarMultivariateFunction> arguments;
-    for (SizeType i = 0u; i != n; ++i) {
-        arguments.append(coordinates[i]);
-    }
-    for (SizeType i = 0u; i != np; ++i) {
-        arguments.append(coordinates[n + 1u + i]);
-    }
-    return compose(system.function(), EffectiveVectorMultivariateFunction(arguments));
-}
-
 template<class ES>
 List<ES> subdivide(const ES& enclosure) {
     List<ES> result;
@@ -450,7 +430,7 @@ Void ContinuousTimeEvolver<ValidatedTag>::
                                                           this->_box_integrator != nullptr ? EvolutionDetail::IntegrationStepRepresentation::ALLOW_BOX_ENCLOSURES
                                                                                            : EvolutionDetail::IntegrationStepRepresentation::REQUIRE_STRUCTURED);
     } else {
-        const FunctionType dynamic = equation_field(*this->system().equation());
+        const FunctionType dynamic = EvolutionDetail::prepare_equation_field(this->system().equation()->function(), this->system().dimension(), this->system().has_explicit_time(), this->system().parameter_space().dimension());
         const SizeType parameter_count = _system->parameter_space().dimension();
         if (_system->has_explicit_time()) {
             const auto parameters = current_set.constant_parameter_function(parameter_count);

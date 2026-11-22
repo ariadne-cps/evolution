@@ -16,6 +16,20 @@
 #include "system/odai.hpp"
 
 namespace Ariadne::EvolutionDetail {
+EffectiveVectorMultivariateFunction prepare_equation_field(const EffectiveVectorMultivariateFunction& field,
+                                                           SizeType state_dimension, bool timed, SizeType parameter_count) {
+    ARIADNE_PRECONDITION(field.argument_size() == state_dimension + (timed ? 1u : 0u) + parameter_count);
+    if (timed || parameter_count == 0u)
+        return field;
+    const auto coordinates = EffectiveScalarMultivariateFunction::coordinates(state_dimension + 1u + parameter_count);
+    List<EffectiveScalarMultivariateFunction> arguments;
+    for (SizeType i = 0u; i != state_dimension; ++i)
+        arguments.append(coordinates[i]);
+    for (SizeType i = 0u; i != parameter_count; ++i)
+        arguments.append(coordinates[state_dimension + 1u + i]);
+    return compose(field, EffectiveVectorMultivariateFunction(arguments));
+}
+
 namespace {
 
 ValidatedIntegrationStep at_autonomous_time(const ValidatedIntegrationStep& step, const StepSizeType& time) {

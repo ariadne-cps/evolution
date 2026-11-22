@@ -17,6 +17,11 @@ class SelectedParametricMultifunctionIntegrator;
 class FirstOrderMultifunctionIntegrator;
 
 namespace EvolutionDetail {
+/** @brief Match the ordinary/hybrid equation field's explicit state/time/parameter layout.
+ * Autonomous parameterized fields acquire an ignored numerical clock argument.
+ */
+EffectiveVectorMultivariateFunction prepare_equation_field(const EffectiveVectorMultivariateFunction&,
+                                                           SizeType state_dimension, bool timed, SizeType parameter_count);
 /** @brief Shared inclusion request/bound construction; no workload or Orbit is created. */
 ValidatedIntegrationStep compute_inclusion_step(
     const OrdinaryDifferentialAlgebraicInclusion&, const Enclosure&,

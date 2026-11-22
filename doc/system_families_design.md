@@ -79,8 +79,8 @@ contract, with its limitations visible to the caller.
    Python tutorial functional parity with C++ for every available capability.
    Update installation, exports and documentation without compatibility aliases.
 
-IMPACT and external global time advance the first two items; constant model
-parameters in the hybrid path and further simulator capabilities remain open. All planned APIs, converters
+IMPACT, external global time and trajectory-constant physical parameters advance
+the first two items. Further approximate evolver capabilities remain open. All planned APIs, converters
 and the native hybrid discrete-time model remain unimplemented. The detailed
 [continuous hybrid handler design](hybrid_transition_handlers_design.md)
 records the implemented event capabilities and their mathematical boundaries.
@@ -89,7 +89,11 @@ Ordinary validated equations also support [auxiliary outputs depending on fixed
 parameters](constant_parameter_auxiliaries_design.md), with explicit argument
 layouts and rejection of conversions that cannot preserve those bindings.
 Named [physical parameter maps](constant_parameter_maps_design.md) now support
-recombination and compatible ordinary continuation without resampling. Paving
+recombination and compatible ordinary continuation without resampling.
+[Hybrid constant parameters](hybrid_constant_parameters_design.md) extend the
+same binding to ODAE/ODAI UPPER modes, guards, invariants, resets and equation
+auxiliaries, including parameter-free intermediate modes. Partial parameter
+tuples, LOWER parameterized evolution and preconditioning remain unsupported. Paving
 decoupling is developed on the separate `decoupling` branch.
 
 

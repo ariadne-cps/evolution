@@ -101,6 +101,13 @@ enum class EnclosureFunctionArguments : std::uint8_t { STATE,
                                                        STATE_PARAMETERS,
                                                        STATE_TIME_PARAMETERS };
 
+constexpr Bool enclosure_has_time_argument(EnclosureFunctionArguments arguments) {
+    return arguments == EnclosureFunctionArguments::STATE_TIME || arguments == EnclosureFunctionArguments::STATE_TIME_PARAMETERS;
+}
+constexpr Bool enclosure_has_parameter_arguments(EnclosureFunctionArguments arguments) {
+    return arguments == EnclosureFunctionArguments::STATE_PARAMETERS || arguments == EnclosureFunctionArguments::STATE_TIME_PARAMETERS;
+}
+
 enum class EnclosureVariableKind : std::uint8_t { INITIAL,
                                                   TEMPORAL,
                                                   PARAMETER,

@@ -1,5 +1,6 @@
 include(CTest)
 set(UNIT_TESTS
+    test_hybrid_constant_parameters
     test_constant_parameter_maps
     test_constant_parameter_auxiliaries
     test_evolver_paradigms

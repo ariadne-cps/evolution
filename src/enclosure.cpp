@@ -485,8 +485,7 @@ ValidatedVectorMultivariateFunctionPatch Enclosure::constant_parameter_function(
 }
 
 ValidatedVectorMultivariateFunctionPatch Enclosure::argument_function(EnclosureFunctionArguments arguments, SizeType parameter_count) const {
-    const bool parameter_layout = arguments == EnclosureFunctionArguments::STATE_PARAMETERS ||
-                                  arguments == EnclosureFunctionArguments::STATE_TIME_PARAMETERS;
+    const bool parameter_layout = enclosure_has_parameter_arguments(arguments);
     if (parameter_layout != (parameter_count != 0u))
         throw std::invalid_argument("Enclosure function parameter count does not match its explicit argument layout");
     switch (arguments) {
@@ -560,10 +559,7 @@ Void Enclosure::clear_time() {
 
 Void Enclosure::apply_map(ValidatedVectorMultivariateFunction map) {
     ARIADNE_PRECONDITION_MSG(map.argument_size() == this->state_dimension(), "state_dimension=" << this->state_dimension() << ", map=" << map);
-    const SizeType nt = _auxiliary_arguments == EnclosureFunctionArguments::STATE_TIME ||
-                                _auxiliary_arguments == EnclosureFunctionArguments::STATE_TIME_PARAMETERS
-                          ? 1u
-                          : 0u;
+    const SizeType nt = enclosure_has_time_argument(_auxiliary_arguments) ? 1u : 0u;
     ARIADNE_PRECONDITION(map.result_size() + nt + _auxiliary_parameter_count == this->_auxiliary_mapping.argument_size());
     this->_state_function = compose(map, this->_state_function);
     this->_dwell_time_function = this->configuration().function_factory().create_zero(this->domain());
@@ -571,16 +567,19 @@ Void Enclosure::apply_map(ValidatedVectorMultivariateFunction map) {
 
 Void Enclosure::apply_map(ValidatedVectorMultivariateFunction map, EffectiveVectorMultivariateFunction aux_map,
                           EnclosureFunctionArguments source_arguments, EnclosureFunctionArguments auxiliary_arguments) {
-    const auto arguments = argument_function(source_arguments);
+    const auto arguments = argument_function(source_arguments, enclosure_has_parameter_arguments(source_arguments) ? constant_parameter_count() : 0u);
     ARIADNE_PRECONDITION_MSG(map.argument_size() == arguments.result_size(), "arguments=" << arguments << ", map=" << map);
-    const SizeType nt = auxiliary_arguments == EnclosureFunctionArguments::STATE_TIME ? 1u : 0u;
-    ARIADNE_PRECONDITION(auxiliary_arguments == EnclosureFunctionArguments::STATE || auxiliary_arguments == EnclosureFunctionArguments::STATE_TIME);
-    ARIADNE_PRECONDITION_MSG(aux_map.argument_size() == map.result_size() + nt, "map=" << map << ", aux_map=" << aux_map);
+    const SizeType nt = enclosure_has_time_argument(auxiliary_arguments) ? 1u : 0u;
+    const SizeType np = enclosure_has_parameter_arguments(auxiliary_arguments) ? constant_parameter_count() : 0u;
+    ARIADNE_PRECONDITION(auxiliary_arguments == EnclosureFunctionArguments::STATE || auxiliary_arguments == EnclosureFunctionArguments::STATE_TIME || enclosure_has_parameter_arguments(auxiliary_arguments));
+    if (enclosure_has_parameter_arguments(auxiliary_arguments) && np == 0u)
+        throw std::invalid_argument("Parameter-dependent reset outputs require an explicit physical binding");
+    ARIADNE_PRECONDITION_MSG(aux_map.argument_size() == map.result_size() + nt + np, "map=" << map << ", aux_map=" << aux_map);
     this->_state_function = compose(map, arguments);
     this->_dwell_time_function = this->configuration().function_factory().create_zero(this->domain());
     this->_auxiliary_mapping = aux_map;
     this->_auxiliary_arguments = auxiliary_arguments;
-    this->_auxiliary_parameter_count = 0u;
+    this->_auxiliary_parameter_count = np;
 }
 
 Void Enclosure::apply_discrete_time_map_step(ValidatedVectorMultivariateFunction map) {

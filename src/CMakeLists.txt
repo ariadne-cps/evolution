@@ -19,6 +19,7 @@ add_library(EVOLUTION_SRC OBJECT
     hybrid_step_results.cpp
     hybrid_timing.cpp
     hybrid_outer_flow.cpp
+    hybrid_parameters.cpp
     hybrid_continuous_time_validated_evolver.cpp
 )
 target_include_directories(EVOLUTION_SRC PRIVATE "${PROJECT_SOURCE_DIR}/include/evolution")

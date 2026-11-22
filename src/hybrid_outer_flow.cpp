@@ -8,6 +8,7 @@
 #include <stdexcept>
 
 #include "continuous_integration.hpp"
+#include "hybrid_parameters.hpp"
 #include "hybrid_transition_handlers.hpp"
 #include "system/hybrid_automaton_interface.hpp"
 
@@ -33,7 +34,7 @@ Map<DiscreteEvent, TransitionData> outer_flow_transitions(
         TransitionData transition;
         transition.event = event;
         transition.event_kind = system.event_kind(location, event);
-        transition.source_arguments = system.time_variable(location) ? EnclosureFunctionArguments::STATE_TIME : EnclosureFunctionArguments::STATE;
+        transition.source_arguments = hybrid_function_arguments(system, location);
         if (transition.event_kind == EventKind::INVARIANT) {
             transition.guard_function = system.invariant_function(location, event);
         } else {
@@ -45,7 +46,7 @@ Map<DiscreteEvent, TransitionData> outer_flow_transitions(
                 transition.reset_function = system.reset_function(location, event);
                 transition.target_auxiliary_space = system.continuous_auxiliary_space(transition.target);
                 transition.target_auxiliary_function = system.auxiliary_function(transition.target);
-                transition.target_auxiliary_arguments = system.time_variable(transition.target) ? EnclosureFunctionArguments::STATE_TIME : EnclosureFunctionArguments::STATE;
+                configure_transition_target(system, transition);
             }
         }
         transitions.insert(event, transition);
@@ -107,9 +108,7 @@ Void publish_outer_jump_candidates(
             candidate.bound_time(final_time);
         if (definitely(candidate.is_empty()))
             continue;
-        candidate.apply_reset(transition.event, transition.target, transition.target_space,
-                              transition.reset_function, transition.target_auxiliary_space,
-                              transition.target_auxiliary_function, transition.source_arguments, transition.target_auxiliary_arguments);
+        apply_transition_reset(candidate, transition);
         result.transition_to(candidate, transition.event, transition.event_kind);
     }
 }

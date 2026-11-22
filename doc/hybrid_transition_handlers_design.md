@@ -584,8 +584,8 @@ inclusion guard component. Native helper names are `outer_flow_transitions`,
 have no compatibility aliases. `publish_outer_step` retains the existing
 endpoint/reach/horizon ordering for both numerical producers.
 
-Each transition explicitly declares `STATE` or `STATE_TIME` source arguments
-and the target auxiliary layout. Invariants, activations and boundary constraints
+Each transition explicitly declares `STATE`, `STATE_TIME`, `STATE_PARAMETERS`
+or `STATE_TIME_PARAMETERS` source arguments and the target auxiliary layout. Invariants, activations and boundary constraints
 compose through that layout; resets read the pre-reset clock and preserve its
 value. Initial activation remains a whole-source decision with the requested
 semantics. Timed modes require UPPER, including at zero horizon. Conservative
@@ -598,5 +598,14 @@ recombination. Six new analytic Evolution cases cover clock correlations,
 ordinary/hybrid equation outputs, timed inclusions with uncertain arrival,
 time-only equation events, timed inclusion events on autonomous/nonautonomous
 fields, and equation simulation at stage times. Structured/box methods and
-flat/tree backends remain active. Fixed model parameters in hybrid modes and
-inclusion simulation input policies remain separate future work.
+flat/tree backends remain active.
+
+[Physical parameter bindings](hybrid_constant_parameters_design.md) now extend
+the outer-flow path to parameterized autonomous/timed equation and inclusion
+modes. The shared transition preparation checks the target tuple/domain before
+reset, preserving the binding through parameter-free modes. State-only analytic
+crossing remains for unparameterized autonomous equations; no LOWER or
+first-entry evidence is inferred for parameterized outer flow. The dedicated
+regressions cover URGENT/PERMISSIVE activation, IMPACT boundary constraints,
+parameter/time-dependent resets, equation outputs and incompatible declarations.
+Approximate inclusion input policies remain separate future work.

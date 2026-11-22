@@ -97,8 +97,8 @@ does not become validated event localization merely because time is explicit.
 | --- | --- | --- | --- |
 | Ordinary equation evolver | yes | yes, including time- and fixed-parameter-dependent auxiliary outputs | Timed/parameterised preconditioning remains unsupported |
 | Ordinary inclusion evolver | UPPER | UPPER with supported numerical field | Existing representation and solver capability limits |
-| Hybrid equation evolver | Existing equation path | UPPER outer-flow path, including time-only events | Timed LOWER, fixed model parameters and timed preconditioning rejected |
-| Hybrid inclusion evolver | UPPER | UPPER, with structured or box method | LOWER and fixed model parameters rejected |
+| Hybrid equation evolver | Analytic path without parameters; UPPER outer-flow with parameters | UPPER outer-flow, including time/parameter events and outputs | Timed/parameterized LOWER and preconditioning rejected |
+| Hybrid inclusion evolver | UPPER, including fixed parameters | UPPER, with structured or box method and fixed parameters | LOWER and existing method/domain capability limits |
 | Ordinary/hybrid equation simulators | yes | yes, including events and outputs in the hybrid case | Constant model parameters and inclusion input sampling remain pending |
 
 Typed hybrid composition retains its separate existing capability restriction.
@@ -106,6 +106,9 @@ The new clock support does not bypass it. The implemented
 [paradigm API](evolver_paradigms_design.md) selects approximate trajectories or
 validated enclosures explicitly. [Fixed-parameter auxiliary layouts](constant_parameter_auxiliaries_design.md)
 also preserve physical parameter intervals through ordinary validated evolution.
+[Hybrid parameter bindings](hybrid_constant_parameters_design.md) retain those
+values across validated mode transitions, including state/time/parameter reset
+arguments and target equation outputs.
 Full Python/C++ tutorial parity remains the final Evolution activity.
 
 Analytic regressions verify `x'=t`, source-clock correlations, auxiliary

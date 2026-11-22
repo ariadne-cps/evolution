@@ -275,7 +275,8 @@ class HybridEnclosure
 
     //! \brief Sets the auxiliary variables and functions.
     Void set_auxiliary(List<RealVariable> vars, EffectiveVectorMultivariateFunction aux,
-                       EnclosureFunctionArguments arguments = EnclosureFunctionArguments::STATE);
+                       EnclosureFunctionArguments arguments = EnclosureFunctionArguments::STATE,
+                       SizeType parameter_count = 0u);
 
     //! \brief Introduces a new state constraint \f$C\f$ on \f$x\f$.
     Void new_state_constraint(DiscreteEvent e, ValidatedConstraint c);

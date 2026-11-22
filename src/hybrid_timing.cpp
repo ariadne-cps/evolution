@@ -121,7 +121,7 @@ Bool needs_guard_creep(
         HybridEnclosure evolve_set = initial_set;
         evolve_set.apply_fixed_evolve_step(flow, flow.step_size());
 
-        for (Map<DiscreteEvent, CrossingData>::Iterator crossing_iter = crossings.begin();
+        for (Map<DiscreteEvent, CrossingData>::ConstIterator crossing_iter = crossings.begin();
              crossing_iter != crossings.end(); ++crossing_iter) {
             DiscreteEvent event = crossing_iter->first;
             EventKind event_kind = transitions[event].event_kind;

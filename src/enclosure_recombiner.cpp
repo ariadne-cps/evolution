@@ -34,6 +34,7 @@
 #include <cmath>
 #include <memory>
 #include <optional>
+#include <stdexcept>
 #include <utility>
 #include <vector>
 
@@ -369,6 +370,8 @@ EnclosureRecombinationResult ReferenceEnclosureRecombiner::recombine(
     const auto& reference = sources.front();
     const auto auxiliary_formula = make_formula(reference.auxiliary_mapping());
     for (const auto& source: sources) {
+        if (source.auxiliary_parameter_count() != 0u)
+            throw std::invalid_argument("Multi-source recombination does not yet preserve physical parameter bindings for auxiliary outputs");
         ARIADNE_PRECONDITION(source.auxiliary_arguments() == reference.auxiliary_arguments());
         ARIADNE_PRECONDITION_MSG(identical(auxiliary_formula, make_formula(source.auxiliary_mapping())),
                                  "Recombination requires identical auxiliary mappings.");

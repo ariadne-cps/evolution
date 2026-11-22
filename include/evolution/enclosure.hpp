@@ -96,7 +96,9 @@ class EnclosureConfiguration {
 /** @brief EnclosureVariableKind: validated enclosures for continuous dynamics. */
 /** @brief Explicit argument layout; global time is never a physical state. */
 enum class EnclosureFunctionArguments : std::uint8_t { STATE,
-                                                       STATE_TIME };
+                                                       STATE_TIME,
+                                                       STATE_PARAMETERS,
+                                                       STATE_TIME_PARAMETERS };
 
 enum class EnclosureVariableKind : std::uint8_t { INITIAL,
                                                   TEMPORAL,
@@ -121,6 +123,7 @@ class Enclosure
     ExactBoxType _domain;
     EffectiveVectorMultivariateFunction _auxiliary_mapping;
     EnclosureFunctionArguments _auxiliary_arguments = EnclosureFunctionArguments::STATE;
+    SizeType _auxiliary_parameter_count = 0u;
     ValidatedVectorMultivariateFunctionPatch _state_function;
     ValidatedScalarMultivariateFunctionPatch _time_function;
     ValidatedScalarMultivariateFunctionPatch _dwell_time_function;
@@ -190,9 +193,15 @@ class Enclosure
 
     //! \brief Set the auxiliary function.
     Void set_auxiliary_mapping(const EffectiveVectorMultivariateFunction& aux,
-                               EnclosureFunctionArguments arguments = EnclosureFunctionArguments::STATE);
+                               EnclosureFunctionArguments arguments = EnclosureFunctionArguments::STATE,
+                               SizeType parameter_count = 0u);
     EnclosureFunctionArguments auxiliary_arguments() const;
-    ValidatedVectorMultivariateFunctionPatch argument_function(EnclosureFunctionArguments) const;
+    //! \brief The declared number of fixed parameter arguments in the auxiliary mapping.
+    SizeType auxiliary_parameter_count() const;
+    ValidatedVectorMultivariateFunctionPatch argument_function(EnclosureFunctionArguments, SizeType parameter_count = 0u) const;
+    //! \brief Select the last count PARAMETER coordinates in their declared order.
+    //! These physical intervals are protected during reconditioning.
+    ValidatedVectorMultivariateFunctionPatch constant_parameter_function(SizeType count) const;
     //! \brief Get the auxiliary function.
     const EffectiveVectorMultivariateFunction& auxiliary_mapping() const;
 
@@ -501,7 +510,8 @@ class LabelledEnclosure
 
     /** @brief Perform the specified evolution operation. */
     Void set_auxiliary(const RealSpace& spc, const EffectiveVectorMultivariateFunction& aux,
-                       EnclosureFunctionArguments arguments = EnclosureFunctionArguments::STATE);
+                       EnclosureFunctionArguments arguments = EnclosureFunctionArguments::STATE,
+                       SizeType parameter_count = 0u);
 
     /** @brief Perform the specified evolution operation. */
     friend LabelledEnclosure product(const LabelledEnclosure&, const ExactIntervalType&);

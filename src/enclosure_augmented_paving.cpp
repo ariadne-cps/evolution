@@ -42,8 +42,8 @@
 namespace Ariadne {
 namespace {
 void require_state_auxiliary_paving(const Enclosure& enclosure) {
-    if (enclosure.auxiliary_arguments() == EnclosureFunctionArguments::STATE_TIME && enclosure.auxiliary_mapping().result_size() != 0u)
-        throw std::invalid_argument("A state-only augmented paving cannot represent time-dependent auxiliary outputs");
+    if (enclosure.auxiliary_arguments() != EnclosureFunctionArguments::STATE && enclosure.auxiliary_mapping().result_size() != 0u)
+        throw std::invalid_argument("A state-only augmented paving cannot represent time- or parameter-dependent auxiliary outputs");
 }
 } // namespace
 

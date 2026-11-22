@@ -56,8 +56,8 @@ class TestOrdinaryDynamicsContract : public Ariadne::Testing::ContextFixture {
                                       parameterised_evolver.orbit(RealVariablesBox({x == 0}), Real(0.125_x), Semantics::LOWER));
         const OrdinaryDifferentialAlgebraicEquation parameterised_auxiliary(
             {dot(x) = p - x}, RealVariablesBox({0 <= p <= 1}), std::nullopt, {let(output) = p + x});
-        ARIADNE_TESTING_EXPECT_THROWS(std::invalid_argument,
-                                      ContinuousTimeEvolver<ValidatedTag>(parameterised_auxiliary, integrator));
+        ContinuousTimeEvolver<ValidatedTag> parameterised_output(parameterised_auxiliary, integrator);
+        ARIADNE_TESTING_EXPECT_EQUAL(parameterised_output.system().auxiliary_space(), RealSpace({output}));
         PreconditionedGradedTaylorSeriesIntegrator preconditioned(step_maximum_error = 1e-5);
         ARIADNE_TESTING_EXPECT_THROWS(std::invalid_argument,
                                       ContinuousTimeEvolver<ValidatedTag>(parameterised, preconditioned));

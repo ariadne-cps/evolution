@@ -128,8 +128,13 @@ The `multifunction` branch uses the ordinary dynamics declarations
 trajectory-constant parameters under `Semantics::UPPER`. Each parameter retains
 the same enclosure coordinate across integration steps, subdivision and
 reconditioning; parameters and time are not added to the physical state.
-Time-dependent auxiliary outputs use the separate enclosure clock. Fixed-parameter
-auxiliary outputs and timed/parameterised preconditioning remain unsupported.
+Auxiliary outputs may depend on the separate enclosure clock and fixed model
+parameters. Explicit argument layouts retain their correlation with state,
+time and physical parameter intervals through subdivision and reconditioning.
+State-only augmented pavings and multi-source recombination reject these
+parameter-dependent outputs until they can preserve the required bindings;
+see [constant-parameter auxiliary outputs](doc/constant_parameter_auxiliaries_design.md).
+Timed/parameterised preconditioning remains unsupported.
 `Semantics::LOWER` is rejected for parameterised equations and for all inclusions.
 `system()` returns an owning `ContinuousDynamics` metadata view of the original
 ODAE or ODAI declaration; numerical dispatch remains internal and introduces no

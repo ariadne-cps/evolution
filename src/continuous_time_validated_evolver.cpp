@@ -82,25 +82,6 @@ EffectiveVectorMultivariateFunction equation_field(const OrdinaryDifferentialAlg
     return compose(system.function(), EffectiveVectorMultivariateFunction(arguments));
 }
 
-ValidatedVectorMultivariateFunctionPatch constant_parameter_coordinates(const Enclosure& set, SizeType count) {
-    Array<SizeType> indices(count);
-    SizeType remaining = count;
-    for (SizeType i = set.number_of_parameters(); i != 0u && remaining != 0u; --i) {
-        if (set.variable_kinds()[i - 1u] == EnclosureVariableKind::PARAMETER) {
-            indices[--remaining] = i - 1u;
-        }
-    }
-    if (remaining != 0u) {
-        throw std::logic_error("Continuous evolution lost its trajectory-constant parameter coordinates");
-    }
-    const auto& factory = set.configuration().function_factory();
-    auto result = factory.create_zeros(count, set.parameter_domain());
-    for (SizeType i = 0u; i != count; ++i) {
-        result[i] = factory.create_coordinate(set.parameter_domain(), indices[i]);
-    }
-    return result;
-}
-
 template<class ES>
 List<ES> subdivide(const ES& enclosure) {
     List<ES> result;
@@ -231,12 +212,6 @@ const OrdinaryDifferentialAlgebraicInclusion* ContinuousDynamics::inclusion() co
 ContinuousTimeEvolver<ValidatedTag>::ContinuousTimeEvolver(const OrdinaryDifferentialAlgebraicEquation& system, const IntegratorInterface& i)
     : _system(new SystemType(system)), _integrator(i.clone()),
       _function_factory(dynamic_cast<const IntegratorBase&>(i).function_factory()), _configuration(new ConfigurationType()) {
-    if (system.parameter_space().dimension() != 0u && system.auxiliary_space().size() != 0u) {
-        // Time-aware auxiliary layouts are supported. Fixed model parameters
-        // still require their own labelled auxiliary argument contract.
-        throw std::invalid_argument(
-            "ContinuousTimeEvolver<ValidatedTag> does not yet support auxiliary outputs with constant model parameters");
-    }
     if ((system.has_explicit_time() || system.parameter_space().dimension() != 0u) &&
         dynamic_cast<const PreconditionedGradedTaylorSeriesIntegrator*>(&i) != nullptr) {
         throw std::invalid_argument("Preconditioned continuous evolution does not yet support explicit time or constant parameters");
@@ -266,7 +241,7 @@ ContinuousTimeEvolver<ValidatedTag>::ContinuousTimeEvolver(const OrdinaryDiffere
 ValidatedIntegrationStep ContinuousTimeEvolver<ValidatedTag>::_inclusion_step(
     const EnclosureType& current, const TimeStepType& time, const StepSizeType& maximum_step) const {
     const auto& inclusion = *this->system().inclusion();
-    const auto parameters = constant_parameter_coordinates(current, inclusion.parameter_space().dimension());
+    const auto parameters = current.constant_parameter_function(inclusion.parameter_space().dimension());
     if (this->_inclusion_integrator) {
         return EvolutionDetail::compute_inclusion_step(inclusion, current.euclidean_set(), parameters, time, maximum_step, *this->_inclusion_integrator);
     }
@@ -283,31 +258,19 @@ auto ContinuousTimeEvolver<ValidatedTag>::function_factory() const -> const Func
 
 auto ContinuousTimeEvolver<ValidatedTag>::orbit(const RealVariablesBox& initial_set, const TimeType& time, Semantics semantics) const -> Orbit<EnclosureType> {
     auto enclosure = EnclosureType(initial_set, this->system().state_space(), EnclosureConfiguration(this->function_factory()));
-    // A time-dependent field without auxiliary outputs still carries a
-    // zero-output auxiliary function with arguments [state,time]. Enclosure
-    // already has a state-arity zero-output mapping, so leave it unchanged.
-    if (this->system().auxiliary_space().size() != 0u) {
-        enclosure.set_auxiliary(this->system().auxiliary_space(), this->system().equation()->auxiliary_function(),
-                                this->system().has_explicit_time() ? EnclosureFunctionArguments::STATE_TIME : EnclosureFunctionArguments::STATE);
-    }
     return orbit(enclosure, time, semantics);
 }
 
 auto ContinuousTimeEvolver<ValidatedTag>::orbit(const RealExpressionBoundedConstraintSet& initial_set, const TimeType& time, Semantics semantics) const -> Orbit<EnclosureType> {
     auto enclosure = EnclosureType(initial_set.euclidean_set(this->system().state_space()), this->system().state_space(), EnclosureConfiguration(this->function_factory()));
-    // A time-dependent field without auxiliary outputs still carries a
-    // zero-output auxiliary function with arguments [state,time]. Enclosure
-    // already has a state-arity zero-output mapping, so leave it unchanged.
-    if (this->system().auxiliary_space().size() != 0u) {
-        enclosure.set_auxiliary(this->system().auxiliary_space(), this->system().equation()->auxiliary_function(),
-                                this->system().has_explicit_time() ? EnclosureFunctionArguments::STATE_TIME : EnclosureFunctionArguments::STATE);
-    }
     return orbit(enclosure, time, semantics);
 }
 
 auto ContinuousTimeEvolver<ValidatedTag>::orbit(const EnclosureType& initial_set, const TimeType& time, Semantics semantics) const -> Orbit<EnclosureType> {
     LOGGING_SCOPE_CREATE
-    ARIADNE_PRECONDITION(this->system().state_auxiliary_space() == initial_set.state_auxiliary_space())
+    ARIADNE_PRECONDITION(this->system().state_space() == initial_set.state_space())
+    ARIADNE_PRECONDITION(initial_set.auxiliary_space().size() == 0u ||
+                         this->system().auxiliary_space() == initial_set.auxiliary_space())
 
     if (this->system().inclusion() != nullptr && semantics != Semantics::UPPER) {
         throw std::invalid_argument("Continuous inclusion evolution requires UPPER semantics");
@@ -318,6 +281,14 @@ auto ContinuousTimeEvolver<ValidatedTag>::orbit(const EnclosureType& initial_set
             throw std::invalid_argument("Parameterised continuous evolution currently requires UPPER semantics");
         }
         initial.adjoin_parameters(this->system().constant_parameter_domain(), EnclosureVariableKind::PARAMETER);
+    }
+    if (this->system().auxiliary_space().size() != 0u) {
+        const SizeType count = this->system().parameter_space().dimension();
+        const bool timed = this->system().has_explicit_time();
+        const auto arguments = count != 0u
+                                 ? (timed ? EnclosureFunctionArguments::STATE_TIME_PARAMETERS : EnclosureFunctionArguments::STATE_PARAMETERS)
+                                 : (timed ? EnclosureFunctionArguments::STATE_TIME : EnclosureFunctionArguments::STATE);
+        initial.set_auxiliary(this->system().auxiliary_space(), this->system().equation()->auxiliary_function(), arguments, count);
     }
     auto result = std::make_shared<SynchronisedOrbit>(initial);
     WorkloadType workload([time](const TimedEnclosureType& timed_enclosure, SharedPointer<ProgressIndicator> indicator) {
@@ -458,7 +429,7 @@ Void ContinuousTimeEvolver<ValidatedTag>::
     SharedPointer<PreconditionedTaylorSeriesState> next_preconditioned_state;
 
     if (this->system().inclusion() != nullptr) {
-        const auto parameters = constant_parameter_coordinates(current_set, this->system().parameter_space().dimension());
+        const auto parameters = current_set.constant_parameter_function(this->system().parameter_space().dimension());
         const auto& model = *this->system().inclusion();
         const auto numerical = [&]() -> EvolutionDetail::AnchoredIntegrationStep {
             if (model.has_explicit_time()) {
@@ -476,7 +447,7 @@ Void ContinuousTimeEvolver<ValidatedTag>::
         const FunctionType dynamic = equation_field(*this->system().equation());
         const SizeType parameter_count = _system->parameter_space().dimension();
         if (_system->has_explicit_time()) {
-            const auto parameters = constant_parameter_coordinates(current_set, parameter_count);
+            const auto parameters = current_set.constant_parameter_function(parameter_count);
             const auto numerical = EvolutionDetail::compute_clocked_equation_step(dynamic, current_set, parameters, maximum_step_size, *integrator);
             step_size = numerical.step.time_step();
             applied = EvolutionDetail::apply_integration_step(current_set, numerical.step, numerical.arguments, semantics);
@@ -487,7 +458,7 @@ Void ContinuousTimeEvolver<ValidatedTag>::
             EulerBounder bounder;
             StepSizeType bounded_step;
             UpperBoxType bounding_box;
-            const auto parameters = constant_parameter_coordinates(current_set, parameter_count);
+            const auto parameters = current_set.constant_parameter_function(parameter_count);
             const auto parameter_domain = cast_exact_box(UpperBoxType(parameters.range()));
             make_lpair(bounded_step, bounding_box) = bounder.compute(
                 dynamic, current_set_bounds, current_time, parameter_domain,

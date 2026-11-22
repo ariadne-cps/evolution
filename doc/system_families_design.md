@@ -85,6 +85,10 @@ and the native hybrid discrete-time model remain unimplemented. The detailed
 [continuous hybrid handler design](hybrid_transition_handlers_design.md)
 records the implemented event capabilities and their mathematical boundaries.
 
+Ordinary validated equations also support [auxiliary outputs depending on fixed
+parameters](constant_parameter_auxiliaries_design.md), with explicit argument
+layouts and rejection of conversions that cannot preserve those bindings.
+
 
 ## Implemented paradigm axis
 

@@ -164,9 +164,9 @@ class ContinuousTimeEvolver<ValidatedTag>
     //! \details Autonomous and explicit-time ODAEs share the same evolution loop.
     //! Parameters remain enclosure coordinates across steps, subdivision and
     //! reconditioning. Parameterised evolution currently supports UPPER only.
-    //! \throws std::invalid_argument for auxiliary outputs on
-    //! parameterised ODAEs, or if the selected preconditioned integrator lacks
-    //! support for time or parameters.
+    //! Auxiliary outputs may depend on state, explicit time and fixed parameters.
+    //! \throws std::invalid_argument if the selected preconditioned integrator
+    //! lacks support for time or parameters.
     ContinuousTimeEvolver(const OrdinaryDifferentialAlgebraicEquation&, const IntegratorInterface&);
 
     //! \brief Construct an ODAI evolver with one explicitly selected reach and evolve method.

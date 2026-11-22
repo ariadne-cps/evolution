@@ -1,5 +1,6 @@
 include(CTest)
 set(UNIT_TESTS
+    test_constant_parameter_auxiliaries
     test_evolver_paradigms
     test_orbit_collections
     test_scalings

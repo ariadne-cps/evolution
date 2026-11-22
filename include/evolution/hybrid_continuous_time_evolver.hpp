@@ -57,6 +57,10 @@ using LockGuard = std::lock_guard<T>;
 /** @brief IntegratorInterface represents hybrid evolution strategies, transitions and timing. */
 class IntegratorInterface;
 class ValidatedIntegrationStep;
+class IntegratorBase;
+class InputApproximation;
+class FirstOrderMultifunctionIntegrator;
+class SelectedParametricMultifunctionIntegrator;
 /** @brief EquationSolverInterface represents hybrid evolution strategies, transitions and timing. */
 class EquationSolverInterface;
 /** @brief HybridContinuousTimeEvolverBaseConfiguration represents hybrid evolution strategies, transitions and timing. */
@@ -152,6 +156,10 @@ class HybridContinuousTimeEvolverBase
 
     //! \brief Set the class which integrates the continuous dynamics.
     Void set_integrator(const IntegratorInterface& integrator);
+    //! \brief Select one reach and one endpoint method for inclusion modes.
+    Void set_integrator(const IntegratorBase&, const InputApproximation& reach, const InputApproximation& evolve);
+    //! \brief Explicitly select outer box certificates for inclusion modes.
+    Void set_integrator(const FirstOrderMultifunctionIntegrator&);
     //! \brief Set the class which integrates the continuous dynamics.
     Void set_solver(const EquationSolverInterface& solver);
 
@@ -425,7 +433,11 @@ class HybridContinuousTimeEvolverBase
   protected:
     /** @brief Perform the specified evolution operation. */
     Void _create(const SystemType& system, const FunctionFactoryType& factory);
+    Void _validate_mode(DiscreteLocation, Semantics) const;
+    Void _evolve_inclusion(const HybridEnclosure&, const Real& final_time, HybridEvolutionStepResult&) const;
     std::shared_ptr<IntegratorInterface> _integrator_ptr;
+    std::shared_ptr<const SelectedParametricMultifunctionIntegrator> _inclusion_integrator_ptr;
+    std::shared_ptr<const FirstOrderMultifunctionIntegrator> _box_integrator_ptr;
 
   private:
     std::shared_ptr<FunctionFactoryType::Interface> _function_factory_ptr;

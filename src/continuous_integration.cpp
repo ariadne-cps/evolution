@@ -8,11 +8,112 @@
 #include <optional>
 #include <stdexcept>
 
+#include "evolution_time.hpp"
 #include "function/function.hpp"
-#include "integration/validated_integration_step.hpp"
+#include "integration/integrator.hpp"
+#include "integration/selected_inclusion_integrator.hpp"
+#include "integration/validated_step_integrator.hpp"
+#include "system/odai.hpp"
 
 namespace Ariadne::EvolutionDetail {
 namespace {
+
+ValidatedIntegrationStep at_autonomous_time(const ValidatedIntegrationStep& step, const StepSizeType& time) {
+    // Autonomous fields are time-translation invariant. Keep the numerical
+    // patch arguments unchanged and record their offset from physical time.
+    return ValidatedIntegrationStep(step.time_step(), step.reach(), step.evolve(), {}, step.reach_models(),
+                                    step.has_evolve_model() ? std::optional(step.evolve_model()) : std::nullopt,
+                                    time, step.reach_time_index(), false, step.constant_parameter_domain(),
+                                    step.reach_time_offset() + time - step.initial_time());
+}
+
+Pair<StepSizeType, UpperBoxType> interval_field_bound(
+    const ValidatedIntervalTaylorBoxMultifunctionDP& field, const ExactBoxType& initial, StepSizeType h,
+    bool structured) {
+    const auto domain = field.domain();
+    if (!definitely(subset(initial, domain))) {
+        throw std::invalid_argument("Inclusion state lies outside the interval model's domain");
+    }
+    const UpperBoxType bound(domain);
+    const auto values = [&]() -> UpperBoxType {
+        if (structured) {
+            // Polynomial expansion can lose coefficient correlations. Bound
+            // the actual numerical input field used by the selected solver,
+            // which can be wider than the original pointwise box extension.
+            const auto data = field.inclusion_integrator_field();
+            return UpperBoxType(apply(data.field, product(bound, UpperBoxType(data.inputs))));
+        }
+        return field.evaluate(bound);
+    }();
+    for (SizeType attempt = 0u; attempt != 64u; ++attempt) {
+        UpperBoxType tube(initial.dimension());
+        for (SizeType i = 0u; i != initial.dimension(); ++i) {
+            tube[i] = UpperIntervalType(initial[i]) + UpperIntervalType(0u, h) * values[i];
+        }
+        if (definitely(inside(tube, domain))) {
+            return {h, bound};
+        }
+        h = EvolutionDetail::limit_step_to_remaining_time(h, h / 2u);
+    }
+    throw BoundingNotFoundException("Cannot certify an inclusion step inside the interval model's domain");
+}
+ValidatedIntegrationStep inclusion_step_impl(
+    const OrdinaryDifferentialAlgebraicInclusion& inclusion, const Enclosure& current,
+    const ValidatedVectorMultivariateFunctionPatch& parameters,
+    const StepSizeType& time, const StepSizeType& maximum_step,
+    const SelectedParametricMultifunctionIntegrator* selected,
+    const FirstOrderMultifunctionIntegrator* boxes) {
+    const auto initial = hull(cast_exact_box(current.bounding_box()),
+                              cast_exact_box(UpperBoxType(current.state_function().range())));
+    if (parameters.domain() != current.parameter_domain() ||
+        parameters.result_size() != inclusion.parameter_space().dimension()) {
+        throw std::invalid_argument("Inclusion parameters must retain their original enclosure coordinates");
+    }
+    const auto run = [&](const ValidatedIntegrationRequest& request) {
+        if (selected) {
+            return StructuredInclusionStepIntegratorAdapter(*selected).step(request);
+        }
+        return MultiflowStepIntegratorAdapter(*boxes).step(request);
+    };
+    if (!inclusion.has_input_function()) {
+        const ValidatedIntervalTaylorBoxMultifunctionDP field(inclusion.interval_taylor_multifunction());
+        const auto bounded = interval_field_bound(field, initial, maximum_step, selected != nullptr);
+        return at_autonomous_time(run(ValidatedIntegrationRequest(field, initial, bounded.first, bounded.second)), time);
+    }
+    const SizeType np = inclusion.parameter_space().dimension();
+    const auto parameter_domain = cast_exact_box(UpperBoxType(parameters.range()));
+    const auto uncertain_arguments = product(parameter_domain, inclusion.inputs());
+    EulerBounder bounder;
+    auto bounded = inclusion.has_explicit_time()
+                     ? bounder.compute(inclusion.function(), initial, time, uncertain_arguments, suggest(maximum_step))
+                     : bounder.compute(inclusion.function(), initial, uncertain_arguments, suggest(maximum_step));
+    // Refinement can make Euler's bound coincide with the tube. The chosen
+    // inclusion solver still verifies strict containment on this padded box.
+    for (SizeType i = 0u; i != bounded.second.dimension(); ++i) {
+        const FloatDPUpperBound padding = cast_positive(mag(bounded.second[i]) + FloatDPUpperBound(1u, dp)) *
+                                          cast_positive(FloatDPUpperBound(0x1p-40_x, dp));
+        bounded.second[i] = widen(bounded.second[i], padding);
+    }
+    // The timed box capability also accepts a zero-dimensional input domain.
+    if (inclusion.has_explicit_time() || np != 0u || inclusion.number_of_inputs() == 0u) {
+        auto function = inclusion.function();
+        if (!inclusion.has_explicit_time()) {
+            const SizeType n = inclusion.dimension();
+            const auto coordinates = EffectiveScalarMultivariateFunction::coordinates(function.argument_size() + 1u);
+            List<EffectiveScalarMultivariateFunction> arguments;
+            for (SizeType i = 0u; i != function.argument_size(); ++i) {
+                arguments.append(coordinates[i < n ? i : i + 1u]);
+            }
+            function = compose(function, EffectiveVectorMultivariateFunction(arguments));
+        }
+        const ValidatedTimedInputFieldBoxAdapterDP field(
+            function, cast_exact_box(bounded.second), IntervalDomainType(time, time + bounded.first),
+            parameter_domain, inclusion.inputs());
+        return run(ValidatedIntegrationRequest(field, initial, time, bounded.first, parameter_domain, bounded.second));
+    }
+    const ValidatedInputFieldBoxAdapterDP field(inclusion.function(), inclusion.inputs(), cast_exact_box(bounded.second));
+    return at_autonomous_time(run(ValidatedIntegrationRequest(field, initial, bounded.first, bounded.second)), time);
+}
 
 struct ModelContext {
     Enclosure enclosure;
@@ -177,6 +278,22 @@ AppliedIntegrationStep apply_step(const Enclosure& initial, const ValidatedInteg
     return result;
 }
 } // namespace
+
+ValidatedIntegrationStep compute_inclusion_step(
+    const OrdinaryDifferentialAlgebraicInclusion& inclusion, const Enclosure& current,
+    const ValidatedVectorMultivariateFunctionPatch& parameters,
+    const StepSizeType& time, const StepSizeType& maximum_step,
+    const SelectedParametricMultifunctionIntegrator& solver) {
+    return inclusion_step_impl(inclusion, current, parameters, time, maximum_step, &solver, nullptr);
+}
+
+ValidatedIntegrationStep compute_inclusion_step(
+    const OrdinaryDifferentialAlgebraicInclusion& inclusion, const Enclosure& current,
+    const ValidatedVectorMultivariateFunctionPatch& parameters,
+    const StepSizeType& time, const StepSizeType& maximum_step,
+    const FirstOrderMultifunctionIntegrator& solver) {
+    return inclusion_step_impl(inclusion, current, parameters, time, maximum_step, nullptr, &solver);
+}
 
 AppliedIntegrationStep apply_integration_step(const Enclosure& initial, const ValidatedIntegrationStep& step,
                                               IntegrationStepCoordinates coordinates, Semantics semantics,

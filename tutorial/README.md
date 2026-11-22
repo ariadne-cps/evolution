@@ -12,7 +12,8 @@ evolution capabilities with bounded scenarios:
 3. **DiscreteTimeEvolver** — take one validated step of a contracting map.
 4. **HybridContinuousTimeSimulator and HybridContinuousTimeEvolver** — specify a two-mode
    discrete-only automaton, create a simulator, then compute a short
-   validated orbit for a separate continuous single-mode hybrid system.
+   validated orbit for a separate continuous single-mode hybrid system,
+   followed by an ODAI mode using explicit reach and endpoint approximations.
 5. **FirstOrderPDE** — construct a validated, owning PDE model using
    `add_direction()` and run the actual two-dimensional first-order PDE
    solver and inspect its computed solution history. This is the most

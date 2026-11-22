@@ -11,8 +11,23 @@
 
 namespace Ariadne {
 class ValidatedIntegrationStep;
+class OrdinaryDifferentialAlgebraicInclusion;
+class SelectedParametricMultifunctionIntegrator;
+class FirstOrderMultifunctionIntegrator;
 
 namespace EvolutionDetail {
+/** @brief Shared inclusion request/bound construction; no workload or Orbit is created. */
+ValidatedIntegrationStep compute_inclusion_step(
+    const OrdinaryDifferentialAlgebraicInclusion&, const Enclosure&,
+    const ValidatedVectorMultivariateFunctionPatch& constant_parameters,
+    const Dyadic& time, const Dyadic& maximum_step,
+    const SelectedParametricMultifunctionIntegrator& solver);
+ValidatedIntegrationStep compute_inclusion_step(
+    const OrdinaryDifferentialAlgebraicInclusion&, const Enclosure&,
+    const ValidatedVectorMultivariateFunctionPatch& constant_parameters,
+    const Dyadic& time, const Dyadic& maximum_step,
+    const FirstOrderMultifunctionIntegrator& solver);
+
 /** @brief Whether the maps take physical states or existing enclosure parameters. */
 enum class IntegrationStepCoordinates { STATE,
                                         PARAMETERS };

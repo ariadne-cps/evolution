@@ -63,12 +63,39 @@ their actual stopping time. The numerical domain covers the entire state map
 over the enclosure parameter domain, including points excluded by constraints,
 so composition stays within the certified patch domain.
 
-Hybrid event analysis currently requires one structured autonomous reach patch
+Equation-mode hybrid event analysis requires one structured autonomous reach patch
 on `[state, local time]` and a structured endpoint. Multipatch results, extra
 input coordinates, explicit-time or fixed-parameter metadata and box-only
-certificates are rejected explicitly. The hybrid system interface still exposes
-state-only equation fields per mode; accepting ODAI modes and extending event
-analysis remain subsequent tasks.
+certificates are rejected explicitly for that event analysis.
+
+`HybridAutomaton::new_mode(location, equation_or_inclusion)` retains an owned copy
+of the original ODAE or ODAI declaration. `HybridContinuousTimeEvolver` supports
+autonomous inclusion modes without declared fixed parameters or outgoing events,
+under `UPPER` semantics. Select their numerical capability explicitly:
+
+```cpp
+HybridAutomaton automaton;
+automaton.new_mode(mode, inclusion);
+HybridContinuousTimeEvolver evolver(automaton);
+evolver.set_integrator(integrator, ZeroApproximation(), ConstantApproximation());
+// Alternatively: evolver.set_integrator(FirstOrderMultifunctionIntegrator());
+```
+
+Both structured and box paths also accept interval-Taylor inclusion modes.
+An equation mode can reset into an inclusion mode, including a change in state
+dimension and a parameter-dependent arrival time. The same hybrid workload,
+subdivision, reconditioning and flat/tree backends process these modes. The
+common continuous helper constructs each inclusion request, bound and result;
+no nested continuous Orbit or separate inclusion scheduler is created. At an
+uncertain arrival time, final sections retain the time equality as a constraint
+on state/dwell maps and expose the requested final time as the time map.
+
+Inclusion guards/invariants, timed or fixed-parameter typed modes, and composition
+of typed mode declarations require further capabilities and fail explicitly.
+Inclusions reject `LOWER`, including at zero horizon. Input axes accumulate
+between steps; numerical reconditioning protects all carried fixed-parameter
+axes and allows state/time error axes in its parameter-count limit. Switching
+back to the ordinary integrator overload clears the inclusion solver choice.
 
 ## Dependencies
 

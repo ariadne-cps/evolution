@@ -37,14 +37,18 @@
 #include "evolution/hybrid_continuous_time_evolver.hpp"
 #include "evolution/hybrid_time.hpp"
 #include "evolution/orbit.hpp"
+#include "evolution_time.hpp"
 #include "function/function.hpp"
 #include "function/function_model.hpp"
 #include "function/function_patch.hpp"
 #include "integration/integrator.hpp"
+#include "integration/selected_inclusion_integrator.hpp"
 #include "integration/validated_step_integrator.hpp"
 #include "numeric/numeric.hpp"
 #include "paving/binary_tree_paving.hpp"
 #include "system/hybrid_automaton_interface.hpp"
+#include "system/odae.hpp"
+#include "system/odai.hpp"
 
 #include "equation-solving/equation_solver.hpp"
 #include "equation-solving/interval_newton_method.hpp"
@@ -310,6 +314,10 @@ Set<DiscreteEvent> activating_events(const Map<DiscreteEvent, TransitionData>& t
 
 Void set_auxiliary(const HybridAutomatonInterface& system, HybridEnclosure& enclosure) {
     DiscreteLocation initial_location = enclosure.location();
+    if (const auto* equation = system.equation(initial_location)) {
+        if (equation->has_explicit_time() || equation->parameter_space().dimension() != 0u)
+            throw std::invalid_argument("Hybrid equation modes currently require autonomous dynamics without fixed parameters");
+    }
     ARIADNE_PRECONDITION(system.state_space().has_location(initial_location))
     RealSpace auxiliary_space = system.continuous_auxiliary_space(initial_location);
     EffectiveVectorMultivariateFunction auxiliary_function = system.auxiliary_function(initial_location);
@@ -360,6 +368,7 @@ Orbit<HybridEnclosure>
         orbit(const HybridEnclosure& initial,
               const HybridTerminationCriterion& termination,
               Semantics semantics) const {
+    this->_validate_mode(initial.location(), semantics);
     ARIADNE_PRECONDITION(this->system().state_auxiliary_space().has_location(initial.location()))
     ARIADNE_PRECONDITION(this->system().state_auxiliary_space()[initial.location()] == initial.state_auxiliary_space())
 
@@ -417,6 +426,41 @@ const HybridContinuousTimeEvolverBase::FunctionFactoryType
 
 Void HybridContinuousTimeEvolverBase::set_integrator(const IntegratorInterface& integrator) {
     this->_integrator_ptr = std::shared_ptr<IntegratorInterface>(integrator.clone());
+    this->_inclusion_integrator_ptr.reset();
+    this->_box_integrator_ptr.reset();
+}
+
+Void HybridContinuousTimeEvolverBase::set_integrator(const IntegratorBase& base, const InputApproximation& reach,
+                                                     const InputApproximation& evolve) {
+    if (dynamic_cast<const PreconditionedGradedTaylorSeriesIntegrator*>(&base) != nullptr)
+        throw std::invalid_argument("Hybrid inclusion input approximations do not support preconditioning");
+    auto selected = std::make_shared<SelectedParametricMultifunctionIntegrator>(base, reach, evolve);
+    this->set_integrator(static_cast<const IntegratorInterface&>(base));
+    this->_inclusion_integrator_ptr = std::move(selected);
+}
+
+Void HybridContinuousTimeEvolverBase::set_integrator(const FirstOrderMultifunctionIntegrator& boxes) {
+    this->_box_integrator_ptr = std::make_shared<FirstOrderMultifunctionIntegrator>(boxes);
+    this->_inclusion_integrator_ptr.reset();
+}
+
+Void HybridContinuousTimeEvolverBase::_validate_mode(DiscreteLocation location, Semantics semantics) const {
+    if (const auto* equation = this->system().equation(location)) {
+        if (equation->has_explicit_time() || equation->parameter_space().dimension() != 0u)
+            throw std::invalid_argument("Hybrid equation modes currently require autonomous dynamics without fixed parameters");
+    }
+    if (const auto* inclusion = this->system().inclusion(location)) {
+        if (semantics != Semantics::UPPER)
+            throw std::invalid_argument("Hybrid inclusion modes require UPPER semantics");
+        if (inclusion->has_explicit_time() || inclusion->parameter_space().dimension() != 0u)
+            throw std::invalid_argument("Hybrid inclusion modes currently require autonomous dynamics without fixed parameters");
+        if (!this->system().events(location).empty())
+            throw std::invalid_argument("Guards and invariants in inclusion modes require a dedicated event-analysis capability");
+        if (!this->_inclusion_integrator_ptr && !this->_box_integrator_ptr)
+            throw std::invalid_argument("Select an explicit integration method for hybrid inclusion modes");
+        if (this->_inclusion_integrator_ptr && inclusion->has_input_function() && inclusion->number_of_inputs() == 0u)
+            throw std::invalid_argument("The selected hybrid inclusion method requires free numerical inputs");
+    }
 }
 
 Void HybridContinuousTimeEvolverBase::set_solver(const EquationSolverInterface& solver) {
@@ -477,10 +521,11 @@ Map<DiscreteEvent, TransitionData>
     HybridContinuousTimeEvolverBase::
         _extract_transitions(const DiscreteLocation& location) const {
     LOGGING_SCOPE_CREATE;
-    const EffectiveVectorMultivariateFunction& dynamic = this->system().dynamic_function(location);
-
     Map<DiscreteEvent, TransitionData> transitions;
     Set<DiscreteEvent> events = this->system().events(location);
+    if (events.empty())
+        return transitions;
+    const EffectiveVectorMultivariateFunction& dynamic = this->system().dynamic_function(location);
     for (Set<DiscreteEvent>::ConstIterator event_iter = events.begin();
          event_iter != events.end(); ++event_iter) {
         DiscreteEvent event = *event_iter;
@@ -1164,11 +1209,9 @@ Void HybridContinuousTimeEvolverBase::
     const DiscreteLocation location = initial_set.location();
 
     // Cache dynamic and constraint functions
-    EffectiveVectorMultivariateFunction dynamic = this->system().dynamic_function(location);
     LOGGING_RUN_AT(1, auto transitions = this->_extract_transitions(location));
     Set<DiscreteEvent> events = transitions.keys();
 
-    LOGGING_PRINTLN_AT(2, "dynamic=" << dynamic);
     LOGGING_PRINTLN_AT(1, "initial_set " << initial_set);
     LOGGING_PRINTLN_AT(2, "transitions=" << transitions);
 
@@ -1217,6 +1260,7 @@ HybridEvolutionStepResult HybridContinuousTimeEvolverBase::
                          const Semantics& semantics,
                          const HybridEvolutionStatistics& statistics) const {
     LOGGING_SCOPE_CREATE;
+    this->_validate_mode(working_set.enclosure.location(), semantics);
     HybridEvolutionStepResult result;
     switch (working_set.phase) {
         case HybridEvolutionPhase::PROCESS_STARTING_EVENTS:
@@ -1243,10 +1287,9 @@ Void HybridContinuousTimeEvolverBase::
     HybridEnclosure starting_set = set;
 
     const DiscreteLocation& location = starting_set.location();
-    EffectiveVectorMultivariateFunction dynamic = this->system().dynamic_function(location);
+    const auto* inclusion = this->system().inclusion(location);
+    this->_validate_mode(location, semantics);
     LOGGING_RUN_AT(1, auto transitions = this->_extract_transitions(location));
-
-    LOGGING_PRINTLN_AT(2, "dynamic=" << dynamic);
 
     LOGGING_PRINTLN_AT(1, "starting_set=" << starting_set);
     LOGGING_PRINTLN_AT(2, "starting_time=" << starting_set.time_function());
@@ -1266,9 +1309,21 @@ Void HybridContinuousTimeEvolverBase::
     const ExactBoxType starting_bounding_box = cast_exact_box(starting_set.state_bounding_box());
     LOGGING_PRINTLN_AT(2, "starting_bounding_box=" << starting_bounding_box);
 
+    SizeType protected_parameters = 0u;
+    for (const auto kind: starting_set.continuous_set().variable_kinds())
+        if (kind == EnclosureVariableKind::PARAMETER)
+            ++protected_parameters;
+    // Allow the error axes introduced by reconditioning state, absolute time
+    // and dwell time, so a structural step can actually relieve the pressure.
+    const SizeType parameter_limit =
+        (starting_set.continuous_set().configuration().reconditioning_num_blocks() + 1u) *
+            starting_set.state_dimension() +
+        protected_parameters + 2u;
+    const bool parameter_pressure = inclusion != nullptr && starting_set.number_of_parameters() > parameter_limit;
+
     // Test to see if set requires reconditioning
     if (this->_configuration_ptr->enable_reconditioning() &&
-        (possibly(norm(starting_set.state_function().errors()) > this->_configuration_ptr->maximum_spacial_error()) || possibly(starting_set.time_function().error() > this->_configuration_ptr->maximum_spacial_error()) || possibly(starting_set.continuous_set().dwell_time_function().error() > this->_configuration_ptr->maximum_spacial_error()))) {
+        (parameter_pressure || possibly(norm(starting_set.state_function().errors()) > this->_configuration_ptr->maximum_spacial_error()) || possibly(starting_set.time_function().error() > this->_configuration_ptr->maximum_spacial_error()) || possibly(starting_set.continuous_set().dwell_time_function().error() > this->_configuration_ptr->maximum_spacial_error()))) {
         HybridEnclosure reconditioned_set = starting_set;
         this->_recondition(reconditioned_set);
         LOGGING_PRINTLN("RECONDITION location=" << location
@@ -1307,6 +1362,12 @@ Void HybridContinuousTimeEvolverBase::
             return;
         }
     }
+
+    if (inclusion != nullptr) {
+        this->_evolve_inclusion(starting_set, final_time, result);
+        return;
+    }
+    const auto dynamic = this->system().dynamic_function(location);
 
     Map<DiscreteEvent, EffectiveScalarMultivariateFunction> guard_functions;
     for (Map<DiscreteEvent, TransitionData>::ConstIterator transition_iter = transitions.begin();
@@ -1369,6 +1430,70 @@ Void HybridContinuousTimeEvolverBase::
     // Apply the time step
     HybridEnclosure reach_set, evolve_set;
     this->_apply_evolution_step(starting_set, step, flow_model, timing_data, crossings, dynamic, transitions, semantics, result);
+}
+
+Void HybridContinuousTimeEvolverBase::_evolve_inclusion(
+    const HybridEnclosure& initial, const Real& final_time, HybridEvolutionStepResult& result) const {
+    const auto& inclusion = *this->system().inclusion(initial.location());
+    const auto horizon = FloatDPBounds(final_time, dp);
+    const StepSizeType remaining = StepSizeType(horizon.upper_raw()) -
+                                   StepSizeType(initial.time_range().lower_bound().raw());
+    const auto maximum_step = EvolutionDetail::limit_step_to_remaining_time(
+        this->configuration().maximum_step_size(), remaining);
+    const auto& source = initial.continuous_set();
+    const auto parameters = this->function_factory().create_zeros(0u, source.parameter_domain());
+    // The field is autonomous. The bridge advances each source time/dwell
+    // map, including a parameter-dependent arrival time after a reset.
+    const auto step = this->_inclusion_integrator_ptr
+                        ? EvolutionDetail::compute_inclusion_step(inclusion, source, parameters, StepSizeType(0u), maximum_step,
+                                                                  *this->_inclusion_integrator_ptr)
+                        : EvolutionDetail::compute_inclusion_step(inclusion, source, parameters, StepSizeType(0u), maximum_step,
+                                                                  *this->_box_integrator_ptr);
+    const auto applied = EvolutionDetail::apply_integration_step(
+        source, step, EvolutionDetail::IntegrationStepCoordinates::STATE, Semantics::UPPER,
+        this->_box_integrator_ptr ? EvolutionDetail::IntegrationStepRepresentation::ALLOW_BOX_ENCLOSURES
+                                  : EvolutionDetail::IntegrationStepRepresentation::REQUIRE_STRUCTURED);
+    HybridEnclosure endpoint = initial;
+    endpoint.replace_continuous_set(applied.evolved);
+    const auto endpoint_time = endpoint.time_range();
+    const bool at_horizon = definitely(endpoint_time.lower_bound() >= final_time) &&
+                            definitely(endpoint_time.upper_bound() <= final_time);
+    HybridEvolutionStepResult completed;
+    for (const auto& continuous: applied.reach) {
+        auto reach = initial;
+        reach.replace_continuous_set(continuous);
+        if (!at_horizon && possibly(reach.time_range().upper_bound() >= final_time)) {
+            auto final_slice = reach;
+            final_slice.set_time(final_time);
+            if (!definitely(final_slice.is_empty())) {
+                // Keep the old time equality as a constraint on the state and
+                // dwell maps, then expose the certified stopping time itself.
+                final_slice.set_time_function(this->function_factory().create_constant(
+                    final_slice.parameter_domain(), final_time));
+                completed.record_final(final_slice);
+            }
+        }
+        if (possibly(reach.time_range().upper_bound() > final_time))
+            reach.bound_time(final_time);
+        if (!definitely(reach.is_empty()))
+            completed.record_reach(reach);
+    }
+    if (at_horizon) {
+        endpoint.set_time(final_time);
+        if (!definitely(endpoint.is_empty()))
+            completed.record_final(endpoint);
+    } else if (possibly(endpoint_time.lower_bound() < final_time)) {
+        if (possibly(endpoint_time.upper_bound() > final_time))
+            endpoint.bound_time(final_time);
+        if (!definitely(endpoint.is_empty())) {
+            completed.record_intermediate(endpoint);
+            completed.continue_with(endpoint);
+        }
+    }
+    completed.continuous_evolution_time = std::min(step.time_step().get_d(), remaining.get_d());
+    if (completed.successors.empty())
+        completed.stop_reason = HybridEvolutionStopReason::TIME_LIMIT;
+    result = std::move(completed);
 }
 
 Void HybridContinuousTimeEvolverBase::
@@ -1709,6 +1834,8 @@ Void HybridContinuousTimeEvolver::_copy_configuration_from(const HybridContinuou
     target.set_enable_reconditioning(source.enable_reconditioning());
     target.set_enable_subdivisions(source.enable_subdivisions());
     this->_integrator_ptr = std::move(integrator);
+    this->_inclusion_integrator_ptr = other._inclusion_integrator_ptr;
+    this->_box_integrator_ptr = other._box_integrator_ptr;
     this->_solver_ptr = std::move(solver);
     this->ALLOW_CREEP = other.ALLOW_CREEP;
     this->ALLOW_UNWIND = other.ALLOW_UNWIND;

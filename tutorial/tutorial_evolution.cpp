@@ -131,6 +131,16 @@ int main() {
     std::cout << "HybridContinuousTimeEvolver: " << hybrid_orbit.final().size()
               << " final enclosure(s)\n";
 
+    // Inclusion modes use the same hybrid evolver and explicit numerical choices.
+    // This mode has no outgoing events; its inputs may vary measurably in time.
+    HybridAutomaton inclusion_automaton;
+    inclusion_automaton.new_mode(idle, disturbed);
+    HybridContinuousTimeEvolver hybrid_inclusion(inclusion_automaton);
+    hybrid_inclusion.set_integrator(integrator, ZeroApproximation(), ConstantApproximation());
+    hybrid_inclusion.configuration().set_maximum_step_size(0.03125);
+    auto hybrid_included = hybrid_inclusion.orbit(hybrid_initial, HybridTime(0.0625_x, 1), Semantics::UPPER);
+    std::cout << "Hybrid inclusion: " << hybrid_included.final().size() << " final enclosure(s)\n";
+
     // First-order PDE: solve a small two-dimensional constant-coefficient
     // three-component hyperbolic system with smooth initial conditions.
     const Real rho = 1 / 2_q, c = 1;

@@ -116,3 +116,22 @@ interfaces, supported template specializations, Python registrations and tests.
 This changes the naming of the planned algorithms above; it does not implement
 missing discrete models, sampling policies or converters. Python tutorial
 parity remains the final Evolution activity.
+
+## Explicit continuous hybrid automata (v6.29)
+
+The System model names are now `ContinuousTimeHybridAutomaton` and
+`CompositeContinuousTimeHybridAutomaton`. Their shared continuous-time API is
+`ContinuousTimeHybridAutomatonInterface`, derived from the time-independent
+`HybridAutomatonInterface` structural contract. The common base provides only
+name, mode existence, events, transitions, targets and state dimensions.
+
+Continuous hybrid evolvers, factories and traits explicitly consume the
+continuous-time interface, never the structural base. Existing C++/Python
+consumer code and tests are migrated without aliases. This does not implement
+any discrete automaton, nor does it modify continuous flow, guard, reset or
+numerical semantics. The matching System gitlink must be updated jointly.
+
+Next, extract shared graph/transition validation and composition code beyond
+virtual interfaces before introducing `DiscreteTimeHybridAutomaton` and
+its time-specialized interface. Its tick order and event semantics require a
+separate, testable definition. Keep `decoupling` paving independent.

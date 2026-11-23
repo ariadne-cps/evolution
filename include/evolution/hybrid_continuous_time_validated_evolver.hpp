@@ -44,7 +44,7 @@
 #include "evolution/hybrid_time.hpp"
 #include "hybrid/hybrid_set.hpp"
 #include "logging/logging.hpp"
-#include "system/hybrid_automaton_interface.hpp"
+#include "system/continuous_time_hybrid_automaton_interface.hpp"
 #include "utility/tuple.hpp"
 
 namespace Ariadne {
@@ -120,7 +120,7 @@ class HybridContinuousTimeEvolverBase<ValidatedTag>
     typedef HybridContinuousTimeEvolverInterface<ValidatedTag> Interface;
     typedef HybridContinuousTimeEvolverBaseConfiguration<ValidatedTag> ConfigurationType;
     typedef ValidatedFunctionPatchFactory FunctionFactoryType;
-    typedef HybridAutomatonInterface SystemType;
+    typedef ContinuousTimeHybridAutomatonInterface SystemType;
     typedef SystemType::TimeType TimeType;
     typedef TimeType::ContinuousTimeType ContinuousTimeType;
     typedef List<DiscreteEvent> EventListType;
@@ -672,7 +672,7 @@ class HybridContinuousTimeEvolverFactory<ValidatedTag>
     virtual HybridContinuousTimeEvolverFactory<ValidatedTag>* clone() const { return new HybridContinuousTimeEvolverFactory<ValidatedTag>(*this); }
 
     //! \brief Create an hybrid evolver around a \a system.
-    virtual HybridContinuousTimeEvolver<ValidatedTag>* create(const HybridAutomatonInterface& system) const;
+    virtual HybridContinuousTimeEvolver<ValidatedTag>* create(const ContinuousTimeHybridAutomatonInterface& system) const;
 };
 
 } // namespace Ariadne

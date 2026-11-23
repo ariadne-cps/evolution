@@ -43,13 +43,13 @@ HybridEvolutionStepResult publish_outer_step(const HybridEnclosure&, const Appli
  *  URGENT/PERMISSIVE/IMPACT candidates under UPPER only. Neither first entry nor impact direction is
  *  certified for arbitrary measurable inputs.
  */
-Void validate_outer_event_kinds(const HybridAutomatonInterface&, DiscreteLocation);
+Void validate_outer_event_kinds(const ContinuousTimeHybridAutomatonInterface&, DiscreteLocation);
 
 /** @brief Extract state/time guards and reset data without evaluating a field Lie
  *  derivative. This intentionally does not claim first contact or crossing.
  */
 Map<DiscreteEvent, TransitionData> outer_flow_transitions(
-    const HybridAutomatonInterface&, DiscreteLocation);
+    const ContinuousTimeHybridAutomatonInterface&, DiscreteLocation);
 
 /** @brief Intersect a state enclosure with necessary invariant conditions.
  *  Applied to both reach and endpoint of an UPPER outer step. This is

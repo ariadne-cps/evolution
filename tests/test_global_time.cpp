@@ -35,7 +35,7 @@
 #include "integration/integrator.hpp"
 #include "integration/selected_inclusion_integrator.hpp"
 #include "logging/test_runner.hpp"
-#include "system/hybrid_automaton.hpp"
+#include "system/continuous_time_hybrid_automaton.hpp"
 #include "system/odae.hpp"
 #include "system/odai.hpp"
 
@@ -111,7 +111,7 @@ class TestGlobalTime : public Testing::ContextFixture {
             ARIADNE_TESTING_PROVE(subset(ExactIntervalType(0.1328125_x, 0.1328125_x), cast_exact_interval(final.auxiliary_function()[0u].range())));
         }
         const DiscreteLocation q(1);
-        HybridAutomaton system;
+        ContinuousTimeHybridAutomaton system;
         system.new_mode(q, equation);
         for (bool tree: {false, true}) {
             HybridContinuousTimeEvolver<ValidatedTag> hybrid(system);
@@ -144,7 +144,7 @@ class TestGlobalTime : public Testing::ContextFixture {
     void test_nonautonomous_inclusion_with_uncertain_arrival() {
         const DiscreteLocation q(1);
         const OrdinaryDifferentialAlgebraicInclusion inclusion({dot(x) = t + u}, RealVariablesBox({-1 <= u <= 1}));
-        HybridAutomaton system;
+        ContinuousTimeHybridAutomaton system;
         system.new_mode(q, inclusion);
         for (bool boxes: {false, true}) {
             HybridContinuousTimeEvolver<ValidatedTag> evolver(system);
@@ -190,7 +190,7 @@ class TestGlobalTime : public Testing::ContextFixture {
     void test_autonomous_modes_with_timed_guards_invariants_and_resets() {
         const DiscreteLocation source(1), target(2);
         const DiscreteEvent jump("timer"), bound("bound");
-        HybridAutomaton system;
+        ContinuousTimeHybridAutomaton system;
         system.new_mode(source, OrdinaryDifferentialAlgebraicEquation({dot(x) = 0}));
         system.new_mode(target, OrdinaryDifferentialAlgebraicEquation({dot(x) = 0}, {let(a) = x + t}));
         system.new_invariant(source, t <= Real(0.09375_x), bound);
@@ -250,7 +250,7 @@ class TestGlobalTime : public Testing::ContextFixture {
         const DiscreteLocation source(1), target(2);
         const DiscreteEvent jump("input timer"), bound("input horizon");
         for (bool timed_field: {false, true}) {
-            HybridAutomaton system;
+            ContinuousTimeHybridAutomaton system;
             const RealExpression drift = timed_field ? RealExpression(t) : RealExpression(0);
             system.new_mode(source, OrdinaryDifferentialAlgebraicInclusion({dot(x) = drift + u}, RealVariablesBox({-1 <= u <= 1})));
             system.new_mode(target, OrdinaryDifferentialAlgebraicEquation({dot(x) = 0}, {let(a) = x + t}));
@@ -304,7 +304,7 @@ class TestGlobalTime : public Testing::ContextFixture {
         ARIADNE_TESTING_EXPECT_WITHIN(curve.end()->second[curve.space()[x]].raw().get_d(), 0.005, 1e-14);
         ARIADNE_TESTING_EXPECT_WITHIN(curve.end()->second[curve.space()[a]].raw().get_d(), 0.105, 1e-14);
         const DiscreteLocation q(1);
-        HybridAutomaton system;
+        ContinuousTimeHybridAutomaton system;
         system.new_mode(q, equation);
         HybridContinuousTimeEvolver<ApproximateTag> hybrid(system);
         hybrid.configuration().set_step_size(0.03125);

@@ -34,7 +34,7 @@
 #include "system/odai.hpp"
 
 namespace Ariadne::EvolutionDetail {
-const RealSpace& hybrid_parameter_space(const HybridAutomatonInterface& system, DiscreteLocation location) {
+const RealSpace& hybrid_parameter_space(const ContinuousTimeHybridAutomatonInterface& system, DiscreteLocation location) {
     if (const auto* equation = system.equation(location))
         return equation->parameter_space();
     if (const auto* inclusion = system.inclusion(location))
@@ -42,7 +42,7 @@ const RealSpace& hybrid_parameter_space(const HybridAutomatonInterface& system, 
     static const RealSpace empty;
     return empty;
 }
-const ExactBoxType& hybrid_parameter_domain(const HybridAutomatonInterface& system, DiscreteLocation location) {
+const ExactBoxType& hybrid_parameter_domain(const ContinuousTimeHybridAutomatonInterface& system, DiscreteLocation location) {
     if (const auto* equation = system.equation(location))
         return equation->constant_parameter_domain();
     if (const auto* inclusion = system.inclusion(location))
@@ -50,7 +50,7 @@ const ExactBoxType& hybrid_parameter_domain(const HybridAutomatonInterface& syst
     static const ExactBoxType empty;
     return empty;
 }
-EnclosureFunctionArguments hybrid_function_arguments(const HybridAutomatonInterface& system, DiscreteLocation location) {
+EnclosureFunctionArguments hybrid_function_arguments(const ContinuousTimeHybridAutomatonInterface& system, DiscreteLocation location) {
     const bool timed = system.time_variable(location).has_value();
     if (hybrid_parameter_space(system, location).dimension() != 0u)
         return timed ? EnclosureFunctionArguments::STATE_TIME_PARAMETERS : EnclosureFunctionArguments::STATE_PARAMETERS;
@@ -74,14 +74,14 @@ Void prepare_parameters(HybridEnclosure& set, const RealSpace& space, const Exac
 }
 } // namespace
 
-Void prepare_hybrid_mode(const HybridAutomatonInterface& system, HybridEnclosure& set) {
+Void prepare_hybrid_mode(const ContinuousTimeHybridAutomatonInterface& system, HybridEnclosure& set) {
     const auto location = set.location();
     const auto& space = hybrid_parameter_space(system, location);
     prepare_parameters(set, space, hybrid_parameter_domain(system, location));
     set.set_auxiliary(system.continuous_auxiliary_space(location).variables(), system.auxiliary_function(location),
                       hybrid_function_arguments(system, location), space.dimension());
 }
-Void configure_transition_target(const HybridAutomatonInterface& system, TransitionData& transition) {
+Void configure_transition_target(const ContinuousTimeHybridAutomatonInterface& system, TransitionData& transition) {
     const auto target = transition.target;
     transition.target_auxiliary_arguments = hybrid_function_arguments(system, target);
     transition.target_parameter_space = hybrid_parameter_space(system, target);

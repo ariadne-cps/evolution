@@ -66,7 +66,7 @@ class TestHybridConstantParameters : public Testing::ContextFixture {
     void test_equation_flow_and_continuation() {
         for (bool timed: {false, true})
             for (bool tree: {false, true}) {
-                HybridAutomaton system;
+                ContinuousTimeHybridAutomaton system;
                 if (timed)
                     system.new_mode(source, OrdinaryDifferentialAlgebraicEquation({dot(x) = p + t}, RealVariablesBox({2 <= p <= 3}), t, {let(a) = x + p + t}));
                 else
@@ -97,7 +97,7 @@ class TestHybridConstantParameters : public Testing::ContextFixture {
         for (bool timed: {false, true})
             for (bool boxes: {false, true})
                 for (bool tree: {false, true}) {
-                    HybridAutomaton system;
+                    ContinuousTimeHybridAutomaton system;
                     const RealVariablesBox inputs({Real(-0.125_x) <= u <= Real(0.125_x)}), parameters({2 <= p <= 3});
                     if (timed)
                         system.new_mode(source, OrdinaryDifferentialAlgebraicInclusion({dot(x) = p + u + t}, inputs, parameters, t));
@@ -122,7 +122,7 @@ class TestHybridConstantParameters : public Testing::ContextFixture {
     void test_immediate_parameter_guard_reset_and_auxiliary() {
         for (auto kind: {EventKind::URGENT, EventKind::PERMISSIVE})
             for (bool tree: {false, true}) {
-                HybridAutomaton system;
+                ContinuousTimeHybridAutomaton system;
                 system.new_mode(source, OrdinaryDifferentialAlgebraicEquation({dot(x) = 0}, RealVariablesBox({2 <= p <= 3})));
                 system.new_mode(target, OrdinaryDifferentialAlgebraicEquation({dot(x) = 0}, RealVariablesBox({2 <= p <= 3}), std::nullopt, {let(a) = x - 2 * p}));
                 system.new_transition(source, DiscreteEvent("jump"), target, {next(x) = 2 * p}, p >= Real(2.5_x), kind);
@@ -145,7 +145,7 @@ class TestHybridConstantParameters : public Testing::ContextFixture {
     void test_timed_parameter_guard_and_reset() {
         for (auto kind: {EventKind::URGENT, EventKind::IMPACT})
             for (bool tree: {false, true}) {
-                HybridAutomaton system;
+                ContinuousTimeHybridAutomaton system;
                 system.new_mode(source, OrdinaryDifferentialAlgebraicEquation({dot(x) = p}, RealVariablesBox({2 <= p <= 3})));
                 system.new_mode(target, OrdinaryDifferentialAlgebraicEquation({dot(x) = 0}, RealVariablesBox({2 <= p <= 3}), std::nullopt, {let(a) = x + 2 * p + t}));
                 system.new_transition(source, DiscreteEvent("timer"), target, {next(x) = x + p + t}, t >= p / 32, kind);
@@ -182,7 +182,7 @@ class TestHybridConstantParameters : public Testing::ContextFixture {
     }
     void test_target_binding_and_parameter_free_intermediate_mode() {
         for (bool tree: {false, true}) {
-            HybridAutomaton introduced;
+            ContinuousTimeHybridAutomaton introduced;
             introduced.new_mode(source, OrdinaryDifferentialAlgebraicEquation({dot(x) = 0}));
             introduced.new_mode(target, OrdinaryDifferentialAlgebraicEquation({dot(x) = 0}, RealVariablesBox({2 <= p <= 3}), std::nullopt, {let(a) = p}));
             introduced.new_transition(source, DiscreteEvent("bind"), target, {next(x) = 0}, x >= -1, EventKind::URGENT);
@@ -193,7 +193,7 @@ class TestHybridConstantParameters : public Testing::ContextFixture {
             binding(bound.final()[0u]);
             zero(bound.final()[0u].auxiliary_function()[0u] - bound.final()[0u].continuous_set().constant_parameter_function(1u).get(0u));
 
-            HybridAutomaton carried;
+            ContinuousTimeHybridAutomaton carried;
             carried.new_mode(source, OrdinaryDifferentialAlgebraicEquation({dot(x) = 0}, RealVariablesBox({2 <= p <= 3})));
             carried.new_mode(middle, OrdinaryDifferentialAlgebraicEquation({dot(x) = 0}, {let(a) = x}));
             carried.new_mode(target, OrdinaryDifferentialAlgebraicEquation({dot(x) = 0}, RealVariablesBox({2 <= p <= 3}), std::nullopt, {let(a) = x - p}));
@@ -216,7 +216,7 @@ class TestHybridConstantParameters : public Testing::ContextFixture {
     }
     void test_incompatible_declarations_and_reset_rejection() {
         for (bool renamed: {false, true}) {
-            HybridAutomaton system;
+            ContinuousTimeHybridAutomaton system;
             system.new_mode(source, OrdinaryDifferentialAlgebraicEquation({dot(x) = 0}, RealVariablesBox({2 <= p <= 3})));
             system.new_mode(target, OrdinaryDifferentialAlgebraicEquation({dot(x) = 0}, renamed ? RealVariablesBox({2 <= z <= 3}) : RealVariablesBox({Real(2.5_x) <= p <= 3})));
             system.new_transition(source, DiscreteEvent("jump"), target, {next(x) = x}, x >= -1, EventKind::URGENT);
@@ -224,7 +224,7 @@ class TestHybridConstantParameters : public Testing::ContextFixture {
             configure(evolver, false);
             ARIADNE_TESTING_EXPECT_THROWS(std::invalid_argument, evolver.orbit(initial(evolver), HybridTime(0.03125_x, 1), Semantics::UPPER));
         }
-        HybridAutomaton invalid;
+        ContinuousTimeHybridAutomaton invalid;
         invalid.new_mode(source, OrdinaryDifferentialAlgebraicEquation({dot(x) = 0}, RealVariablesBox({2 <= p <= 3})));
         invalid.new_mode(target, OrdinaryDifferentialAlgebraicEquation({dot(x) = 0}, RealVariablesBox({2 <= p <= 3})));
         ARIADNE_TESTING_EXPECT_EXCEPTION(([&] {
@@ -233,7 +233,7 @@ class TestHybridConstantParameters : public Testing::ContextFixture {
         }()));
     }
     void test_grouping_distinguishes_physical_tuples() {
-        HybridAutomaton system;
+        ContinuousTimeHybridAutomaton system;
         system.new_mode(source, OrdinaryDifferentialAlgebraicEquation({dot(x) = 0}));
         HybridContinuousTimeEvolver<ValidatedTag> evolver(system);
         configure(evolver, false);

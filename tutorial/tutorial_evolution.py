@@ -2,7 +2,7 @@
 """Bounded discrete and hybrid Evolution workflows using installed pyariadne_evolution."""
 
 from pyariadne_evolution import (
-    DiscreteEvent, DiscreteLocation, HybridAutomaton, HybridContinuousTimeEvolver, ApproximateTag,
+    DiscreteEvent, DiscreteLocation, ContinuousTimeHybridAutomaton, HybridContinuousTimeEvolver, ApproximateTag,
     HybridTime, Integer, Rational, Real, Semantics, RealVariable,
     IteratedMap, DiscreteTimeEvolver, ValidatedTag, RealExpressionBoundedConstraintSet,
     next, dec_,
@@ -22,7 +22,7 @@ def main():
     idle, active = DiscreteLocation(0), DiscreteLocation(1)
     activate = DiscreteEvent("activate")
     deactivate = DiscreteEvent("deactivate")
-    automaton = HybridAutomaton()
+    automaton = ContinuousTimeHybridAutomaton()
     automaton.new_mode(idle)
     automaton.new_mode(active)
     automaton.new_transition(idle, activate, active)

@@ -45,7 +45,7 @@
 #include "symbolic/assignment.hpp"
 #include "symbolic/space.hpp"
 #include "symbolic/valuation.hpp"
-#include "system/hybrid_automaton_interface.hpp"
+#include "system/continuous_time_hybrid_automaton_interface.hpp"
 #include "system/odae.hpp"
 #include "system/odai.hpp"
 #include "utility/array.hpp"
@@ -59,7 +59,7 @@ template<class T>
 class Orbit;
 
 namespace {
-const RealSpace& simulation_parameter_space(const HybridAutomatonInterface& system, DiscreteLocation location) {
+const RealSpace& simulation_parameter_space(const ContinuousTimeHybridAutomatonInterface& system, DiscreteLocation location) {
     if (const auto* equation = system.equation(location))
         return equation->parameter_space();
     if (const auto* inclusion = system.inclusion(location))
@@ -67,7 +67,7 @@ const RealSpace& simulation_parameter_space(const HybridAutomatonInterface& syst
     static const RealSpace empty;
     return empty;
 }
-void validate_simulation_mode(const HybridAutomatonInterface& system, DiscreteLocation location, const RealValuation& values, const InputSamplingPolicy* policy) {
+void validate_simulation_mode(const ContinuousTimeHybridAutomatonInterface& system, DiscreteLocation location, const RealValuation& values, const InputSamplingPolicy* policy) {
     if (const auto* inclusion = system.inclusion(location)) {
         EvolutionDetail::validate_simulation_inclusion(*inclusion, policy);
         EvolutionDetail::validate_simulation_parameters(inclusion->parameter_space(), inclusion->constant_parameter_domain(), values, false);
@@ -76,12 +76,12 @@ void validate_simulation_mode(const HybridAutomatonInterface& system, DiscreteLo
         EvolutionDetail::validate_simulation_parameters(equation->parameter_space(), equation->constant_parameter_domain(), values, false);
 }
 template<class F>
-F prepare_simulation_function(const F& function, const HybridAutomatonInterface& system, DiscreteLocation location, const RealValuation& values) {
+F prepare_simulation_function(const F& function, const ContinuousTimeHybridAutomatonInterface& system, DiscreteLocation location, const RealValuation& values) {
     return EvolutionDetail::bind_simulation_parameters(function,
                                                        system.continuous_state_space(location).dimension() + (system.time_variable(location) ? 1u : 0u),
                                                        simulation_parameter_space(system, location), values);
 }
-EffectiveVectorMultivariateFunction prepare_simulation_dynamic(const HybridAutomatonInterface& system, DiscreteLocation location, const RealValuation& values) {
+EffectiveVectorMultivariateFunction prepare_simulation_dynamic(const ContinuousTimeHybridAutomatonInterface& system, DiscreteLocation location, const RealValuation& values) {
     if (const auto* inclusion = system.inclusion(location))
         return EvolutionDetail::prepare_simulation_inclusion(*inclusion, values, system.time_variable(location).has_value());
     return prepare_simulation_function(system.dynamic_function(location), system, location, values);
@@ -196,7 +196,7 @@ HybridPoint<X> make_hybrid_state_auxiliary_point(const DiscreteLocation& locatio
 
 template<class X>
 Vector<HybridPoint<X>> make_hybrid_state_auxiliary_point_list(const Vector<DiscreteLocation>& location, const Vector<Point<X>>& mpt,
-                                                              const Vector<RealSpace>& sspc, const Vector<RealSpace>& aspc, const Vector<RealSpace>& saspc, const Vector<EffectiveVectorMultivariateFunction>& auxiliary_function, const HybridAutomatonInterface& system) {
+                                                              const Vector<RealSpace>& sspc, const Vector<RealSpace>& aspc, const Vector<RealSpace>& saspc, const Vector<EffectiveVectorMultivariateFunction>& auxiliary_function, const ContinuousTimeHybridAutomatonInterface& system) {
     Vector<HybridPoint<X>> point_list(mpt.size(), HybridPoint<X>());
     for (SizeType index = 0; index < point_list.size(); index++) {
         Point<X> sapt(saspc[index].dimension(), mpt[index].zero_element());
@@ -236,7 +236,7 @@ auto HybridContinuousTimeEvolver<ApproximateTag>::orbit(const HybridApproximateP
     -> Orbit<HybridApproximatePointType> {
     LOGGING_SCOPE_CREATE;
 
-    const HybridAutomatonInterface& system = *_sys_ptr;
+    const ContinuousTimeHybridAutomatonInterface& system = *_sys_ptr;
 
     HybridTime t(0.0_x, 0);
     Dyadic h(cast_exact(configuration().step_size()));
@@ -378,7 +378,7 @@ auto HybridContinuousTimeEvolver<ApproximateTag>::orbit(const HybridApproximateL
     -> Orbit<HybridApproximateListPointType> {
     LOGGING_SCOPE_CREATE;
 
-    const HybridAutomatonInterface& system = *_sys_ptr;
+    const ContinuousTimeHybridAutomatonInterface& system = *_sys_ptr;
 
     Vector<HybridTime> t(init_list.size(), HybridTime(0.0_x, 0));
     Dyadic h(cast_exact(configuration().step_size()));

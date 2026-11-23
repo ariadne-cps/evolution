@@ -37,8 +37,8 @@
 #include "evolution/hybrid_time.hpp"
 #include "evolution/orbit.hpp"
 #include "pybind11.hpp"
-#include "system/hybrid_automaton.hpp"
-#include "system/hybrid_automaton_interface.hpp"
+#include "system/continuous_time_hybrid_automaton.hpp"
+#include "system/continuous_time_hybrid_automaton_interface.hpp"
 
 #include "function-utilities.hpp"
 
@@ -241,11 +241,11 @@ Void evolution_submodule(pybind11::module& module) {
         .def("state_space", &HybridEnclosure::state_space);
     pybind11::class_<HybridContinuousTimeEvolver<ApproximateTag>>(module, "HybridContinuousTimeApproximateEvolver")
         .def(pybind11::init<const HybridContinuousTimeEvolver<ApproximateTag>::SystemType&>())
-        // HybridAutomaton is exported by System without a Python base-class
+        // ContinuousTimeHybridAutomaton is exported by System without a Python base-class
         // declaration; provide the concrete model overload explicitly.
-        .def(pybind11::init([](const HybridAutomaton& automaton) {
+        .def(pybind11::init([](const ContinuousTimeHybridAutomaton& automaton) {
             return std::make_unique<HybridContinuousTimeEvolver<ApproximateTag>>(
-                static_cast<const HybridAutomatonInterface&>(automaton));
+                static_cast<const ContinuousTimeHybridAutomatonInterface&>(automaton));
         }));
     template_<ContinuousTimeEvolver> continuousTime_template(module, "ContinuousTimeEvolver");
     continuousTime_template.instantiate("ApproximateTag", "ContinuousTimeApproximateEvolver");

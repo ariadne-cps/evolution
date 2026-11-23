@@ -129,7 +129,7 @@ class TestHybridEvolutionBackend : public Testing::ContextFixture {
     void test_progress_revises_remaining_work_without_recounting_history() {
         DiscreteLocation q(1);
         RealVariable x("x");
-        HybridAutomaton system;
+        ContinuousTimeHybridAutomaton system;
         system.new_mode(q, {dot(x) = 1});
         HybridContinuousTimeEvolver<ValidatedTag> evolver(system);
         const auto initial = evolver.enclosure(HybridExactBox(q, RealSpace({
@@ -189,7 +189,7 @@ class TestHybridEvolutionBackend : public Testing::ContextFixture {
     void test_progress_retains_the_120_second_prefix_when_permissive_branches_accumulate() {
         DiscreteLocation q(1);
         RealVariable x("x");
-        HybridAutomaton system;
+        ContinuousTimeHybridAutomaton system;
         system.new_mode(q, {dot(x) = 1});
         HybridContinuousTimeEvolver<ValidatedTag> evolver(system);
         const auto initial = evolver.enclosure(HybridExactBox(q, RealSpace({
@@ -228,7 +228,7 @@ class TestHybridEvolutionBackend : public Testing::ContextFixture {
     void test_temporal_progress_uses_the_initial_time_and_terminal_branch_credit() {
         DiscreteLocation q(1);
         RealVariable x("x");
-        HybridAutomaton system;
+        ContinuousTimeHybridAutomaton system;
         system.new_mode(q, {dot(x) = 1});
         HybridContinuousTimeEvolver<ValidatedTag> evolver(system);
         auto initial = evolver.enclosure(HybridExactBox(q, RealSpace({
@@ -256,7 +256,7 @@ class TestHybridEvolutionBackend : public Testing::ContextFixture {
     void test_invalid_cost_metadata_does_not_reset_valid_temporal_progress() {
         DiscreteLocation q(1);
         RealVariable x("x");
-        HybridAutomaton system;
+        ContinuousTimeHybridAutomaton system;
         system.new_mode(q, {dot(x) = 1});
         HybridContinuousTimeEvolver<ValidatedTag> evolver(system);
         const auto initial = evolver.enclosure(HybridExactBox(q, RealSpace({
@@ -278,7 +278,7 @@ class TestHybridEvolutionBackend : public Testing::ContextFixture {
     void test_progress_handles_zero_and_unknown_horizons() {
         DiscreteLocation q(1);
         RealVariable x("x");
-        HybridAutomaton system;
+        ContinuousTimeHybridAutomaton system;
         system.new_mode(q, {dot(x) = 1});
         HybridContinuousTimeEvolver<ValidatedTag> evolver(system);
         const auto initial = evolver.enclosure(HybridExactBox(q, RealSpace({
@@ -302,7 +302,7 @@ class TestHybridEvolutionBackend : public Testing::ContextFixture {
     void test_progress_uses_lower_clock_bounds_for_source_and_replacement_estimates() {
         DiscreteLocation q(1);
         RealVariable x("x");
-        HybridAutomaton system;
+        ContinuousTimeHybridAutomaton system;
         system.new_mode(q, {dot(x) = 1});
         HybridContinuousTimeEvolver<ValidatedTag> evolver(system);
         const auto initial = evolver.enclosure(HybridExactBox(q, RealSpace({
@@ -329,7 +329,7 @@ class TestHybridEvolutionBackend : public Testing::ContextFixture {
         ConcurrencyScope concurrency(0u);
         DiscreteLocation q(1);
         RealVariable x("x");
-        HybridAutomaton system;
+        ContinuousTimeHybridAutomaton system;
         system.new_mode(q, {dot(x) = 1});
         HybridContinuousTimeEvolver<ValidatedTag> evolver(system);
         const auto initial = evolver.enclosure(HybridExactBox(q, RealSpace({
@@ -386,7 +386,7 @@ class TestHybridEvolutionBackend : public Testing::ContextFixture {
     void test_numerical_progress_uses_the_selected_continuous_duration() {
         DiscreteLocation q(1);
         RealVariable x("x");
-        HybridAutomaton system;
+        ContinuousTimeHybridAutomaton system;
         system.new_mode(q, {dot(x) = 1});
         StepProbe probe(system);
         probe.configuration().set_maximum_step_size(0.25_x);
@@ -405,7 +405,7 @@ class TestHybridEvolutionBackend : public Testing::ContextFixture {
     void test_output_and_work_are_distinct() {
         DiscreteLocation q(1);
         RealVariable x("x"), y("y");
-        HybridAutomaton system;
+        ContinuousTimeHybridAutomaton system;
         system.new_mode(q, {dot(x) = 1, dot(y) = 0});
         HybridContinuousTimeEvolver<ValidatedTag> evolver(system);
         auto initial = evolver.enclosure(HybridExactBox(q, RealSpace({
@@ -457,7 +457,7 @@ class TestHybridEvolutionBackend : public Testing::ContextFixture {
     void test_failed_step_cannot_release_an_orbit() {
         DiscreteLocation q(1);
         RealVariable x("x"), y("y");
-        HybridAutomaton system;
+        ContinuousTimeHybridAutomaton system;
         system.new_mode(q, {dot(x) = 1, dot(y) = 0});
         HybridContinuousTimeEvolver<ValidatedTag> evolver(system);
         auto initial = evolver.enclosure(HybridExactBox(q, RealSpace({
@@ -483,7 +483,7 @@ class TestHybridEvolutionBackend : public Testing::ContextFixture {
             DiscreteLocation source(1), target(2);
             DiscreteEvent event("jump");
             RealVariable x("x"), y("y");
-            HybridAutomaton system;
+            ContinuousTimeHybridAutomaton system;
             system.new_mode(source, {dot(x) = 1, dot(y) = 0});
             system.new_mode(target, {dot(x) = 0, dot(y) = 0});
             system.new_transition(source, event, target, {next(x) = x, next(y) = y}, x >= 0, kind);
@@ -516,7 +516,7 @@ class TestHybridEvolutionBackend : public Testing::ContextFixture {
         const RealVariable x("x");
         const RealSpace space({x});
         for (auto kind: {EventKind::URGENT, EventKind::PERMISSIVE}) {
-            HybridAutomaton system;
+            ContinuousTimeHybridAutomaton system;
             system.new_mode(source, {dot(x) = 0});
             system.new_mode(target, {dot(x) = 0});
             system.new_transition(source, event, target, {next(x) = x}, x >= 0, kind);
@@ -573,7 +573,7 @@ class TestHybridEvolutionBackend : public Testing::ContextFixture {
         DiscreteLocation source(1), target(2);
         DiscreteEvent event("jump");
         RealVariable x("x"), y("y");
-        HybridAutomaton system;
+        ContinuousTimeHybridAutomaton system;
         system.new_mode(source, {dot(x) = 1, dot(y) = 0});
         system.new_mode(target, {dot(x) = 0, dot(y) = 0});
         system.new_transition(source, event, target, {next(x) = x, next(y) = y}, x >= 0, EventKind::URGENT);

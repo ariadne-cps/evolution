@@ -51,7 +51,7 @@ namespace {
 HybridEnclosure seed() {
     DiscreteLocation q(1);
     RealVariable x("x"), y("y");
-    HybridAutomaton system;
+    ContinuousTimeHybridAutomaton system;
     system.new_mode(q, {dot(x) = 1, dot(y) = 0});
     HybridContinuousTimeEvolver<ValidatedTag> evolver(system);
     return evolver.enclosure(HybridExactBox(q, RealSpace({
@@ -392,7 +392,7 @@ class TestHybridEvolutionTree : public Testing::ContextFixture {
             DiscreteLocation source(1), target(2);
             RealVariable x("x"), y("y");
             DiscreteEvent jump("jump");
-            HybridAutomaton system;
+            ContinuousTimeHybridAutomaton system;
             system.new_mode(source, {dot(x) = 1, dot(y) = 0});
             system.new_mode(target, {dot(x) = 0, dot(y) = 0});
             system.new_transition(source, jump, target,
@@ -414,7 +414,7 @@ class TestHybridEvolutionTree : public Testing::ContextFixture {
         DiscreteLocation source(1), target(2);
         RealVariable x("x"), y("y");
         DiscreteEvent jump("jump"), invariant("invariant");
-        HybridAutomaton system;
+        ContinuousTimeHybridAutomaton system;
         system.new_mode(source, {dot(x) = 1, dot(y) = 0});
         system.new_mode(target, {dot(x) = 0, dot(y) = 0});
         system.new_transition(source, jump, target,
@@ -449,7 +449,7 @@ class TestHybridEvolutionTree : public Testing::ContextFixture {
         ConcurrencyScope concurrency;
         DiscreteLocation q(1);
         RealVariable x("x"), y("y");
-        HybridAutomaton system;
+        ContinuousTimeHybridAutomaton system;
         system.new_mode(q, {dot(x) = 1, dot(y) = 0});
         HybridContinuousTimeEvolver<ValidatedTag> evolver(system);
         evolver.configuration().set_enable_subdivisions(true);
@@ -488,7 +488,7 @@ class TestHybridEvolutionTree : public Testing::ContextFixture {
         ConcurrencyScope concurrency;
         DiscreteLocation q(1);
         RealVariable x("x"), y("y");
-        HybridAutomaton system;
+        ContinuousTimeHybridAutomaton system;
         system.new_mode(q, {dot(x) = 1, dot(y) = 0});
         HybridContinuousTimeEvolver<ValidatedTag> evolver(system);
         evolver.configuration().set_enable_subdivisions(true);
@@ -533,7 +533,7 @@ class TestHybridEvolutionTree : public Testing::ContextFixture {
             DiscreteLocation source(1), target(2);
             RealVariable x("x"), y("y");
             DiscreteEvent jump("jump");
-            HybridAutomaton system;
+            ContinuousTimeHybridAutomaton system;
             system.new_mode(source, {dot(x) = 1, dot(y) = 0});
             system.new_mode(target, {dot(x) = 0, dot(y) = 0});
             system.new_transition(source, jump, target,
@@ -581,7 +581,7 @@ class TestHybridEvolutionTree : public Testing::ContextFixture {
         ConcurrencyScope concurrency;
         DiscreteLocation q(1);
         RealVariable x("x"), y("y");
-        HybridAutomaton system;
+        ContinuousTimeHybridAutomaton system;
         system.new_mode(q, {dot(x) = 1, dot(y) = 0});
         HybridContinuousTimeEvolver<ValidatedTag> evolver(system);
         evolver.configuration().set_enable_subdivisions(true);
@@ -621,7 +621,7 @@ class TestHybridEvolutionTree : public Testing::ContextFixture {
             DiscreteLocation source(1), target(2);
             RealVariable x("x"), y("y");
             DiscreteEvent jump("jump");
-            HybridAutomaton system;
+            ContinuousTimeHybridAutomaton system;
             system.new_mode(source, {dot(x) = 1, dot(y) = 0});
             system.new_mode(target, {dot(x) = 0, dot(y) = 0});
             system.new_transition(source, jump, target,
@@ -775,7 +775,7 @@ class TestHybridEvolutionTree : public Testing::ContextFixture {
     void test_radius_trend_gate_accepts_only_profitable_continuations() {
         DiscreteLocation q(1);
         RealVariable x("x"), y("y");
-        HybridAutomaton system;
+        ContinuousTimeHybridAutomaton system;
         system.new_mode(q, {dot(x) = 1, dot(y) = 0});
         HybridContinuousTimeEvolver<ValidatedTag> evolver(system);
         const auto initial = evolver.enclosure(HybridExactBox(
@@ -1083,7 +1083,7 @@ class TestHybridEvolutionTree : public Testing::ContextFixture {
         const DiscreteEvent jump("jump");
         RealVariable x("x"), y("y");
         for (const auto kind: {EventKind::URGENT, EventKind::PERMISSIVE}) {
-            HybridAutomaton system;
+            ContinuousTimeHybridAutomaton system;
             system.new_mode(source, {dot(x) = 1, dot(y) = sqr(x)});
             system.new_mode(target, {dot(x) = 1 + sqr(y), dot(y) = 1});
             system.new_transition(source, jump, target, {next(x) = x, next(y) = y}, x >= 0, kind);
@@ -2127,7 +2127,7 @@ class TestHybridEvolutionTree : public Testing::ContextFixture {
         for (auto kind: {EventKind::URGENT, EventKind::PERMISSIVE}) {
             DiscreteLocation source(1), target(2);
             RealVariable x("x"), y("y");
-            HybridAutomaton system;
+            ContinuousTimeHybridAutomaton system;
             system.new_mode(source, {dot(x) = 1, dot(y) = 0});
             system.new_mode(target, {dot(x) = 0, dot(y) = 0});
             system.new_transition(source, DiscreteEvent("jump"), target, {next(x) = x, next(y) = y}, x >= 0, kind);
@@ -2147,7 +2147,7 @@ class TestHybridEvolutionTree : public Testing::ContextFixture {
         ConcurrencyScope concurrency;
         DiscreteLocation q(1);
         RealVariable x("x"), y("y");
-        HybridAutomaton system;
+        ContinuousTimeHybridAutomaton system;
         system.new_mode(q, {dot(x) = 1, dot(y) = 0});
         HybridContinuousTimeEvolver<ValidatedTag> evolver(system);
         evolver.configuration().set_maximum_step_size(0.25_x);
@@ -2167,7 +2167,7 @@ class TestHybridEvolutionTree : public Testing::ContextFixture {
         DiscreteLocation q(1), target(2);
         DiscreteEvent jump("jump"), invariant("invariant");
         RealVariable x("x"), y("y");
-        HybridAutomaton system;
+        ContinuousTimeHybridAutomaton system;
         system.new_mode(q, {dot(x) = 1, dot(y) = 0});
         system.new_mode(target, {dot(x) = 0, dot(y) = 0});
         system.new_transition(q, jump, target, {next(x) = x, next(y) = y}, x >= 0, EventKind::URGENT);

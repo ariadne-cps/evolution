@@ -52,7 +52,7 @@
 #include "integration/validated_step_integrator.hpp"
 #include "numeric/numeric.hpp"
 #include "paving/binary_tree_paving.hpp"
-#include "system/hybrid_automaton_interface.hpp"
+#include "system/continuous_time_hybrid_automaton_interface.hpp"
 #include "system/odae.hpp"
 #include "system/odai.hpp"
 
@@ -1204,7 +1204,7 @@ HybridContinuousTimeEvolverFactory<ValidatedTag>::HybridContinuousTimeEvolverFac
 }
 
 HybridContinuousTimeEvolver<ValidatedTag>*
-    HybridContinuousTimeEvolverFactory<ValidatedTag>::create(const HybridAutomatonInterface& system) const {
+    HybridContinuousTimeEvolverFactory<ValidatedTag>::create(const ContinuousTimeHybridAutomatonInterface& system) const {
     return new HybridContinuousTimeEvolver<ValidatedTag>(system, ValidatedFunctionPatchFactory(_function_factory_ptr));
 }
 

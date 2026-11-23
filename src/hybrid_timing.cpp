@@ -36,7 +36,7 @@
 #include "function/function_patch.hpp"
 #include "logging/logging.hpp"
 #include "numeric/numeric.hpp"
-#include "system/hybrid_automaton_interface.hpp"
+#include "system/continuous_time_hybrid_automaton_interface.hpp"
 
 #include "equation-solving/equation_solver.hpp"
 
@@ -216,7 +216,7 @@ Void apply_guard_creep(
     Map<DiscreteEvent, CrossingData>& crossings,
     const Map<DiscreteEvent, TransitionData>& transitions,
     const FlowFunctionModel& flow, const HybridEnclosure& initial_set,
-    const HybridAutomatonInterface& system,
+    const ContinuousTimeHybridAutomatonInterface& system,
     const EquationSolverInterface& solver,
     const ValidatedFunctionPatchFactory& patch_factory,
     const FloatDP& step_size, SizeType n) {
@@ -343,7 +343,7 @@ TimingData estimate_hybrid_timing(
     Real final_time, const FlowFunctionModel& flow,
     Map<DiscreteEvent, CrossingData>& crossings,
     const Map<DiscreteEvent, TransitionData>& transitions,
-    const HybridEnclosure& initial_set, const HybridAutomatonInterface& system,
+    const HybridEnclosure& initial_set, const ContinuousTimeHybridAutomatonInterface& system,
     const ValidatedFunctionPatchFactory& patch_factory,
     const EquationSolverInterface& solver, Bool allow_creep, Bool allow_unwind) {
     // Compute the evolution time for the given step.

@@ -129,7 +129,7 @@ class TestApproximateConstantParameters : public Testing::ContextFixture {
     }
     void test_hybrid_autonomous_and_timed_flow() {
         for (bool timed: {false, true}) {
-            HybridAutomaton system;
+            ContinuousTimeHybridAutomaton system;
             system.new_mode(source, flow(timed));
             Hybrid evolver(system, selection());
             evolver.configuration().set_step_size(0.0625);
@@ -147,8 +147,8 @@ class TestApproximateConstantParameters : public Testing::ContextFixture {
             ARIADNE_TESTING_EXPECT_THROWS(std::invalid_argument, missing.orbit(hybrid_point(), HybridTime(0u, 3)));
         }
     }
-    HybridAutomaton transition_system() const {
-        HybridAutomaton system;
+    ContinuousTimeHybridAutomaton transition_system() const {
+        ContinuousTimeHybridAutomaton system;
         system.new_mode(source, OrdinaryDifferentialAlgebraicEquation({dot(x) = p}, RealVariablesBox({2 <= p <= 3}), std::nullopt, {let(a) = x + p + t}));
         system.new_mode(middle, OrdinaryDifferentialAlgebraicEquation({dot(x) = 0}, {let(a) = x + t}));
         system.new_mode(target, OrdinaryDifferentialAlgebraicEquation({dot(x) = q + t}, RealVariablesBox({-1 <= q <= 0}), t, {let(a) = x + q + t}));
@@ -187,7 +187,7 @@ class TestApproximateConstantParameters : public Testing::ContextFixture {
         ARIADNE_TESTING_EXPECT_THROWS(std::invalid_argument, missing_later.orbit(start, HybridTime(0.25_x, 3)));
     }
     void test_hybrid_parameter_only_guard_and_shared_value() {
-        HybridAutomaton system;
+        ContinuousTimeHybridAutomaton system;
         system.new_mode(source, OrdinaryDifferentialAlgebraicEquation({dot(x) = 0}, RealVariablesBox({2 <= p <= 3})));
         system.new_mode(target, OrdinaryDifferentialAlgebraicEquation({dot(x) = 0}, RealVariablesBox({1 <= p <= 4}), std::nullopt, {let(a) = x - p}));
         system.new_transition(source, DiscreteEvent("selected"), target, {next(x) = p}, p >= Real(2.25_x), EventKind::URGENT);
@@ -208,7 +208,7 @@ class TestApproximateConstantParameters : public Testing::ContextFixture {
         }
     }
     void test_hybrid_invariants_domains_and_first_use() {
-        HybridAutomaton system;
+        ContinuousTimeHybridAutomaton system;
         system.new_mode(source, OrdinaryDifferentialAlgebraicEquation({dot(x) = p}, RealVariablesBox({2 <= p <= 3}), std::nullopt, {let(a) = p}));
         system.new_invariant(source, p <= Real(2.25_x), DiscreteEvent("bound"));
         const auto start = Hybrid::HybridApproximatePointType(source, RealSpace({x}), FloatDPApproximationPoint({0.0_x}, dp));
@@ -220,7 +220,7 @@ class TestApproximateConstantParameters : public Testing::ContextFixture {
         }));
         ARIADNE_TESTING_EXPECT_THROWS(std::invalid_argument, outside.orbit(start, HybridTime(0u, 3)));
 
-        HybridAutomaton introduced;
+        ContinuousTimeHybridAutomaton introduced;
         introduced.new_mode(source, OrdinaryDifferentialAlgebraicEquation({dot(x) = 0}));
         introduced.new_mode(target, OrdinaryDifferentialAlgebraicEquation({dot(x) = p}, RealVariablesBox({2 <= p <= 3}), std::nullopt, {let(a) = p}));
         introduced.new_transition(source, DiscreteEvent("bind"), target, {next(x) = x}, x >= -1, EventKind::URGENT);
@@ -238,7 +238,7 @@ class TestApproximateConstantParameters : public Testing::ContextFixture {
                                               {p, Real(4)}
         }));
         ARIADNE_TESTING_EXPECT_THROWS(std::invalid_argument, outside_target.orbit(start, HybridTime(0.25_x, 3)));
-        HybridAutomaton inclusion;
+        ContinuousTimeHybridAutomaton inclusion;
         const RealVariable u("u");
         inclusion.new_mode(source, OrdinaryDifferentialAlgebraicInclusion({dot(x) = p + u}, RealVariablesBox({-1 <= u <= 1}), RealVariablesBox({2 <= p <= 3})));
         Hybrid unsupported(inclusion, RealValuation({

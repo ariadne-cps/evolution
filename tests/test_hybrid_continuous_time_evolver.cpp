@@ -111,7 +111,7 @@ class DependentStepEvolver : public HybridContinuousTimeEvolver<ValidatedTag> {
     StepKind _kind;
 
   public:
-    DependentStepEvolver(const HybridAutomatonInterface& system, StepKind kind)
+    DependentStepEvolver(const ContinuousTimeHybridAutomatonInterface& system, StepKind kind)
         : HybridContinuousTimeEvolver<ValidatedTag>(system), _kind(kind) {}
     DependentStepEvolver* clone() const override { return new DependentStepEvolver(*this); }
 
@@ -165,11 +165,11 @@ class RuntimeFailureSolver : public IntervalNewtonSolver {
     }
 };
 
-class ProgressAutomaton : public HybridAutomaton {
+class ProgressAutomaton : public ContinuousTimeHybridAutomaton {
   public:
     ProgressAutomaton* clone() const override { return new ProgressAutomaton(*this); }
     EventKind event_kind(DiscreteLocation location, DiscreteEvent event) const override {
-        auto kind = HybridAutomaton::event_kind(location, event);
+        auto kind = ContinuousTimeHybridAutomaton::event_kind(location, event);
         return kind == EventKind::INVARIANT ? EventKind::PROGRESS : kind;
     }
 };
@@ -191,7 +191,7 @@ class TestHybridEvolver : public Ariadne::Testing::ContextFixture {
     inline static Real one{1};
     const Dyadic eighth{0.125_x}, quarter{0.25_x};
     mutable std::unique_ptr<HybridContinuousTimeEvolver<ValidatedTag>> evolver_ptr;
-    Void _set_evolver(const HybridAutomatonInterface& system) {
+    Void _set_evolver(const ContinuousTimeHybridAutomatonInterface& system) {
         evolver_ptr = std::make_unique<HybridContinuousTimeEvolver<ValidatedTag>>(system);
         evolver_ptr->set_integrator(GradedTaylorSeriesIntegrator(1e-3));
     }
@@ -246,16 +246,16 @@ class TestHybridEvolver : public Ariadne::Testing::ContextFixture {
 };
 
 Void TestHybridEvolver::test_components_and_copy_ownership() {
-    HybridAutomaton system;
+    ContinuousTimeHybridAutomaton system;
     system.new_mode(q, {dot(x) = 1, dot(y) = 0});
     EnclosureConfiguration enclosure_config{ValidatedFunctionPatchFactory(make_taylor_function_patch_factory(ThresholdSweeper<FloatDP>(dp, 1e-8)))};
     auto factory = enclosure_config.function_factory();
-    using FactoryInterface = EvolverFactoryInterface<ValidatedTag, HybridAutomatonInterface, HybridEnclosure, HybridTerminationCriterion>;
+    using FactoryInterface = EvolverFactoryInterface<ValidatedTag, ContinuousTimeHybridAutomatonInterface, HybridEnclosure, HybridTerminationCriterion>;
     static_assert(std::has_virtual_destructor_v<FactoryInterface>);
     HybridContinuousTimeEvolverFactory<ValidatedTag> standard;
     std::unique_ptr<HybridContinuousTimeEvolver<ValidatedTag>> made(standard.create(system));
     std::unique_ptr<FactoryInterface> polymorphic_factory(standard.clone());
-    std::unique_ptr<EvolverInterface<ValidatedTag, HybridAutomatonInterface, HybridEnclosure, HybridTerminationCriterion>> owned(polymorphic_factory->create(system));
+    std::unique_ptr<EvolverInterface<ValidatedTag, ContinuousTimeHybridAutomatonInterface, HybridEnclosure, HybridTerminationCriterion>> owned(polymorphic_factory->create(system));
     ARIADNE_TESTING_EXPECT_EQUAL(owned->system().continuous_state_space(q), RealSpace({x, y}));
     HybridContinuousTimeEvolverFactory<ValidatedTag> customized(factory);
     std::unique_ptr<HybridContinuousTimeEvolverFactory<ValidatedTag>> copied_factory(customized.clone());
@@ -318,7 +318,7 @@ Void TestHybridEvolver::test_components_and_copy_ownership() {
 }
 
 Void TestHybridEvolver::test_default_timing_and_policies() {
-    HybridAutomaton system;
+    ContinuousTimeHybridAutomaton system;
     system.new_mode(q, {dot(x) = 1, dot(y) = 0});
     FixedTimingEvolver fixed(system);
     fixed.configuration().set_maximum_step_size(0.25);
@@ -371,7 +371,7 @@ Void TestHybridEvolver::test_default_timing_and_policies() {
 }
 
 Void TestHybridEvolver::test_impact_and_optional_transition() {
-    HybridAutomaton ball;
+    ContinuousTimeHybridAutomaton ball;
     ball.new_mode(q, {dot(x) = y, dot(y) = -1});
     ball.new_transition(q, e, q, {next(x) = x, next(y) = -y / 2}, x <= 0, EventKind::IMPACT);
     _set_evolver(ball);
@@ -384,7 +384,7 @@ Void TestHybridEvolver::test_impact_and_optional_transition() {
     }),
                  1.5, 1u);
     DiscreteLocation target(2);
-    HybridAutomaton optional;
+    ContinuousTimeHybridAutomaton optional;
     optional.new_mode(q, {dot(x) = 1, dot(y) = 0});
     optional.new_mode(target, {dot(x) = 0, dot(y) = 0});
     optional.new_transition(q, e, target, {next(x) = 0, next(y) = y}, x >= 0, EventKind::PERMISSIVE);
@@ -413,7 +413,7 @@ Void TestHybridEvolver::test_impact_and_optional_transition() {
 }
 
 Void TestHybridEvolver::test_grazing_and_terminating_event() {
-    HybridAutomaton tangent;
+    ContinuousTimeHybridAutomaton tangent;
     tangent.new_mode(q, {dot(x) = 1, dot(y) = 0});
     tangent.new_transition(q, e, q, {next(x) = x, next(y) = y - 1}, y - sqr(x) >= 0, EventKind::URGENT);
     _set_evolver(tangent);
@@ -438,7 +438,7 @@ Void TestHybridEvolver::test_grazing_and_terminating_event() {
     }
     ARIADNE_TESTING_PROVE(jumped && flowed);
     DiscreteLocation target(2);
-    HybridAutomaton urgent;
+    ContinuousTimeHybridAutomaton urgent;
     urgent.new_mode(q, {dot(x) = 1, dot(y) = 0});
     urgent.new_mode(target, {dot(x) = 0, dot(y) = 0});
     urgent.new_transition(q, e, target, {next(x) = 0, next(y) = y}, x >= Real(1 / 4_q), EventKind::URGENT);
@@ -459,13 +459,13 @@ Void TestHybridEvolver::test_grazing_and_terminating_event() {
 
 Void TestHybridEvolver::test_invariants_and_curvature() {
     for (Bool progress: {false, true}) {
-        HybridAutomaton invariant;
+        ContinuousTimeHybridAutomaton invariant;
         ProgressAutomaton progressing;
-        for (HybridAutomaton* system: {&invariant, static_cast<HybridAutomaton*>(&progressing)}) {
+        for (ContinuousTimeHybridAutomaton* system: {&invariant, static_cast<ContinuousTimeHybridAutomaton*>(&progressing)}) {
             system->new_mode(q, {dot(x) = 1, dot(y) = 0});
             system->new_invariant(q, x <= 0.25_dec, e);
         }
-        _set_evolver(progress ? static_cast<const HybridAutomatonInterface&>(progressing) : invariant);
+        _set_evolver(progress ? static_cast<const ContinuousTimeHybridAutomatonInterface&>(progressing) : invariant);
         evolver_ptr->configuration().set_maximum_step_size(0.25);
         HybridBoxSet initial(q, {-0.01_dec <= x <= 0.01_dec, -0.01_dec <= y <= 0.01_dec});
         auto before = evolver_ptr->orbit(initial, HybridTime(0.125_x, 3), Semantics::UPPER);
@@ -485,7 +485,7 @@ Void TestHybridEvolver::test_invariants_and_curvature() {
     // Under x'=1,y'=0 these guards are respectively convex, concave,
     // and degenerate in time. A jump resets to a stationary origin.
     for (unsigned shape = 0; shape != 3; ++shape) {
-        HybridAutomaton system;
+        ContinuousTimeHybridAutomaton system;
         system.new_mode(q, {dot(x) = 1, dot(y) = 0});
         system.new_mode(target, {dot(x) = 0, dot(y) = 0});
         auto guard = shape == 0 ? sqr(x) + y : (shape == 1 ? y - sqr(x) : x * x * x + y);
@@ -516,7 +516,7 @@ Void TestHybridEvolver::test_invariants_and_curvature() {
 }
 
 Void TestHybridEvolver::test_correlated_near_miss() {
-    HybridAutomaton system;
+    ContinuousTimeHybridAutomaton system;
     system.new_mode(q, {dot(x) = 1, dot(y) = 1});
     DiscreteEvent second("second");
     system.new_transition(q, e, q, {next(x) = x, next(y) = y}, y - sqr(x) >= 0, EventKind::PERMISSIVE);
@@ -545,7 +545,7 @@ Void TestHybridEvolver::test_correlated_near_miss() {
 }
 
 Void TestHybridEvolver::test_uncertain_initial_time() {
-    HybridAutomaton system;
+    ContinuousTimeHybridAutomaton system;
     system.new_mode(q, {dot(x) = 1, dot(y) = 0});
     for (double width: {0.0625, 0.125, 0.5}) {
         HybridContinuousTimeEvolver<ValidatedTag> evolver(system);
@@ -569,7 +569,7 @@ Void TestHybridEvolver::test_uncertain_initial_time() {
 
 Void TestHybridEvolver::test_clock_error_after_jump() {
     DiscreteLocation target(2);
-    HybridAutomaton system;
+    ContinuousTimeHybridAutomaton system;
     system.new_mode(q, {dot(x) = 1, dot(y) = 0});
     system.new_mode(target, {dot(x) = 1, dot(y) = 0});
     system.new_transition(q, e, target, {next(x) = 0, next(y) = y}, x >= 0, EventKind::URGENT);
@@ -608,7 +608,7 @@ Void TestHybridEvolver::test_clock_error_after_jump() {
 }
 
 Void TestHybridEvolver::test_dwell_error_reconditioning() {
-    HybridAutomaton stationary;
+    ContinuousTimeHybridAutomaton stationary;
     stationary.new_mode(q, {dot(x) = 0, dot(y) = 0});
     ClockProgressEvolver evolver(stationary);
     evolver.configuration().set_maximum_step_size(0.125);
@@ -645,7 +645,7 @@ Void TestHybridEvolver::test_subdivided_crossings_after_reset() {
     // and is required again after a reset expands the second coordinate.
     DiscreteLocation middle(2), target(3);
     DiscreteEvent next_event("next");
-    HybridAutomaton system;
+    ContinuousTimeHybridAutomaton system;
     system.new_mode(q, {dot(x) = 1, dot(y) = 0});
     system.new_mode(middle, {dot(x) = 1, dot(y) = 0});
     system.new_mode(target, {dot(x) = 0, dot(y) = 0});
@@ -679,7 +679,7 @@ Void TestHybridEvolver::test_subdivided_crossings_after_reset() {
 }
 
 Void TestHybridEvolver::test_initial_constraints_and_contracts() {
-    HybridAutomaton system;
+    ContinuousTimeHybridAutomaton system;
     system.new_mode(q, {dot(x) = 1, dot(y) = 0});
     system.new_invariant(q, x <= 0.25_dec, e);
     HybridContinuousTimeEvolver<ValidatedTag> evolver(system);
@@ -724,7 +724,7 @@ Void TestHybridEvolver::test_solver_budget_fallback() {
     DiscreteLocation target(2);
     for (unsigned failure = 0u; failure != 3u; ++failure) {
         Bool concave = failure != 0u;
-        HybridAutomaton system;
+        ContinuousTimeHybridAutomaton system;
         system.new_mode(q, {dot(x) = 1, dot(y) = 0});
         system.new_mode(target, {dot(x) = 0, dot(y) = 0});
         auto guard = concave ? y - sqr(x) : x - 0.25_dec;
@@ -757,7 +757,7 @@ Void TestHybridEvolver::test_solver_budget_fallback() {
             }
         }
     }
-    HybridAutomaton system;
+    ContinuousTimeHybridAutomaton system;
     system.new_mode(q, {dot(x) = 1, dot(y) = 0});
     system.new_transition(q, e, q, {next(x) = 0, next(y) = y}, x >= 0.25_dec, EventKind::URGENT);
     CrossingProbeEvolver probe(system);
@@ -781,7 +781,7 @@ Void TestHybridEvolver::test_solver_budget_fallback() {
 }
 
 Void TestHybridEvolver::test_integrator_step_limit() {
-    HybridAutomaton system;
+    ContinuousTimeHybridAutomaton system;
     system.new_mode(q, {dot(x) = 1, dot(y) = 0});
     CrossingProbeEvolver evolver(system);
     OvershootingIntegrator integrator;
@@ -806,7 +806,7 @@ Void TestHybridEvolver::test_integrator_step_limit() {
 }
 
 Void TestHybridEvolver::test_dependent_step_policies() {
-    HybridAutomaton system;
+    ContinuousTimeHybridAutomaton system;
     system.new_mode(q, {dot(x) = 1, dot(y) = 0});
     for (auto kind: {StepKind::SPACE_DEPENDENT_EVOLUTION_TIME, StepKind::TIME_DEPENDENT_EVOLUTION_TIME,
                      StepKind::PARAMETER_DEPENDENT_EVOLUTION_TIME}) {
@@ -840,7 +840,7 @@ Void TestHybridEvolver::test_dependent_step_policies() {
 }
 
 Void TestHybridEvolver::test_nonlinear_grazing() {
-    HybridAutomaton system;
+    ContinuousTimeHybridAutomaton system;
     system.new_mode(q, {dot(x) = 1, dot(y) = 0});
     // The guard reaches its unique maximum at x=0; negative y misses it,
     // positive y crosses it, and y=0 is tangent.
@@ -874,7 +874,7 @@ Void TestHybridEvolver::test_nonlinear_grazing() {
 }
 
 Void TestHybridEvolver::test_guaranteed_near_tangent_crossing() {
-    HybridAutomaton system;
+    ContinuousTimeHybridAutomaton system;
     system.new_mode(q, {dot(x) = 1, dot(y) = 0});
     system.new_transition(q, e, q, {next(x) = x, next(y) = y - 1}, y - sqr(x) >= 0, EventKind::URGENT);
     HybridContinuousTimeEvolver<ValidatedTag> evolver(system);
@@ -903,7 +903,7 @@ Void TestHybridEvolver::test_guaranteed_near_tangent_crossing() {
 }
 
 Void TestHybridEvolver::test_crossing_in_the_past() {
-    HybridAutomaton system;
+    ContinuousTimeHybridAutomaton system;
     system.new_mode(q, {dot(x) = 1, dot(y) = 0});
     system.new_transition(q, e, q, {next(x) = x, next(y) = y - 1}, y - sqr(x) >= 0, EventKind::URGENT);
     HybridContinuousTimeEvolver<ValidatedTag> evolver(system);
@@ -938,7 +938,7 @@ Void TestHybridEvolver::test_crossing_in_the_past() {
 }
 
 Void TestHybridEvolver::test_initially_active_creep() {
-    HybridAutomaton system;
+    ContinuousTimeHybridAutomaton system;
     DiscreteLocation target(2);
     system.new_mode(q, {dot(x) = 1, dot(y) = 0});
     system.new_mode(target, {dot(x) = 0, dot(y) = 0});
@@ -972,7 +972,7 @@ Void TestHybridEvolver::test_initially_active_creep() {
 }
 
 Void TestHybridEvolver::test_creep_with_other_events() {
-    HybridAutomaton system;
+    ContinuousTimeHybridAutomaton system;
     DiscreteLocation urgent_target(2), early_target(3), optional_target(4);
     DiscreteEvent early("early"), optional("optional");
     system.new_mode(q, {dot(x) = 1, dot(y) = 0});
@@ -1020,7 +1020,7 @@ Void TestHybridEvolver::test_creep_with_other_events() {
 }
 
 Void TestHybridEvolver::test_creep_solver_budget() {
-    HybridAutomaton system;
+    ContinuousTimeHybridAutomaton system;
     DiscreteLocation linear_target(2), curved_target(3);
     DiscreteEvent linear("linear");
     system.new_mode(q, {dot(x) = 1, dot(y) = 0});
@@ -1060,7 +1060,7 @@ Void TestHybridEvolver::test_creep_solver_budget() {
 }
 
 Void TestHybridEvolver::test_partial_crossing_without_creep() {
-    HybridAutomaton system;
+    ContinuousTimeHybridAutomaton system;
     DiscreteLocation target(2);
     system.new_mode(q, {dot(x) = 1, dot(y) = 0});
     system.new_mode(target, {dot(x) = 0, dot(y) = 0});
@@ -1085,7 +1085,7 @@ Void TestHybridEvolver::test_partial_crossing_without_creep() {
 }
 
 Void TestHybridEvolver::test_straddling_initial_times() {
-    HybridAutomaton system;
+    ContinuousTimeHybridAutomaton system;
     system.new_mode(q, {dot(x) = 1, dot(y) = 0});
     HybridContinuousTimeEvolver<ValidatedTag> evolver(system);
     evolver.ALLOW_CREEP = false;
@@ -1191,7 +1191,7 @@ Void TestHybridEvolver::test_formatting() {
 }
 
 Void TestHybridEvolver::test_flow() {
-    HybridAutomaton automaton;
+    ContinuousTimeHybridAutomaton automaton;
     automaton.new_mode(q, {dot(x) = one, dot(y) = one / 2});
     RealSpace space = automaton.continuous_state_space(q);
 
@@ -1214,7 +1214,7 @@ Void TestHybridEvolver::test_flow() {
 }
 
 Void TestHybridEvolver::test_exact_final_time() {
-    HybridAutomaton automaton;
+    ContinuousTimeHybridAutomaton automaton;
     automaton.new_mode(q, {dot(x) = one, dot(y) = one / 2});
     RealSpace space = automaton.continuous_state_space(q);
 
@@ -1237,7 +1237,7 @@ Void TestHybridEvolver::test_exact_final_time() {
 }
 
 Void TestHybridEvolver::test_maximum_steps() {
-    HybridAutomaton automaton;
+    ContinuousTimeHybridAutomaton automaton;
     automaton.new_mode(q, {dot(x) = one, dot(y) = one / 2});
     const Dyadic c1(1.5);
     const Dyadic c2(1.0 / 16);
@@ -1268,7 +1268,7 @@ Void TestHybridEvolver::test_maximum_steps() {
 }
 
 Void TestHybridEvolver::test_urgent_event() {
-    HybridAutomaton automaton;
+    ContinuousTimeHybridAutomaton automaton;
     automaton.new_mode(q, {dot(x) = one, dot(y) = one / 2});
     const Dyadic c1(1.5);
     const Dyadic c2(1.0 / 16);
@@ -1295,7 +1295,7 @@ Void TestHybridEvolver::test_urgent_event() {
 }
 
 Void TestHybridEvolver::test_step_size_event() {
-    HybridAutomaton automaton;
+    ContinuousTimeHybridAutomaton automaton;
     automaton.new_mode(q, {dot(x) = one, dot(y) = one / 2});
     automaton.new_transition(q, e, q, {next(x) = x - 2, next(y) = y}, x - 2 >= 0, EventKind::URGENT);
 
@@ -1319,7 +1319,7 @@ Void TestHybridEvolver::test_step_size_event() {
 }
 
 Void TestHybridEvolver::test_partial_event() {
-    HybridAutomaton automaton;
+    ContinuousTimeHybridAutomaton automaton;
     automaton.new_mode(q, {dot(x) = one, dot(y) = one / 2});
     automaton.new_transition(q, e, q, {next(x) = x - 2, next(y) = y}, x - y / 16 - 2 >= 0, EventKind::URGENT);
 
@@ -1359,7 +1359,7 @@ Void TestHybridEvolver::test_partial_event() {
 }
 
 Void TestHybridEvolver::test_initially_active_event() {
-    HybridAutomaton automaton;
+    ContinuousTimeHybridAutomaton automaton;
     automaton.new_mode(q, {dot(x) = one, dot(y) = one});
     automaton.new_transition(q, e, q, {next(x) = x + 1, next(y) = y}, -x >= 0, EventKind::URGENT);
 
@@ -1383,7 +1383,7 @@ Void TestHybridEvolver::test_initially_active_event() {
 }
 
 Void TestHybridEvolver::test_simultaneous_events() {
-    HybridAutomaton automaton;
+    ContinuousTimeHybridAutomaton automaton;
     DiscreteEvent e1("e1");
     DiscreteEvent e2("e2");
     automaton.new_mode(q, {dot(x) = one, dot(y) = one});
@@ -1416,7 +1416,7 @@ Void TestHybridEvolver::test_transverse_linear_crossing() {
     ExactDouble tol = 1e-5_pr;
     RealExpression guard = x + y / 2 - 1;
 
-    HybridAutomaton system;
+    ContinuousTimeHybridAutomaton system;
     system.new_mode(q1, {dot(x) = 1, dot(y) = 0});
     system.new_mode(q2, {dot(x) = 0, dot(y) = 1});
     system.new_transition(q1, e, q2, {prime(x) = x, prime(y) = y}, guard >= 0, EventKind::URGENT);

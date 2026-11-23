@@ -386,7 +386,7 @@ class TestHybridStepContracts : public Testing::ContextFixture {
         const DiscreteLocation q(1);
         const RealVariable x("x"), output("output");
         const RealSpace space({x});
-        HybridAutomaton system;
+        ContinuousTimeHybridAutomaton system;
         system.new_mode(q, {dot(x) = 1}, {let(output) = 2 * x});
         CertificateProbe probe(system);
         probe.configuration().set_maximum_step_size(0.25);
@@ -422,7 +422,7 @@ class TestHybridStepContracts : public Testing::ContextFixture {
     void test_shortened_steps_use_the_tube_at_the_stopping_time() {
         const DiscreteLocation q(1);
         const RealVariable x("x");
-        HybridAutomaton system;
+        ContinuousTimeHybridAutomaton system;
         system.new_mode(q, {dot(x) = 1});
         CertificateProbe probe(system);
         probe.configuration().set_maximum_step_size(0.25);
@@ -449,7 +449,7 @@ class TestHybridStepContracts : public Testing::ContextFixture {
         const DiscreteLocation q(1);
         const RealVariable x("x");
         const RealSpace space({x});
-        HybridAutomaton system;
+        ContinuousTimeHybridAutomaton system;
         system.new_mode(q, {dot(x) = 1});
         CertificateProbe probe(system);
         probe.configuration().set_maximum_step_size(0.25);
@@ -478,7 +478,7 @@ class TestHybridStepContracts : public Testing::ContextFixture {
     void test_unsupported_step_shapes_are_rejected_before_publication() {
         const DiscreteLocation q(1);
         const RealVariable x("x");
-        HybridAutomaton system;
+        ContinuousTimeHybridAutomaton system;
         system.new_mode(q, {dot(x) = 1});
         CertificateProbe probe(system);
         const auto initial = probe.enclosure(HybridExactBox(q, RealSpace({
@@ -504,7 +504,7 @@ class TestHybridStepContracts : public Testing::ContextFixture {
         DiscreteEvent event("guard");
         RealVariable x("x"), y("y");
         RealSpace space({x, y});
-        HybridAutomaton system;
+        ContinuousTimeHybridAutomaton system;
         system.new_mode(q, {dot(x) = 1, dot(y) = 0});
         StepProbe probe(system);
         auto initial = probe.enclosure(HybridExactBox(q, space, ExactBoxType({
@@ -537,7 +537,7 @@ class TestHybridStepContracts : public Testing::ContextFixture {
         DiscreteEvent guard("jump"), invariant("invariant");
         RealVariable x("x"), y("y");
         RealSpace space({x, y});
-        HybridAutomaton system;
+        ContinuousTimeHybridAutomaton system;
         system.new_mode(q, {dot(x) = 1, dot(y) = 0});
         system.new_mode(target, {dot(x) = 0, dot(y) = 0});
         system.new_invariant(q, x <= -0.5_dec, invariant);
@@ -568,7 +568,7 @@ class TestHybridStepContracts : public Testing::ContextFixture {
         DiscreteLocation q(1);
         RealVariable x("x"), y("y");
         RealSpace space({x, y});
-        HybridAutomaton system;
+        ContinuousTimeHybridAutomaton system;
         system.new_mode(q, {dot(x) = 1, dot(y) = 0});
         StepProbe probe(system);
         probe.ALLOW_UNWIND = true;
@@ -625,7 +625,7 @@ class TestHybridStepContracts : public Testing::ContextFixture {
         DiscreteEvent event("guard");
         RealVariable x("x"), y("y");
         RealSpace space({x, y});
-        HybridAutomaton system;
+        ContinuousTimeHybridAutomaton system;
         system.new_mode(q, {dot(x) = 1, dot(y) = 0});
         StepProbe probe(system);
         auto initial = probe.enclosure(HybridExactBox(q, space, ExactBoxType({
@@ -758,7 +758,7 @@ class TestHybridStepContracts : public Testing::ContextFixture {
         DiscreteEvent event("past maximum");
         RealVariable x("x"), y("y");
         RealSpace space({x, y});
-        HybridAutomaton system;
+        ContinuousTimeHybridAutomaton system;
         system.new_mode(q, {dot(x) = 1, dot(y) = 0});
         StepProbe probe(system);
         auto initial = probe.enclosure(HybridExactBox(q, space,

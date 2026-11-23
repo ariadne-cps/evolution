@@ -264,10 +264,10 @@ struct Scenario {
     double continuation_horizon;
 };
 
-HybridAutomaton make_system(const Scenario& scenario, DiscreteLocation source,
+ContinuousTimeHybridAutomaton make_system(const Scenario& scenario, DiscreteLocation source,
                             DiscreteLocation target, DiscreteEvent jump,
                             RealVariable x, RealVariable y) {
-    HybridAutomaton system(scenario.name);
+    ContinuousTimeHybridAutomaton system(scenario.name);
     system.new_mode(source, {dot(x) = 1, dot(y) = sqr(x)});
     system.new_mode(target, {dot(x) = 1 + sqr(y), dot(y) = 1});
     system.new_transition(source, jump, target, {next(x) = x, next(y) = y},
@@ -751,7 +751,7 @@ ScenarioSummary run_scenario(const Scenario& scenario, const Options& options,
                                    verbose, summary.generated, summary.eligible);
     summary.selected = original.size();
 
-    HybridAutomaton target_system("recombination-continuation");
+    ContinuousTimeHybridAutomaton target_system("recombination-continuation");
     target_system.new_mode(target, {dot(x) = 1 + sqr(y), dot(y) = 1});
     HybridContinuousTimeEvolver<ValidatedTag> continuation(target_system);
     configure(continuation, options);

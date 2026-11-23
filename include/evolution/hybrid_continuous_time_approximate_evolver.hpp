@@ -60,8 +60,8 @@ inline OutputStream& operator<<(OutputStream& os, const DiscretizationHybridType
 
 /** @brief HybridTerminationCriterion represents simulation algorithms for hybrid dynamical systems. */
 class HybridTerminationCriterion;
-/** @brief HybridAutomatonInterface represents simulation algorithms for hybrid dynamical systems. */
-class HybridAutomatonInterface;
+/** @brief ContinuousTimeHybridAutomatonInterface represents simulation algorithms for hybrid dynamical systems. */
+class ContinuousTimeHybridAutomatonInterface;
 /** @brief DiscreteEvent represents simulation algorithms for hybrid dynamical systems. */
 class DiscreteEvent;
 /** @brief DiscreteLocation represents simulation algorithms for hybrid dynamical systems. */
@@ -86,7 +86,7 @@ class HybridContinuousTimeEvolver<ApproximateTag> : public HybridContinuousTimeE
     typedef Point<FloatDPApproximation> ApproximatePointType;
     typedef Vector<ApproximatePointType> ApproximatePointListType;
     typedef HybridContinuousTimeEvolverConfiguration<ApproximateTag> ConfigurationType;
-    typedef HybridAutomatonInterface SystemType;
+    typedef ContinuousTimeHybridAutomatonInterface SystemType;
     typedef Orbit<HybridApproximatePointType> OrbitType;
     typedef HybridTerminationCriterion TerminationType;
     typedef Orbit<HybridApproximateListPointType> OrbitListType;

@@ -91,7 +91,7 @@ int main() {
     // Python tutorial. The simulation budget counts time and jumps.
     const DiscreteLocation idle(0), active(1);
     const DiscreteEvent activate("activate"), deactivate("deactivate");
-    HybridAutomaton automaton;
+    ContinuousTimeHybridAutomaton automaton;
     automaton.new_mode(idle);
     automaton.new_mode(active);
     automaton.new_transition(idle, activate, active);
@@ -113,7 +113,7 @@ int main() {
     // Hybrid validated evolution with continuous dynamics in a single mode.
     // No events are enabled: this isolates the continuous flow in a hybrid
     // enclosure, with a short maximum time and at most one discrete jump.
-    HybridAutomaton flow_automaton;
+    ContinuousTimeHybridAutomaton flow_automaton;
     List<DottedRealAssignment> hybrid_dynamics;
     hybrid_dynamics.append(dot(x) = -x);
     flow_automaton.new_mode(idle, hybrid_dynamics);
@@ -133,7 +133,7 @@ int main() {
 
     // Inclusion modes use the same hybrid evolver and explicit numerical choices.
     // This mode has no outgoing events; its inputs may vary measurably in time.
-    HybridAutomaton inclusion_automaton;
+    ContinuousTimeHybridAutomaton inclusion_automaton;
     inclusion_automaton.new_mode(idle, disturbed);
     HybridContinuousTimeEvolver<ValidatedTag> hybrid_inclusion(inclusion_automaton);
     hybrid_inclusion.set_integrator(integrator, ZeroApproximation(), ConstantApproximation());

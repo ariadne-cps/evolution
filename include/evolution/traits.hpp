@@ -41,8 +41,8 @@ class IteratedMap;
 class OrdinaryDifferentialAlgebraicEquation;
 /** @brief OrdinaryDifferentialAlgebraicInclusion: compile-time correspondence between systems, evolvers and enclosures. */
 class OrdinaryDifferentialAlgebraicInclusion;
-/** @brief HybridAutomatonInterface: compile-time correspondence between systems, evolvers and enclosures. */
-class HybridAutomatonInterface;
+/** @brief ContinuousTimeHybridAutomatonInterface: compile-time correspondence between systems, evolvers and enclosures. */
+class ContinuousTimeHybridAutomatonInterface;
 
 /** @brief DiscreteTimeEvolver<ValidatedTag>: compile-time correspondence between systems, evolvers and enclosures. */
 template<>
@@ -88,7 +88,7 @@ struct EvolutionTraits<ValidatedTag, ContinuousDynamics> {
 };
 
 template<>
-struct EvolutionTraits<ValidatedTag, HybridAutomatonInterface> {
+struct EvolutionTraits<ValidatedTag, ContinuousTimeHybridAutomatonInterface> {
     using EvolverType = HybridContinuousTimeEvolverInterface<ValidatedTag>;
     using EnclosureType = HybridEnclosure;
 };
@@ -108,7 +108,7 @@ struct EvolutionTraits<ApproximateTag, ContinuousDynamics> {
 };
 
 template<>
-struct EvolutionTraits<ApproximateTag, HybridAutomatonInterface> {
+struct EvolutionTraits<ApproximateTag, ContinuousTimeHybridAutomatonInterface> {
     using EvolverType = HybridContinuousTimeEvolverInterface<ApproximateTag>;
 };
 

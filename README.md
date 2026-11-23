@@ -78,7 +78,7 @@ on `[state, local time]` and a structured endpoint. Multipatch results, extra
 input coordinates, explicit-time or fixed-parameter metadata and box-only
 certificates are rejected explicitly for that event analysis.
 
-`HybridAutomaton::new_mode(location, equation_or_inclusion)` retains an owned copy
+`ContinuousTimeHybridAutomaton::new_mode(location, equation_or_inclusion)` retains an owned copy
 of the original ODAE or ODAI declaration. `HybridContinuousTimeEvolver<ValidatedTag>` supports
 autonomous and nonautonomous inclusion modes without fixed model parameters, under `UPPER`
 semantics. State invariants and PROGRESS/URGENT/IMPACT guards restrict outer
@@ -88,7 +88,7 @@ zero-derivative contacts, without claiming direction or a first-entry time.
 Select their numerical capability explicitly:
 
 ```cpp
-HybridAutomaton automaton;
+ContinuousTimeHybridAutomaton automaton;
 automaton.new_mode(mode, inclusion);
 HybridContinuousTimeEvolver<ValidatedTag> evolver(automaton);
 evolver.set_integrator(integrator, ZeroApproximation(), ConstantApproximation());

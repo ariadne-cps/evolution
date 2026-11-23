@@ -39,7 +39,7 @@
 #include "evolution/hybrid_crossing.hpp"
 #include "evolution/hybrid_orbit.hpp"
 #include "system/discrete_event.hpp"
-#include "system/hybrid_automaton_interface.hpp"
+#include "system/continuous_time_hybrid_automaton_interface.hpp"
 
 namespace Ariadne {
 

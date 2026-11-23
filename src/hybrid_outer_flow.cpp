@@ -33,11 +33,11 @@
 #include "continuous_integration.hpp"
 #include "hybrid_parameters.hpp"
 #include "hybrid_transition_handlers.hpp"
-#include "system/hybrid_automaton_interface.hpp"
+#include "system/continuous_time_hybrid_automaton_interface.hpp"
 
 namespace Ariadne::EvolutionDetail {
 
-Void validate_outer_event_kinds(const HybridAutomatonInterface& system, DiscreteLocation location) {
+Void validate_outer_event_kinds(const ContinuousTimeHybridAutomatonInterface& system, DiscreteLocation location) {
     for (const auto& event: system.events(location)) {
         const auto kind = system.event_kind(location, event);
         if (kind != EventKind::INVARIANT && kind != EventKind::PROGRESS &&
@@ -50,7 +50,7 @@ Void validate_outer_event_kinds(const HybridAutomatonInterface& system, Discrete
 }
 
 Map<DiscreteEvent, TransitionData> outer_flow_transitions(
-    const HybridAutomatonInterface& system, DiscreteLocation location) {
+    const ContinuousTimeHybridAutomatonInterface& system, DiscreteLocation location) {
     validate_outer_event_kinds(system, location);
     Map<DiscreteEvent, TransitionData> transitions;
     for (const auto& event: system.events(location)) {

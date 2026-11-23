@@ -79,11 +79,11 @@ List<ArgumentParser> argument_parsers(Options& options) {
     count("n", "samples", "Measured runs (default: 5)", options.samples, false);
     return parsers;
 }
-HybridAutomaton make_watertank() {
+ContinuousTimeHybridAutomaton make_watertank() {
     RealVariable height("height"), aperture("aperture");
     StringVariable valve("valve");
     DiscreteLocation open(valve | "open"), opening(valve | "opening"), closed(valve | "closed"), closing(valve | "closing");
-    HybridAutomaton tank("watertank");
+    ContinuousTimeHybridAutomaton tank("watertank");
     RealExpression flow = -Real(1 / 50_q) * height + Real(3 / 10_q) * aperture;
     tank.new_mode(open, {dot(height) = flow, dot(aperture) = 0});
     tank.new_mode(closed, {dot(height) = flow, dot(aperture) = 0});
@@ -134,7 +134,7 @@ int main(int argc, const char* argv[]) {
                                         argument_parsers(options)));
         if (!cli.acquire(argc, argv))
             return 0;
-        const HybridAutomaton tank = make_watertank();
+        const ContinuousTimeHybridAutomaton tank = make_watertank();
         RealVariable height("height"), aperture("aperture");
         StringVariable valve("valve");
         HybridSet initial(DiscreteLocation(valve | "opening"),

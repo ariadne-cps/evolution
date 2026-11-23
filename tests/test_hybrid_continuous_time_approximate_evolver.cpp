@@ -40,12 +40,12 @@
 using namespace Ariadne;
 
 // A valid progress predicate supplied through the supported automaton interface.
-// HybridAutomaton's convenience invariant builder currently selects INVARIANT.
-class ProgressAutomaton : public HybridAutomaton {
+// ContinuousTimeHybridAutomaton's convenience invariant builder currently selects INVARIANT.
+class ProgressAutomaton : public ContinuousTimeHybridAutomaton {
   public:
     ProgressAutomaton* clone() const override { return new ProgressAutomaton(*this); }
     EventKind event_kind(DiscreteLocation location, DiscreteEvent event) const override {
-        auto kind = HybridAutomaton::event_kind(location, event);
+        auto kind = ContinuousTimeHybridAutomaton::event_kind(location, event);
         return kind == EventKind::INVARIANT ? EventKind::PROGRESS : kind;
     }
 };
@@ -70,8 +70,8 @@ class TestHybridContinuousTimeApproximateEvolver : public Ariadne::Testing::Cont
         ARIADNE_TESTING_PROVE(std::abs(values[curve.space()[y]].raw().get_d() - yv) < 1e-12);
         ARIADNE_TESTING_PROVE(std::abs(values[curve.space()[z]].raw().get_d() - zv) < 1e-12);
     }
-    HybridAutomaton flow_system() const {
-        HybridAutomaton system;
+    ContinuousTimeHybridAutomaton flow_system() const {
+        ContinuousTimeHybridAutomaton system;
         system.new_mode(q, {dot(x) = 1, dot(y) = 0}, {let(z) = x + 2 * y});
         return system;
     }
@@ -136,8 +136,8 @@ class TestHybridContinuousTimeApproximateEvolver : public Ariadne::Testing::Cont
             progress.new_mode(q, {dot(x) = 1, dot(y) = 0}, {let(z) = x + 2 * y});
             progress.new_invariant(q, x <= 1, block);
             HybridContinuousTimeEvolver<ApproximateTag> simulator(kind == EventKind::INVARIANT
-                                                                      ? static_cast<const HybridAutomatonInterface&>(base)
-                                                                      : static_cast<const HybridAutomatonInterface&>(progress));
+                                                                      ? static_cast<const ContinuousTimeHybridAutomatonInterface&>(base)
+                                                                      : static_cast<const ContinuousTimeHybridAutomatonInterface&>(progress));
             for (unsigned verbosity: {0u, 100u}) {
                 LogVerbosityScope logging(verbosity);
                 auto stopped = simulator.orbit(point(2.0), HybridTime(1.0_x, 3));

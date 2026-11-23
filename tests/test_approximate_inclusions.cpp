@@ -198,7 +198,7 @@ class TestApproximateInclusions : public Testing::ContextFixture {
     }
     void test_hybrid_flow_single_and_multiple() {
         for (bool timed: {false, true}) {
-            HybridAutomaton system;
+            ContinuousTimeHybridAutomaton system;
             system.new_mode(source, inclusion(timed));
             Hybrid evolver(system, AlternatingSampling(), parameters());
             evolver.configuration().set_step_size(0.0625);
@@ -220,8 +220,8 @@ class TestApproximateInclusions : public Testing::ContextFixture {
             ARIADNE_TESTING_PROVE(batch.curves(0u)[0u].euclidean_set().end()->second[0u].raw().get_d() != batch.curves(1u)[0u].euclidean_set().end()->second[0u].raw().get_d());
         }
     }
-    HybridAutomaton transitions() const {
-        HybridAutomaton system;
+    ContinuousTimeHybridAutomaton transitions() const {
+        ContinuousTimeHybridAutomaton system;
         system.new_mode(source, OrdinaryDifferentialAlgebraicEquation({dot(x) = 1}, RealVariablesBox({2 <= p <= 3})));
         system.new_mode(middle, OrdinaryDifferentialAlgebraicInclusion({dot(x) = u}, RealVariablesBox({-1 <= u <= 1}), RealVariablesBox({2 <= p <= 3})));
         system.new_mode(target, OrdinaryDifferentialAlgebraicInclusion({dot(x) = v + sqr(w) + t}, RealVariablesBox({-1 <= v <= 1, -2 <= w <= 2})));
@@ -259,7 +259,7 @@ class TestApproximateInclusions : public Testing::ContextFixture {
     }
     void test_sampler_output_and_representation_gates() {
         const Ordinary::ApproximateListPointType initial{point()};
-        HybridAutomaton system;
+        ContinuousTimeHybridAutomaton system;
         system.new_mode(source, inclusion());
         for (unsigned kind: {0u, 1u, 2u}) {
             Ordinary evolver(inclusion(), InvalidSampling(kind), parameters());
@@ -278,7 +278,7 @@ class TestApproximateInclusions : public Testing::ContextFixture {
         const auto uncertain = ValidatedIntervalTaylorFunctionModel<FloatDP>::constant(domain, FloatDPUpperInterval(-1, 1, dp), ThresholdSweeper<FloatDP>(dp, 1e-10));
         const OrdinaryDifferentialAlgebraicInclusion interval(RealSpace({x}), ValidatedVectorIntervalTaylorFunctionModel<FloatDP>({uncertain}));
         ARIADNE_TESTING_EXPECT_THROWS(std::invalid_argument, Ordinary(interval, MidpointInputSampling()));
-        HybridAutomaton interval_system;
+        ContinuousTimeHybridAutomaton interval_system;
         interval_system.new_mode(source, interval);
         Hybrid interval_hybrid(interval_system, MidpointInputSampling());
         const auto interval_start = Hybrid::HybridApproximatePointType(source, RealSpace({x}), FloatDPApproximationPoint({0.0_x}, dp));

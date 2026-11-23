@@ -21,7 +21,7 @@ evolution capabilities with bounded scenarios:
 
 The Python program builds a contracting `IteratedMap`, computes one validated
 upper-semantics iteration using `DiscreteTimeEvolver[ValidatedTag]`, and constructs the same
-discrete-only `HybridAutomaton` used in C++. Both examples use the installed
+discrete-only `ContinuousTimeHybridAutomaton` used in C++. Both examples use the installed
 `pyariadne_evolution` extension. `DiscreteTimeValidatedEvolverConfiguration` is exposed so that
 its enclosure-radius and subdivision options can be configured.
 

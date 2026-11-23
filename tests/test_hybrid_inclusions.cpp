@@ -34,7 +34,7 @@
 #include "integration/integrator.hpp"
 #include "integration/selected_inclusion_integrator.hpp"
 #include "logging/test_runner.hpp"
-#include "system/hybrid_automaton.hpp"
+#include "system/continuous_time_hybrid_automaton.hpp"
 #include "system/odae.hpp"
 #include "system/odai.hpp"
 
@@ -49,7 +49,7 @@ class TestHybridInclusions : public Testing::ContextFixture {
     Void test_autonomous_inclusion_with_both_explicit_solver_choices() {
         const DiscreteLocation q(1);
         const RealVariable x("x"), u("u");
-        HybridAutomaton system;
+        ContinuousTimeHybridAutomaton system;
         system.new_mode(q, OrdinaryDifferentialAlgebraicInclusion({dot(x) = u}, RealVariablesBox({-1 <= u <= 1})));
         for (bool box_method: {false, true}) {
             HybridContinuousTimeEvolver<ValidatedTag> evolver(system);
@@ -88,7 +88,7 @@ class TestHybridInclusions : public Testing::ContextFixture {
     Void test_reconditioning_protects_carried_parameters() {
         const DiscreteLocation q(1);
         const RealVariable x("x"), u("u");
-        HybridAutomaton system;
+        ContinuousTimeHybridAutomaton system;
         system.new_mode(q, OrdinaryDifferentialAlgebraicInclusion({dot(x) = u}, RealVariablesBox({-1 <= u <= 1})));
         HybridContinuousTimeEvolver<ValidatedTag> evolver(system);
         TaylorPicardIntegrator base(step_maximum_error = 1e-6);
@@ -136,7 +136,7 @@ class TestHybridInclusions : public Testing::ContextFixture {
         const DiscreteLocation source(1), target(2);
         const DiscreteEvent enter("enter");
         const RealVariable s("s"), x("x"), y("y"), u("u"), output("output");
-        HybridAutomaton system;
+        ContinuousTimeHybridAutomaton system;
         system.new_mode(source, OrdinaryDifferentialAlgebraicEquation({dot(s) = 1}, {let(output) = 2 * s}));
         system.new_mode(target, OrdinaryDifferentialAlgebraicInclusion(
                                     {dot(x) = u, dot(y) = 0}, RealVariablesBox({-1 <= u <= 1})));
@@ -183,7 +183,7 @@ class TestHybridInclusions : public Testing::ContextFixture {
         });
         const auto field = ValidatedIntervalTaylorFunctionModel<FloatDP>::constant(
             domain, FloatDPUpperInterval(-1, 1, dp), ThresholdSweeper<FloatDP>(dp, 1e-10));
-        HybridAutomaton system;
+        ContinuousTimeHybridAutomaton system;
         system.new_mode(q, OrdinaryDifferentialAlgebraicInclusion(RealSpace({x}),
                                                                   ValidatedVectorIntervalTaylorFunctionModel<FloatDP>({field})));
         for (bool boxes: {false, true}) {
@@ -223,7 +223,7 @@ class TestHybridInclusions : public Testing::ContextFixture {
         const DiscreteLocation q(1);
         const RealVariable x("x");
         auto make = [&]() {
-            HybridAutomaton system;
+            ContinuousTimeHybridAutomaton system;
             system.new_mode(q, OrdinaryDifferentialAlgebraicInclusion({dot(x) = 1}, RealVariablesBox({})));
             HybridContinuousTimeEvolver<ValidatedTag> evolver(system);
             evolver.set_integrator(FirstOrderMultifunctionIntegrator());
@@ -255,7 +255,7 @@ class TestHybridInclusions : public Testing::ContextFixture {
         const DiscreteLocation q(1);
         const RealVariable x("x"), u("u");
         const DiscreteEvent bound("bound");
-        HybridAutomaton system;
+        ContinuousTimeHybridAutomaton system;
         system.new_mode(q, OrdinaryDifferentialAlgebraicInclusion(
                                {dot(x) = u}, RealVariablesBox({-1 <= u <= 1})));
         system.new_invariant(q, x <= 0, bound);
@@ -292,7 +292,7 @@ class TestHybridInclusions : public Testing::ContextFixture {
     Void test_inclusion_invariants_preserve_closed_zero_horizon() {
         const DiscreteLocation q(1);
         const RealVariable x("x"), u("u");
-        HybridAutomaton system;
+        ContinuousTimeHybridAutomaton system;
         system.new_mode(q, OrdinaryDifferentialAlgebraicInclusion(
                                {dot(x) = u}, RealVariablesBox({-1 <= u <= 1})));
         system.new_invariant(q, x <= 0, DiscreteEvent("bound"));
@@ -315,7 +315,7 @@ class TestHybridInclusions : public Testing::ContextFixture {
         const DiscreteLocation source(1), target(2);
         const RealVariable x("x"), u("u");
         for (EventKind kind: {EventKind::URGENT, EventKind::PERMISSIVE}) {
-            HybridAutomaton system;
+            ContinuousTimeHybridAutomaton system;
             system.new_mode(source, OrdinaryDifferentialAlgebraicInclusion(
                                         {dot(x) = u}, RealVariablesBox({-1 <= u <= 1})));
             system.new_mode(target, OrdinaryDifferentialAlgebraicEquation({dot(x) = 0}));
@@ -365,7 +365,7 @@ class TestHybridInclusions : public Testing::ContextFixture {
         const DiscreteLocation q(1);
         const RealVariable x("x"), u("u");
         const DiscreteEvent progress("progress");
-        HybridAutomaton system;
+        ContinuousTimeHybridAutomaton system;
         system.new_mode(q, OrdinaryDifferentialAlgebraicInclusion(
                                {dot(x) = u}, RealVariablesBox({-1 <= u <= 1})));
         system.new_guard(q, progress, x >= 0.03125_x, EventKind::PROGRESS);
@@ -407,7 +407,7 @@ class TestHybridInclusions : public Testing::ContextFixture {
         const DiscreteLocation source(1), left(2), right(3);
         const RealVariable x("x"), u("u");
         const DiscreteEvent first("first"), second("second");
-        HybridAutomaton system;
+        ContinuousTimeHybridAutomaton system;
         system.new_mode(source, OrdinaryDifferentialAlgebraicInclusion(
                                     {dot(x) = u}, RealVariablesBox({-1 <= u <= 1})));
         system.new_mode(left, OrdinaryDifferentialAlgebraicEquation({dot(x) = 0}));
@@ -446,7 +446,7 @@ class TestHybridInclusions : public Testing::ContextFixture {
         const DiscreteLocation source(1), target(2);
         const RealVariable x("x"), u("u");
         const DiscreteEvent event("optional");
-        HybridAutomaton system;
+        ContinuousTimeHybridAutomaton system;
         system.new_mode(source, OrdinaryDifferentialAlgebraicInclusion(
                                     {dot(x) = u}, RealVariablesBox({-1 <= u <= 1})));
         system.new_mode(target, OrdinaryDifferentialAlgebraicEquation({dot(x) = 0}));
@@ -482,7 +482,7 @@ class TestHybridInclusions : public Testing::ContextFixture {
                                                    x
         }),
                                             ExactBoxType({{0, 0}}));
-        HybridAutomaton system;
+        ContinuousTimeHybridAutomaton system;
         system.new_mode(q, OrdinaryDifferentialAlgebraicInclusion({dot(x) = u}, RealVariablesBox({-1 <= u <= 1})));
         HybridContinuousTimeEvolver<ValidatedTag> evolver(system);
         ARIADNE_TESTING_EXPECT_THROWS(std::invalid_argument, evolver.orbit(initial, HybridTime(0u, 1), Semantics::UPPER));
@@ -501,7 +501,7 @@ class TestHybridInclusions : public Testing::ContextFixture {
         // A state invariant does not establish a certified entry time or
         // LOWER reset capability; possible UPPER jumps use guarded reach.
         const DiscreteLocation target(2);
-        HybridAutomaton jumping;
+        ContinuousTimeHybridAutomaton jumping;
         jumping.new_mode(q, OrdinaryDifferentialAlgebraicInclusion(
                                 {dot(x) = u}, RealVariablesBox({-1 <= u <= 1})));
         jumping.new_mode(target, OrdinaryDifferentialAlgebraicEquation({dot(x) = 0}));
@@ -514,7 +514,7 @@ class TestHybridInclusions : public Testing::ContextFixture {
         // conservative event candidate, never a coverage certificate.
         ARIADNE_TESTING_PROVE(at_zero.final().size() > 0u);
 
-        HybridAutomaton timed;
+        ContinuousTimeHybridAutomaton timed;
         timed.new_mode(q, OrdinaryDifferentialAlgebraicInclusion({dot(x) = t + p + u}, RealVariablesBox({-1 <= u <= 1}),
                                                                  RealVariablesBox({0 <= p <= 1}), t));
         HybridContinuousTimeEvolver<ValidatedTag> timed_evolver(timed);

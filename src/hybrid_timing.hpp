@@ -41,7 +41,7 @@ TimingData estimate_hybrid_timing(
     Real final_time, const FlowFunctionModel& flow,
     Map<DiscreteEvent, CrossingData>& crossings,
     const Map<DiscreteEvent, TransitionData>& transitions,
-    const HybridEnclosure& initial, const HybridAutomatonInterface& system,
+    const HybridEnclosure& initial, const ContinuousTimeHybridAutomatonInterface& system,
     const ValidatedFunctionPatchFactory& patch_factory,
     const EquationSolverInterface& solver, Bool allow_creep, Bool allow_unwind);
 } // namespace EvolutionDetail

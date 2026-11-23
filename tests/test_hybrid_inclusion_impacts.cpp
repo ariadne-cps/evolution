@@ -31,7 +31,7 @@
 #include "integration/integrator.hpp"
 #include "integration/selected_inclusion_integrator.hpp"
 #include "logging/test_runner.hpp"
-#include "system/hybrid_automaton.hpp"
+#include "system/continuous_time_hybrid_automaton.hpp"
 #include "system/odae.hpp"
 #include "system/odai.hpp"
 
@@ -48,8 +48,8 @@ struct ContactScenario {
     TaylorPicardIntegrator base{StepMaximumError(1e-6)};
     ValidatedFunctionPatchFactory factory{base.function_factory()};
 
-    HybridAutomaton system(const RealExpression& guard) const {
-        HybridAutomaton result;
+    ContinuousTimeHybridAutomaton system(const RealExpression& guard) const {
+        ContinuousTimeHybridAutomaton result;
         result.new_mode(source, OrdinaryDifferentialAlgebraicInclusion(
                                     {dot(x) = 1, dot(y) = u}, RealVariablesBox({Dyadic(-0.125_x) <= u <= Dyadic(0.125_x)})));
         result.new_mode(target, OrdinaryDifferentialAlgebraicEquation({dot(z) = 0}, {let(output) = 2 * z}));

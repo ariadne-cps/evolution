@@ -64,7 +64,9 @@ class Scalings {
     ExactDouble scaling(const RealVariable& var) const {
         return (this->_scalings.has_key(var.name())) ? this->_scalings[var.name()] : this->_default_scaling;
     }
-    /** @brief Perform the specified evolution operation. */
+    /** @brief Return the scaling lengths in the variable order of the requested real space. */
+    Vector<ExactDouble> lengths(const RealSpace& spc) const;
+    /** @brief Construct a grid from the scaling policy (legacy paving adapter). */
     Grid grid(const RealSpace& spc) const;
     /** @brief Perform the specified evolution operation. */
     friend OutputStream& operator<<(OutputStream& os, const Scalings& s) {
@@ -83,13 +85,16 @@ inline Scalings::Scalings(ExactDouble default_scaling, const Map<RealVariable, E
     }
 }
 
-inline Grid Scalings::grid(const RealSpace& spc) const {
-    /** @brief Perform the specified evolution operation. */
-    Vector<ExactDouble> lengths(spc.dimension(), 1.0_x);
+inline Vector<ExactDouble> Scalings::lengths(const RealSpace& spc) const {
+    Vector<ExactDouble> result(spc.dimension(), 1.0_x);
     for (SizeType i = 0; i < spc.dimension(); ++i) {
-        lengths[i] = this->scaling(spc[i]);
+        result[i] = this->scaling(spc[i]);
     }
-    return Grid(lengths);
+    return result;
+}
+
+inline Grid Scalings::grid(const RealSpace& spc) const {
+    return Grid(this->lengths(spc));
 }
 
 } // namespace Ariadne

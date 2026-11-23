@@ -54,11 +54,17 @@ class TestScalings : public Ariadne::Testing::ContextFixture {
         Scalings named(3.0_x, entries);
         ARIADNE_TESTING_EXPECT_EQUAL(named.scaling(x), 2.0_x);
         ARIADNE_TESTING_EXPECT_EQUAL(named.scaling(y), 3.0_x);
-        Grid grid = named.grid(RealSpace({y, x}));
+        const RealSpace reversed_space({y, x});
+        const Vector<ExactDouble> lengths = named.lengths(reversed_space);
+        ARIADNE_TESTING_EXPECT_EQUAL(lengths.size(), 2u);
+        ARIADNE_TESTING_EXPECT_EQUAL(lengths[0], 3.0_x);
+        ARIADNE_TESTING_EXPECT_EQUAL(lengths[1], 2.0_x);
+        Grid grid = named.grid(reversed_space);
         ARIADNE_TESTING_EXPECT_EQUAL(grid.dimension(), 2u);
         ARIADNE_TESTING_EXPECT_EQUAL(grid.lengths()[0].get_d(), 3.0);
         ARIADNE_TESTING_EXPECT_EQUAL(grid.lengths()[1].get_d(), 2.0);
         Scalings empty(1.0_x, Map<RealVariable, ExactDouble>{});
+        ARIADNE_TESTING_EXPECT_EQUAL(empty.lengths(RealSpace()).size(), 0u);
         ARIADNE_TESTING_EXPECT_EQUAL(empty.grid(RealSpace()).dimension(), 0u);
         std::ostringstream description;
         description << named;

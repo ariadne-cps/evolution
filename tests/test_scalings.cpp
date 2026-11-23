@@ -41,8 +41,8 @@ class TestScalings : public Ariadne::Testing::ContextFixture {
     using Ariadne::Testing::ContextFixture::ContextFixture;
 
   public:
-    Void test_named_and_default_grid() {
-        RealVariable x("x"), y("y");
+    Void test_named_and_default_scalings() {
+        RealVariable x("x"), y("y"), z("z");
         Scalings uniform(ApproximateDouble(2.0));
         ARIADNE_TESTING_EXPECT_EQUAL(uniform.scaling(x), 2.0_x);
         uniform.set_scaling(x, ApproximateDouble(4.0));
@@ -55,17 +55,13 @@ class TestScalings : public Ariadne::Testing::ContextFixture {
         ARIADNE_TESTING_EXPECT_EQUAL(named.scaling(x), 2.0_x);
         ARIADNE_TESTING_EXPECT_EQUAL(named.scaling(y), 3.0_x);
         const RealSpace reversed_space({y, x});
-        const Vector<ExactDouble> lengths = named.lengths(reversed_space);
-        ARIADNE_TESTING_EXPECT_EQUAL(lengths.size(), 2u);
-        ARIADNE_TESTING_EXPECT_EQUAL(lengths[0], 3.0_x);
-        ARIADNE_TESTING_EXPECT_EQUAL(lengths[1], 2.0_x);
-        Grid grid = named.grid(reversed_space);
-        ARIADNE_TESTING_EXPECT_EQUAL(grid.dimension(), 2u);
-        ARIADNE_TESTING_EXPECT_EQUAL(grid.lengths()[0].get_d(), 3.0);
-        ARIADNE_TESTING_EXPECT_EQUAL(grid.lengths()[1].get_d(), 2.0);
+        ARIADNE_TESTING_EXPECT_EQUAL(reversed_space.dimension(), 2u);
+        ARIADNE_TESTING_EXPECT_EQUAL(named.scaling(reversed_space[0]), 3.0_x);
+        ARIADNE_TESTING_EXPECT_EQUAL(named.scaling(reversed_space[1]), 2.0_x);
+        ARIADNE_TESTING_EXPECT_EQUAL(named.scaling(z), 3.0_x);
         Scalings empty(1.0_x, Map<RealVariable, ExactDouble>{});
-        ARIADNE_TESTING_EXPECT_EQUAL(empty.lengths(RealSpace()).size(), 0u);
-        ARIADNE_TESTING_EXPECT_EQUAL(empty.grid(RealSpace()).dimension(), 0u);
+        ARIADNE_TESTING_EXPECT_EQUAL(empty.scaling(x), 1.0_x);
+        ARIADNE_TESTING_EXPECT_EQUAL(empty.scaling(y), 1.0_x);
         std::ostringstream description;
         description << named;
         ARIADNE_TESTING_PROVE(description.str().find("Scalings") != std::string::npos);
@@ -94,7 +90,7 @@ class TestScalings : public Ariadne::Testing::ContextFixture {
 
 int main(int argc, char* argv[]) {
     ARIADNE_TESTING_SUITE("test_scalings");
-    ARIADNE_TESTING_ADD_TEST(TestScalings, test_named_and_default_grid);
+    ARIADNE_TESTING_ADD_TEST(TestScalings, test_named_and_default_scalings);
     ARIADNE_TESTING_ADD_TEST(TestScalings, test_positive_scaling_contracts);
     return Ariadne::Testing::run_logging_suite(ariadne_test_suite, argc, argv);
 }

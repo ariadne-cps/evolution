@@ -108,8 +108,8 @@ CarriedExpansionSnapshot
     return profile;
 }
 
-Void print_carried_expansion_snapshot(
-    OutputStream& output, const String& stage,
+Void log_carried_expansion_snapshot(
+    const String& stage,
     SizeType step,
     const ValidatedVectorMultivariateTaylorFunctionModelDP& mapping,
     const Sweeper<FloatDP>& sweeper) {
@@ -121,18 +121,17 @@ Void print_carried_expansion_snapshot(
         if (total_count == 0u) {
             continue;
         }
-        output << "[CarriedExpansionSnapshot]"
-               << " sweeper=" << sweeper
-               << " stage=" << stage
-               << " step=" << step
-               << " degree=" << bucket_degree
-               << " below_3e-14_count=" << profile.below_tight_count[bucket_degree]
-               << " bridge_3e-14_to_1e-12_count=" << profile.bridge_count[bucket_degree]
-               << " above_1e-12_count=" << profile.above_loose_count[bucket_degree]
-               << " below_3e-14_abs_mass=" << profile.below_tight_abs_mass[bucket_degree]
-               << " bridge_3e-14_to_1e-12_abs_mass=" << profile.bridge_abs_mass[bucket_degree]
-               << " above_1e-12_abs_mass=" << profile.above_loose_abs_mass[bucket_degree]
-               << std::endl;
+        LOGGING_PRINTLN_AT(1, "[CarriedExpansionSnapshot]"
+                                  << " sweeper=" << sweeper
+                                  << " stage=" << stage
+                                  << " step=" << step
+                                  << " degree=" << bucket_degree
+                                  << " below_3e-14_count=" << profile.below_tight_count[bucket_degree]
+                                  << " bridge_3e-14_to_1e-12_count=" << profile.bridge_count[bucket_degree]
+                                  << " above_1e-12_count=" << profile.above_loose_count[bucket_degree]
+                                  << " below_3e-14_abs_mass=" << profile.below_tight_abs_mass[bucket_degree]
+                                  << " bridge_3e-14_to_1e-12_abs_mass=" << profile.bridge_abs_mass[bucket_degree]
+                                  << " above_1e-12_abs_mass=" << profile.above_loose_abs_mass[bucket_degree]);
     }
 }
 
@@ -473,28 +472,26 @@ Void ContinuousTimeEvolver<ValidatedTag>::
                 auto qr_state =
                     qr_probe.precondition(current_set.state_function());
 
-                std::cerr << "[PreconditionedSecondStepState]"
-                          << " physical_error=" << current_set.state_function().error()
-                          << " physical_range=" << current_set.state_function().range()
-                          << " identity_domy=" << identity_state.local_domain()
-                          << " identity_A=" << identity_state.linear_map()
-                          << " identity_normalized_error=" << identity_state.normalised_mapping().error()
-                          << " qr_domy=" << qr_state.local_domain()
-                          << " qr_A=" << qr_state.linear_map()
-                          << " qr_normalized_error=" << qr_state.normalised_mapping().error()
-                          << std::endl;
+                LOGGING_PRINTLN_AT(1, "[PreconditionedSecondStepState]"
+                                          << " physical_error=" << current_set.state_function().error()
+                                          << " physical_range=" << current_set.state_function().range()
+                                          << " identity_domy=" << identity_state.local_domain()
+                                          << " identity_A=" << identity_state.linear_map()
+                                          << " identity_normalized_error=" << identity_state.normalised_mapping().error()
+                                          << " qr_domy=" << qr_state.local_domain()
+                                          << " qr_A=" << qr_state.linear_map()
+                                          << " qr_normalized_error=" << qr_state.normalised_mapping().error());
 
                 auto identity_step =
                     identity_probe.step(dynamic, identity_state, suggest(maximum_step_size));
                 auto qr_step =
                     qr_probe.step(dynamic, qr_state, suggest(maximum_step_size));
 
-                std::cerr << "[PreconditionedSecondStepResult]"
-                          << " identity_h=" << identity_step.time_step()
-                          << " identity_flow_error=" << identity_step.flowpipe_mapping().error()
-                          << " qr_h=" << qr_step.time_step()
-                          << " qr_flow_error=" << qr_step.flowpipe_mapping().error()
-                          << std::endl;
+                LOGGING_PRINTLN_AT(1, "[PreconditionedSecondStepResult]"
+                                          << " identity_h=" << identity_step.time_step()
+                                          << " identity_flow_error=" << identity_step.flowpipe_mapping().error()
+                                          << " qr_h=" << qr_step.time_step()
+                                          << " qr_flow_error=" << qr_step.flowpipe_mapping().error());
             }
 
             PreconditionedTaylorSeriesState local_state =
@@ -506,8 +503,8 @@ Void ContinuousTimeEvolver<ValidatedTag>::
             const bool carried_snapshot_step =
                 diagnostic_step == 500u || diagnostic_step == 1000u || diagnostic_step == 1500u || diagnostic_step == 2000u;
             if (preconditioned_integrator->carried_expansion_diagnostics() && carried_snapshot_step) {
-                print_carried_expansion_snapshot(
-                    std::cerr, "input", diagnostic_step,
+                log_carried_expansion_snapshot(
+                    "input", diagnostic_step,
                     dynamic_cast<const ValidatedVectorMultivariateTaylorFunctionModelDP&>(
                         local_state.normalised_mapping().reference()),
                     preconditioned_integrator->sweeper());
@@ -518,8 +515,8 @@ Void ContinuousTimeEvolver<ValidatedTag>::
                     dynamic, local_state, suggest(maximum_step_size));
 
             if (preconditioned_integrator->carried_expansion_diagnostics() && carried_snapshot_step) {
-                print_carried_expansion_snapshot(
-                    std::cerr, "output", diagnostic_step,
+                log_carried_expansion_snapshot(
+                    "output", diagnostic_step,
                     dynamic_cast<const ValidatedVectorMultivariateTaylorFunctionModelDP&>(
                         local_step.final_state().normalised_mapping().reference()),
                     preconditioned_integrator->sweeper());
@@ -547,22 +544,21 @@ Void ContinuousTimeEvolver<ValidatedTag>::
                         local_step.flowpipe_mapping(),
                         local_step.flowpipe_mapping().argument_size() - 1u,
                         step_size);
-                std::cerr << "[PreconditionedStepDiagnostic]"
-                          << " step=" << result->reach_size()
-                          << " carried_state=" << (carried_preconditioned_state ? 1 : 0)
-                          << " t=" << current_time
-                          << " h=" << step_size
-                          << " state_error=" << current_set.state_function().error()
-                          << " normalized_error=" << local_state.normalised_mapping().error()
-                          << " normalized_range=" << local_state.normalised_mapping().range()
-                          << " A=" << local_state.linear_map()
-                          << " flowpipe_error=" << local_step.flowpipe_mapping().error()
-                          << " old_order_endpoint_error=" << old_order_endpoint.error()
-                          << " final_mapping_error=" << final_mapping.error()
-                          << " final_normalized_error=" << final_state.normalised_mapping().error()
-                          << " final_normalized_range=" << final_state.normalised_mapping().range()
-                          << " final_A=" << final_state.linear_map()
-                          << std::endl;
+                LOGGING_PRINTLN_AT(1, "[PreconditionedStepDiagnostic]"
+                                          << " step=" << result->reach_size()
+                                          << " carried_state=" << (carried_preconditioned_state ? 1 : 0)
+                                          << " t=" << current_time
+                                          << " h=" << step_size
+                                          << " state_error=" << current_set.state_function().error()
+                                          << " normalized_error=" << local_state.normalised_mapping().error()
+                                          << " normalized_range=" << local_state.normalised_mapping().range()
+                                          << " A=" << local_state.linear_map()
+                                          << " flowpipe_error=" << local_step.flowpipe_mapping().error()
+                                          << " old_order_endpoint_error=" << old_order_endpoint.error()
+                                          << " final_mapping_error=" << final_mapping.error()
+                                          << " final_normalized_error=" << final_state.normalised_mapping().error()
+                                          << " final_normalized_range=" << final_state.normalised_mapping().range()
+                                          << " final_A=" << final_state.linear_map());
             }
         } else {
             const FlowStepIntegratorAdapter step_integrator(*integrator);

@@ -46,6 +46,7 @@
 #include "evolution/hybrid_orbit.hpp"
 #include "evolution/hybrid_time.hpp"
 #include "integration/integrator.hpp"
+#include "logging/logging.hpp"
 #include "system/hybrid_automata.hpp"
 #include "threading/thread_manager.hpp"
 #include "threading/threading_command_line_interface.hpp"
@@ -1289,8 +1290,8 @@ int run_sweep(const Scenario (&scenarios)[2], const Options& options,
                     } catch (const std::exception& error) {
                         failed = true;
                         csv_failure(csv, configuration, scenario, error.what());
-                        std::cerr << "  FAILED " << scenario.name << " step=" << step
-                                  << ": " << error.what() << '\n';
+                        LOGGING_PRINTLN("  FAILED " << scenario.name << " step=" << step
+                                                    << ": " << error.what());
                     }
                     csv.flush();
                     if (!csv)
@@ -1334,7 +1335,7 @@ int main(int argc, const char* argv[]) {
             run_scenario(scenario, options, cli, true);
         return 0;
     } catch (const std::exception& error) {
-        std::cerr << "benchmark_recombination: " << error.what() << "\n";
+        LOGGING_PRINTLN("benchmark_recombination: " << error.what());
         return 1;
     }
 }

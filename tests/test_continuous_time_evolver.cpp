@@ -43,6 +43,7 @@
 #include "integration/integrator.hpp"
 #include "labelled/figure.hpp"
 #include "log_verbosity_scope.hpp"
+#include "logging/logging.hpp"
 #include "logging/test_runner.hpp"
 #include "numeric/rational.hpp"
 #include "set/list_set.hpp"
@@ -164,19 +165,17 @@ class TestContinuousTimeEvolver : public Ariadne::Testing::ContextFixture {
             // Diagnostic only: keep the tight numerical assertion unchanged.
             // Expose the certified range of each step to distinguish a
             // widened validated enclosure from a time-coordinate error.
-            std::cerr << "[NonautonomousTwoStepOrbit] final=" << final_box
-                      << " reach_count=" << result.reach().size()
-                      << " intermediate_count=" << result.intermediate().size()
-                      << std::endl;
+            LOGGING_PRINTLN_AT(1, "[NonautonomousTwoStepOrbit] final=" << final_box
+                                                                       << " reach_count=" << result.reach().size()
+                                                                       << " intermediate_count=" << result.intermediate().size());
             SizeType i = 0u;
             for (const auto& stage: result.intermediate()) {
                 if (i >= 8u) {
                     break;
                 }
-                std::cerr << "[NonautonomousTwoStepOrbit] endpoint=" << i
-                          << " box=" << stage.euclidean_set().bounding_box()
-                          << " absolute_time=" << stage.time_function().range()
-                          << std::endl;
+                LOGGING_PRINTLN_AT(1, "[NonautonomousTwoStepOrbit] endpoint=" << i
+                                                                              << " box=" << stage.euclidean_set().bounding_box()
+                                                                              << " absolute_time=" << stage.time_function().range());
                 ++i;
             }
         }

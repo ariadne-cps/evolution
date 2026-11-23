@@ -41,7 +41,6 @@
 #include "function/function_patch.hpp"
 #include "integration/integrator.hpp"
 #include "numeric/numeric.hpp"
-#include "paving/binary_tree_paving.hpp"
 #include "system/hybrid_automaton_interface.hpp"
 
 #include "equation-solving/equation_solver.hpp"

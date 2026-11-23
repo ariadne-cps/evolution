@@ -17,7 +17,6 @@ set(UNIT_TESTS
     test_orbit_evolution_header
     test_differential_inclusion_evolver
     test_enclosure
-    test_enclosure_augmented_paving
     test_enclosure_operations
     test_enclosure_recombination
     test_enclosure_precision

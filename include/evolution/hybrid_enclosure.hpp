@@ -313,10 +313,6 @@ class HybridEnclosure
     ValidatedLowerKleenean inside(const HybridExactBox& hbx) const;
     //! \brief Restricts to a subdomain of the \em parameter domain.
     Void restrict(const ExactBoxType& subdomain);
-    //! \brief Adjoins an outer approximation of the set to the grid-based set \a paving, with accuracy given by
-    //! \a fineness subdivisions in each component.
-    Void adjoin_outer_approximation_to(HybridPaving& paving, Nat fineness, const Paver& paver) const;
-
     //! \brief Splits into two smaller subsets along parameter direction \a dim.
     Pair<HybridEnclosure, HybridEnclosure> split(SizeType dim) const;
     //! \brief Splits into smaller subsets.

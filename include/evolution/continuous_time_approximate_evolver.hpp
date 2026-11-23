@@ -37,6 +37,7 @@
 #include "logging/logging.hpp"
 #include "numeric/float.decl.hpp"
 #include "numeric/floatdp.hpp"
+#include "symbolic/valuation.hpp"
 #include "system/odae.hpp"
 #include "threading/using.hpp"
 #include "threading/workload.hpp"
@@ -111,9 +112,11 @@ class ContinuousTimeEvolver<ApproximateTag>
     typedef StaticWorkload<Pair<SizeType, ApproximatePointType>, const TerminationType&, SharedPointer<SynchronisedOrbit>> WorkloadType;
 
   public:
-    //! \brief Construct from an autonomous or nonautonomous ODAE without fixed parameters.
-    //! \throws std::invalid_argument if constant model parameters are declared.
+    //! \brief Construct with an empty constant-parameter selection.
     ContinuousTimeEvolver(const SystemType& system);
+    //! \brief Select named parameter values fixed across all trajectories and calls.
+    ContinuousTimeEvolver(const SystemType& system, const RealValuation& constant_parameters);
+    const RealValuation& constant_parameters() const { return _constant_parameters; }
     ContinuousTimeEvolver* clone() const override { return new ContinuousTimeEvolver(*this); }
     const SystemType& system() const override { return *_system; }
 
@@ -141,6 +144,9 @@ class ContinuousTimeEvolver<ApproximateTag>
   private:
     SharedPointer<SystemType> _system;
     SharedPointer<ConfigurationType> _configuration;
+    RealValuation _constant_parameters;
+    EffectiveVectorMultivariateFunction _dynamic_function;
+    EffectiveVectorMultivariateFunction _auxiliary_function;
 };
 
 //! \brief Configuration for a ContinuousTimeEvolver<ApproximateTag>, essentially to control accuracy of evolution.

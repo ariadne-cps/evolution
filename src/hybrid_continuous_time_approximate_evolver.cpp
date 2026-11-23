@@ -40,6 +40,7 @@
 #include "hybrid/hybrid_set.hpp"
 #include "integration/runge_kutta_integrator.hpp"
 #include "logging/logging.hpp"
+#include "simulation_parameters.hpp"
 #include "simulation_time.hpp"
 #include "symbolic/assignment.hpp"
 #include "symbolic/space.hpp"
@@ -58,18 +59,31 @@ template<class T>
 class Orbit;
 
 namespace {
-void validate_simulation_mode(const HybridAutomatonInterface& system, DiscreteLocation location) {
+const RealSpace& simulation_parameter_space(const HybridAutomatonInterface& system, DiscreteLocation location) {
+    if (const auto* equation = system.equation(location))
+        return equation->parameter_space();
+    static const RealSpace empty;
+    return empty;
+}
+void validate_simulation_mode(const HybridAutomatonInterface& system, DiscreteLocation location, const RealValuation& values) {
     if (system.inclusion(location))
         throw std::invalid_argument("Hybrid ODAI approximate evolution requires an input sampling policy; not yet supported");
     if (const auto* equation = system.equation(location))
-        if (equation->parameter_space().size() != 0u)
-            throw std::invalid_argument("Hybrid approximate evolution does not yet support constant model parameters");
+        EvolutionDetail::validate_simulation_parameters(equation->parameter_space(), equation->constant_parameter_domain(), values, false);
+}
+template<class F>
+F prepare_simulation_function(const F& function, const HybridAutomatonInterface& system, DiscreteLocation location, const RealValuation& values) {
+    return EvolutionDetail::bind_simulation_parameters(function,
+                                                       system.continuous_state_space(location).dimension() + (system.time_variable(location) ? 1u : 0u),
+                                                       simulation_parameter_space(system, location), values);
 }
 } // namespace
 
 HybridContinuousTimeEvolver<ApproximateTag>::HybridContinuousTimeEvolver(const SystemType& system)
-    : _sys_ptr(system.clone()), _configuration(new ConfigurationType()) {
-}
+    : HybridContinuousTimeEvolver(system, RealValuation{}) {}
+
+HybridContinuousTimeEvolver<ApproximateTag>::HybridContinuousTimeEvolver(const SystemType& system, const RealValuation& parameters)
+    : _sys_ptr(system.clone()), _configuration(new ConfigurationType()), _constant_parameters(parameters) {}
 
 Map<DiscreteEvent, EffectiveScalarMultivariateFunction>
     HybridContinuousTimeEvolver<ApproximateTag>::_guard_functions(const DiscreteLocation& location) const {
@@ -78,7 +92,7 @@ Map<DiscreteEvent, EffectiveScalarMultivariateFunction>
     for (Set<DiscreteEvent>::ConstIterator iter = events.begin(); iter != events.end(); ++iter) {
         EventKind kind = _sys_ptr->event_kind(location, *iter);
         if (kind != EventKind::INVARIANT && kind != EventKind::PROGRESS)
-            guards.insert(*iter, _sys_ptr->guard_function(location, *iter));
+            guards.insert(*iter, prepare_simulation_function(_sys_ptr->guard_function(location, *iter), *_sys_ptr, location, _constant_parameters));
     }
     return guards;
 }
@@ -89,7 +103,7 @@ Bool HybridContinuousTimeEvolver<ApproximateTag>::_satisfies_invariants(const Di
         EventKind kind = _sys_ptr->event_kind(location, event);
         if (kind == EventKind::INVARIANT || kind == EventKind::PROGRESS) {
             // Both predicates are supplied by invariant_function with p(x)<=0.
-            auto predicate = _sys_ptr->invariant_function(location, event);
+            auto predicate = prepare_simulation_function(_sys_ptr->invariant_function(location, event), *_sys_ptr, location, _constant_parameters);
             if (probably(evaluate(predicate, EvolutionDetail::simulation_arguments(Vector<FloatDPApproximation>(point), _sys_ptr->time_variable(location).has_value(), time)) > 0)) {
                 return false;
             }
@@ -217,19 +231,19 @@ auto HybridContinuousTimeEvolver<ApproximateTag>::orbit(const HybridApproximateP
     HybridTime tmax(termination.maximum_time(), termination.maximum_steps());
 
     DiscreteLocation location = init_pt.location();
-    validate_simulation_mode(system, location);
+    validate_simulation_mode(system, location, _constant_parameters);
     RealSpace continuous_state_space = system.continuous_state_space(location);
     RealSpace continuous_auxiliary_space = system.continuous_auxiliary_space(location);
     RealSpace continuous_state_auxiliary_space = system.state_auxiliary_space()[location];
-    EffectiveVectorMultivariateFunction auxiliary_function = system.auxiliary_function(location);
+    EffectiveVectorMultivariateFunction auxiliary_function = prepare_simulation_function(system.auxiliary_function(location), system, location, _constant_parameters);
     ApproximatePointType point = make_point(init_pt, continuous_state_space);
     ApproximatePointType next_point;
     List<DiscreteEvent> event_trace;
 
     Orbit<HybridApproximatePoint> orbit(make_hybrid_state_auxiliary_point(location, point, continuous_state_space,
-                                                                          continuous_auxiliary_space, continuous_state_auxiliary_space, system.auxiliary_function(location), system.time_variable(location).has_value()));
+                                                                          continuous_auxiliary_space, continuous_state_auxiliary_space, auxiliary_function, system.time_variable(location).has_value()));
 
-    EffectiveVectorMultivariateFunction dynamic = system.dynamic_function(location);
+    EffectiveVectorMultivariateFunction dynamic = prepare_simulation_function(system.dynamic_function(location), system, location, _constant_parameters);
     Map<DiscreteEvent, EffectiveScalarMultivariateFunction> guards = _guard_functions(location);
 
     RungeKutta4Integrator integrator(configuration().step_size().get_d());
@@ -262,20 +276,20 @@ auto HybridContinuousTimeEvolver<ApproximateTag>::orbit(const HybridApproximateP
 
         if (enabled) {
             DiscreteLocation target = system.target(location, event);
-            EffectiveVectorMultivariateFunction reset = system.reset_function(location, event);
+            EffectiveVectorMultivariateFunction reset = prepare_simulation_function(system.reset_function(location, event), system, location, _constant_parameters);
             const auto reset_arguments = EvolutionDetail::simulation_arguments(Vector<FloatDPApproximation>(point), system.time_variable(location).has_value(), FloatDPApproximation(t.continuous_time(), dp));
-            validate_simulation_mode(system, target);
+            validate_simulation_mode(system, target, _constant_parameters);
             location = target;
             continuous_state_space = system.continuous_state_space(location);
             continuous_auxiliary_space = system.continuous_auxiliary_space(location);
             continuous_state_auxiliary_space = system.state_auxiliary_space()[location];
-            auxiliary_function = system.auxiliary_function(location);
+            auxiliary_function = prepare_simulation_function(system.auxiliary_function(location), system, location, _constant_parameters);
             next_point = reset(reset_arguments);
             event_trace.push_back(event);
 
             LOGGING_PRINTLN_AT(1, "event " << event << " enabled: next point " << next_point << ", on location " << target);
 
-            dynamic = system.dynamic_function(location);
+            dynamic = prepare_simulation_function(system.dynamic_function(location), system, location, _constant_parameters);
             guards = _guard_functions(location);
 
             t._discrete_time += 1;
@@ -367,11 +381,11 @@ auto HybridContinuousTimeEvolver<ApproximateTag>::orbit(const HybridApproximateL
 
     for (SizeType i = 0; i < init_list.size(); i++) {
         location[i] = init_list[i].location();
-        validate_simulation_mode(system, location[i]);
+        validate_simulation_mode(system, location[i], _constant_parameters);
         continuous_state_space[i] = system.continuous_state_space(location[i]);
         continuous_auxiliary_space[i] = system.continuous_auxiliary_space(location[i]);
         continuous_state_auxiliary_space[i] = system.state_auxiliary_space()[location[i]];
-        auxiliary_function[i] = system.auxiliary_function(location[i]);
+        auxiliary_function[i] = prepare_simulation_function(system.auxiliary_function(location[i]), system, location[i], _constant_parameters);
         make_point_list(init_list[i], point_list, continuous_state_space[i], i);
     }
 
@@ -381,7 +395,7 @@ auto HybridContinuousTimeEvolver<ApproximateTag>::orbit(const HybridApproximateL
     for (SizeType i = 0; i < init_list.size(); i++) {
         bool reached_time_horizon = false;
         while (!reached_time_horizon && possibly(t[i] < tmax) && (event_trace[i].empty() || !termination.terminating_events().contains(event_trace[i].back()))) {
-            EffectiveVectorMultivariateFunction dynamic = system.dynamic_function(location[i]);
+            EffectiveVectorMultivariateFunction dynamic = prepare_simulation_function(system.dynamic_function(location[i]), system, location[i], _constant_parameters);
             Map<DiscreteEvent, EffectiveScalarMultivariateFunction> guards = _guard_functions(location[i]);
 
             RungeKutta4Integrator integrator(configuration().step_size().get_d());
@@ -413,20 +427,20 @@ auto HybridContinuousTimeEvolver<ApproximateTag>::orbit(const HybridApproximateL
 
             if (enabled) {
                 DiscreteLocation target = system.target(location[i], event);
-                EffectiveVectorMultivariateFunction reset = system.reset_function(location[i], event);
+                EffectiveVectorMultivariateFunction reset = prepare_simulation_function(system.reset_function(location[i], event), system, location[i], _constant_parameters);
                 const auto reset_arguments = EvolutionDetail::simulation_arguments(Vector<FloatDPApproximation>(point_list[i]), system.time_variable(location[i]).has_value(), FloatDPApproximation(t[i].continuous_time(), dp));
-                validate_simulation_mode(system, target);
+                validate_simulation_mode(system, target, _constant_parameters);
                 location[i] = target;
                 continuous_state_space[i] = system.continuous_state_space(location[i]);
                 continuous_auxiliary_space[i] = system.continuous_auxiliary_space(location[i]);
                 continuous_state_auxiliary_space[i] = system.state_auxiliary_space()[location[i]];
-                auxiliary_function[i] = system.auxiliary_function(location[i]);
+                auxiliary_function[i] = prepare_simulation_function(system.auxiliary_function(location[i]), system, location[i], _constant_parameters);
                 next_point[i] = reset(reset_arguments);
                 event_trace[i].push_back(event);
 
                 LOGGING_PRINTLN_AT(1, "event " << event << " enabled: next point " << next_point[i] << ", on location " << target);
 
-                dynamic = system.dynamic_function(location[i]);
+                dynamic = prepare_simulation_function(system.dynamic_function(location[i]), system, location[i], _constant_parameters);
                 guards = _guard_functions(location[i]);
 
                 t[i]._discrete_time += 1;

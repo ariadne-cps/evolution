@@ -37,6 +37,7 @@
 #include "function/functional.hpp"
 #include "function/taylor_model.hpp"
 #include "integration/runge_kutta_integrator.hpp"
+#include "simulation_parameters.hpp"
 #include "simulation_time.hpp"
 #include "symbolic/assignment.hpp"
 #include "symbolic/space.hpp"
@@ -151,10 +152,15 @@ List<LabelledPoint<FloatDPApproximation>> create_point_list(BinaryTreePaving& pa
     return result;
 }
 
-ContinuousTimeEvolver<ApproximateTag>::ContinuousTimeEvolver(const SystemType& system) : _system(system.clone()), _configuration(new ContinuousTimeEvolverConfiguration<ApproximateTag>()) {
-    if (system.parameter_space().dimension() != 0u) {
-        throw std::invalid_argument("ContinuousTimeEvolver<ApproximateTag> does not yet support constant model parameters");
-    }
+ContinuousTimeEvolver<ApproximateTag>::ContinuousTimeEvolver(const SystemType& system)
+    : ContinuousTimeEvolver(system, RealValuation{}) {}
+
+ContinuousTimeEvolver<ApproximateTag>::ContinuousTimeEvolver(const SystemType& system, const RealValuation& parameters)
+    : _system(system.clone()), _configuration(new ConfigurationType()), _constant_parameters(parameters) {
+    EvolutionDetail::validate_simulation_parameters(system.parameter_space(), system.constant_parameter_domain(), parameters, true);
+    const SizeType retained_arguments = system.dimension() + (system.has_explicit_time() ? 1u : 0u);
+    _dynamic_function = EvolutionDetail::bind_simulation_parameters(system.function(), retained_arguments, system.parameter_space(), parameters);
+    _auxiliary_function = EvolutionDetail::bind_simulation_parameters(system.auxiliary_function(), retained_arguments, system.parameter_space(), parameters);
 }
 
 inline FloatDPApproximation evaluate(const EffectiveScalarMultivariateFunction& f, const Vector<FloatDPApproximation>& x) { return f(x); }
@@ -190,7 +196,7 @@ auto ContinuousTimeEvolver<ApproximateTag>::orbit(const ApproximateListPointType
 
     LOGGING_PRINTLN("Simulating from " << initial_points.size() << " initial points")
 
-    const auto& auxiliary_function = _system->auxiliary_function();
+    const auto& auxiliary_function = _auxiliary_function;
 
     auto state_space = _system->state_space();
     auto auxiliary_space = _system->auxiliary_space();
@@ -227,8 +233,8 @@ void ContinuousTimeEvolver<ApproximateTag>::_simulate_from_point(Pair<SizeType, 
     ApproximateTimeType h(_configuration->step_size(), dp);
     ApproximateTimeType tmax(termination, dp);
 
-    const auto& dynamic_function = _system->function();
-    const auto& auxiliary_function = _system->auxiliary_function();
+    const auto& dynamic_function = _dynamic_function;
+    const auto& auxiliary_function = _auxiliary_function;
 
     const auto state_space = _system->state_space();
     const auto auxiliary_space = _system->auxiliary_space();

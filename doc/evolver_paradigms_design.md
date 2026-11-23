@@ -73,5 +73,11 @@ tutorials must still work with the new names.
 Next, complete missing numerical capabilities and the native hybrid discrete
 model in the [system-family roadmap](system_families_design.md). Factor common
 infrastructure only where input/result and certificate contracts agree. Keep
-sampling policies, fixed parameters, contact handling, converters and final
+sampling policies, further parameter capabilities, contact handling, converters and final
 Python tutorial parity as explicit unfinished activities.
+
+Explicit fixed parameter values are now supported by ordinary and hybrid ODAE
+approximate constructors, retaining the same paradigm interface and physical
+state dimension. See [approximate parameter selection](approximate_constant_parameters_design.md).
+The corresponding Python constructor bindings remain deferred to the final
+binding/tutorial phase.

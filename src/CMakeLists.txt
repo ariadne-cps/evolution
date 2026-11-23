@@ -7,6 +7,7 @@ add_library(EVOLUTION_SRC OBJECT
     discrete_time_evolver.cpp
     continuous_time_validated_evolver.cpp
     continuous_time_approximate_evolver.cpp
+    simulation_parameters.cpp
     first_order_pde.cpp
     hybrid_orbit.cpp
     hybrid_enclosure.cpp

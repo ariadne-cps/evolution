@@ -41,7 +41,6 @@
 #include "geometry/box.hpp"
 #include "hybrid/discrete_location.hpp"
 #include "hybrid/hybrid_expression_set.hpp"
-#include "hybrid/hybrid_paving.hpp"
 #include "hybrid/hybrid_set.hpp"
 #include "labelled/figure.hpp"
 #include "numeric/numeric.hpp"

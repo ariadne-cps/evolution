@@ -55,12 +55,6 @@ class Vector;
 
 /** @brief Enclosure represents enclosures and representations for hybrid system states. */
 class Enclosure;
-/** @brief Grid represents enclosures and representations for hybrid system states. */
-class Grid;
-/** @brief BinaryTreePaving represents enclosures and representations for hybrid system states. */
-class BinaryTreePaving;
-/** @brief Paver selects the outer-approximation algorithm supplied by the caller. */
-class Paver;
 /** @brief AffineSet represents enclosures and representations for hybrid system states. */
 class AffineSet;
 /** @brief DiscreteEvent represents enclosures and representations for hybrid system states. */
@@ -86,8 +80,6 @@ class HybridBasicSet;
 
 /** @brief HybridEnclosure represents enclosures and representations for hybrid system states. */
 class HybridEnclosure;
-/** @brief HybridPaving represents enclosures and representations for hybrid system states. */
-class HybridPaving;
 template<>
 class ListSet<HybridEnclosure>;
 

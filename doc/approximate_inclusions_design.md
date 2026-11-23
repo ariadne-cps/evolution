@@ -74,3 +74,9 @@ metadata. Existing authors and years are retained; two stale renamed-test
 banners are corrected. The header audit checks all 109 tracked C++ files,
 including public/private headers and tests. New files use the same format.
 Diagnostic output continues to use LOGGING. Submodules and paving are unchanged.
+
+Built-in policies select round-to-nearest for interpolation and restore the
+caller's rounding mode on return or exception. A regression compares identical
+seed/context samples in upward and downward rounding over 32 steps and checks
+that each caller mode is preserved. This prevents ambient arithmetic modes from
+changing the input signal in the last bits.

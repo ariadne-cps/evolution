@@ -113,6 +113,23 @@ class TestApproximateInclusions : public Testing::ContextFixture {
             const double value = values[i].raw().get_d();
             ARIADNE_TESTING_PROVE(value >= domain[i].lower_bound().get_d() && value <= domain[i].upper_bound().get_d());
         }
+        struct RestoreRounding {
+            FloatDP::RoundingModeType mode = FloatDP::get_rounding_mode();
+            ~RestoreRounding() { FloatDP::set_rounding_mode(mode); }
+        } restore_rounding;
+        for (SizeType step = 0u; step != 32u; ++step) {
+            auto request = context;
+            request.step = step;
+            FloatDP::set_rounding_mode(FloatDP::ROUND_UPWARD);
+            const auto sampled_up = uniform.sample(domain, request);
+            const auto upward_mode = FloatDP::get_rounding_mode();
+            FloatDP::set_rounding_mode(FloatDP::ROUND_DOWNWARD);
+            const auto sampled_down = uniform.sample(domain, request);
+            const auto downward_mode = FloatDP::get_rounding_mode();
+            same_points(sampled_up, sampled_down);
+            ARIADNE_TESTING_EXPECT_EQUAL(upward_mode, static_cast<int>(FloatDP::ROUND_UPWARD));
+            ARIADNE_TESTING_EXPECT_EQUAL(downward_mode, static_cast<int>(FloatDP::ROUND_DOWNWARD));
+        }
         const auto center = MidpointInputSampling().sample(domain, context);
         near(center[0u].raw().get_d(), 0.5);
         near(center[1u].raw().get_d(), 7.5);

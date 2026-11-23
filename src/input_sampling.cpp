@@ -30,6 +30,8 @@
 
 #include <cmath>
 #include <stdexcept>
+
+#include "numeric/rounding.hpp"
 namespace Ariadne {
 namespace {
 std::uint64_t mix(std::uint64_t value) {
@@ -40,6 +42,8 @@ std::uint64_t mix(std::uint64_t value) {
 }
 Vector<FloatDPApproximation> sample_box(const ExactBoxType& domain, const InputSamplingContext& context,
                                         std::uint64_t seed, bool midpoint) {
+    RoundingSession<FloatDP> rounding_session;
+    rounding_session.set(FloatDP::ROUND_TO_NEAREST);
     Vector<FloatDPApproximation> result(domain.dimension(), FloatDPApproximation(0, dp));
     for (SizeType i = 0u; i != domain.dimension(); ++i) {
         const double lower = domain[i].lower_bound().get_d(), upper = domain[i].upper_bound().get_d();

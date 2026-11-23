@@ -349,11 +349,6 @@ inline ValidatedLowerKleenean separated(const HybridEnclosure& he, const HybridE
 
 inline OutputStream& operator<<(OutputStream& os, const HybridEnclosure& s) { return s._write(os); }
 
-/** @brief HybridGrid represents enclosures and representations for hybrid system states. */
-class HybridGrid;
-/** @brief HybridPaving represents enclosures and representations for hybrid system states. */
-class HybridPaving;
-
 template<>
 /** @brief ListSet represents enclosures and representations for hybrid system states. */
 class ListSet<HybridEnclosure>
@@ -412,8 +407,6 @@ class ListSet<HybridEnclosure>
     friend OutputStream& operator<<(OutputStream& os, const ListSet<HybridEnclosure>& hls) {
         return os << hls._list;
     };
-    /** @brief Perform the specified evolution operation. */
-    friend HybridPaving outer_approximation(const ListSet<HybridEnclosure>& hls, const HybridGrid& g, Int dpth);
 
   private:
     List<HybridEnclosure> _list;

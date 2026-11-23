@@ -2,8 +2,29 @@
  *            test_ordinary_dynamics_contract.cpp
  *
  *  Copyright  2026  Luca Geretti
- *  SPDX-License-Identifier: GPL-3.0-or-later
+ *
  ****************************************************************************/
+
+/*
+ *  This file is part of Ariadne Evolution.
+ *
+ *  Ariadne Evolution is free software: you can redistribute it and/or modify
+ *  it under the terms of the GNU General Public License as published by
+ *  the Free Software Foundation, either version 3 of the License, or
+ *  (at your option) any later version.
+ *
+ *  Ariadne Evolution is distributed in the hope that it will be useful,
+ *  but WITHOUT ANY WARRANTY; without even the implied warranty of
+ *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ *  GNU General Public License for more details.
+ *
+ *  You should have received a copy of the GNU General Public License
+ *  along with Ariadne Evolution. If not, see <https://www.gnu.org/licenses/>.
+ */
+
+/** @file tests/test_ordinary_dynamics_contract.cpp
+ *  @brief Verify ordinary dynamics contract behavior.
+ */
 
 #include <stdexcept>
 #include <type_traits>
@@ -22,7 +43,9 @@
 using namespace Ariadne;
 
 static_assert(std::is_same_v<ContinuousTimeEvolver<ValidatedTag>::SystemType, ContinuousDynamics>);
-static_assert(std::is_same_v<ContinuousTimeEvolver<ApproximateTag>::SystemType, OrdinaryDifferentialAlgebraicEquation>);
+static_assert(std::is_same_v<ContinuousTimeEvolver<ApproximateTag>::SystemType, ContinuousDynamics>);
+static_assert(std::is_same_v<EvolutionTraits<ApproximateTag, OrdinaryDifferentialAlgebraicEquation>::EvolverType,
+                             EvolutionTraits<ApproximateTag, OrdinaryDifferentialAlgebraicInclusion>::EvolverType>);
 static_assert(std::is_same_v<EvolutionTraits<ValidatedTag, OrdinaryDifferentialAlgebraicEquation>::EvolverType,
                              EvolutionTraits<ValidatedTag, OrdinaryDifferentialAlgebraicInclusion>::EvolverType>);
 static_assert(std::is_same_v<EvolutionTraits<ValidatedTag, ContinuousTimeEvolver<ValidatedTag>::SystemType>::EnclosureType,

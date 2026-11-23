@@ -32,10 +32,10 @@
 #include <iostream>
 #include <list>
 #include <string>
-#include <variant>
 #include <vector>
 
 #include "evolution/configuration_interface.hpp"
+#include "evolution/continuous_dynamics.hpp"
 #include "evolution/enclosure.hpp"
 #include "evolution/evolver.decl.hpp"
 #include "evolution/evolver_interface.hpp"
@@ -69,34 +69,6 @@ class ValidatedIntegrationStep;
 
 /** @brief RealExpressionBoundedConstraintSet: validated evolvers for vector fields. */
 class RealExpressionBoundedConstraintSet;
-
-/** @brief Owning metadata view of an ODAE or ODAI for the common evolution loop.
- *  The original declaration is retained unchanged; this view defines no solver
- *  or additional physical state. Numerical dispatch remains internal.
- */
-class ContinuousDynamics {
-  public:
-    using Paradigm = ValidatedTag;
-    using TimeType = Real;
-    explicit ContinuousDynamics(const OrdinaryDifferentialAlgebraicEquation&);
-    explicit ContinuousDynamics(const OrdinaryDifferentialAlgebraicInclusion&);
-    ContinuousDynamics* clone() const;
-    SizeType dimension() const;
-    RealSpace state_space() const;
-    RealSpace auxiliary_space() const;
-    RealSpace state_auxiliary_space() const;
-    const RealSpace& parameter_space() const;
-    const BoxDomainType& constant_parameter_domain() const;
-    bool has_explicit_time() const;
-
-  private:
-    std::variant<SharedPointer<const OrdinaryDifferentialAlgebraicEquation>,
-                 SharedPointer<const OrdinaryDifferentialAlgebraicInclusion>>
-        _declaration;
-    const OrdinaryDifferentialAlgebraicEquation* equation() const;
-    const OrdinaryDifferentialAlgebraicInclusion* inclusion() const;
-    friend class ContinuousTimeEvolver<ValidatedTag>;
-};
 
 //! \brief Compute continuous evolution of ODAE and ODAI declarations.
 //!

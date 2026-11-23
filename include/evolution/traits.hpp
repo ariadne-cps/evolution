@@ -99,6 +99,15 @@ struct EvolutionTraits<ApproximateTag, OrdinaryDifferentialAlgebraicEquation> {
 };
 
 template<>
+struct EvolutionTraits<ApproximateTag, OrdinaryDifferentialAlgebraicInclusion> {
+    using EvolverType = ContinuousTimeEvolver<ApproximateTag>;
+};
+template<>
+struct EvolutionTraits<ApproximateTag, ContinuousDynamics> {
+    using EvolverType = ContinuousTimeEvolver<ApproximateTag>;
+};
+
+template<>
 struct EvolutionTraits<ApproximateTag, HybridAutomatonInterface> {
     using EvolverType = HybridContinuousTimeEvolverInterface<ApproximateTag>;
 };

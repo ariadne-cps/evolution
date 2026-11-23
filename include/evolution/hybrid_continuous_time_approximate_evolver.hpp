@@ -32,6 +32,7 @@
 #include "evolution/configuration_interface.hpp"
 #include "evolution/evolver.decl.hpp"
 #include "evolution/hybrid_continuous_time_evolver_interface.hpp"
+#include "evolution/input_sampling.hpp"
 #include "hybrid/hybrid_paving.hpp"
 #include "hybrid/hybrid_set.hpp"
 #include "logging/logging.hpp"
@@ -94,12 +95,16 @@ class HybridContinuousTimeEvolver<ApproximateTag> : public HybridContinuousTimeE
     SharedPointer<SystemType> _sys_ptr;
     SharedPointer<ConfigurationType> _configuration;
     RealValuation _constant_parameters;
+    SharedPointer<const InputSamplingPolicy> _input_sampling;
 
   public:
     //! \brief Default constructor.
     HybridContinuousTimeEvolver(const SystemType& system);
     //! \brief Select named parameter values retained through all mode changes.
     HybridContinuousTimeEvolver(const SystemType& system, const RealValuation& constant_parameters);
+    //! \brief Select an explicit input policy for structured inclusion modes.
+    HybridContinuousTimeEvolver(const SystemType&, const InputSamplingPolicy&,
+                                const RealValuation& constant_parameters = RealValuation{});
     const RealValuation& constant_parameters() const { return _constant_parameters; }
     HybridContinuousTimeEvolver* clone() const override { return new HybridContinuousTimeEvolver(*this); }
     const SystemType& system() const override { return *_sys_ptr; }

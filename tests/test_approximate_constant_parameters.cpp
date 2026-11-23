@@ -22,6 +22,10 @@
  *  along with Ariadne Evolution. If not, see <https://www.gnu.org/licenses/>.
  */
 
+/** @file tests/test_approximate_constant_parameters.cpp
+ *  @brief Verify approximate constant parameters behavior.
+ */
+
 #include <cmath>
 #include <memory>
 #include <stdexcept>

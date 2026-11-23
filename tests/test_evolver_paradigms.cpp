@@ -71,7 +71,8 @@ static_assert(!HasSampledOrbit<ValidatedHybrid> && HasSetSemantics<ValidatedHybr
 static_assert(!HasSampledOrbit<DiscreteTimeEvolver<ValidatedTag>>);
 static_assert(HasEvolutionTraits<ApproximateTag, OrdinaryDifferentialAlgebraicEquation>);
 static_assert(HasEvolutionTraits<ValidatedTag, OrdinaryDifferentialAlgebraicInclusion>);
-static_assert(!HasEvolutionTraits<ApproximateTag, OrdinaryDifferentialAlgebraicInclusion>);
+static_assert(HasEvolutionTraits<ApproximateTag, OrdinaryDifferentialAlgebraicInclusion>);
+static_assert(std::is_constructible_v<ApproximateContinuous, const OrdinaryDifferentialAlgebraicInclusion&, const InputSamplingPolicy&>);
 static_assert(!HasEvolutionTraits<ApproximateTag, IteratedMap>);
 static_assert(!CompleteType<DiscreteTimeEvolver<ApproximateTag>>);
 static_assert(!CompleteType<ContinuousTimeEvolver<ExactTag>>);

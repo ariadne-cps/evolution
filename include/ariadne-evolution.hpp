@@ -30,6 +30,7 @@
 #define ARIADNE_ARIADNE_EVOLUTION_HPP
 
 #include "evolution/configuration_interface.hpp"
+#include "evolution/continuous_dynamics.hpp"
 #include "evolution/continuous_time_approximate_evolver.hpp"
 #include "evolution/continuous_time_evolver.hpp"
 #include "evolution/discrete_time_evolver.hpp"
@@ -49,6 +50,7 @@
 #include "evolution/hybrid_evolution_tree.hpp"
 #include "evolution/hybrid_orbit.hpp"
 #include "evolution/hybrid_time.hpp"
+#include "evolution/input_sampling.hpp"
 #include "evolution/orbit.hpp"
 #include "evolution/scalings.hpp"
 #include "evolution/traits.hpp"

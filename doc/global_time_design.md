@@ -99,7 +99,7 @@ does not become validated event localization merely because time is explicit.
 | Ordinary inclusion evolver | UPPER | UPPER with supported numerical field | Existing representation and solver capability limits |
 | Hybrid equation evolver | Analytic path without parameters; UPPER outer-flow with parameters | UPPER outer-flow, including time/parameter events and outputs | Timed/parameterized LOWER and preconditioning rejected |
 | Hybrid inclusion evolver | UPPER, including fixed parameters | UPPER, with structured or box method and fixed parameters | LOWER and existing method/domain capability limits |
-| Ordinary/hybrid equation simulators | yes, with explicitly selected fixed parameters | yes, including events and outputs in the hybrid case | ODAI input sampling and general parameter sampling policies remain pending |
+| Ordinary/hybrid approximate evolvers | ODAE and structured ODAI, with fixed parameters | yes, including stage times, events and equation outputs | Explicit input policy required for ODAI; interval-Taylor sampling and general parameter sampling remain unsupported |
 
 Typed hybrid composition retains its separate existing capability restriction.
 The new clock support does not bypass it. The implemented

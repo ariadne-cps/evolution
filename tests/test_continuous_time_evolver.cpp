@@ -1,5 +1,5 @@
 /***************************************************************************
- *            test_continuous_time_validated_evolver.cpp
+ *            test_continuous_time_evolver.cpp
  *
  *  Copyright  2006-21  Pieter Collins
  *
@@ -22,7 +22,7 @@
  *  along with Ariadne Evolution. If not, see <https://www.gnu.org/licenses/>.
  */
 
-/** @file tests/test_continuous_time_validated_evolver.cpp
+/** @file tests/test_continuous_time_evolver.cpp
  *  @brief Test vector field evolver behavior and numerical invariants.
  */
 

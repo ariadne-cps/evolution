@@ -23,15 +23,17 @@
  */
 
 /** @file evolution/continuous_time_approximate_evolver.hpp
- *  @brief Numerical simulation of continuous vector-field systems.
+ *  @brief Approximate evolution of continuous equations and structured inclusions.
  */
 
 #ifndef ARIADNE_CONTINUOUS_TIME_APPROXIMATE_EVOLVER_HPP
 #define ARIADNE_CONTINUOUS_TIME_APPROXIMATE_EVOLVER_HPP
 
 #include "evolution/configuration_interface.hpp"
+#include "evolution/continuous_dynamics.hpp"
 #include "evolution/evolver.decl.hpp"
 #include "evolution/evolver_interface.hpp"
+#include "evolution/input_sampling.hpp"
 #include "evolution/orbit.hpp"
 #include "geometry/point.hpp"
 #include "logging/logging.hpp"
@@ -82,10 +84,10 @@ using subspace = Map<RealVariable, Nat>;
  */
 template<>
 class ContinuousTimeEvolver<ApproximateTag>
-    : public EvolverInterface<ApproximateTag, OrdinaryDifferentialAlgebraicEquation, List<LabelledPoint<FloatDPApproximation>>, Real> {
+    : public EvolverInterface<ApproximateTag, ContinuousDynamics, List<LabelledPoint<FloatDPApproximation>>, Real> {
   public:
     using Paradigm = ApproximateTag;
-    using Interface = EvolverInterface<ApproximateTag, OrdinaryDifferentialAlgebraicEquation, List<LabelledPoint<FloatDPApproximation>>, Real>;
+    using Interface = EvolverInterface<ApproximateTag, ContinuousDynamics, List<LabelledPoint<FloatDPApproximation>>, Real>;
     typedef FloatDPApproximation ApproximateTimeType;
     typedef LabelledPoint<FloatDPApproximation> ApproximatePointType;
     typedef List<ApproximatePointType> ApproximateListPointType;
@@ -93,7 +95,7 @@ class ContinuousTimeEvolver<ApproximateTag>
     typedef List<RealPointType> RealListPointType;
     typedef RealVariablesBox RealBoxType;
     typedef Real TerminationType;
-    typedef OrdinaryDifferentialAlgebraicEquation SystemType;
+    typedef ContinuousDynamics SystemType;
     typedef ContinuousTimeEvolverConfiguration<ApproximateTag> ConfigurationType;
     typedef Orbit<ApproximateListPointType> OrbitType;
 
@@ -113,9 +115,12 @@ class ContinuousTimeEvolver<ApproximateTag>
 
   public:
     //! \brief Construct with an empty constant-parameter selection.
-    ContinuousTimeEvolver(const SystemType& system);
+    ContinuousTimeEvolver(const OrdinaryDifferentialAlgebraicEquation& system);
     //! \brief Select named parameter values fixed across all trajectories and calls.
-    ContinuousTimeEvolver(const SystemType& system, const RealValuation& constant_parameters);
+    ContinuousTimeEvolver(const OrdinaryDifferentialAlgebraicEquation& system, const RealValuation& constant_parameters);
+    //! \brief Simulate a structured inclusion with an explicit per-step input policy.
+    ContinuousTimeEvolver(const OrdinaryDifferentialAlgebraicInclusion&, const InputSamplingPolicy&,
+                          const RealValuation& constant_parameters = RealValuation{});
     const RealValuation& constant_parameters() const { return _constant_parameters; }
     ContinuousTimeEvolver* clone() const override { return new ContinuousTimeEvolver(*this); }
     const SystemType& system() const override { return *_system; }
@@ -145,6 +150,7 @@ class ContinuousTimeEvolver<ApproximateTag>
     SharedPointer<SystemType> _system;
     SharedPointer<ConfigurationType> _configuration;
     RealValuation _constant_parameters;
+    SharedPointer<const InputSamplingPolicy> _input_sampling;
     EffectiveVectorMultivariateFunction _dynamic_function;
     EffectiveVectorMultivariateFunction _auxiliary_function;
 };

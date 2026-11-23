@@ -143,7 +143,7 @@ Void export_simulator<ContinuousTimeEvolver<ApproximateTag>>(pybind11::module& m
     simulator_orbit_class.def("curves", &OrbitType::curves);
 
     pybind11::class_<ContinuousTimeEvolver<ApproximateTag>> simulator_class(module, name);
-    simulator_class.def(pybind11::init<const ContinuousTimeEvolver<ApproximateTag>::SystemType&>());
+    simulator_class.def(pybind11::init<const OrdinaryDifferentialAlgebraicEquation&>());
     simulator_class.def("configuration", pybind11::overload_cast<>(&ContinuousTimeEvolver<ApproximateTag>::configuration), reference_internal);
     simulator_class.def("orbit", (OrbitType (ContinuousTimeEvolver<ApproximateTag>::*)(const ApproximateListPointType&, const TerminationType&) const) & ContinuousTimeEvolver<ApproximateTag>::orbit);
     simulator_class.def("orbit", pybind11::overload_cast<const ApproximateListPointType&, const TerminationType&>(&ContinuousTimeEvolver<ApproximateTag>::orbit, pybind11::const_));

@@ -38,11 +38,13 @@ flows currently support UPPER only. This migration adds no inner certificates.
 
 Configurations and hybrid interfaces, bases and factories also carry the
 paradigm. `EvolutionTraits<P, System>` associates only implemented combinations:
-ODAE has both continuous paradigms, ODAI has validated evolution, and
+ODAE and ODAI have both continuous paradigms, with explicit sampling policies
+required for approximate ODAI, and
 `IteratedMap` has validated discrete evolution. Hybrid model traits select the
 corresponding hybrid interface; its runtime model capability checks remain.
-There is no approximate ODAI sampling policy or approximate discrete algorithm
-hidden behind a fallback. Unsupported template combinations remain incomplete.
+Structured approximate ODAI use an explicit input policy; interval-Taylor
+multifunctions remain rejected. No approximate discrete algorithm is hidden
+behind a fallback. Unsupported template combinations remain incomplete.
 Tag inheritance does not enable dispatch to another paradigm specialization.
 
 ## Python and migration boundary
@@ -81,3 +83,9 @@ approximate constructors, retaining the same paradigm interface and physical
 state dimension. See [approximate parameter selection](approximate_constant_parameters_design.md).
 The corresponding Python constructor bindings remain deferred to the final
 binding/tutorial phase.
+
+ContinuousDynamics is now shared metadata without a paradigm tag, extracted
+into its own public header/source. Both continuous SystemType aliases use this
+owning ODAE/ODAI view; numerical kernels and policies stay in the evolvers. The
+original declarations are retained. Existing Python ODAE construction is ported
+to the explicit equation overload; new sampling bindings remain deferred.

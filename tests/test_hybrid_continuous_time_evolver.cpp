@@ -1,5 +1,5 @@
 /***************************************************************************
- *            test_hybrid_continuous_time_validated_evolver.cpp
+ *            test_hybrid_continuous_time_evolver.cpp
  *
  *  Copyright  2026  Luca Geretti
  *
@@ -22,7 +22,7 @@
  *  along with Ariadne Evolution. If not, see <https://www.gnu.org/licenses/>.
  */
 
-/** @file tests/test_hybrid_continuous_time_validated_evolver.cpp
+/** @file tests/test_hybrid_continuous_time_evolver.cpp
  *  @brief Test hybrid evolver behavior and numerical invariants.
  */
 

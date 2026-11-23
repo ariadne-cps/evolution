@@ -62,12 +62,16 @@ namespace {
 const RealSpace& simulation_parameter_space(const HybridAutomatonInterface& system, DiscreteLocation location) {
     if (const auto* equation = system.equation(location))
         return equation->parameter_space();
+    if (const auto* inclusion = system.inclusion(location))
+        return inclusion->parameter_space();
     static const RealSpace empty;
     return empty;
 }
-void validate_simulation_mode(const HybridAutomatonInterface& system, DiscreteLocation location, const RealValuation& values) {
-    if (system.inclusion(location))
-        throw std::invalid_argument("Hybrid ODAI approximate evolution requires an input sampling policy; not yet supported");
+void validate_simulation_mode(const HybridAutomatonInterface& system, DiscreteLocation location, const RealValuation& values, const InputSamplingPolicy* policy) {
+    if (const auto* inclusion = system.inclusion(location)) {
+        EvolutionDetail::validate_simulation_inclusion(*inclusion, policy);
+        EvolutionDetail::validate_simulation_parameters(inclusion->parameter_space(), inclusion->constant_parameter_domain(), values, false);
+    }
     if (const auto* equation = system.equation(location))
         EvolutionDetail::validate_simulation_parameters(equation->parameter_space(), equation->constant_parameter_domain(), values, false);
 }
@@ -77,6 +81,11 @@ F prepare_simulation_function(const F& function, const HybridAutomatonInterface&
                                                        system.continuous_state_space(location).dimension() + (system.time_variable(location) ? 1u : 0u),
                                                        simulation_parameter_space(system, location), values);
 }
+EffectiveVectorMultivariateFunction prepare_simulation_dynamic(const HybridAutomatonInterface& system, DiscreteLocation location, const RealValuation& values) {
+    if (const auto* inclusion = system.inclusion(location))
+        return EvolutionDetail::prepare_simulation_inclusion(*inclusion, values, system.time_variable(location).has_value());
+    return prepare_simulation_function(system.dynamic_function(location), system, location, values);
+}
 } // namespace
 
 HybridContinuousTimeEvolver<ApproximateTag>::HybridContinuousTimeEvolver(const SystemType& system)
@@ -84,6 +93,9 @@ HybridContinuousTimeEvolver<ApproximateTag>::HybridContinuousTimeEvolver(const S
 
 HybridContinuousTimeEvolver<ApproximateTag>::HybridContinuousTimeEvolver(const SystemType& system, const RealValuation& parameters)
     : _sys_ptr(system.clone()), _configuration(new ConfigurationType()), _constant_parameters(parameters) {}
+
+HybridContinuousTimeEvolver<ApproximateTag>::HybridContinuousTimeEvolver(const SystemType& system, const InputSamplingPolicy& policy, const RealValuation& parameters)
+    : _sys_ptr(system.clone()), _configuration(new ConfigurationType()), _constant_parameters(parameters), _input_sampling(policy.clone()) {}
 
 Map<DiscreteEvent, EffectiveScalarMultivariateFunction>
     HybridContinuousTimeEvolver<ApproximateTag>::_guard_functions(const DiscreteLocation& location) const {
@@ -231,7 +243,7 @@ auto HybridContinuousTimeEvolver<ApproximateTag>::orbit(const HybridApproximateP
     HybridTime tmax(termination.maximum_time(), termination.maximum_steps());
 
     DiscreteLocation location = init_pt.location();
-    validate_simulation_mode(system, location, _constant_parameters);
+    validate_simulation_mode(system, location, _constant_parameters, _input_sampling.get());
     RealSpace continuous_state_space = system.continuous_state_space(location);
     RealSpace continuous_auxiliary_space = system.continuous_auxiliary_space(location);
     RealSpace continuous_state_auxiliary_space = system.state_auxiliary_space()[location];
@@ -243,11 +255,12 @@ auto HybridContinuousTimeEvolver<ApproximateTag>::orbit(const HybridApproximateP
     Orbit<HybridApproximatePoint> orbit(make_hybrid_state_auxiliary_point(location, point, continuous_state_space,
                                                                           continuous_auxiliary_space, continuous_state_auxiliary_space, auxiliary_function, system.time_variable(location).has_value()));
 
-    EffectiveVectorMultivariateFunction dynamic = prepare_simulation_function(system.dynamic_function(location), system, location, _constant_parameters);
+    EffectiveVectorMultivariateFunction dynamic = prepare_simulation_dynamic(system, location, _constant_parameters);
     Map<DiscreteEvent, EffectiveScalarMultivariateFunction> guards = _guard_functions(location);
 
     RungeKutta4Integrator integrator(configuration().step_size().get_d());
 
+    SizeType continuous_step = 0u;
     bool reached_time_horizon = false;
     while (!reached_time_horizon && possibly(t < tmax) && (event_trace.empty() || !termination.terminating_events().contains(event_trace.back()))) {
         std::streamsize old_precision = std::clog.precision();
@@ -278,7 +291,7 @@ auto HybridContinuousTimeEvolver<ApproximateTag>::orbit(const HybridApproximateP
             DiscreteLocation target = system.target(location, event);
             EffectiveVectorMultivariateFunction reset = prepare_simulation_function(system.reset_function(location, event), system, location, _constant_parameters);
             const auto reset_arguments = EvolutionDetail::simulation_arguments(Vector<FloatDPApproximation>(point), system.time_variable(location).has_value(), FloatDPApproximation(t.continuous_time(), dp));
-            validate_simulation_mode(system, target, _constant_parameters);
+            validate_simulation_mode(system, target, _constant_parameters, _input_sampling.get());
             location = target;
             continuous_state_space = system.continuous_state_space(location);
             continuous_auxiliary_space = system.continuous_auxiliary_space(location);
@@ -289,7 +302,7 @@ auto HybridContinuousTimeEvolver<ApproximateTag>::orbit(const HybridApproximateP
 
             LOGGING_PRINTLN_AT(1, "event " << event << " enabled: next point " << next_point << ", on location " << target);
 
-            dynamic = prepare_simulation_function(system.dynamic_function(location), system, location, _constant_parameters);
+            dynamic = prepare_simulation_dynamic(system, location, _constant_parameters);
             guards = _guard_functions(location);
 
             t._discrete_time += 1;
@@ -297,9 +310,12 @@ auto HybridContinuousTimeEvolver<ApproximateTag>::orbit(const HybridApproximateP
             reached_time_horizon = !probably(FloatDPApproximation(t.continuous_time(), dp) + FloatDPApproximation(h, dp) < FloatDPApproximation(tmax.continuous_time(), dp));
             const Real duration = reached_time_horizon ? tmax.continuous_time() - t.continuous_time() : Real(h);
             const FloatDPApproximation dt(duration, dp);
+            const auto step_field = EvolutionDetail::sample_simulation_field(dynamic, system.inclusion(location), _input_sampling.get(),
+                                                                             InputSamplingContext{0u, continuous_step, FloatDPApproximation(t.continuous_time(), dp), dt});
             next_point = system.time_variable(location)
-                           ? integrator.step(dynamic, point, FloatDPApproximation(t.continuous_time(), dp), dt)
-                           : integrator.step(dynamic, point, dt);
+                           ? integrator.step(step_field, point, FloatDPApproximation(t.continuous_time(), dp), dt)
+                           : integrator.step(step_field, point, dt);
+            ++continuous_step;
             t._continuous_time = reached_time_horizon ? tmax.continuous_time() : t._continuous_time + duration;
         }
         point = next_point;
@@ -372,6 +388,7 @@ auto HybridContinuousTimeEvolver<ApproximateTag>::orbit(const HybridApproximateL
 
     Vector<ApproximatePointType> next_point(init_list.size(), ApproximatePointType());
     Vector<List<DiscreteEvent>> event_trace(init_list.size(), List<DiscreteEvent>());
+    Vector<SizeType> continuous_steps(init_list.size(), 0u);
 
     Vector<RealSpace> continuous_state_space(init_list.size(), RealSpace());
     Vector<RealSpace> continuous_auxiliary_space(init_list.size(), RealSpace());
@@ -381,7 +398,7 @@ auto HybridContinuousTimeEvolver<ApproximateTag>::orbit(const HybridApproximateL
 
     for (SizeType i = 0; i < init_list.size(); i++) {
         location[i] = init_list[i].location();
-        validate_simulation_mode(system, location[i], _constant_parameters);
+        validate_simulation_mode(system, location[i], _constant_parameters, _input_sampling.get());
         continuous_state_space[i] = system.continuous_state_space(location[i]);
         continuous_auxiliary_space[i] = system.continuous_auxiliary_space(location[i]);
         continuous_state_auxiliary_space[i] = system.state_auxiliary_space()[location[i]];
@@ -395,7 +412,7 @@ auto HybridContinuousTimeEvolver<ApproximateTag>::orbit(const HybridApproximateL
     for (SizeType i = 0; i < init_list.size(); i++) {
         bool reached_time_horizon = false;
         while (!reached_time_horizon && possibly(t[i] < tmax) && (event_trace[i].empty() || !termination.terminating_events().contains(event_trace[i].back()))) {
-            EffectiveVectorMultivariateFunction dynamic = prepare_simulation_function(system.dynamic_function(location[i]), system, location[i], _constant_parameters);
+            EffectiveVectorMultivariateFunction dynamic = prepare_simulation_dynamic(system, location[i], _constant_parameters);
             Map<DiscreteEvent, EffectiveScalarMultivariateFunction> guards = _guard_functions(location[i]);
 
             RungeKutta4Integrator integrator(configuration().step_size().get_d());
@@ -429,7 +446,7 @@ auto HybridContinuousTimeEvolver<ApproximateTag>::orbit(const HybridApproximateL
                 DiscreteLocation target = system.target(location[i], event);
                 EffectiveVectorMultivariateFunction reset = prepare_simulation_function(system.reset_function(location[i], event), system, location[i], _constant_parameters);
                 const auto reset_arguments = EvolutionDetail::simulation_arguments(Vector<FloatDPApproximation>(point_list[i]), system.time_variable(location[i]).has_value(), FloatDPApproximation(t[i].continuous_time(), dp));
-                validate_simulation_mode(system, target, _constant_parameters);
+                validate_simulation_mode(system, target, _constant_parameters, _input_sampling.get());
                 location[i] = target;
                 continuous_state_space[i] = system.continuous_state_space(location[i]);
                 continuous_auxiliary_space[i] = system.continuous_auxiliary_space(location[i]);
@@ -440,7 +457,7 @@ auto HybridContinuousTimeEvolver<ApproximateTag>::orbit(const HybridApproximateL
 
                 LOGGING_PRINTLN_AT(1, "event " << event << " enabled: next point " << next_point[i] << ", on location " << target);
 
-                dynamic = prepare_simulation_function(system.dynamic_function(location[i]), system, location[i], _constant_parameters);
+                dynamic = prepare_simulation_dynamic(system, location[i], _constant_parameters);
                 guards = _guard_functions(location[i]);
 
                 t[i]._discrete_time += 1;
@@ -448,9 +465,12 @@ auto HybridContinuousTimeEvolver<ApproximateTag>::orbit(const HybridApproximateL
                 reached_time_horizon = !probably(FloatDPApproximation(t[i].continuous_time(), dp) + FloatDPApproximation(h, dp) < FloatDPApproximation(tmax.continuous_time(), dp));
                 const Real duration = reached_time_horizon ? tmax.continuous_time() - t[i].continuous_time() : Real(h);
                 const FloatDPApproximation dt(duration, dp);
+                const auto step_field = EvolutionDetail::sample_simulation_field(dynamic, system.inclusion(location[i]), _input_sampling.get(),
+                                                                                 InputSamplingContext{i, continuous_steps[i], FloatDPApproximation(t[i].continuous_time(), dp), dt});
                 next_point[i] = system.time_variable(location[i])
-                                  ? integrator.step(dynamic, point_list[i], FloatDPApproximation(t[i].continuous_time(), dp), dt)
-                                  : integrator.step(dynamic, point_list[i], dt);
+                                  ? integrator.step(step_field, point_list[i], FloatDPApproximation(t[i].continuous_time(), dp), dt)
+                                  : integrator.step(step_field, point_list[i], dt);
+                ++continuous_steps[i];
                 t[i]._continuous_time = reached_time_horizon ? tmax.continuous_time() : t[i]._continuous_time + duration;
             }
 

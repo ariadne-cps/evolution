@@ -151,43 +151,6 @@ Dyadic limit_step_to_remaining_time(const Dyadic& configured, const Dyadic& rema
 
 } // namespace EvolutionDetail
 
-ContinuousDynamics::ContinuousDynamics(const OrdinaryDifferentialAlgebraicEquation& system)
-    : _declaration(SharedPointer<const OrdinaryDifferentialAlgebraicEquation>(system.clone())) {}
-ContinuousDynamics::ContinuousDynamics(const OrdinaryDifferentialAlgebraicInclusion& system)
-    : _declaration(SharedPointer<const OrdinaryDifferentialAlgebraicInclusion>(system.clone())) {}
-ContinuousDynamics* ContinuousDynamics::clone() const { return new ContinuousDynamics(*this); }
-SizeType ContinuousDynamics::dimension() const {
-    return std::visit([](const auto& system) { return system->dimension(); }, _declaration);
-}
-RealSpace ContinuousDynamics::state_space() const {
-    return std::visit([](const auto& system) -> RealSpace { return system->state_space(); }, _declaration);
-}
-RealSpace ContinuousDynamics::auxiliary_space() const {
-    const auto* value = equation();
-    return value != nullptr ? value->auxiliary_space() : RealSpace{};
-}
-RealSpace ContinuousDynamics::state_auxiliary_space() const {
-    const auto* value = equation();
-    return value != nullptr ? value->state_auxiliary_space() : state_space();
-}
-const RealSpace& ContinuousDynamics::parameter_space() const {
-    return std::visit([](const auto& system) -> const RealSpace& { return system->parameter_space(); }, _declaration);
-}
-const BoxDomainType& ContinuousDynamics::constant_parameter_domain() const {
-    return std::visit([](const auto& system) -> const BoxDomainType& { return system->constant_parameter_domain(); }, _declaration);
-}
-bool ContinuousDynamics::has_explicit_time() const {
-    return std::visit([](const auto& system) { return system->has_explicit_time(); }, _declaration);
-}
-const OrdinaryDifferentialAlgebraicEquation* ContinuousDynamics::equation() const {
-    const auto* value = std::get_if<SharedPointer<const OrdinaryDifferentialAlgebraicEquation>>(&_declaration);
-    return value != nullptr ? value->get() : nullptr;
-}
-const OrdinaryDifferentialAlgebraicInclusion* ContinuousDynamics::inclusion() const {
-    const auto* value = std::get_if<SharedPointer<const OrdinaryDifferentialAlgebraicInclusion>>(&_declaration);
-    return value != nullptr ? value->get() : nullptr;
-}
-
 ContinuousTimeEvolver<ValidatedTag>::ContinuousTimeEvolver(const OrdinaryDifferentialAlgebraicEquation& system, const IntegratorInterface& i)
     : _system(new SystemType(system)), _integrator(i.clone()),
       _function_factory(dynamic_cast<const IntegratorBase&>(i).function_factory()), _configuration(new ConfigurationType()) {

@@ -19,8 +19,8 @@ RK4 retains the physical state dimension and evaluates external time at every
 stage. Parameters are constants in the prepared function, not differential
 states. A selected value stays fixed for every trajectory and every invocation
 on the same evolver, including clones and batches. Distinct selections can be
-simulated with distinct evolvers. General random/grid parameter policies and
-ODAI measurable-input sampling remain separate activities.
+simulated with distinct evolvers. General random/grid parameter policies remain separate activities. Structured ODAI input
+sampling is implemented with an [explicit policy](approximate_inclusions_design.md).
 
 The returned orbit still labels state and equation auxiliary variables. The
 constant_parameters getter exposes the selected valuation for provenance.

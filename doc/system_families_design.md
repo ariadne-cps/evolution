@@ -6,9 +6,9 @@ This is the implementation roadmap adopted in design v6.20 on 22 November
 | Native family | Validated evolution | Numerical simulation | Current status |
 | --- | --- | --- | --- |
 | Discrete time (`IteratedMap`) | `DiscreteTimeEvolver<ValidatedTag>` | `DiscreteTimeEvolver<ApproximateTag>` | Validated exists; approximate planned |
-| Continuous time (ODAE / ODAI) | `ContinuousTimeEvolver<ValidatedTag>` | `ContinuousTimeEvolver<ApproximateTag>` | Validated accepts both with explicit time; approximate accepts autonomous/nonautonomous ODAE with explicitly selected fixed parameters |
+| Continuous time (ODAE / ODAI) | `ContinuousTimeEvolver<ValidatedTag>` | `ContinuousTimeEvolver<ApproximateTag>` | Validated accepts both with explicit time; approximate accepts ODAE and structured ODAI with explicit time, fixed parameters and an explicit input policy |
 | Hybrid discrete time | `HybridDiscreteTimeEvolver<ValidatedTag>` | `HybridDiscreteTimeEvolver<ApproximateTag>` | Native System model and both algorithms planned |
-| Hybrid continuous time | `HybridContinuousTimeEvolver<ValidatedTag>` | `HybridContinuousTimeEvolver<ApproximateTag>` | ODAE/ODAI timed UPPER evolution; approximate equation evolution supports external time and explicitly selected fixed parameters; other extensions planned |
+| Hybrid continuous time | `HybridContinuousTimeEvolver<ValidatedTag>` | `HybridContinuousTimeEvolver<ApproximateTag>` | ODAE/ODAI timed UPPER evolution; approximate ODAE/structured ODAI supports external time, fixed parameters and explicit input policies; further contact handling planned |
 
 `IteratedMap` keeps its existing name and contract. Hybrid discrete time needs
 its own native model in `ariadne-cps/system` before either algorithm is added.
@@ -104,8 +104,8 @@ are selected by a RealValuation supplied to either continuous approximate
 constructor. Named values remain fixed across trajectories, repeated calls,
 clones and hybrid mode changes. Domains and required names are checked;
 RK4 retains external stage time and the physical state dimension. Hybrid
-modes can use different subsets of the selected names. This does not yet add
-random/grid parameter policies, ODAI input sampling or new event localization.
+modes can use different subsets of the selected names. Structured ODAI now also support [explicit input sampling](approximate_inclusions_design.md).
+Random/grid parameter policies and new event localization remain separate work.
 
 ## Implemented paradigm axis
 

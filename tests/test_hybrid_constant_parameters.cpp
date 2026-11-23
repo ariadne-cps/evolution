@@ -22,6 +22,10 @@
  *  along with Ariadne Evolution. If not, see <https://www.gnu.org/licenses/>.
  */
 
+/** @file tests/test_hybrid_constant_parameters.cpp
+ *  @brief Verify hybrid constant parameters behavior.
+ */
+
 #include <stdexcept>
 
 #include "logging/test_runner.hpp"

@@ -23,7 +23,7 @@
  */
 
 /** @file src/continuous_time_approximate_evolver.cpp
- *  @brief Implement vector field simulator operations.
+ *  @brief Implement approximate continuous equation and inclusion evolution.
  */
 
 #include "evolution/continuous_time_approximate_evolver.hpp"
@@ -152,15 +152,24 @@ List<LabelledPoint<FloatDPApproximation>> create_point_list(BinaryTreePaving& pa
     return result;
 }
 
-ContinuousTimeEvolver<ApproximateTag>::ContinuousTimeEvolver(const SystemType& system)
+ContinuousTimeEvolver<ApproximateTag>::ContinuousTimeEvolver(const OrdinaryDifferentialAlgebraicEquation& system)
     : ContinuousTimeEvolver(system, RealValuation{}) {}
 
-ContinuousTimeEvolver<ApproximateTag>::ContinuousTimeEvolver(const SystemType& system, const RealValuation& parameters)
-    : _system(system.clone()), _configuration(new ConfigurationType()), _constant_parameters(parameters) {
+ContinuousTimeEvolver<ApproximateTag>::ContinuousTimeEvolver(const OrdinaryDifferentialAlgebraicEquation& system, const RealValuation& parameters)
+    : _system(new SystemType(system)), _configuration(new ConfigurationType()), _constant_parameters(parameters) {
     EvolutionDetail::validate_simulation_parameters(system.parameter_space(), system.constant_parameter_domain(), parameters, true);
     const SizeType retained_arguments = system.dimension() + (system.has_explicit_time() ? 1u : 0u);
     _dynamic_function = EvolutionDetail::bind_simulation_parameters(system.function(), retained_arguments, system.parameter_space(), parameters);
     _auxiliary_function = EvolutionDetail::bind_simulation_parameters(system.auxiliary_function(), retained_arguments, system.parameter_space(), parameters);
+}
+
+ContinuousTimeEvolver<ApproximateTag>::ContinuousTimeEvolver(const OrdinaryDifferentialAlgebraicInclusion& system,
+                                                             const InputSamplingPolicy& policy, const RealValuation& parameters)
+    : _system(new SystemType(system)), _configuration(new ConfigurationType()), _constant_parameters(parameters), _input_sampling(policy.clone()) {
+    EvolutionDetail::validate_simulation_inclusion(system, _input_sampling.get());
+    EvolutionDetail::validate_simulation_parameters(system.parameter_space(), system.constant_parameter_domain(), parameters, true);
+    _dynamic_function = EvolutionDetail::prepare_simulation_inclusion(system, parameters, system.has_explicit_time());
+    _auxiliary_function = EffectiveVectorMultivariateFunction::zeros(0u, system.dimension() + (system.has_explicit_time() ? 1u : 0u));
 }
 
 inline FloatDPApproximation evaluate(const EffectiveScalarMultivariateFunction& f, const Vector<FloatDPApproximation>& x) { return f(x); }
@@ -245,11 +254,15 @@ void ContinuousTimeEvolver<ApproximateTag>::_simulate_from_point(Pair<SizeType, 
 
     std::streamsize old_precision = std::clog.precision();
     LOGGING_PRINTLN("t=" << std::setw(4) << std::left << t << " p=" << state_pt << std::setprecision(old_precision));
+    SizeType continuous_step = 0u;
     while (decide(t < tmax)) {
         const auto duration = decide(t + h > tmax) ? tmax - t : h;
+        const auto step_field = EvolutionDetail::sample_simulation_field(dynamic_function, _system->inclusion(), _input_sampling.get(),
+                                                                         InputSamplingContext{curve_number, continuous_step, t, duration});
         state_pt = _system->has_explicit_time()
-                     ? integrator.step(dynamic_function, state_pt, t, duration)
-                     : integrator.step(dynamic_function, state_pt, duration);
+                     ? integrator.step(step_field, state_pt, t, duration)
+                     : integrator.step(step_field, state_pt, duration);
+        ++continuous_step;
         t += duration;
         orbit->insert(cast_exact(t), make_state_auxiliary_point(ApproximatePointType(state_space, state_pt), state_space, auxiliary_space, state_auxiliary_space, auxiliary_function, _system->has_explicit_time(), t), curve_number);
         old_precision = std::clog.precision();

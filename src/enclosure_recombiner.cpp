@@ -22,7 +22,7 @@
  *  along with Ariadne Evolution. If not, see <https://www.gnu.org/licenses/>.
  */
 
-/** @file enclosure_recombiner.cpp
+/** @file src/enclosure_recombiner.cpp
  *  @brief Reference strategy and handle for continuous enclosure recombination.
  */
 

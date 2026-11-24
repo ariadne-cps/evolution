@@ -624,3 +624,30 @@ geometries still terminate conservatively. The additional
 crossing case has been implemented but is not accepted until
 all functional CI passes on this checkpoint. No unrelated matrix
 cell or tested numerical semantics have been weakened.
+
+
+## v6.64 — Joint explicit-clock/physical-parameter LOWER first-crossing regression
+
+This checkpoint adds test coverage, not a new numerical algorithm or a
+promotion of hybrid continuous equation LOWER from partial (◐) to complete.
+The v6.63 first-boundary witness implementation is exercised when **both**
+explicit global time and fixed physical parameters occur in the *same*
+equation mode. The dynamics are `x'=p+t`, `p in [2,3]`, with the
+time-dependent URGENT guard `x>=t+1/64`. A reset `x'=x-t+1`
+must preserve a genuinely reached first-boundary witness at
+`x=1+1/64` for both flat and tree evolution backends. The final
+enclosure must retain the physical parameter binding, target location
+and exact event history.
+
+A second test case for each backend adds an earlier competing URGENT
+boundary `x>=t+1/128` and demands that no LOWER final target be
+published. These tests specifically exercise the state/time/parameter
+argument layout and guard/reset correlation. The prior timed-only and
+parameter-only positive/negative regressions remain unchanged, as do
+all UPPER, inclusion, autonomous, and hybrid discrete tests.
+
+The earlier v6.62 baseline passed Ubuntu, macOS, Windows, Coverage and
+Sanitizers. The v6.63 checkpoint was still being validated when this
+test-only increment was prepared; do not infer its acceptance from the
+v6.62 CI or infer acceptance of this v6.64 commit before its own five
+functional workflows complete. Format remains nonblocking.

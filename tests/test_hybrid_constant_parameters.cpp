@@ -283,6 +283,57 @@ class TestHybridConstantParameters : public Testing::ContextFixture {
         }
     }
 
+    void test_lower_joint_clock_parameter_guard() {
+        // Both the external clock and fixed physical parameters occur in
+        // the same flow. The guard and reset must preserve the time-state
+        // correlation across the certified LOWER first crossing.
+        for (bool tree: {false, true}) {
+            const RealVariablesBox parameters({2 <= p <= 3});
+            const DiscreteEvent crossing("joint_clock_parameter_crossing");
+            ContinuousTimeHybridAutomaton system;
+            system.new_mode(source, OrdinaryDifferentialAlgebraicEquation(
+                {dot(x) = p + t}, parameters, t));
+            system.new_mode(target, OrdinaryDifferentialAlgebraicEquation(
+                {dot(x) = 0}, parameters, t));
+            system.new_transition(source, crossing, target,
+                {next(x) = x - t + 1}, x >= t + Real(1 / 64_q), EventKind::URGENT);
+
+            HybridContinuousTimeEvolver<ValidatedTag> evolver(system);
+            configure(evolver, tree);
+            const auto lower = evolver.orbit(initial(evolver), HybridTime(0.125_x, 1),
+                                            Semantics::LOWER);
+            ARIADNE_TESTING_REQUIRE(lower.final().size() == 1u);
+            const auto& final = lower.final()[0u];
+            ARIADNE_TESTING_EXPECT_EQUAL(final.location(), target);
+            ARIADNE_TESTING_REQUIRE(final.previous_events().size() == 1u);
+            ARIADNE_TESTING_EXPECT_EQUAL(final.previous_events()[0u], crossing);
+            binding(final);
+            // At the true first crossing, x-t=1/64, hence the reset
+            // produces x=1+1/64. The witness must remain enclosed.
+            ARIADNE_TESTING_PROVE(subset(
+                ExactIntervalType(1.015625_x, 1.015625_x),
+                cast_exact_interval(final.state_function()[0u].range())));
+
+            // A distinct earlier URGENT boundary cannot be excluded from
+            // the tube. No LOWER target may be chosen from the two
+            // potentially overlapping first-entry candidates.
+            ContinuousTimeHybridAutomaton competing;
+            competing.new_mode(source, OrdinaryDifferentialAlgebraicEquation(
+                {dot(x) = p + t}, parameters, t));
+            competing.new_mode(target, OrdinaryDifferentialAlgebraicEquation(
+                {dot(x) = 0}, parameters, t));
+            competing.new_transition(source, DiscreteEvent("later"), target,
+                {next(x) = x - t + 1}, x >= t + Real(1 / 64_q), EventKind::URGENT);
+            competing.new_transition(source, DiscreteEvent("earlier"), target,
+                {next(x) = x - t + 2}, x >= t + Real(1 / 128_q), EventKind::URGENT);
+            HybridContinuousTimeEvolver<ValidatedTag> conservative(competing);
+            configure(conservative, tree);
+            const auto blocked = conservative.orbit(initial(conservative),
+                HybridTime(0.125_x, 1), Semantics::LOWER);
+            ARIADNE_TESTING_EXPECT_EQUAL(blocked.final().size(), 0u);
+        }
+    }
+
     void test_inclusion_flow_and_method_gates() {
         for (bool timed: {false, true})
             for (bool boxes: {false, true})
@@ -459,6 +510,7 @@ int main(int argc, char** argv) {
     ARIADNE_TESTING_ADD_TEST(TestHybridConstantParameters, test_lower_clocked_event_witnesses);
     ARIADNE_TESTING_ADD_TEST(TestHybridConstantParameters, test_lower_certified_crossing_during_clocked_step);
     ARIADNE_TESTING_ADD_TEST(TestHybridConstantParameters, test_lower_crossing_with_competing_urgent_guard);
+    ARIADNE_TESTING_ADD_TEST(TestHybridConstantParameters, test_lower_joint_clock_parameter_guard);
     ARIADNE_TESTING_ADD_TEST(TestHybridConstantParameters, test_inclusion_flow_and_method_gates);
     ARIADNE_TESTING_ADD_TEST(TestHybridConstantParameters, test_immediate_parameter_guard_reset_and_auxiliary);
     ARIADNE_TESTING_ADD_TEST(TestHybridConstantParameters, test_timed_parameter_guard_and_reset);

@@ -193,3 +193,28 @@ numerical algorithm has not changed, except removal of the
 v6.57 admission restriction. Functional CI must pass on v6.58
 before promoting the checkpoint to validated; Format remains
 outside the acceptance gate.
+
+## v6.59 — Fix lifetime of the coordinate function in the v6.58 regression
+
+The v6.58 regression `lower_constrained_source_matches_continuous_admission`
+failed during construction of a state constraint, before evaluating the
+LOWER orbit. Its coordinate function was obtained by indexing a
+**temporary** `EffectiveVectorMultivariateFunction::identity(1u)`.
+That expression did not retain the owner of the indexed component;
+the reported precondition failure was in `Function::get(i)` with
+`i >= result_size()`. The test now holds the identity vector function
+in a named local before indexing it, checks its result dimension, and
+then retains the scalar coordinate for the entire test. No production
+algorithm, semantics, constraint, or witness expectation was changed.
+
+The regression still requires that the feasible constrained source
+`x in [1/4,1/2]` be accepted in LOWER both at zero horizon and for
+one deterministic map step. The witness `x_0=3/8` reaches `x_1=11/8`.
+The correction does **not** reintroduce v6.57's special input
+certification: ordinary discrete LOWER remains aligned with ordinary
+continuous LOWER, including the initial-source feasibility assumption.
+
+This checkpoint is unvalidated until Ubuntu, macOS, Windows, Coverage,
+and Sanitizers have passed on the exact v6.59 commit. Continuous and
+both hybrid test families remain in the complete CI gate; Format is
+non-blocking. No capacity-matrix cell changes on this test-only fix.

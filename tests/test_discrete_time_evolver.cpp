@@ -149,7 +149,11 @@ class TestDiscreteTimeEvolver : public Ariadne::Testing::ContextFixture {
         const DifferenceAlgebraicEquation equation(
             List<PrimedRealAssignment>{next(x) = x + 1});
         DiscreteTimeEvolver<ValidatedTag> evolver(equation);
-        const auto coordinate = EffectiveVectorMultivariateFunction::identity(1u)[0u];
+        // Retain the vector function owning the indexed component:
+        // indexing a temporary may leave a borrowed function reference dangling.
+        const auto identity = EffectiveVectorMultivariateFunction::identity(1u);
+        ARIADNE_TESTING_EXPECT_EQUAL(identity.result_size(), 1u);
+        const auto coordinate = identity[0u];
         auto initial = evolver.enclosure(ExactBoxType({{-1.0_x, 1.0_x}}));
 
         // This feasible constrained set has a witness x0=3/8, but none

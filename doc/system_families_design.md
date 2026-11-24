@@ -457,3 +457,16 @@ has been flagged for a focused separate review and must
 not be hidden by an extra admission gate on discrete
 evolution. All existing continuous and hybrid suites
 remain mandatory in CI.
+
+## v6.59 — Correct lifetime in constrained discrete LOWER regression
+
+The initial-state parity test introduced in v6.58 indexed an ephemeral
+identity vector function when making a scalar coordinate. A CI failure
+in the function library's `get(i)` precondition revealed this test
+construction error. The identity vector function is now retained as a
+local owner while its component is used to build two constraints.
+The feasible source, analytical witness, orbit assertions, and LOWER
+admission policy remain unchanged. The complete capability matrix is
+unchanged; ordinary discrete deterministic LOWER has the same source
+contract as ordinary continuous deterministic LOWER. This is a test
+repair, not a new capability. Functional CI is required before validation.

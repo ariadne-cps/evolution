@@ -47,6 +47,7 @@
 #include "evolution/hybrid_discrete_time_step_planner.hpp"
 #include "evolution/hybrid_discrete_time_step_image.hpp"
 #include "evolution/hybrid_discrete_time_step_executor.hpp"
+#include "evolution/hybrid_discrete_time_predicate_evaluator.hpp"
 #include "evolution/hybrid_crossing.hpp"
 #include "evolution/hybrid_enclosure.hpp"
 #include "evolution/hybrid_evolution_backend.hpp"

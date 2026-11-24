@@ -27,10 +27,21 @@
  */
 
 #include "evolution/hybrid_discrete_time_step_executor.hpp"
+#include "evolution/hybrid_discrete_time_predicate_evaluator.hpp"
 
 #include <stdexcept>
 
 namespace Ariadne {
+
+HybridDiscreteTimeStepExecution HybridDiscreteTimeStepExecutor::execute_certified(
+    const DiscreteTimeHybridAutomatonInterface& automaton,
+    const HybridEnclosure& source, Integer source_index) {
+    const auto evaluate = [&](DiscreteLocation, DiscreteEvent,
+                              DiscreteTimePredicateRole, const ContinuousPredicate& predicate) {
+        return HybridDiscreteTimePredicateEvaluator::classify(automaton, source, predicate);
+    };
+    return execute(automaton, source, source_index, evaluate);
+}
 
 HybridDiscreteTimeStepExecution HybridDiscreteTimeStepExecutor::execute(
     const DiscreteTimeHybridAutomatonInterface& automaton,

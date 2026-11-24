@@ -63,6 +63,11 @@ struct HybridDiscreteTimeStepExecution {
 //! time function. This is a single-step adapter, not an orbit scheduler.
 class HybridDiscreteTimeStepExecutor {
   public:
+    /** @brief Run a deterministic UPPER tick using certified enclosure evidence. */
+    static HybridDiscreteTimeStepExecution execute_certified(
+        const DiscreteTimeHybridAutomatonInterface& automaton,
+        const HybridEnclosure& source, Integer source_index);
+
     static HybridDiscreteTimeStepExecution execute(
         const DiscreteTimeHybridAutomatonInterface& automaton,
         const HybridEnclosure& source, Integer source_index,

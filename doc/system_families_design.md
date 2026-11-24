@@ -243,3 +243,42 @@ transition/progression alternatives, fully blocked steps, inclusion
 rejection, event provenance and source-set immutability. The existing
 regression matrix must validate the new code. Format remains deferred
 until completion of the full redesign.
+
+## Certified deterministic discrete hybrid predicate evidence (v6.42)
+
+`HybridDiscreteTimePredicateEvaluator::classify` evaluates a System
+`ContinuousPredicate` over the *entire* source `HybridEnclosure`.
+For a deterministic difference equation mode, it constructs a scalar
+sign-indicator function using System's existing
+`make_constraint_function` on the physical state space and
+`algebraic_sort` of the mode's explicit auxiliary assignments.
+This substitutes dependent auxiliary expressions *before* interval
+evaluation, avoiding the unsound independence of an auxiliary
+output and its state inputs. The indicator is then evaluated using
+`HybridEnclosure::range_of`, retaining the source parameterization
+and constrained domain.
+
+Evidence is TRUE only if the validated indicator lower bound is strictly
+positive; FALSE only if its upper bound is strictly negative. All remaining
+ranges, including those touching zero, yield UNKNOWN. This deliberately
+avoids falsely certifying strict predicate truth at a boundary; it can
+produce additional conservative UPPER branches. It does not construct
+branch-specific restricted source enclosures, refine uncertainty by
+subdivision, certify LOWER reachability or handle bounded-input
+inclusion input/auxiliary dependencies.
+
+`HybridDiscreteTimeStepExecutor::execute_certified` couples that evidence
+to the existing planner/executor, so clients no longer need to supply
+independent ad-hoc predicate sampling to obtain a deterministic UPPER
+single-tick fan-out. The original callback interface remains available
+for separately certified evidence. The caller must still keep the
+explicit integer index consistent with the `HybridEnclosure` time map;
+the adapter does not yet provide multi-step scheduling or an Orbit.
+Inclusion modes and incompatible physical state spaces are rejected.
+No numerical kernels in continuous evolution are changed.
+
+Tests cover uniformly true and false predicates, uncertain boundaries,
+symbolically correlated auxiliary assignments, urgent branching,
+time advancement, immutability, inclusion rejection and state-space
+mismatches. Functional CI is required to validate this new component.
+Format remains deferred as requested.

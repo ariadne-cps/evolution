@@ -3,6 +3,8 @@ add_library(EVOLUTION_SRC OBJECT
     continuous_integration.cpp
     continuous_dynamics.cpp
     input_sampling.cpp
+    domain_bisection_sampling.cpp
+    simulator_sampling.cpp
     enclosure_recombiner.cpp
     enclosure_augmented_paving.cpp
     orbit.cpp

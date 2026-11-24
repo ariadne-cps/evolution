@@ -741,3 +741,19 @@ At publication, v6.66 Ubuntu and macOS had passed on
 Coverage and Sanitizers were still being checked. This v6.67
 checkpoint requires its **own** successful functional CI across all
 five workflows before acceptance. Format remains nonblocking.
+
+## v6.68 (stage 1) — Shared paving-independent sampling infrastructure
+
+Copied `sampling_counts.hpp`, `domain_bisection_sampling.hpp/.cpp`, and
+`test_domain_bisection_sampling.cpp` from evolution/decoupling byte-for-byte.
+Adapted `simulator_sampling.hpp/.cpp` solely to the renamed current
+`ContinuousTimeEvolver<ApproximateTag>` and
+`HybridContinuousTimeEvolver<ApproximateTag>` API types, retaining the
+same midpoint-of-domain-leaves algorithm. Copied its separate sampling
+contract regression and registered both suites in CMake. Unspecified
+coordinate counts default to one; flat dimensions are never multiplied.
+The ongoing migration will make the existing Approximate evolvers call
+these helpers, eliminating their grid/paving sampling paths. The validated
+algorithms and per-step `InputSamplingPolicy` are unaffected. Neither
+this stage nor a subsequent commit is accepted without its own five-way
+functional CI. Format remains nonblocking.

@@ -161,6 +161,35 @@ class TestHybridDiscreteTimeEvolver : public Ariadne::Testing::ContextFixture {
             evolver.orbit(initial(mode), Termination(Integer(0), Integer(1)), Semantics::LOWER));
     }
 
+    Void test_public_guarded_inclusion_upper_orbit() {
+        const RealVariable x("x"), u("u");
+        const DiscreteLocation mode(1), target(2);
+        const DiscreteEvent event("choice");
+        DiscreteTimeHybridAutomaton system;
+        system.new_mode(mode, DifferenceAlgebraicInclusion(
+            List<PrimedRealAssignment>{next(x) = x + u},
+            RealVariablesBox({-1 <= u <= 1})));
+        system.new_mode(target, DifferenceAlgebraicEquation(
+            List<PrimedRealAssignment>{next(x) = x}));
+        system.new_urgent_transition(mode, event, target,
+                                     {next(x) = x + 10}, x >= 1/2_q);
+        Evolver evolver(system);
+        const auto source = initial(mode);
+        const auto orbit = evolver.orbit(source, Termination(Integer(0), Integer(1)),
+                                        Semantics::UPPER);
+        ARIADNE_TESTING_EXPECT_EQUAL(orbit.reach().size(), 2u);
+        ARIADNE_TESTING_EXPECT_EQUAL(orbit.final().size(), 2u);
+        const auto tree = evolver.explore(source, Termination(Integer(0), Integer(1)),
+                                         Semantics::UPPER);
+        ARIADNE_TESTING_EXPECT_EQUAL(tree.nodes.size(), 3u);
+        ARIADNE_TESTING_PROVE(tree.nodes[1u].incoming_branch.has_value());
+        ARIADNE_TESTING_PROVE(tree.nodes[1u].incoming_branch->event.has_value());
+        ARIADNE_TESTING_EXPECT_EQUAL(
+            tree.nodes[2u].enclosure.continuous_set().number_of_parameters(), 2u);
+        ARIADNE_TESTING_EXPECT_THROWS(std::invalid_argument,
+            evolver.orbit(source, Termination(Integer(0), Integer(1)), Semantics::LOWER));
+    }
+
     Void test_rejections() {
         const RealVariable x("x"), u("u");
         const DiscreteLocation mode(1);
@@ -194,6 +223,7 @@ int main(int argc, char** argv) {
     ARIADNE_TESTING_ADD_TEST(TestHybridDiscreteTimeEvolver, test_horizon_and_blocked);
     ARIADNE_TESTING_ADD_TEST(TestHybridDiscreteTimeEvolver, test_resume_clone_and_budget);
     ARIADNE_TESTING_ADD_TEST(TestHybridDiscreteTimeEvolver, test_public_event_free_inclusion_upper);
+    ARIADNE_TESTING_ADD_TEST(TestHybridDiscreteTimeEvolver, test_public_guarded_inclusion_upper_orbit);
     ARIADNE_TESTING_ADD_TEST(TestHybridDiscreteTimeEvolver, test_rejections);
     return Ariadne::Testing::run_logging_suite(ariadne_test_suite, argc, argv);
 }

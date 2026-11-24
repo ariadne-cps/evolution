@@ -255,6 +255,34 @@ class TestHybridDiscreteTimeUpperScheduler : public Ariadne::Testing::ContextFix
         ARIADNE_TESTING_EXPECT_EQUAL(orbit.orbit.reach().size(), 2u);
     }
 
+    Void test_state_guarded_inclusion_fanout_and_orbit() {
+        const RealVariable x("x"), u("u");
+        const DiscreteLocation mode(1), target(2);
+        const DiscreteEvent event("choice");
+        DiscreteTimeHybridAutomaton system;
+        system.new_mode(mode, DifferenceAlgebraicInclusion(
+            List<PrimedRealAssignment>{next(x) = x + u},
+            RealVariablesBox({-1 <= u <= 1})));
+        system.new_mode(target, DifferenceAlgebraicEquation(
+            List<PrimedRealAssignment>{next(x) = x}));
+        system.new_permissive_transition(mode, event, target,
+                                         {next(x) = x + 10}, x >= 1/2_q, x <= 1/4_q);
+        const auto result = HybridDiscreteTimeUpperScheduler::evolve(
+            system, initial(mode), Integer(0), Integer(1), 3u);
+        ARIADNE_TESTING_EXPECT_EQUAL(result.nodes.size(), 3u);
+        ARIADNE_TESTING_EXPECT_EQUAL(result.terminals.size(), 2u);
+        ARIADNE_TESTING_PROVE(result.nodes[1u].enclosure.location() == target);
+        ARIADNE_TESTING_PROVE(result.nodes[2u].enclosure.location() == mode);
+        ARIADNE_TESTING_PROVE(result.nodes[1u].incoming_branch.has_value());
+        ARIADNE_TESTING_PROVE(result.nodes[1u].incoming_branch->event.has_value());
+        ARIADNE_TESTING_PROVE(*result.nodes[1u].incoming_branch->event == event);
+        ARIADNE_TESTING_EXPECT_EQUAL(result.nodes[1u].enclosure.continuous_set().number_of_parameters(), 1u);
+        ARIADNE_TESTING_EXPECT_EQUAL(result.nodes[2u].enclosure.continuous_set().number_of_parameters(), 2u);
+        const auto projected = HybridDiscreteTimeUpperScheduler::project_orbit(result);
+        ARIADNE_TESTING_EXPECT_EQUAL(projected.orbit.final().size(), 2u);
+        ARIADNE_TESTING_EXPECT_EQUAL(projected.blocked.size(), 0u);
+    }
+
     Void test_inclusion_rejected_without_sampling() {
         const RealVariable x("x"), u("u"), a("a");
         const DiscreteLocation mode(1);
@@ -282,6 +310,7 @@ int main(int argc, char** argv) {
     ARIADNE_TESTING_ADD_TEST(TestHybridDiscreteTimeUpperScheduler, test_time_index_matches_entire_enclosure);
     ARIADNE_TESTING_ADD_TEST(TestHybridDiscreteTimeUpperScheduler, test_orbit_projection_and_blocked_terminal);
     ARIADNE_TESTING_ADD_TEST(TestHybridDiscreteTimeUpperScheduler, test_validated_event_free_inclusion_orbit);
+    ARIADNE_TESTING_ADD_TEST(TestHybridDiscreteTimeUpperScheduler, test_state_guarded_inclusion_fanout_and_orbit);
     ARIADNE_TESTING_ADD_TEST(TestHybridDiscreteTimeUpperScheduler, test_inclusion_rejected_without_sampling);
     return Ariadne::Testing::run_logging_suite(ariadne_test_suite, argc, argv);
 }

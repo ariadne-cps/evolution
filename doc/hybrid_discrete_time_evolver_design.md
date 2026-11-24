@@ -134,3 +134,41 @@ This was a functional integration bug in v6.48, not a reason to weaken
 the tests. Functional CI remains required on the repair commit, and
 both continuous and discrete hybrid suites remain active. The
 quantified-guard extension is deferred until that CI is verified.
+
+## v6.50 — State-only guards and resets from bounded-input inclusion modes
+
+The native discrete System model forbids free input symbols in guards,
+progression invariants and transition resets. Without auxiliary outputs,
+those predicates depend solely on the **pre-tick state**. The validated
+shared source-guard classifier now handles such inclusion modes with the
+same closed-side restriction used for deterministic source modes.
+An unknown guard produces independent UPPER alternatives; URGENT uses
+the pre-state complement for progression, while PERMISSIVE applies the
+explicit progression invariant. Multiple events are not prioritized.
+
+A bounded-input inclusion's progression adds independent INPUT coordinates
+for the current tick as before. A transition from an inclusion instead
+executes the state-only reset to a deterministic equation mode, consumes
+one integer tick and **does not** select or append a current-tick input.
+Previous input coordinates remain correlated with the source state.
+All target inclusion modes and auxiliary-bearing inclusion sources
+remain rejected, including at a zero horizon; this is enforced by a
+single shared capability gate in predicate conversion, image application,
+executor and scheduler. Unsupported inclusion dynamics never return a
+partial UPPER orbit. LOWER remains unsupported.
+
+**Two-family regression obligation:** discrete predicate tests verify
+TRUE/FALSE/UNKNOWN, urgent complement, both constrained alternatives,
+immutable source, input axes only on progression, exact tick and event
+history. Step-image tests verify state-only inclusion reset; scheduler
+and public-evolver tests verify UPPER reach/final and provenance.
+The existing continuous hybrid guard classifier, continuous integration
+and event/impact suites remain enabled and must be green together with
+the discrete suites in Ubuntu, macOS, Windows, Coverage and Sanitizers.
+Format remains non-blocking. No CI result can be transferred from
+v6.49 to the v6.50 commit.
+
+Next: verify functional CI; correct regressions without weakening
+semantic expectations. Only then expand inclusion auxiliary or target
+capabilities and eventually introduce approximate discrete evolvers.
+Python binding and tutorial parity remain the final phase.

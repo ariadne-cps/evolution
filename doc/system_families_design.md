@@ -7,7 +7,7 @@ This is the implementation roadmap adopted in design v6.20 on 22 November
 | --- | --- | --- | --- |
 | Discrete time (`IteratedMap`) | `DiscreteTimeEvolver<ValidatedTag>` | `DiscreteTimeEvolver<ApproximateTag>` | Validated exists; approximate planned |
 | Continuous time (ODAE / ODAI) | `ContinuousTimeEvolver<ValidatedTag>` | `ContinuousTimeEvolver<ApproximateTag>` | Validated accepts both with explicit time; approximate accepts ODAE and structured ODAI with explicit time, fixed parameters and an explicit input policy |
-| Hybrid discrete time | `HybridDiscreteTimeEvolver<ValidatedTag>` | `HybridDiscreteTimeEvolver<ApproximateTag>` | Validated deterministic UPPER public; event-free bounded-input inclusion progression supported; inclusion transitions/auxiliaries, LOWER and approximate pending |
+| Hybrid discrete time | `HybridDiscreteTimeEvolver<ValidatedTag>` | `HybridDiscreteTimeEvolver<ApproximateTag>` | Validated deterministic UPPER public; bounded-input inclusion progression and state-only transitions to deterministic modes supported; inclusion targets/auxiliaries, LOWER and approximate pending |
 | Hybrid continuous time | `HybridContinuousTimeEvolver<ValidatedTag>` | `HybridContinuousTimeEvolver<ApproximateTag>` | ODAE/ODAI timed UPPER evolution; approximate ODAE/structured ODAI supports external time, fixed parameters and explicit input policies; further contact handling planned |
 
 `IteratedMap` keeps its existing name and contract. Hybrid discrete time now has its native model in `ariadne-cps/system`.

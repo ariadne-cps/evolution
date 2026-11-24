@@ -122,6 +122,48 @@ class TestHybridDiscreteTimePredicateEvaluator : public Ariadne::Testing::Contex
         ARIADNE_TESTING_EXPECT_EQUAL(source.number_of_constraints(), 0u);
     }
 
+    Void test_inclusion_state_only_guard_and_urgent_complement() {
+        const RealVariable x("x"), u("u");
+        const DiscreteLocation mode(1), target(2);
+        const DiscreteEvent event("urgent");
+        DiscreteTimeHybridAutomaton automaton;
+        automaton.new_mode(mode, DifferenceAlgebraicInclusion(
+            List<PrimedRealAssignment>{next(x) = x + u},
+            RealVariablesBox({-1 <= u <= 1})));
+        automaton.new_mode(target, DifferenceAlgebraicEquation(
+            List<PrimedRealAssignment>{next(x) = x}));
+        automaton.new_urgent_transition(mode, event, target,
+                                        {next(x) = x + 10}, x >= 1/2_q);
+        const auto source = initial(mode);
+        ARIADNE_TESTING_PROVE(HybridDiscreteTimePredicateEvaluator::classify(
+            automaton, source, x >= 2) == Evidence::FALSE);
+        ARIADNE_TESTING_PROVE(HybridDiscreteTimePredicateEvaluator::classify(
+            automaton, source, x >= -1) == Evidence::TRUE);
+        ARIADNE_TESTING_PROVE(HybridDiscreteTimePredicateEvaluator::classify(
+            automaton, source, x >= 1/2_q) == Evidence::UNKNOWN);
+        const auto branches = HybridDiscreteTimeStepExecutor::execute_certified(
+            automaton, source, Integer(0));
+        ARIADNE_TESTING_EXPECT_EQUAL(branches.successors.size(), 2u);
+        const auto& jump = branches.successors[0u];
+        const auto& progress = branches.successors[1u];
+        ARIADNE_TESTING_PROVE(jump.branch.kind == Kind::TRANSITION);
+        ARIADNE_TESTING_PROVE(progress.branch.kind == Kind::PROGRESSION);
+        ARIADNE_TESTING_PROVE(jump.enclosure.location() == target);
+        ARIADNE_TESTING_PROVE(progress.enclosure.location() == mode);
+        ARIADNE_TESTING_EXPECT_EQUAL(jump.enclosure.number_of_constraints(), 1u);
+        ARIADNE_TESTING_EXPECT_EQUAL(progress.enclosure.number_of_constraints(), 1u);
+        ARIADNE_TESTING_EXPECT_EQUAL(jump.enclosure.continuous_set().number_of_parameters(), 1u);
+        ARIADNE_TESTING_EXPECT_EQUAL(progress.enclosure.continuous_set().number_of_parameters(), 2u);
+        ARIADNE_TESTING_EXPECT_EQUAL(progress.enclosure.continuous_set().variable_kinds().back(),
+                                    EnclosureVariableKind::INPUT);
+        ARIADNE_TESTING_EXPECT_EQUAL(jump.enclosure.previous_events().size(), 1u);
+        ARIADNE_TESTING_PROVE(jump.enclosure.previous_events()[0u] == event);
+        ARIADNE_TESTING_EXPECT_EQUAL(jump.enclosure.time_range().lower_bound().raw().get_d(), 1.0);
+        ARIADNE_TESTING_EXPECT_EQUAL(progress.enclosure.time_range().lower_bound().raw().get_d(), 1.0);
+        ARIADNE_TESTING_EXPECT_EQUAL(source.number_of_constraints(), 0u);
+        ARIADNE_TESTING_EXPECT_EQUAL(source.continuous_set().number_of_parameters(), 1u);
+    }
+
     Void test_certified_upper_tick() {
         const RealVariable x("x");
         const DiscreteLocation mode(1), target(2);
@@ -254,6 +296,7 @@ int main(int argc, char** argv) {
     ARIADNE_TESTING_ADD_TEST(TestHybridDiscreteTimePredicateEvaluator, test_certified_signs_and_boundary);
     ARIADNE_TESTING_ADD_TEST(TestHybridDiscreteTimePredicateEvaluator, test_correlated_auxiliary_is_not_independent);
     ARIADNE_TESTING_ADD_TEST(TestHybridDiscreteTimePredicateEvaluator, test_discrete_source_guard_uses_shared_certificates);
+    ARIADNE_TESTING_ADD_TEST(TestHybridDiscreteTimePredicateEvaluator, test_inclusion_state_only_guard_and_urgent_complement);
     ARIADNE_TESTING_ADD_TEST(TestHybridDiscreteTimePredicateEvaluator, test_certified_upper_tick);
     ARIADNE_TESTING_ADD_TEST(TestHybridDiscreteTimePredicateEvaluator, test_boundary_keeps_both_upper_alternatives);
     ARIADNE_TESTING_ADD_TEST(TestHybridDiscreteTimePredicateEvaluator, test_certified_prestate_restriction_and_callback_compatibility);

@@ -27,7 +27,6 @@
  */
 
 #include <iostream>
-#include <stdexcept>
 
 #include "function/function.hpp"
 #include "hybrid/hybrid_set.hpp"
@@ -50,11 +49,8 @@ int main() {
 
     RealExpressionBoundedConstraintSet initial({0.9_dec <= x <= 1.1_dec});
     auto simulated = approximate_continuous_evolver.orbit(initial, 0.1_dec);
-    const auto ncurves = simulated.curves().size();
-    if (ncurves != 1u) {
-        throw std::runtime_error("Expected one short continuous trajectory");
-    }
-    std::cout << "Approximate continuous equation: " << ncurves << " trajectory\n";
+    std::cout << "Approximate continuous equation: " << simulated.curves().size()
+              << " trajectory(s)\n";
 
     // Validated continuous evolution: an enclosure, not a sampled trajectory.
     // The short time horizon keeps the demonstration inexpensive.
@@ -96,15 +92,8 @@ int main() {
     automaton.new_transition(idle, activate, active);
     automaton.new_transition(active, deactivate, idle);
 
-    if (!automaton.has_transition(idle, activate) ||
-        automaton.target(active, deactivate) != idle) {
-        throw std::runtime_error("Hybrid transition relation is incorrect");
-    }
     HybridContinuousTimeEvolver<ApproximateTag> approximate_hybrid_continuous_evolver(automaton);
     HybridTime budget(1.0_x, 2);
-    if (budget.discrete_time() != Integer(2)) {
-        throw std::runtime_error("Incorrect hybrid jump budget");
-    }
     std::cout << "Hybrid transition model: " << automaton.locations().size()
               << " modes, budget " << budget << "\n";
     (void)approximate_hybrid_continuous_evolver;
@@ -182,7 +171,6 @@ int main() {
     EffectiveVectorMultivariateFunction profile = {sin(coords[0]), sin(coords[1]), zero};
     FirstOrderPDE pde(A, forcing);
     pde.add_direction(B0, Ds[0], T0).add_direction(B1, Ds[1], T1);
-    pde.validate();
     auto solution = first_order_pde(pde, profile, double_precision);
     std::cout << "First-order PDE: " << solution.uts.size(0) << " x "
               << solution.uts.size(1) << " x " << solution.uts.size(2)

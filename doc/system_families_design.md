@@ -968,3 +968,24 @@ model construction, assertions, integrators, semantics, and CMake
 registration remain untouched. This is a display-only change; no new
 algorithm or capability is claimed. CI validation is required on the
 new SHA; Format remains nonblocking.
+
+## v6.78 — Keep the installed C++ tutorial demonstrative, not test-like
+
+Removed the three explicit correctness checks in
+`tutorial/tutorial_evolution.cpp`: asserting exactly one approximate
+continuous trajectory, checking the manually constructed hybrid
+transition relation, and checking the hybrid jump budget. The
+`stdexcept` include is no longer needed. The trajectory count is
+printed directly from the produced orbit instead of being compared
+against a hard-coded expectation. All semantic output labels from
+v6.77 remain intact.
+
+Also removed the duplicate explicit `pde.validate()` call:
+`first_order_pde(pde, profile, double_precision)` already invokes
+`pde.validate()` internally, so PDE input precondition validation is
+not lost. All numerical demonstrations, configurations, orbit calls,
+printed results, and actual model definitions remain otherwise
+unchanged. The dedicated test targets remain responsible for
+assertions; no tests, CMake policies or CI checks have been weakened.
+This change is not considered validated before its five functional
+GitHub workflow results are successful. Format is nonblocking.

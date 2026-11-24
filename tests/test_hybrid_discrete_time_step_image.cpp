@@ -135,8 +135,56 @@ class TestHybridDiscreteTimeStepImage : public Ariadne::Testing::ContextFixture 
                                                ExactBoxType({{0.0_x, 1.0_x}})), configuration());
         const HybridDiscreteTimePlannedBranch uncertain_progression{
             HybridDiscreteTimeBranchKind::PROGRESSION, uncertain, std::nullopt, true};
+        const auto image = HybridDiscreteTimeStepImage::apply(
+            automaton, from_inclusion, uncertain_progression);
+        ARIADNE_TESTING_EXPECT_EQUAL(image.time_range().lower_bound().raw().get_d(), 1.0);
+        ARIADNE_TESTING_EXPECT_EQUAL(image.continuous_set().number_of_parameters(), 2u);
+        ARIADNE_TESTING_EXPECT_EQUAL(image.continuous_set().variable_kinds().back(),
+                                    EnclosureVariableKind::INPUT);
+        ARIADNE_TESTING_PROVE(definitely(image.state_bounding_box().inside(
+            ExactBoxType({{-2.0_x, 3.0_x}}))));
+    }
+
+    Void test_fresh_input_at_every_inclusion_tick() {
+        const RealVariable x("x"), u("u");
+        const DiscreteLocation mode(1);
+        DiscreteTimeHybridAutomaton automaton;
+        automaton.new_mode(mode, DifferenceAlgebraicInclusion(
+            List<PrimedRealAssignment>{next(x) = x + u},
+            RealVariablesBox({-1 <= u <= 1})));
+        HybridEnclosure initial(HybridExactBox(mode, RealSpace({x}),
+            ExactBoxType({{0.0_x, 0.0_x}})), configuration());
+        const HybridDiscreteTimePlannedBranch progress{
+            HybridDiscreteTimeBranchKind::PROGRESSION, mode, std::nullopt, true};
+        const auto first = HybridDiscreteTimeStepImage::apply(automaton, initial, progress);
+        const auto second = HybridDiscreteTimeStepImage::apply(automaton, first, progress);
+        ARIADNE_TESTING_EXPECT_EQUAL(first.continuous_set().number_of_parameters(), 2u);
+        ARIADNE_TESTING_EXPECT_EQUAL(second.continuous_set().number_of_parameters(), 3u);
+        ARIADNE_TESTING_EXPECT_EQUAL(second.continuous_set().variable_kinds()[1u],
+                                    EnclosureVariableKind::INPUT);
+        ARIADNE_TESTING_EXPECT_EQUAL(second.continuous_set().variable_kinds()[2u],
+                                    EnclosureVariableKind::INPUT);
+        ARIADNE_TESTING_EXPECT_EQUAL(second.time_range().lower_bound().raw().get_d(), 2.0);
+        const auto extent = second.state_bounding_box()[0u];
+        ARIADNE_TESTING_PROVE(extent.lower_bound().raw().get_d() <= -2.0);
+        ARIADNE_TESTING_PROVE(extent.upper_bound().raw().get_d() >= 2.0);
+        ARIADNE_TESTING_EXPECT_EQUAL(initial.continuous_set().number_of_parameters(), 1u);
+    }
+
+    Void test_input_dependent_auxiliary_rejected() {
+        const RealVariable x("x"), u("u"), a("a");
+        const DiscreteLocation mode(1);
+        DiscreteTimeHybridAutomaton automaton;
+        automaton.new_mode(mode, DifferenceAlgebraicInclusion(
+            List<PrimedRealAssignment>{next(x) = x + u},
+            List<RealAssignment>{let(a) = x + u},
+            RealVariablesBox({-1 <= u <= 1})));
+        HybridEnclosure initial(HybridExactBox(mode, RealSpace({x}),
+            ExactBoxType({{0.0_x, 1.0_x}})), configuration());
+        const HybridDiscreteTimePlannedBranch progress{
+            HybridDiscreteTimeBranchKind::PROGRESSION, mode, std::nullopt, true};
         ARIADNE_TESTING_EXPECT_THROWS(std::invalid_argument,
-            HybridDiscreteTimeStepImage::apply(automaton, from_inclusion, uncertain_progression));
+            HybridDiscreteTimeStepImage::apply(automaton, initial, progress));
     }
 };
 
@@ -145,5 +193,7 @@ int main(int argc, char** argv) {
     ARIADNE_TESTING_ADD_TEST(TestHybridDiscreteTimeStepImage, test_progression_and_reset_tick);
     ARIADNE_TESTING_ADD_TEST(TestHybridDiscreteTimeStepImage, test_reset_target_variable_order);
     ARIADNE_TESTING_ADD_TEST(TestHybridDiscreteTimeStepImage, test_no_silent_inclusion_sampling);
+    ARIADNE_TESTING_ADD_TEST(TestHybridDiscreteTimeStepImage, test_fresh_input_at_every_inclusion_tick);
+    ARIADNE_TESTING_ADD_TEST(TestHybridDiscreteTimeStepImage, test_input_dependent_auxiliary_rejected);
     return Ariadne::Testing::run_logging_suite(ariadne_test_suite, argc, argv);
 }

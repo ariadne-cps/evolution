@@ -97,3 +97,23 @@ with correlated auxiliary outputs and retains urgent/permissive branch tests,
 alongside the public discrete evolver and scheduler suites. A CI pass on
 the actual new commit is required before this version is considered validated.
 Format remains outside the functional acceptance gate.
+
+## v6.48: validated event-free bounded-input inclusion UPPER progression
+
+For a DifferenceAlgebraicInclusion in an event-free mode without auxiliary
+outputs, each tick appends a fresh INPUT parameter axis for each bounded
+input and composes the validated difference update with the existing
+parameterized state and the new independent input coordinates. No sample
+is selected; previous input axes remain independent and the original
+enclosure stays unchanged. This produces an UPPER set-valued image.
+
+Transitions involving inclusion sources or targets and input-dependent
+auxiliary outputs remain unsupported, requiring the missing quantified
+guard and auxiliary representation. LOWER remains explicitly rejected.
+
+Tests cover image construction, independent inputs across two ticks,
+the full x=0, u in [-1,1] two-tick extent [-2,2], scheduler and Orbit
+integration, the public validated evolver, immutability and rejection
+of unsupported auxiliary/transition paths. Continuous guard and evolution
+regressions must continue to pass alongside all discrete suites.
+Acceptance depends on CI for the actual new commit, not on prior commits.

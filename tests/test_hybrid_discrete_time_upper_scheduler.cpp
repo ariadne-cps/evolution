@@ -233,12 +233,36 @@ class TestHybridDiscreteTimeUpperScheduler : public Ariadne::Testing::ContextFix
             stopped_projected.blocked.front().time_range().lower_bound().raw().get_d(), 0.0);
     }
 
-    Void test_inclusion_rejected_without_sampling() {
+    Void test_validated_event_free_inclusion_orbit() {
         const RealVariable x("x"), u("u");
         const DiscreteLocation mode(1);
         DiscreteTimeHybridAutomaton system;
         system.new_mode(mode, DifferenceAlgebraicInclusion(
             List<PrimedRealAssignment>{next(x) = x + u},
+            RealVariablesBox({-1 <= u <= 1})));
+        const auto result = HybridDiscreteTimeUpperScheduler::evolve(
+            system, initial(mode), Integer(0), Integer(2), 3u);
+        ARIADNE_TESTING_EXPECT_EQUAL(result.nodes.size(), 3u);
+        ARIADNE_TESTING_EXPECT_EQUAL(result.terminals.size(), 1u);
+        ARIADNE_TESTING_EXPECT_EQUAL(result.nodes[2u].index, Integer(2));
+        ARIADNE_TESTING_EXPECT_EQUAL(
+            result.nodes[2u].enclosure.continuous_set().number_of_parameters(), 3u);
+        ARIADNE_TESTING_EXPECT_EQUAL(
+            result.nodes[2u].enclosure.continuous_set().variable_kinds()[2u],
+            EnclosureVariableKind::INPUT);
+        const auto orbit = HybridDiscreteTimeUpperScheduler::project_orbit(result);
+        ARIADNE_TESTING_EXPECT_EQUAL(orbit.orbit.final().size(), 1u);
+        ARIADNE_TESTING_EXPECT_EQUAL(orbit.orbit.reach().size(), 2u);
+    }
+
+    Void test_inclusion_rejected_without_sampling() {
+        const RealVariable x("x"), u("u");
+        const DiscreteLocation mode(1);
+        DiscreteTimeHybridAutomaton system;
+        const RealVariable a("a");
+        system.new_mode(mode, DifferenceAlgebraicInclusion(
+            List<PrimedRealAssignment>{next(x) = x + u},
+            List<RealAssignment>{let(a) = x + u},
             RealVariablesBox({-1 <= u <= 1})));
         ARIADNE_TESTING_EXPECT_THROWS(std::invalid_argument,
             HybridDiscreteTimeUpperScheduler::evolve(
@@ -253,6 +277,7 @@ int main(int argc, char** argv) {
     ARIADNE_TESTING_ADD_TEST(TestHybridDiscreteTimeUpperScheduler, test_blocked_and_budget_contract);
     ARIADNE_TESTING_ADD_TEST(TestHybridDiscreteTimeUpperScheduler, test_time_index_matches_entire_enclosure);
     ARIADNE_TESTING_ADD_TEST(TestHybridDiscreteTimeUpperScheduler, test_orbit_projection_and_blocked_terminal);
+    ARIADNE_TESTING_ADD_TEST(TestHybridDiscreteTimeUpperScheduler, test_validated_event_free_inclusion_orbit);
     ARIADNE_TESTING_ADD_TEST(TestHybridDiscreteTimeUpperScheduler, test_inclusion_rejected_without_sampling);
     return Ariadne::Testing::run_logging_suite(ariadne_test_suite, argc, argv);
 }

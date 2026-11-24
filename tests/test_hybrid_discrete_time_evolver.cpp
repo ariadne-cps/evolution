@@ -141,6 +141,26 @@ class TestHybridDiscreteTimeEvolver : public Ariadne::Testing::ContextFixture {
             copy->orbit(shifted, Termination(Integer(2), Integer(4)), Semantics::UPPER).final().size(), 1u);
     }
 
+    Void test_public_event_free_inclusion_upper() {
+        const RealVariable x("x"), u("u");
+        const DiscreteLocation mode(1);
+        DiscreteTimeHybridAutomaton system;
+        system.new_mode(mode, DifferenceAlgebraicInclusion(
+            List<PrimedRealAssignment>{next(x) = x + u},
+            RealVariablesBox({-1 <= u <= 1})));
+        Evolver evolver(system);
+        const auto orbit = evolver.orbit(
+            initial(mode), Termination(Integer(0), Integer(2)), Semantics::UPPER);
+        ARIADNE_TESTING_EXPECT_EQUAL(orbit.reach().size(), 2u);
+        ARIADNE_TESTING_EXPECT_EQUAL(orbit.final().size(), 1u);
+        ARIADNE_TESTING_EXPECT_EQUAL(
+            orbit.final().front().continuous_set().number_of_parameters(), 3u);
+        ARIADNE_TESTING_EXPECT_EQUAL(
+            orbit.final().front().time_range().lower_bound().raw().get_d(), 2.0);
+        ARIADNE_TESTING_EXPECT_THROWS(std::invalid_argument,
+            evolver.orbit(initial(mode), Termination(Integer(0), Integer(1)), Semantics::LOWER));
+    }
+
     Void test_rejections() {
         const RealVariable x("x"), u("u");
         const DiscreteLocation mode(1);
@@ -157,8 +177,11 @@ class TestHybridDiscreteTimeEvolver : public Ariadne::Testing::ContextFixture {
         ARIADNE_TESTING_EXPECT_THROWS(std::invalid_argument,
             evolver.orbit(initial(mode), Termination(Integer(1), Integer(1)), Semantics::UPPER));
         DiscreteTimeHybridAutomaton inclusion;
+        const RealVariable a("a");
         inclusion.new_mode(mode, DifferenceAlgebraicInclusion(
-            List<PrimedRealAssignment>{next(x) = x + u}, RealVariablesBox({-1 <= u <= 1})));
+            List<PrimedRealAssignment>{next(x) = x + u},
+            List<RealAssignment>{let(a) = x + u},
+            RealVariablesBox({-1 <= u <= 1})));
         Evolver no_sampling(inclusion);
         ARIADNE_TESTING_EXPECT_THROWS(std::invalid_argument,
             no_sampling.orbit(initial(mode), Termination(Integer(0), Integer(1)), Semantics::UPPER));
@@ -170,6 +193,7 @@ int main(int argc, char** argv) {
     ARIADNE_TESTING_ADD_TEST(TestHybridDiscreteTimeEvolver, test_orbit_and_branches);
     ARIADNE_TESTING_ADD_TEST(TestHybridDiscreteTimeEvolver, test_horizon_and_blocked);
     ARIADNE_TESTING_ADD_TEST(TestHybridDiscreteTimeEvolver, test_resume_clone_and_budget);
+    ARIADNE_TESTING_ADD_TEST(TestHybridDiscreteTimeEvolver, test_public_event_free_inclusion_upper);
     ARIADNE_TESTING_ADD_TEST(TestHybridDiscreteTimeEvolver, test_rejections);
     return Ariadne::Testing::run_logging_suite(ariadne_test_suite, argc, argv);
 }

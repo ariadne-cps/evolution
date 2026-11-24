@@ -151,8 +151,10 @@ class TestHybridDiscreteTimeStepExecutor : public Ariadne::Testing::ContextFixtu
         const RealVariable x("x"), u("u");
         const DiscreteLocation source(1);
         DiscreteTimeHybridAutomaton automaton;
+        const RealVariable a("a");
         automaton.new_mode(source, DifferenceAlgebraicInclusion(
             List<PrimedRealAssignment>{next(x) = x + u},
+            List<RealAssignment>{let(a) = x + u},
             RealVariablesBox({-1 <= u <= 1})));
         const auto evidence = [](DiscreteLocation, DiscreteEvent, Role,
                                  const ContinuousPredicate&) { return Evidence::TRUE; };

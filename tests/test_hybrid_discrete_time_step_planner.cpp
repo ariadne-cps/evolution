@@ -102,6 +102,23 @@ class TestHybridDiscreteTimeStepPlanner : public Ariadne::Testing::ContextFixtur
         }
     }
 
+    Void test_invalid_predicate_evidence() {
+        DiscreteTimeHybridAutomaton automaton;
+        const DiscreteLocation source(1), target(2);
+        const DiscreteEvent event("urgent");
+        const RealVariable x("x");
+        automaton.new_mode(source, dynamics());
+        automaton.new_mode(target, dynamics());
+        automaton.new_urgent_transition(source, event, target, {next(x) = x}, x >= 0);
+
+        // The evaluator contract must reject an invalid enum rather than
+        // treating it as uncertain evidence.
+        ARIADNE_TESTING_EXPECT_THROWS(std::invalid_argument,
+            HybridDiscreteTimeStepPlanner::plan(
+                automaton, source, Integer(0),
+                constant(static_cast<Evidence>(255))));
+    }
+
     Void test_permissive_overlap_and_simultaneous_events() {
         DiscreteTimeHybridAutomaton automaton;
         const DiscreteLocation source(1), a(2), b(3);
@@ -166,6 +183,7 @@ int main(int argc, char** argv) {
     ARIADNE_TESTING_SUITE("test_hybrid_discrete_time_step_planner");
     ARIADNE_TESTING_ADD_TEST(TestHybridDiscreteTimeStepPlanner, test_no_events);
     ARIADNE_TESTING_ADD_TEST(TestHybridDiscreteTimeStepPlanner, test_urgent_complement);
+    ARIADNE_TESTING_ADD_TEST(TestHybridDiscreteTimeStepPlanner, test_invalid_predicate_evidence);
     ARIADNE_TESTING_ADD_TEST(TestHybridDiscreteTimeStepPlanner, test_permissive_overlap_and_simultaneous_events);
     ARIADNE_TESTING_ADD_TEST(TestHybridDiscreteTimeStepPlanner, test_unknown_invariant_and_blocked_progress);
     return Ariadne::Testing::run_logging_suite(ariadne_test_suite, argc, argv);

@@ -38,8 +38,8 @@ DiscreteTimePredicateEvidence complement(DiscreteTimePredicateEvidence value) {
         case DiscreteTimePredicateEvidence::TRUE: return DiscreteTimePredicateEvidence::FALSE;
         case DiscreteTimePredicateEvidence::FALSE: return DiscreteTimePredicateEvidence::TRUE;
         case DiscreteTimePredicateEvidence::UNKNOWN: return DiscreteTimePredicateEvidence::UNKNOWN;
+        default: throw std::invalid_argument("Unknown predicate evidence");
     }
-    throw std::invalid_argument("Unknown predicate evidence");
 }
 
 } // namespace

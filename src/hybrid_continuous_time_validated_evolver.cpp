@@ -948,6 +948,64 @@ Void HybridContinuousTimeEvolverBase<ValidatedTag>::_evolve_outer_equation(
                                                                  numerical.arguments, Semantics::UPPER);
     const auto transitions = this->_extract_transitions(initial.location());
     if (semantics == Semantics::LOWER) {
+        // A single certified tube gives a constructive LOWER first-crossing
+        // witness for an URGENT transition without solving for an exact
+        // crossing time. A real trajectory starts strictly before the guard,
+        // and its hypothetical uninterrupted endpoint is strictly beyond it.
+        // Continuity gives a first zero; excluding every other blocker on
+        // the *whole tube* makes that first zero an admissible hybrid jump.
+        // The guard-equality slice of the tube contains this real witness,
+        // even though it need not be an INNER set.
+        if (applied.reach.size() == 1u && !transitions.empty()) {
+            HybridEnclosure tube = initial;
+            tube.replace_continuous_set(applied.reach[0u]);
+            HybridEnclosure endpoint = initial;
+            endpoint.replace_continuous_set(applied.evolved);
+            for (const auto& entry: transitions) {
+                const auto& crossing = entry.second;
+                if (crossing.event_kind != EventKind::URGENT)
+                    continue;
+                const auto at_start = initial.range_of(crossing.guard_function, crossing.source_arguments);
+                const auto at_finish = endpoint.range_of(crossing.guard_function, crossing.source_arguments);
+                if (!definitely(at_start.upper_bound() < 0) ||
+                    !definitely(at_finish.lower_bound() > 0))
+                    continue;
+                bool no_competing_blocker = true;
+                for (const auto& other_entry: transitions) {
+                    if (other_entry.first == entry.first)
+                        continue;
+                    const auto& other = other_entry.second;
+                    if (!EvolutionDetail::transition_policy(other.event_kind).blocks_flow)
+                        continue;
+                    const auto range = tube.range_of(other.guard_function, other.source_arguments);
+                    const bool safe = other.event_kind == EventKind::INVARIANT
+                        ? definitely(range.upper_bound() <= 0)
+                        : definitely(range.upper_bound() < 0);
+                    if (!safe) {
+                        no_competing_blocker = false;
+                        break;
+                    }
+                }
+                if (!no_competing_blocker)
+                    continue;
+
+                HybridEnclosure witnessed_crossing = tube;
+                witnessed_crossing.new_guard(crossing.event,
+                                            crossing.guard_function,
+                                            crossing.source_arguments);
+                if (definitely(witnessed_crossing.is_empty()))
+                    continue;
+                result.record_reach(witnessed_crossing);
+                EvolutionDetail::apply_transition_reset(witnessed_crossing, crossing);
+                result.record_intermediate(witnessed_crossing);
+                result.transition_to(witnessed_crossing, crossing.event, crossing.event_kind);
+                // One certified integration step furnished this crossing.
+                // The precise first-entry time is deliberately not guessed.
+                result.continuous_evolution_time =
+                    std::min(numerical.step.time_step().get_d(), remaining.get_d());
+                return;
+            }
+        }
         // All blocking predicates must be safe on the entire certified
         // state/time/parameter tube. Otherwise neither restricting the
         // UPPER tube nor selecting a possible jump preserves a witness.

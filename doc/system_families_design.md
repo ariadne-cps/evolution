@@ -944,3 +944,27 @@ reported at the v6.75 checkpoint. Other Debug, sanitizer and platform
 errors, if any, require independent diagnosis. Acceptance is conditional
 on passing Ubuntu, macOS, Windows, Coverage and Sanitizers for this
 exact new commit. Format remains nonblocking.
+
+## v6.77 — Uniform tutorial output descriptions
+
+All user-facing output prefixes in the installed C++ tutorial are now
+concise semantic descriptions rather than a mixture of C++ type names
+and generic text. The examples print:
+`Approximate continuous equation`,
+`Validated continuous equation`,
+`Validated continuous inclusion`,
+`Validated discrete equation`,
+`Validated hybrid continuous equation`, and
+`Validated hybrid continuous inclusion`.
+The two-mode hybrid automaton section prints
+`Hybrid transition model`, because it checks its transition structure
+and budget but does not compute an orbit. The final PDE example uses
+`First-order PDE` instead of its class name.
+
+The discrete example is an *equation*, not an inclusion; the labels
+therefore reflect the concrete instantiated models, not an illustrative
+placeholder. The orbit sizes, enclosure counts, trajectory counts,
+model construction, assertions, integrators, semantics, and CMake
+registration remain untouched. This is a display-only change; no new
+algorithm or capability is claimed. CI validation is required on the
+new SHA; Format remains nonblocking.

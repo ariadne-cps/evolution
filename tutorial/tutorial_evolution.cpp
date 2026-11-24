@@ -54,7 +54,7 @@ int main() {
     if (ncurves != 1u) {
         throw std::runtime_error("Expected one short continuous trajectory");
     }
-    std::cout << "Continuous evolution: " << ncurves << " trajectory\n";
+    std::cout << "Approximate continuous equation: " << ncurves << " trajectory\n";
 
     // Validated continuous evolution: an enclosure, not a sampled trajectory.
     // The short time horizon keeps the demonstration inexpensive.
@@ -63,7 +63,7 @@ int main() {
     validated.configuration().set_maximum_step_size(0.05);
     validated.configuration().set_maximum_enclosure_radius(1.0);
     auto validated_orbit = validated.orbit(initial, Real(0.05_dec), Semantics::UPPER);
-    std::cout << "ContinuousTimeEvolver<ValidatedTag>: " << validated_orbit.final().size()
+    std::cout << "Validated continuous equation: " << validated_orbit.final().size()
               << " final enclosure(s)\n";
 
     // The same evolver and Orbit type handle measurable uncertain inputs.
@@ -74,7 +74,7 @@ int main() {
     ContinuousTimeEvolver<ValidatedTag> inclusion(disturbed, integrator, ZeroApproximation(), ConstantApproximation());
     inclusion.configuration().set_maximum_step_size(0.03125);
     const auto inclusion_orbit = inclusion.orbit(initial, Real(0.0625_x), Semantics::UPPER);
-    std::cout << "Continuous inclusion: " << inclusion_orbit.final().size() << " final enclosure(s)\n";
+    std::cout << "Validated continuous inclusion: " << inclusion_orbit.final().size() << " final enclosure(s)\n";
 
     // Discrete-time system: one step of a contracting difference equation.
     List<PrimedRealAssignment> updates;
@@ -83,7 +83,7 @@ int main() {
     DiscreteTimeEvolver<ValidatedTag> validated_discrete_evolver(contraction);
     validated_discrete_evolver.configuration().set_maximum_enclosure_radius(1.0);
     auto discrete = validated_discrete_evolver.orbit(initial, DifferenceAlgebraicEquation::TimeType(1), Semantics::UPPER);
-    std::cout << "Discrete evolution: " << discrete.final().size()
+    std::cout << "Validated discrete equation: " << discrete.final().size()
               << " final enclosure(s)\n";
 
     // Discrete-only hybrid system: the same two-mode automaton as the
@@ -105,7 +105,7 @@ int main() {
     if (budget.discrete_time() != Integer(2)) {
         throw std::runtime_error("Incorrect hybrid jump budget");
     }
-    std::cout << "Hybrid evolution: " << automaton.locations().size()
+    std::cout << "Hybrid transition model: " << automaton.locations().size()
               << " modes, budget " << budget << "\n";
     (void)approximate_hybrid_continuous_evolver;
 
@@ -127,7 +127,7 @@ int main() {
                                       {0.875_x, 1.125_x}
     });
     auto hybrid_orbit = validated_hybrid_continuous_evolver.orbit(hybrid_initial, HybridTime(Real(1 / 20_q), Integer(1)), Semantics::UPPER);
-    std::cout << "HybridContinuousTimeEvolver<ValidatedTag>: " << hybrid_orbit.final().size()
+    std::cout << "Validated hybrid continuous equation: " << hybrid_orbit.final().size()
               << " final enclosure(s)\n";
 
     // Inclusion modes use the same hybrid evolver and explicit numerical choices.
@@ -138,7 +138,7 @@ int main() {
     hybrid_inclusion.set_integrator(integrator, ZeroApproximation(), ConstantApproximation());
     hybrid_inclusion.configuration().set_maximum_step_size(0.03125);
     auto hybrid_included = hybrid_inclusion.orbit(hybrid_initial, HybridTime(0.0625_x, 1), Semantics::UPPER);
-    std::cout << "Hybrid inclusion: " << hybrid_included.final().size() << " final enclosure(s)\n";
+    std::cout << "Validated hybrid continuous inclusion: " << hybrid_included.final().size() << " final enclosure(s)\n";
 
     // First-order PDE: solve a small two-dimensional constant-coefficient
     // three-component hyperbolic system with smooth initial conditions.
@@ -184,7 +184,7 @@ int main() {
     pde.add_direction(B0, Ds[0], T0).add_direction(B1, Ds[1], T1);
     pde.validate();
     auto solution = first_order_pde(pde, profile, double_precision);
-    std::cout << "FirstOrderPDE: " << solution.uts.size(0) << " x "
+    std::cout << "First-order PDE: " << solution.uts.size(0) << " x "
               << solution.uts.size(1) << " x " << solution.uts.size(2)
               << " grid samples\n";
     return 0;

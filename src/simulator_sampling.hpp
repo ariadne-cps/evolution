@@ -1,5 +1,5 @@
 /***************************************************************************
- *            simulator_paving_sampling.hpp
+ *            src/simulator_sampling.hpp
  *
  *  Copyright  2026  Luca Geretti
  *
@@ -22,30 +22,37 @@
  *  along with Ariadne Evolution. If not, see <https://www.gnu.org/licenses/>.
  */
 
-/** @file src/simulator_paving_sampling.hpp
- *  @brief Private simulator sampling boundary; no paving types in its interface.
+/** @file src/simulator_sampling.hpp
+ *  @brief Private sampling API for continuous and hybrid simulations.
  */
 
-#ifndef ARIADNE_EVOLUTION_SIMULATOR_PAVING_SAMPLING_HPP
-#define ARIADNE_EVOLUTION_SIMULATOR_PAVING_SAMPLING_HPP
+#ifndef ARIADNE_EVOLUTION_SIMULATOR_SAMPLING_HPP
+#define ARIADNE_EVOLUTION_SIMULATOR_SAMPLING_HPP
 
 #include "evolution/hybrid_simulator.hpp"
 #include "evolution/vector_field_simulator.hpp"
 
 namespace Ariadne::EvolutionDetail {
 
-/** @brief Sample a continuous box using the legacy tree discretisation policy. */
+/** @brief Sample a continuous initial domain by deterministic bisection.
+ * Explicit subspace counts control their respective coordinate; otherwise
+ * Mince resolves every non-flat axis at subdivisions, Recombine at one
+ * lower resolution, and None takes the domain centre.
+ */
 VectorFieldSimulator::ApproximateListPointType sample_vector_field_initial_points(
     const UpperBoxType& initial_box, const RealSpace& space,
     const subspace& selected_subspace, DiscretisationType discretisation,
     Nat subdivisions);
 
-/** @brief Sample a hybrid box, clipping each tree cell to the original domain. */
+/** @brief Sample a hybrid initial domain directly without grid widening.
+ * HMince uses fineness per non-degenerate axis; HRecombine uses one
+ * fewer bisection. Every resulting point stays in the original box.
+ */
 HybridSimulator::HybridApproximateListPointType sample_hybrid_initial_points(
-    const UpperBoxType& box, const UpperBoxType& sampling_box,
-    DiscreteLocation location, const RealSpace& space,
-    DiscretizationHybridType discretisation, Nat fineness);
+    const UpperBoxType& domain, DiscreteLocation location,
+    const RealSpace& space, DiscretizationHybridType discretisation,
+    Nat fineness);
 
 } // namespace Ariadne::EvolutionDetail
 
-#endif // ARIADNE_EVOLUTION_SIMULATOR_PAVING_SAMPLING_HPP
+#endif // ARIADNE_EVOLUTION_SIMULATOR_SAMPLING_HPP

@@ -28,7 +28,7 @@
 
 #include "evolution/vector_field_simulator.hpp"
 
-#include "simulator_paving_sampling.hpp"
+#include "simulator_sampling.hpp"
 
 #include "algebra/algebra.hpp"
 #include "evolution/orbit.hpp"

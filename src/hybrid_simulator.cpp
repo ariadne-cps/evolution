@@ -28,7 +28,7 @@
 
 #include "evolution/hybrid_simulator.hpp"
 
-#include "simulator_paving_sampling.hpp"
+#include "simulator_sampling.hpp"
 
 #include "algebra/algebra.hpp"
 #include "evolution/hybrid_orbit.hpp"
@@ -260,26 +260,10 @@ auto HybridSimulator::orbit(const Vector<HybridRealPoint>& initial_set, const Te
 
 auto HybridSimulator::orbit(const HybridUpperBox& initial_box, DiscreteLocation loc, HybridSpace space, const TerminationType& termination) const
     -> Orbit<HybridApproximateListPointType> {
-    auto box = initial_box.euclidean_set(space[loc]);
-    auto lengths = box.widths();
-    Nat box_width_null = 0;
-    for (SizeType i = 0; i < lengths.size(); ++i) {
-        if (lengths[i].get_d() > 0) {
-            continue;
-        }
-        ++box_width_null;
-    }
-    if (box_width_null == lengths.size()) {
-        auto midpoint = box.midpoint();
-        HybridApproximateListPointType pointList(1, HybridApproximatePointType(loc, space[loc], midpoint));
-        return orbit(pointList, termination);
-    }
-    if (box_width_null > 0) {
-        // A partially flat box needs positive grid lengths in every coordinate.
-        box = widen(box, FloatDPUpperBound(0.0001_q, dp));
-    }
+    // Sample the original domain directly; partially flat boxes do not
+    // require artificial widening when no grid is constructed.
     HybridApproximateListPointType pointList = EvolutionDetail::sample_hybrid_initial_points(
-        box, initial_box.euclidean_set(space[loc]), loc,
+        initial_box.euclidean_set(space[loc]), loc,
         this->_sys_ptr->continuous_state_space(loc),
         _configuration->d_type(), _configuration->fineness());
     return orbit(pointList, termination);

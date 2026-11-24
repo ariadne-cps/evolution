@@ -24,7 +24,8 @@ set(UNIT_TESTS
     test_vector_field_evolver
     test_vector_field_evolver_header
     test_vector_field_simulator
-    test_simulator_sampling_parity
+    test_domain_bisection_sampling
+    test_simulator_sampling_contract
     test_evolution_dependency_boundary
 )
 foreach(TEST IN LISTS UNIT_TESTS)
@@ -45,6 +46,6 @@ endif()
 add_custom_target(tests)
 add_dependencies(tests ${UNIT_TESTS})
 
-# The sampling implementation remains private to Evolution. This fidelity
-# regression examines its exact ordered output before the paving cut-over.
-target_include_directories(test_simulator_sampling_parity PRIVATE "${PROJECT_SOURCE_DIR}/src")
+# Sampling stays an Evolution-private implementation with no paving dependency.
+target_include_directories(test_domain_bisection_sampling PRIVATE "${PROJECT_SOURCE_DIR}/src")
+target_include_directories(test_simulator_sampling_contract PRIVATE "${PROJECT_SOURCE_DIR}/src")

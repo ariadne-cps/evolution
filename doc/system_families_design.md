@@ -5,12 +5,12 @@ This is the implementation roadmap adopted in design v6.20 on 22 November
 
 | Native family | Validated evolution | Numerical simulation | Current status |
 | --- | --- | --- | --- |
-| Discrete time (`IteratedMap`) | `DiscreteTimeEvolver<ValidatedTag>` | `DiscreteTimeEvolver<ApproximateTag>` | Validated exists; approximate planned |
+| Discrete time (`DifferenceAlgebraicEquation`) | `DiscreteTimeEvolver<ValidatedTag>` | `DiscreteTimeEvolver<ApproximateTag>` | Validated exists; approximate planned |
 | Continuous time (ODAE / ODAI) | `ContinuousTimeEvolver<ValidatedTag>` | `ContinuousTimeEvolver<ApproximateTag>` | Validated accepts both with explicit time; approximate accepts ODAE and structured ODAI with explicit time, fixed parameters and an explicit input policy |
 | Hybrid discrete time | `HybridDiscreteTimeEvolver<ValidatedTag>` | `HybridDiscreteTimeEvolver<ApproximateTag>` | Validated deterministic UPPER public; bounded-input inclusion progression and state-only transitions to deterministic modes supported; inclusion targets/auxiliaries, LOWER and approximate pending |
 | Hybrid continuous time | `HybridContinuousTimeEvolver<ValidatedTag>` | `HybridContinuousTimeEvolver<ApproximateTag>` | ODAE/ODAI timed UPPER evolution; approximate ODAE/structured ODAI supports external time, fixed parameters and explicit input policies; further contact handling planned |
 
-`IteratedMap` keeps its existing name and contract. Hybrid discrete time now has its native model in `ariadne-cps/system`.
+`DifferenceAlgebraicEquation` keeps its existing name and contract. Hybrid discrete time now has its native model in `ariadne-cps/system`.
 Its deterministic UPPER scheduler is now consumed by the public validated
 hybrid discrete evolver. LOWER and approximate evolution are unsupported.
 The tick semantics must define guard evaluation before/after the update,
@@ -48,7 +48,7 @@ A converter declares the step duration, time origin/grid, integration or
 discretization scheme, parameter treatment and input policy. Approximate
 simulation and validated step propagation have separate contracts. An ODAI
 conversion must retain nondeterminism through a suitable typed discrete
-relation/multimap, or reject the operation if `IteratedMap` cannot represent it.
+relation/multimap, or reject the operation if `DifferenceAlgebraicEquation` cannot represent it.
 
 Hybrid conversion additionally declares how within-step events, precedence,
 resets, zero-time behavior and tangencies are handled. Endpoint guard samples
@@ -341,7 +341,7 @@ For bounded LOWER enclosures, any represented point is within the
 enclosure's diameter of a reachable witness; no separate distance
 evaluation is needed.
 
-For deterministic `IteratedMap` evolution from a known nonempty
+For deterministic `DifferenceAlgebraicEquation` evolution from a known nonempty
 initial enclosure, the sound map image propagates a witness.
 UPPER-only subdivision and optional LOWER early termination preserve
 the witness contract. A focused regression verifies affine and
@@ -354,3 +354,26 @@ LOWER API fully audited without this qualification.
 
 No hybrid or inclusion algorithm is modified by this audit;
 the continuous and discrete hybrid regression suites remain required.
+
+## v6.55 — Remove the obsolete ordinary discrete IteratedMap API
+
+System's public deterministic discrete model is now
+`DifferenceAlgebraicEquation`, which directly owns symbolic updates,
+auxiliary declarations, compiled update and auxiliary functions.
+The removed `IteratedMap` type is not exported in the umbrella header,
+the hybrid automaton interface, Python, or the C++ implementation.
+
+`DiscreteTimeEvolver<ValidatedTag>` accepts
+`DifferenceAlgebraicEquation` as its public `SystemType`,
+including `EvolutionTraits`, the Python constructor, tutorials,
+and all ordinary discrete tests. The Evolution `ss/sys` gitlink is
+pinned to the matching System migration commit. The numerical map
+step and the LOWER witness proof are unchanged: this is an API
+migration, **not** an additional approximation capability.
+System and Evolution CI on the corresponding commits, including
+both hybrid test families, must pass before accepting the migration.
+
+The four-notion matrix (LOWER/INNER/UPPER/OUTER) is unchanged.
+Ordinary discrete equation LOWER remains audited for known nonempty
+initial sources, with arbitrary constrained-source witness evidence
+still open. Format remains intentionally outside acceptance.

@@ -77,13 +77,13 @@ int main() {
     const auto inclusion_orbit = inclusion.orbit(initial, Real(0.0625_x), Semantics::UPPER);
     std::cout << "Continuous inclusion: " << inclusion_orbit.final().size() << " final enclosure(s)\n";
 
-    // Discrete-time system: one step of a contracting iterated map.
+    // Discrete-time system: one step of a contracting difference equation.
     List<PrimedRealAssignment> updates;
     updates.append(next(x) = 0.5_dec * x);
-    IteratedMap contraction(updates);
+    DifferenceAlgebraicEquation contraction(updates);
     DiscreteTimeEvolver<ValidatedTag> evolver(contraction);
     evolver.configuration().set_maximum_enclosure_radius(1.0);
-    auto discrete = evolver.orbit(initial, IteratedMap::TimeType(1), Semantics::UPPER);
+    auto discrete = evolver.orbit(initial, DifferenceAlgebraicEquation::TimeType(1), Semantics::UPPER);
     std::cout << "Discrete evolution: " << discrete.final().size()
               << " final enclosure(s)\n";
 

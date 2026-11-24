@@ -13,7 +13,7 @@ def test_evolution_bindings():
     assert a.Semantics.UPPER != a.Semantics.LOWER
     assert not hasattr(a, "VectorField")
     assert not hasattr(a, "DifferentialInclusion")
-    for old_name in ("VectorFieldEvolver", "IteratedMapEvolver", "GeneralHybridEvolver"):
+    for old_name in ("VectorFieldEvolver", "DifferenceAlgebraicEquationEvolver", "GeneralHybridEvolver"):
         assert not hasattr(a, old_name)
 
 
@@ -40,10 +40,10 @@ def test_paradigm_contracts():
         certified.orbit(initial, a.Real(1)/16)
 
 
-def test_iterated_map_configuration():
-    from pyariadne_evolution import IteratedMap, DiscreteTimeEvolver, ValidatedTag, RealVariable, next
+def test_difference_algebraic_equation_configuration():
+    from pyariadne_evolution import DifferenceAlgebraicEquation, DiscreteTimeEvolver, ValidatedTag, RealVariable, next
     x = RealVariable("x")
-    evolver = DiscreteTimeEvolver[ValidatedTag](IteratedMap([next(x) << x / 2]))
+    evolver = DiscreteTimeEvolver[ValidatedTag](DifferenceAlgebraicEquation([next(x) << x / 2]))
     config = evolver.configuration()
     config.set_maximum_enclosure_radius(1.0)
     config.set_enable_subdivisions(False)
@@ -52,7 +52,7 @@ def test_iterated_map_configuration():
 
 def test_continuous_recombination():
     x = a.RealVariable("x")
-    evolver = a.DiscreteTimeEvolver[a.ValidatedTag](a.IteratedMap([a.next(x) << x / 2]))
+    evolver = a.DiscreteTimeEvolver[a.ValidatedTag](a.DifferenceAlgebraicEquation([a.next(x) << x / 2]))
     evolver.configuration().set_maximum_enclosure_radius(1.0)
     initial = a.RealExpressionBoundedConstraintSet(
         [(a.dec_(0.9) <= x) & (x <= a.dec_(1.1))], [])
@@ -153,7 +153,7 @@ def test_common_inclusion_consumers():
 if __name__ == "__main__":
     test_evolution_bindings()
     test_paradigm_contracts()
-    test_iterated_map_configuration()
+    test_difference_algebraic_equation_configuration()
     test_continuous_recombination()
     test_ordinary_equation_consumers()
     test_common_inclusion_consumers()

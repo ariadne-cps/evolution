@@ -222,7 +222,7 @@ Void evolution_submodule(pybind11::module& module) {
 
     export_orbit<ContinuousTimeEvolver<ValidatedTag>::OrbitType>(module, "LabelledEnclosureOrbit");
 
-    export_evolver<DiscreteTimeEvolver<ValidatedTag>, IteratedMap>(module, "DiscreteTimeValidatedEvolver");
+    export_evolver<DiscreteTimeEvolver<ValidatedTag>, DifferenceAlgebraicEquation>(module, "DiscreteTimeValidatedEvolver");
     auto continuous = export_evolver<ContinuousTimeEvolver<ValidatedTag>, OrdinaryDifferentialAlgebraicEquation, const IntegratorInterface&>(module, "ContinuousTimeValidatedEvolver");
     continuous.def(pybind11::init<const OrdinaryDifferentialAlgebraicInclusion&, const IntegratorBase&,
                                   const InputApproximation&, const InputApproximation&>());

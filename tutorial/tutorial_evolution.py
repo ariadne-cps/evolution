@@ -4,14 +4,14 @@
 from pyariadne_evolution import (
     DiscreteEvent, DiscreteLocation, ContinuousTimeHybridAutomaton, HybridContinuousTimeEvolver, ApproximateTag,
     HybridTime, Integer, Rational, Real, Semantics, RealVariable,
-    IteratedMap, DiscreteTimeEvolver, ValidatedTag, RealExpressionBoundedConstraintSet,
+    DifferenceAlgebraicEquation, DiscreteTimeEvolver, ValidatedTag, RealExpressionBoundedConstraintSet,
     next, dec_,
 )
 
 
 def main():
     x = RealVariable("x")
-    contraction = IteratedMap([next(x) << x / 2])
+    contraction = DifferenceAlgebraicEquation([next(x) << x / 2])
     initial = RealExpressionBoundedConstraintSet(
         [(dec_(0.9) <= x) & (x <= dec_(1.1))], [])
     discrete_evolver = DiscreteTimeEvolver[ValidatedTag](contraction)

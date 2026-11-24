@@ -46,7 +46,7 @@ That distinction is mathematically necessary: splitting a
 witness-bearing enclosure does not prove that *every* child contains
 a reachable witness.
 
-For an ordinary deterministic `IteratedMap`, there are no hybrid
+For an ordinary deterministic `DifferenceAlgebraicEquation`, there are no hybrid
 guarded resets or alternative transitions. By propagating all map
 images, a finite-horizon UPPER computation can additionally be OUTER
 if it exhaustively covers its intended initial set and completes
@@ -99,9 +99,9 @@ Approximate evolver or inclusion semantics.
 ## v6.54 — Compile fix, no semantic changes
 
 The v6.53 Debug CI failed to compile `test_discrete_time_evolver.cpp`
-because the single-element brace arguments to the `IteratedMap`
+because the single-element brace arguments to the `DifferenceAlgebraicEquation`
 constructor were ambiguous between the copy constructor and
-`IteratedMap(const List<PrimedRealAssignment>&)`. Both the affine and
+`DifferenceAlgebraicEquation(const List<PrimedRealAssignment>&)`. Both the affine and
 quadratic regression models now explicitly construct
 `List<PrimedRealAssignment>`. The mathematical witness argument, the
 LOWER non-splitting requirement, and the test expectations are unchanged.

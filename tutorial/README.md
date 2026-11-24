@@ -19,7 +19,7 @@ evolution capabilities with bounded scenarios:
    solver and inspect its computed solution history. This is the most
    expensive section; the initial profile uses unit-frequency sinusoids.
 
-The Python program builds a contracting `IteratedMap`, computes one validated
+The Python program builds a contracting `DifferenceAlgebraicEquation`, computes one validated
 upper-semantics iteration using `DiscreteTimeEvolver[ValidatedTag]`, and constructs the same
 discrete-only `ContinuousTimeHybridAutomaton` used in C++. Both examples use the installed
 `pyariadne_evolution` extension. `DiscreteTimeValidatedEvolverConfiguration` is exposed so that

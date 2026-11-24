@@ -40,7 +40,7 @@ Configurations and hybrid interfaces, bases and factories also carry the
 paradigm. `EvolutionTraits<P, System>` associates only implemented combinations:
 ODAE and ODAI have both continuous paradigms, with explicit sampling policies
 required for approximate ODAI, and
-`IteratedMap` has validated discrete evolution. Hybrid model traits select the
+`DifferenceAlgebraicEquation` has validated discrete evolution. Hybrid model traits select the
 corresponding hybrid interface; its runtime model capability checks remain.
 Structured approximate ODAI use an explicit input policy; interval-Taylor
 multifunctions remain rejected. No approximate discrete algorithm is hidden

@@ -68,3 +68,32 @@ regression verifies permissive split guards including a dependent
 auxiliary, the urgent guard's complement, independent constraints for
 each alternative, no mutation of the original source, and unchanged
 callback-based semantics. CI on the new commit is pending until checked.
+
+## v6.47: shared source-guard certificates across both hybrid time models
+
+The private `hybrid_guard_predicate` component now contains validated
+`classify_source_guard` and `restrict_source_guard`. The classification
+checks emptiness of the complete source, then whole-source strict positivity,
+and finally emptiness of a candidate restricted to the **closed** positive
+guard side. It returns EXCLUDED, UNRESOLVED or FULL_SOURCE and never
+turns a partial UPPER candidate into a LOWER reachability certificate.
+
+The continuous hybrid `classify_initial_guard` delegates to this same
+component, preserving its existing enum and UPPER/LOWER policies; source/tube
+activation and immediate jump candidates use the common restriction.
+Crossing geometry, integration, and impact processing remain continuous-only.
+
+The discrete hybrid evaluator constructs an indicator with canonical algebraic
+substitution and delegates classification to the same component. The certified
+tick executor applies the same restriction on independent pre-state copies;
+the external-evidence callback path remains full-source. Inclusion sampling
+and LOWER evolution remain rejected.
+
+Tests for **both** cases are mandatory: `test_hybrid_step_contracts` checks
+continuous guard status, source immutability, equivalent restriction, and
+UPPER/LOWER gating, alongside the existing continuous evolution suites;
+`test_hybrid_discrete_time_predicate_evaluator` checks all three statuses
+with correlated auxiliary outputs and retains urgent/permissive branch tests,
+alongside the public discrete evolver and scheduler suites. A CI pass on
+the actual new commit is required before this version is considered validated.
+Format remains outside the functional acceptance gate.

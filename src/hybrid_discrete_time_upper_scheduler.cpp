@@ -31,6 +31,19 @@
 #include <stdexcept>
 
 namespace Ariadne {
+namespace {
+
+// The discrete index must describe the whole validated time set, not merely
+// intersect it. In particular, ambiguous or non-singleton clocks are rejected.
+Void check_time_index(const HybridEnclosure& enclosure, const Integer& index) {
+    const Real expected_time(index);
+    const UpperIntervalType range = enclosure.time_range();
+    if (!definitely(range.lower_bound() >= expected_time) ||
+        !definitely(range.upper_bound() <= expected_time))
+        throw std::invalid_argument("Discrete hybrid enclosure global time does not match sample index");
+}
+
+} // namespace
 
 HybridDiscreteTimeUpperExploration HybridDiscreteTimeUpperScheduler::evolve(
     const DiscreteTimeHybridAutomatonInterface& automaton,
@@ -48,6 +61,7 @@ HybridDiscreteTimeUpperExploration HybridDiscreteTimeUpperScheduler::evolve(
         throw std::invalid_argument("Discrete hybrid UPPER scheduler does not support inclusion modes");
     if (initial.state_space() != automaton.state_space(initial.location()))
         throw std::invalid_argument("Discrete hybrid initial state space mismatch");
+    check_time_index(initial, initial_index);
 
     HybridDiscreteTimeUpperExploration result{initial_index, termination_index, {}, {}};
     result.nodes.push_back({initial_index, initial, std::nullopt, std::nullopt});
@@ -56,6 +70,7 @@ HybridDiscreteTimeUpperExploration HybridDiscreteTimeUpperScheduler::evolve(
     // that vector growth could invalidate.
     for (SizeType position = 0u; position < result.nodes.size(); ++position) {
         const Integer current_index = result.nodes[position].index;
+        check_time_index(result.nodes[position].enclosure, current_index);
         if (current_index == termination_index) {
             result.terminals.push_back({position, HybridDiscreteTimeUpperTerminalKind::HORIZON});
             continue;
@@ -79,11 +94,53 @@ HybridDiscreteTimeUpperExploration HybridDiscreteTimeUpperScheduler::evolve(
             continue;
         }
 
-        for (const HybridDiscreteTimeStepSuccessor& successor: step.successors)
+        for (const HybridDiscreteTimeStepSuccessor& successor: step.successors) {
+            check_time_index(successor.enclosure, step.successor_index);
             result.nodes.push_back({step.successor_index, successor.enclosure,
                                     position, successor.branch});
+        }
     }
     return result;
+}
+
+// Orbit is a set-oriented view. The exploration retains the complete tree,
+// including parent indices and event evidence, without merging alternatives.
+HybridDiscreteTimeUpperOrbitProjection HybridDiscreteTimeUpperScheduler::project_orbit(
+    const HybridDiscreteTimeUpperExploration& exploration) {
+    if (exploration.nodes.empty())
+        throw std::invalid_argument("Cannot project an empty discrete hybrid exploration");
+
+    HybridDiscreteTimeUpperOrbitProjection projection{
+        Orbit<HybridEnclosure>(exploration.nodes.front().enclosure), {}};
+
+    // The initial set is stored only in orbit.initial(), except when it is
+    // itself a terminal (zero horizon or blocked at the first index).
+    for (SizeType position = 1u; position < exploration.nodes.size(); ++position) {
+        const HybridDiscreteTimeUpperNode& node = exploration.nodes[position];
+        projection.orbit.adjoin_reach(node.enclosure);
+        if (node.index < exploration.termination_index)
+            projection.orbit.adjoin_intermediate(node.enclosure);
+    }
+    for (const HybridDiscreteTimeUpperTerminal& terminal: exploration.terminals) {
+        if (terminal.node_index >= exploration.nodes.size())
+            throw std::invalid_argument("Discrete hybrid terminal references an invalid node");
+        const HybridDiscreteTimeUpperNode& node = exploration.nodes[terminal.node_index];
+        switch (terminal.kind) {
+            case HybridDiscreteTimeUpperTerminalKind::HORIZON:
+                if (node.index != exploration.termination_index)
+                    throw std::invalid_argument("Discrete hybrid horizon terminal has wrong index");
+                projection.orbit.adjoin_final(node.enclosure);
+                break;
+            case HybridDiscreteTimeUpperTerminalKind::BLOCKED:
+                if (node.index >= exploration.termination_index)
+                    throw std::invalid_argument("Discrete hybrid blocked terminal is not before horizon");
+                projection.blocked.adjoin(node.enclosure);
+                break;
+            default:
+                throw std::invalid_argument("Unknown discrete hybrid terminal kind");
+        }
+    }
+    return projection;
 }
 
 } // namespace Ariadne

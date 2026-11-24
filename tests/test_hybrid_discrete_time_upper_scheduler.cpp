@@ -117,6 +117,11 @@ class TestHybridDiscreteTimeUpperScheduler : public Ariadne::Testing::ContextFix
         ARIADNE_TESTING_PROVE(full.nodes[2u].enclosure.location() == mode);
         ARIADNE_TESTING_EXPECT_EQUAL(full.nodes[1u].enclosure.previous_events().size(), 1u);
         ARIADNE_TESTING_EXPECT_EQUAL(full.nodes[2u].enclosure.previous_events().size(), 0u);
+        const auto projected = HybridDiscreteTimeUpperScheduler::project_orbit(full);
+        ARIADNE_TESTING_EXPECT_EQUAL(projected.orbit.reach().size(), 2u);
+        ARIADNE_TESTING_EXPECT_EQUAL(projected.orbit.intermediate().size(), 0u);
+        ARIADNE_TESTING_EXPECT_EQUAL(projected.orbit.final().size(), 2u);
+        ARIADNE_TESTING_EXPECT_EQUAL(projected.blocked.size(), 0u);
     }
 
     Void test_blocked_and_budget_contract() {
@@ -150,6 +155,84 @@ class TestHybridDiscreteTimeUpperScheduler : public Ariadne::Testing::ContextFix
                 unblocked, initial(mode), Integer(0), Integer(2), 0u));
     }
 
+    Void test_time_index_matches_entire_enclosure() {
+        const RealVariable x("x");
+        const DiscreteLocation mode(1);
+        DiscreteTimeHybridAutomaton system;
+        system.new_mode(mode, DifferenceAlgebraicEquation(
+            List<PrimedRealAssignment>{next(x) = x + 1}));
+
+        const auto source = initial(mode);
+        // This also applies to a zero-length exploration: it must not silently
+        // certify a mismatched initial state as a horizon terminal.
+        ARIADNE_TESTING_EXPECT_THROWS(std::invalid_argument,
+            HybridDiscreteTimeUpperScheduler::evolve(
+                system, source, Integer(1), Integer(1), 1u));
+
+        HybridEnclosure shifted = source;
+        shifted.set_time_function(shifted.time_function() + StepSizeType(2, 0u));
+        ARIADNE_TESTING_EXPECT_THROWS(std::invalid_argument,
+            HybridDiscreteTimeUpperScheduler::evolve(
+                system, shifted, Integer(0), Integer(2), 3u));
+        const auto resumed = HybridDiscreteTimeUpperScheduler::evolve(
+            system, shifted, Integer(2), Integer(4), 3u);
+        ARIADNE_TESTING_EXPECT_EQUAL(resumed.nodes.size(), 3u);
+        ARIADNE_TESTING_EXPECT_EQUAL(resumed.nodes[2u].index, Integer(4));
+        ARIADNE_TESTING_EXPECT_EQUAL(
+            resumed.nodes[2u].enclosure.time_range().lower_bound().raw().get_d(), 4.0);
+
+        // A clock range containing the requested index is not sufficient.
+        HybridEnclosure uncertain = source;
+        uncertain.set_time_function(uncertain.state_function()[0u]);
+        ARIADNE_TESTING_EXPECT_THROWS(std::invalid_argument,
+            HybridDiscreteTimeUpperScheduler::evolve(
+                system, uncertain, Integer(0), Integer(0), 1u));
+    }
+
+    Void test_orbit_projection_and_blocked_terminal() {
+        const RealVariable x("x");
+        const DiscreteLocation mode(1), target(2);
+        const DiscreteEvent event("blocked");
+        DiscreteTimeHybridAutomaton live;
+        live.new_mode(mode, DifferenceAlgebraicEquation(
+            List<PrimedRealAssignment>{next(x) = x + 1}));
+
+        const auto source = initial(mode);
+        const auto zero = HybridDiscreteTimeUpperScheduler::evolve(
+            live, source, Integer(0), Integer(0), 1u);
+        const auto zero_projected = HybridDiscreteTimeUpperScheduler::project_orbit(zero);
+        ARIADNE_TESTING_EXPECT_EQUAL(zero_projected.orbit.reach().size(), 0u);
+        ARIADNE_TESTING_EXPECT_EQUAL(zero_projected.orbit.intermediate().size(), 0u);
+        ARIADNE_TESTING_EXPECT_EQUAL(zero_projected.orbit.final().size(), 1u);
+        ARIADNE_TESTING_EXPECT_EQUAL(zero_projected.blocked.size(), 0u);
+
+        const auto full = HybridDiscreteTimeUpperScheduler::evolve(
+            live, source, Integer(0), Integer(2), 3u);
+        const auto projected = HybridDiscreteTimeUpperScheduler::project_orbit(full);
+        ARIADNE_TESTING_EXPECT_EQUAL(projected.orbit.reach().size(), 2u);
+        ARIADNE_TESTING_EXPECT_EQUAL(projected.orbit.intermediate().size(), 1u);
+        ARIADNE_TESTING_EXPECT_EQUAL(projected.orbit.final().size(), 1u);
+        ARIADNE_TESTING_EXPECT_EQUAL(projected.blocked.size(), 0u);
+        ARIADNE_TESTING_EXPECT_EQUAL(
+            projected.orbit.final().front().time_range().lower_bound().raw().get_d(), 2.0);
+
+        DiscreteTimeHybridAutomaton blocked;
+        blocked.new_mode(mode, DifferenceAlgebraicEquation(
+            List<PrimedRealAssignment>{next(x) = x}));
+        blocked.new_mode(target, DifferenceAlgebraicEquation(
+            List<PrimedRealAssignment>{next(x) = x}));
+        blocked.new_permissive_transition(mode, event, target, {next(x) = x},
+                                          x >= 2, x <= -1);
+        const auto stopped = HybridDiscreteTimeUpperScheduler::evolve(
+            blocked, source, Integer(0), Integer(2), 1u);
+        const auto stopped_projected = HybridDiscreteTimeUpperScheduler::project_orbit(stopped);
+        ARIADNE_TESTING_EXPECT_EQUAL(stopped_projected.orbit.reach().size(), 0u);
+        ARIADNE_TESTING_EXPECT_EQUAL(stopped_projected.orbit.final().size(), 0u);
+        ARIADNE_TESTING_EXPECT_EQUAL(stopped_projected.blocked.size(), 1u);
+        ARIADNE_TESTING_EXPECT_EQUAL(
+            stopped_projected.blocked.front().time_range().lower_bound().raw().get_d(), 0.0);
+    }
+
     Void test_inclusion_rejected_without_sampling() {
         const RealVariable x("x"), u("u");
         const DiscreteLocation mode(1);
@@ -168,6 +251,8 @@ int main(int argc, char** argv) {
     ARIADNE_TESTING_ADD_TEST(TestHybridDiscreteTimeUpperScheduler, test_horizon_and_linear_provenance);
     ARIADNE_TESTING_ADD_TEST(TestHybridDiscreteTimeUpperScheduler, test_branch_tree_and_horizon);
     ARIADNE_TESTING_ADD_TEST(TestHybridDiscreteTimeUpperScheduler, test_blocked_and_budget_contract);
+    ARIADNE_TESTING_ADD_TEST(TestHybridDiscreteTimeUpperScheduler, test_time_index_matches_entire_enclosure);
+    ARIADNE_TESTING_ADD_TEST(TestHybridDiscreteTimeUpperScheduler, test_orbit_projection_and_blocked_terminal);
     ARIADNE_TESTING_ADD_TEST(TestHybridDiscreteTimeUpperScheduler, test_inclusion_rejected_without_sampling);
     return Ariadne::Testing::run_logging_suite(ariadne_test_suite, argc, argv);
 }

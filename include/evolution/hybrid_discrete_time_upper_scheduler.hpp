@@ -34,6 +34,7 @@
 #include <vector>
 
 #include "evolution/hybrid_discrete_time_step_executor.hpp"
+#include "evolution/hybrid_orbit.hpp"
 
 namespace Ariadne {
 
@@ -70,14 +71,27 @@ struct HybridDiscreteTimeUpperExploration {
     std::vector<HybridDiscreteTimeUpperTerminal> terminals;
 };
 
+//! \brief A projection of a discrete exploration into the existing hybrid orbit.
+//! \details reach contains each non-root reached node; intermediate contains
+//! non-horizon reached nodes (including blocked leaves); final contains only
+//! leaves at the requested horizon. Blocked leaves are also reported separately
+//! so they are never mistaken for horizon results. Parentage and event history
+//! remain available in the original exploration, not in Orbit.
+struct HybridDiscreteTimeUpperOrbitProjection {
+    Orbit<HybridEnclosure> orbit;
+    ListSet<HybridEnclosure> blocked;
+};
+
 //! \brief Explore all possible deterministic hybrid successors up to an index.
 //! \details Each branch consumes one tick. Uncertain guard and invariant
 //! evidence always retains every possibly admissible successor. The complete
 //! source enclosure is imaged separately for each branch (UPPER semantics).
 //! No zero-time transitions, implicit event priorities, or LOWER claims.
 //!
-//! The caller must supply an initial_index consistent with the enclosure's
-//! global time function. Unsupported difference inclusions throw rather
+//! The initial enclosure's entire certified time range must be the singleton
+//! initial_index; a range merely containing that index is insufficient.
+//! The same invariant is checked for all generated nodes.
+//! Unsupported difference inclusions throw rather
 //! than being sampled. A hard maximum_nodes budget aborts with an exception
 //! instead of dropping branches or returning an incomplete exploration.
 //! This is a single-purpose scheduler, not yet a public Evolver specialization.
@@ -89,6 +103,12 @@ class HybridDiscreteTimeUpperScheduler {
         Integer initial_index,
         Integer termination_index,
         SizeType maximum_nodes);
+
+    //! \brief Project the explored tree without merging independent branches.
+    //! \details Only HORIZON terminals contribute to orbit.final().
+    //! BLOCKED terminals are returned separately, including a blocked root.
+    static HybridDiscreteTimeUpperOrbitProjection project_orbit(
+        const HybridDiscreteTimeUpperExploration& exploration);
 };
 
 } // namespace Ariadne

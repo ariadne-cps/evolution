@@ -7,11 +7,12 @@ This is the implementation roadmap adopted in design v6.20 on 22 November
 | --- | --- | --- | --- |
 | Discrete time (`IteratedMap`) | `DiscreteTimeEvolver<ValidatedTag>` | `DiscreteTimeEvolver<ApproximateTag>` | Validated exists; approximate planned |
 | Continuous time (ODAE / ODAI) | `ContinuousTimeEvolver<ValidatedTag>` | `ContinuousTimeEvolver<ApproximateTag>` | Validated accepts both with explicit time; approximate accepts ODAE and structured ODAI with explicit time, fixed parameters and an explicit input policy |
-| Hybrid discrete time | `HybridDiscreteTimeEvolver<ValidatedTag>` | `HybridDiscreteTimeEvolver<ApproximateTag>` | Native System model and both algorithms planned |
+| Hybrid discrete time | `HybridDiscreteTimeEvolver<ValidatedTag>` | `HybridDiscreteTimeEvolver<ApproximateTag>` | Native System model present; deterministic finite-horizon UPPER scheduler and orbit projection internal; public evolvers planned |
 | Hybrid continuous time | `HybridContinuousTimeEvolver<ValidatedTag>` | `HybridContinuousTimeEvolver<ApproximateTag>` | ODAE/ODAI timed UPPER evolution; approximate ODAE/structured ODAI supports external time, fixed parameters and explicit input policies; further contact handling planned |
 
-`IteratedMap` keeps its existing name and contract. Hybrid discrete time needs
-its own native model in `ariadne-cps/system` before either algorithm is added.
+`IteratedMap` keeps its existing name and contract. Hybrid discrete time now has its native model in `ariadne-cps/system`.
+Its deterministic UPPER scheduler and orbit projection are still internal, not
+a public validated or approximate hybrid discrete evolver.
 The tick semantics must define guard evaluation before/after the update,
 priorities and simultaneous events, resets, multiple jumps at the same tick,
 termination and the domain of integer indices. Continuous event semantics must
@@ -80,8 +81,9 @@ contract, with its limitations visible to the caller.
    Update installation, exports and documentation without compatibility aliases.
 
 IMPACT, external global time and trajectory-constant physical parameters advance
-the first two items. Further approximate evolver capabilities remain open. All planned APIs, converters
-and the native hybrid discrete-time model remain unimplemented. The detailed
+the first two items. Further approximate evolver capabilities remain open. The discrete hybrid System model and an internal deterministic UPPER
+scheduler are implemented; public discrete hybrid evolvers, other missing APIs
+and converters remain unimplemented. The detailed
 [continuous hybrid handler design](hybrid_transition_handlers_design.md)
 records the implemented event capabilities and their mathematical boundaries.
 

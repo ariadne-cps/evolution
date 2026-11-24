@@ -57,8 +57,19 @@ HybridDiscreteTimeUpperExploration HybridDiscreteTimeUpperScheduler::evolve(
         throw std::invalid_argument("Discrete hybrid maximum node budget must be positive");
     if (!automaton.has_mode(initial.location()))
         throw std::invalid_argument("Discrete hybrid initial mode does not exist");
-    if (!automaton.has_equation(initial.location()))
-        throw std::invalid_argument("Discrete hybrid UPPER scheduler does not support inclusion modes");
+    if (automaton.has_inclusion(initial.location())) {
+        // The UPPER kernel supports fresh bounded inputs only for event-free
+        // inclusion modes without auxiliary outputs. Check this before the
+        // zero-horizon case too: an unsupported model must not be presented
+        // as an accepted evolution without examining its capabilities.
+        if (!automaton.events(initial.location()).empty() ||
+            automaton.inclusion(initial.location()).auxiliary_space().dimension() != 0u ||
+            initial.auxiliary_space().dimension() != 0u)
+            throw std::invalid_argument(
+                "Discrete hybrid UPPER inclusion requires an event-free mode without auxiliary outputs");
+    } else if (!automaton.has_equation(initial.location())) {
+        throw std::invalid_argument("Discrete hybrid initial mode has unsupported dynamics");
+    }
     if (initial.state_space() != automaton.state_space(initial.location()))
         throw std::invalid_argument("Discrete hybrid initial state space mismatch");
     check_time_index(initial, initial_index);

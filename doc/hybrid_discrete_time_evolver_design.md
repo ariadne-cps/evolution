@@ -117,3 +117,20 @@ integration, the public validated evolver, immutability and rejection
 of unsupported auxiliary/transition paths. Continuous guard and evolution
 regressions must continue to pass alongside all discrete suites.
 Acceptance depends on CI for the actual new commit, not on prior commits.
+
+## v6.49: scheduler capability gate repaired
+
+The v6.48 image/executor subset had a mismatched scheduler precondition:
+`HybridDiscreteTimeUpperScheduler::evolve` still rejected all inclusion
+modes before reaching the new event-free kernel. The initial capability
+gate now accepts equation modes or only inclusion modes with no outgoing
+events and no auxiliary outputs. Unsupported inclusion models fail even
+at a zero horizon instead of appearing to succeed without a step.
+The existing state-space, certified integer clock and hard node-budget
+checks remain in force. The scheduler and public evolver two-tick
+inclusion tests now exercise a reachable path through this gate.
+
+This was a functional integration bug in v6.48, not a reason to weaken
+the tests. Functional CI remains required on the repair commit, and
+both continuous and discrete hybrid suites remain active. The
+quantified-guard extension is deferred until that CI is verified.

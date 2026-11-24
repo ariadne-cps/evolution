@@ -256,14 +256,18 @@ class TestHybridDiscreteTimeUpperScheduler : public Ariadne::Testing::ContextFix
     }
 
     Void test_inclusion_rejected_without_sampling() {
-        const RealVariable x("x"), u("u");
+        const RealVariable x("x"), u("u"), a("a");
         const DiscreteLocation mode(1);
         DiscreteTimeHybridAutomaton system;
-        const RealVariable a("a");
         system.new_mode(mode, DifferenceAlgebraicInclusion(
             List<PrimedRealAssignment>{next(x) = x + u},
             List<RealAssignment>{let(a) = x + u},
             RealVariablesBox({-1 <= u <= 1})));
+        // Reject unsupported auxiliary outputs even at a zero horizon;
+        // otherwise an initial result could hide a missing capability.
+        ARIADNE_TESTING_EXPECT_THROWS(std::invalid_argument,
+            HybridDiscreteTimeUpperScheduler::evolve(
+                system, initial(mode), Integer(0), Integer(0), 10u));
         ARIADNE_TESTING_EXPECT_THROWS(std::invalid_argument,
             HybridDiscreteTimeUpperScheduler::evolve(
                 system, initial(mode), Integer(0), Integer(1), 10u));

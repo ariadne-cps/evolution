@@ -550,3 +550,28 @@ remaining mathematical work. Thus the capacity matrix cell
 "Hybrid continuous / equation / Validated LOWER" stays ◐, now
 covering more event-bearing cases, pending full functional CI
 on the exact v6.61 checkpoint. Format is non-blocking.
+
+## v6.62 — Global-time regression aligned with witnessed LOWER for nonautonomous equations
+
+The `test_global_time::nonautonomous_equations_and_auxiliaries_in_both_evolvers`
+case retained a pre-v6.60 expectation that
+`hybrid.orbit(initial, HybridTime(0,1), LOWER)` throws. This is obsolete:
+event-free deterministic hybrid equations with explicit time now admit
+LOWER, as do the corresponding ordinary continuous equations.
+
+Replace the negative assertion with positive analytical witness
+checks for both flat and tree evolution backends, at zero horizon
+and at time `1/8`. For `x'=t, x(0)=0`, prove the computed
+validated state interval contains `x(1/8)=1/128`, the
+auxiliary `a=x+t` contains `17/128`, and the final time is
+`1/8`. Also verify no spurious discrete events and nonempty
+reach output. Keep all existing UPPER accuracy assertions.
+
+This is a **stale test contract**, not a reason to undo the
+LOWER extension, suppress the failing case, or weaken mathematical
+coverage. Production numerical code and the capability matrix are
+unchanged. Hybrid continuous equation LOWER stays partial for
+unresolved timed/parameterized first-entry crossings, even though
+the no-event nonautonomous case is now supported. The v6.61 CI
+detected this test failure; v6.62 must pass the functional CI
+on its own commit before acceptance. Format remains nonblocking.

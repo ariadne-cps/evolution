@@ -470,3 +470,42 @@ admission policy remain unchanged. The complete capability matrix is
 unchanged; ordinary discrete deterministic LOWER has the same source
 contract as ordinary continuous deterministic LOWER. This is a test
 repair, not a new capability. Functional CI is required before validation.
+
+## v6.60 — LOWER for event-free timed/parameterised hybrid continuous equations
+
+The deterministic validated hybrid continuous-time evolver now accepts
+`Semantics::LOWER` in equation modes with explicit global time,
+fixed physical parameters, or both **when the source mode has no
+events**. Previously the mode gate rejected all such requests even
+at zero horizon. An event-free deterministic flow has no ambiguous
+branch: for an initially reachable witness, the validated
+`compute_clocked_equation_step` and `apply_integration_step`
+enclose its trajectory for every accepted step. The existing outer
+reach/endpoint representation therefore also satisfies Ariadne's
+LOWER witness contract; no INNER approximation or distance
+calculation is needed. The parameter tuple remains fixed and
+correlated across steps.
+
+**The limitation is not cosmetic.** Clocked/parameterised hybrid
+equations with event guards still use `publish_outer_jump_candidates`,
+which may emit a reset from an intersected UPPER tube even if no
+reachable trajectory satisfies the guard. Such branches cannot
+be published under LOWER. The new gate explicitly rejects
+`LOWER` in these modes with any events until a certified
+crossing/guard mechanism is available. Ordinary autonomous
+guarded LOWER keeps its existing event-aware implementation;
+inclusion LOWER remains unsupported. Preconditioned integration
+restrictions for clocked/parameterised modes are unchanged.
+
+Tests now cover zero horizon and finite LOWER flow with fixed
+parameters (timed and autonomous, across flat/tree backends),
+global-time-only LOWER without physical parameters, analytical
+state/time witnesses, physical-parameter/auxiliary correlation,
+no history of spurious events, and explicit rejection of
+event-bearing timed and parameterised LOWER modes.
+The complete continuous/hybrid-discrete/impact suites remain
+mandatory. The capacity matrix's hybrid continuous equation
+LOWER cell **remains partial** until guarded timed and
+parameterised branches can be handled without spurious witnesses.
+Format remains outside the acceptance gate. The v6.60 CI result
+must be checked on its own commit.

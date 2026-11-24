@@ -323,15 +323,28 @@ Void HybridContinuousTimeEvolverBase<ValidatedTag>::set_integrator(const FirstOr
 }
 
 Void HybridContinuousTimeEvolverBase<ValidatedTag>::_validate_mode(DiscreteLocation location, Semantics semantics) const {
-    if (this->system().time_variable(location)) {
-        if (semantics != Semantics::UPPER)
-            throw std::invalid_argument("Timed hybrid dynamics/events currently require UPPER semantics");
+    const bool timed = this->system().time_variable(location).has_value();
+    const bool parameterized = EvolutionDetail::hybrid_parameter_space(this->system(), location).dimension() != 0u;
+
+    // A deterministic, event-free equation transports an existing reachable
+    // witness through each validated numerical flow enclosure, even with
+    // global time and fixed physical parameters. The same outer image is
+    // therefore also a valid LOWER enclosure without an INNER algorithm.
+    //
+    // The clocked/parameterized event path, however, only constructs UPPER
+    // candidates by intersecting an outer tube with possibly active guards.
+    // Such a candidate need not contain any genuine jumping trajectory;
+    // never silently interpret it as a LOWER reset or continuation.
+    if (semantics == Semantics::LOWER && (timed || parameterized) &&
+        !this->system().events(location).empty())
+        throw std::invalid_argument(
+            "LOWER for timed/parameterized hybrid equations with events requires certified witness-preserving crossings");
+
+    if (timed) {
         if (dynamic_cast<const PreconditionedGradedTaylorSeriesIntegrator*>(this->_integrator_ptr.get()) != nullptr)
             throw std::invalid_argument("Timed hybrid evolution does not support preconditioning");
     }
-    if (EvolutionDetail::hybrid_parameter_space(this->system(), location).dimension() != 0u) {
-        if (semantics != Semantics::UPPER)
-            throw std::invalid_argument("Parameterized hybrid modes require UPPER semantics");
+    if (parameterized) {
         if (dynamic_cast<const PreconditionedGradedTaylorSeriesIntegrator*>(this->_integrator_ptr.get()) != nullptr)
             throw std::invalid_argument("Parameterized hybrid evolution does not support preconditioning");
         EvolutionDetail::validate_outer_event_kinds(this->system(), location);

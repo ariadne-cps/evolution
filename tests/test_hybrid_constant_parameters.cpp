@@ -88,11 +88,79 @@ class TestHybridConstantParameters : public Testing::ContextFixture {
                     zero(current.state_function()[0u] - physical * duration - (timed ? duration * duration / 2 : Real(0)));
                     zero(current.auxiliary_function()[0u] - current.state_function()[0u] - physical - (timed ? current.time_function() : 0 * current.time_function()));
                 }
-                ARIADNE_TESTING_EXPECT_THROWS(std::invalid_argument, evolver.orbit(initial(evolver), HybridTime(0u, 1), Semantics::LOWER));
+                // No event can split the reachable witnesses. The validated
+                // clocked equation image also satisfies Ariadne's LOWER
+                // (nonempty-witness) contract without an INNER operation.
+                const auto lower_seed = evolver.orbit(initial(evolver), HybridTime(0u, 1), Semantics::LOWER);
+                ARIADNE_TESTING_REQUIRE(lower_seed.final().size() == 1u);
+                ARIADNE_TESTING_EXPECT_EQUAL(lower_seed.final()[0u].previous_events().size(), 0u);
+                const auto lower = evolver.orbit(initial(evolver), HybridTime(0.125_x, 1), Semantics::LOWER);
+                ARIADNE_TESTING_REQUIRE(lower.final().size() == 1u);
+                ARIADNE_TESTING_PROVE(lower.reach().size() > 0u);
+                const auto& lower_final = lower.final()[0u];
+                binding(lower_final);
+                ARIADNE_TESTING_EXPECT_EQUAL(lower_final.previous_events().size(), 0u);
+                const auto physical = lower_final.continuous_set().constant_parameter_function(1u).get(0u);
+                const Real duration = Real(1) / 8;
+                zero(lower_final.state_function()[0u] - physical * duration -
+                     (timed ? duration * duration / 2 : Real(0)));
+                zero(lower_final.auxiliary_function()[0u] - lower_final.state_function()[0u] -
+                     physical - (timed ? lower_final.time_function() : 0 * lower_final.time_function()));
                 evolver.set_integrator(PreconditionedGradedTaylorSeriesIntegrator(step_maximum_error = 1e-6));
                 ARIADNE_TESTING_EXPECT_THROWS(std::invalid_argument, evolver.orbit(initial(evolver), HybridTime(0u, 1), Semantics::UPPER));
             }
     }
+    void test_lower_timed_equation_without_parameters() {
+        for (bool tree: {false, true}) {
+            ContinuousTimeHybridAutomaton system;
+            system.new_mode(source, OrdinaryDifferentialAlgebraicEquation(
+                {dot(x) = 1 + t}, RealVariablesBox(), t));
+            HybridContinuousTimeEvolver<ValidatedTag> evolver(system);
+            configure(evolver, tree);
+
+            const auto lower = evolver.orbit(initial(evolver), HybridTime(0.125_x, 1),
+                                            Semantics::LOWER);
+            ARIADNE_TESTING_REQUIRE(lower.final().size() == 1u);
+            ARIADNE_TESTING_PROVE(lower.reach().size() > 0u);
+            const auto& result = lower.final()[0u];
+            ARIADNE_TESTING_EXPECT_EQUAL(result.previous_events().size(), 0u);
+            // x(1/8) = 1/8 + (1/8)^2/2 = 17/128.
+            ARIADNE_TESTING_PROVE(subset(
+                ExactIntervalType(0.1328125_x, 0.1328125_x),
+                cast_exact_interval(result.state_function()[0u].range())));
+            ARIADNE_TESTING_PROVE(subset(
+                ExactIntervalType(0.125_x, 0.125_x),
+                cast_exact_interval(result.time_function().range())));
+        }
+    }
+
+    void test_lower_clocked_guard_rejected_without_false_witness() {
+        for (bool timed: {false, true}) {
+            ContinuousTimeHybridAutomaton system;
+            const auto parameters = timed ? RealVariablesBox() : RealVariablesBox({2 <= p <= 3});
+            if (timed) {
+                system.new_mode(source, OrdinaryDifferentialAlgebraicEquation(
+                    {dot(x) = 1 + t}, parameters, t));
+                system.new_mode(target, OrdinaryDifferentialAlgebraicEquation(
+                    {dot(x) = 0}, parameters, t));
+            } else {
+                system.new_mode(source, OrdinaryDifferentialAlgebraicEquation(
+                    {dot(x) = p}, parameters));
+                system.new_mode(target, OrdinaryDifferentialAlgebraicEquation(
+                    {dot(x) = 0}, parameters));
+            }
+            system.new_transition(source, DiscreteEvent("choice"), target,
+                                  {next(x) = x}, x >= 0, EventKind::URGENT);
+            HybridContinuousTimeEvolver<ValidatedTag> evolver(system);
+            configure(evolver, false);
+            // An UPPER guard intersection alone does not certify a
+            // reachable reset on the clocked/parameterized path.
+            ARIADNE_TESTING_EXPECT_THROWS(std::invalid_argument,
+                evolver.orbit(initial(evolver), HybridTime(0.125_x, 1),
+                             Semantics::LOWER));
+        }
+    }
+
     void test_inclusion_flow_and_method_gates() {
         for (bool timed: {false, true})
             for (bool boxes: {false, true})
@@ -265,6 +333,8 @@ class TestHybridConstantParameters : public Testing::ContextFixture {
 int main(int argc, char** argv) {
     ARIADNE_TESTING_SUITE("test_hybrid_constant_parameters");
     ARIADNE_TESTING_ADD_TEST(TestHybridConstantParameters, test_equation_flow_and_continuation);
+    ARIADNE_TESTING_ADD_TEST(TestHybridConstantParameters, test_lower_timed_equation_without_parameters);
+    ARIADNE_TESTING_ADD_TEST(TestHybridConstantParameters, test_lower_clocked_guard_rejected_without_false_witness);
     ARIADNE_TESTING_ADD_TEST(TestHybridConstantParameters, test_inclusion_flow_and_method_gates);
     ARIADNE_TESTING_ADD_TEST(TestHybridConstantParameters, test_immediate_parameter_guard_reset_and_auxiliary);
     ARIADNE_TESTING_ADD_TEST(TestHybridConstantParameters, test_timed_parameter_guard_and_reset);

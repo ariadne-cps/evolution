@@ -41,6 +41,10 @@ class DiscreteTimeEvolver;
 template<class P>
 class DiscreteTimeEvolverConfiguration;
 template<class P>
+class HybridDiscreteTimeEvolver;
+template<class P>
+class HybridDiscreteTimeEvolverConfiguration;
+template<class P>
 class HybridContinuousTimeEvolver;
 template<class P>
 class HybridContinuousTimeEvolverBase;

@@ -43,6 +43,7 @@ class OrdinaryDifferentialAlgebraicEquation;
 class OrdinaryDifferentialAlgebraicInclusion;
 /** @brief ContinuousTimeHybridAutomatonInterface: compile-time correspondence between systems, evolvers and enclosures. */
 class ContinuousTimeHybridAutomatonInterface;
+class DiscreteTimeHybridAutomatonInterface;
 
 /** @brief DiscreteTimeEvolver<ValidatedTag>: compile-time correspondence between systems, evolvers and enclosures. */
 template<>
@@ -54,6 +55,8 @@ class ContinuousDynamics;
 /** @brief HybridContinuousTimeEvolverInterface<ValidatedTag>: compile-time correspondence between systems, evolvers and enclosures. */
 template<>
 class HybridContinuousTimeEvolverInterface<ValidatedTag>;
+template<>
+class HybridDiscreteTimeEvolver<ValidatedTag>;
 
 /** @brief LabelledEnclosure: compile-time correspondence between systems, evolvers and enclosures. */
 class LabelledEnclosure;
@@ -85,6 +88,12 @@ template<>
 struct EvolutionTraits<ValidatedTag, ContinuousDynamics> {
     using EvolverType = ContinuousTimeEvolver<ValidatedTag>;
     using EnclosureType = LabelledEnclosure;
+};
+
+template<>
+struct EvolutionTraits<ValidatedTag, DiscreteTimeHybridAutomatonInterface> {
+    using EvolverType = HybridDiscreteTimeEvolver<ValidatedTag>;
+    using EnclosureType = HybridEnclosure;
 };
 
 template<>

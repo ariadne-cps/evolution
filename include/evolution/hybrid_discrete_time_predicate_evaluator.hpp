@@ -41,10 +41,11 @@ namespace Ariadne {
  *  validated range is computed over the entire constrained source enclosure,
  *  rather than over a sampled point or an independent auxiliary box.
  *
- *  An indicator strictly positive over the set certifies TRUE; strictly
- *  negative certifies FALSE. In all other cases (including contact with
- *  zero), returns UNKNOWN. This conservative handling is also required for
- *  strict comparisons, whose boundary is not distinguished by the indicator.
+ *  The shared source-guard classifier, also used for continuous hybrid
+ *  initial activation, certifies TRUE on a nonempty source with a strictly
+ *  positive indicator; FALSE if the closed active-side candidate is provably
+ *  empty; and UNKNOWN otherwise. This remains conservative for strict guards
+ *  because the closed restriction includes the boundary.
  *  No LOWER image guarantee follows from the returned evidence.
  *
  *  Bounded-input inclusion modes are rejected because independent input

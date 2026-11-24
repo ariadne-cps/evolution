@@ -28,6 +28,8 @@
 
 #include <stdexcept>
 
+#include "../src/hybrid_guard_predicate.hpp"
+#include "../src/hybrid_discrete_time_predicate_function.hpp"
 #include "evolution/hybrid_discrete_time_predicate_evaluator.hpp"
 #include "evolution/hybrid_discrete_time_step_executor.hpp"
 #include "function/taylor_function.hpp"
@@ -87,6 +89,37 @@ class TestHybridDiscreteTimePredicateEvaluator : public Ariadne::Testing::Contex
             automaton, source, a - x + 1 >= 0) == Evidence::TRUE);
         ARIADNE_TESTING_PROVE(HybridDiscreteTimePredicateEvaluator::classify(
             automaton, source, a - x - 1 >= 0) == Evidence::FALSE);
+    }
+
+    Void test_discrete_source_guard_uses_shared_certificates() {
+        const RealVariable x("x"), a("a");
+        const DiscreteLocation mode(1);
+        DiscreteTimeHybridAutomaton automaton;
+        automaton.new_mode(mode, DifferenceAlgebraicEquation(
+            List<PrimedRealAssignment>{next(x) = x + 1},
+            List<RealAssignment>{let(a) = x}));
+        const HybridEnclosure source = initial(mode);
+        const auto check = [&](const ContinuousPredicate& predicate,
+                               EvolutionDetail::HybridSourceGuardStatus expected,
+                               Evidence discrete_expected) {
+            const auto indicator =
+                EvolutionDetail::discrete_source_indicator(automaton, source, predicate);
+            ARIADNE_TESTING_EXPECT_EQUAL(
+                EvolutionDetail::classify_source_guard(source, indicator), expected);
+            ARIADNE_TESTING_PROVE(
+                HybridDiscreteTimePredicateEvaluator::classify(automaton, source, predicate)
+                == discrete_expected);
+        };
+        check(a >= 2, EvolutionDetail::HybridSourceGuardStatus::EXCLUDED, Evidence::FALSE);
+        check(a >= 1/2_q, EvolutionDetail::HybridSourceGuardStatus::UNRESOLVED, Evidence::UNKNOWN);
+        check(a >= -1, EvolutionDetail::HybridSourceGuardStatus::FULL_SOURCE, Evidence::TRUE);
+
+        const auto indicator = EvolutionDetail::discrete_source_indicator(
+            automaton, source, a >= 1/2_q);
+        HybridEnclosure restricted = source;
+        EvolutionDetail::restrict_source_guard(restricted, DiscreteEvent("discrete"), indicator);
+        ARIADNE_TESTING_EXPECT_EQUAL(restricted.number_of_constraints(), 1u);
+        ARIADNE_TESTING_EXPECT_EQUAL(source.number_of_constraints(), 0u);
     }
 
     Void test_certified_upper_tick() {
@@ -220,6 +253,7 @@ int main(int argc, char** argv) {
     ARIADNE_TESTING_SUITE("test_hybrid_discrete_time_predicate_evaluator");
     ARIADNE_TESTING_ADD_TEST(TestHybridDiscreteTimePredicateEvaluator, test_certified_signs_and_boundary);
     ARIADNE_TESTING_ADD_TEST(TestHybridDiscreteTimePredicateEvaluator, test_correlated_auxiliary_is_not_independent);
+    ARIADNE_TESTING_ADD_TEST(TestHybridDiscreteTimePredicateEvaluator, test_discrete_source_guard_uses_shared_certificates);
     ARIADNE_TESTING_ADD_TEST(TestHybridDiscreteTimePredicateEvaluator, test_certified_upper_tick);
     ARIADNE_TESTING_ADD_TEST(TestHybridDiscreteTimePredicateEvaluator, test_boundary_keeps_both_upper_alternatives);
     ARIADNE_TESTING_ADD_TEST(TestHybridDiscreteTimePredicateEvaluator, test_certified_prestate_restriction_and_callback_compatibility);

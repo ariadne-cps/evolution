@@ -27,11 +27,10 @@
  */
 
 #include "evolution/hybrid_discrete_time_predicate_evaluator.hpp"
+#include "hybrid_discrete_time_predicate_function.hpp"
+#include "hybrid_guard_predicate.hpp"
 
 #include <stdexcept>
-
-#include "symbolic/assignment.hpp"
-#include "system/system_function.hpp"
 
 namespace Ariadne {
 
@@ -39,34 +38,18 @@ DiscreteTimePredicateEvidence HybridDiscreteTimePredicateEvaluator::classify(
     const DiscreteTimeHybridAutomatonInterface& automaton,
     const HybridEnclosure& source,
     const ContinuousPredicate& predicate) {
-    const DiscreteLocation location = source.location();
-    if (!automaton.has_mode(location))
-        throw std::invalid_argument("Discrete hybrid predicate source mode does not exist");
-    if (!automaton.has_equation(location))
-        throw std::invalid_argument("Certified discrete inclusion predicate evaluation is not implemented");
-
-    const DifferenceAlgebraicEquation& equation = automaton.equation(location);
-    if (source.state_space() != equation.state_space())
-        throw std::invalid_argument("Discrete hybrid predicate source state space mismatch");
-
-    // Build a scalar function of the physical state only. Substituting the
-    // sorted algebraic assignments prevents treating outputs such as a=x
-    // as independent interval variables when classifying a-x+1 >= 0.
-    const EffectiveScalarMultivariateFunction indicator_function =
-        make_constraint_function(equation.state_space(),
-                                 algebraic_sort(equation.auxiliary_assignments()),
-                                 predicate, Sign::POSITIVE);
-
-    // Composing with the enclosure's state map preserves correlations in
-    // its parameterization and retains the constraints on its source domain.
-    const UpperIntervalType range =
-        source.range_of(indicator_function, EnclosureFunctionArguments::STATE);
-
-    if (definitely(range.lower_bound() > 0))
-        return DiscreteTimePredicateEvidence::TRUE;
-    if (definitely(range.upper_bound() < 0))
-        return DiscreteTimePredicateEvidence::FALSE;
-    return DiscreteTimePredicateEvidence::UNKNOWN;
+    const EffectiveScalarMultivariateFunction indicator =
+        EvolutionDetail::discrete_source_indicator(automaton, source, predicate);
+    switch (EvolutionDetail::classify_source_guard(source, indicator)) {
+        case EvolutionDetail::HybridSourceGuardStatus::FULL_SOURCE:
+            return DiscreteTimePredicateEvidence::TRUE;
+        case EvolutionDetail::HybridSourceGuardStatus::EXCLUDED:
+            return DiscreteTimePredicateEvidence::FALSE;
+        case EvolutionDetail::HybridSourceGuardStatus::UNRESOLVED:
+            return DiscreteTimePredicateEvidence::UNKNOWN;
+        default:
+            throw std::logic_error("Unhandled hybrid source predicate status");
+    }
 }
 
 } // namespace Ariadne

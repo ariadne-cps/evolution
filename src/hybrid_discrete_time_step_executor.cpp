@@ -28,30 +28,22 @@
 
 #include "evolution/hybrid_discrete_time_step_executor.hpp"
 #include "evolution/hybrid_discrete_time_predicate_evaluator.hpp"
+#include "hybrid_discrete_time_predicate_function.hpp"
+#include "hybrid_guard_predicate.hpp"
 
 #include <stdexcept>
-
-#include "system/system_function.hpp"
-#include "symbolic/assignment.hpp"
 
 namespace Ariadne {
 namespace {
 
-// The indicator returned by System is positive at points satisfying the
-// predicate. Its closed nonnegative half-space is an OUTER approximation,
-// including the boundary even if the original comparison is strict.
-// Always compose with the same parameterized source state: correlated
-// algebraic auxiliaries must never become independent box coordinates.
+// Discrete predicates use algebraic substitution, then the same closed
+// activation restriction as the continuous hybrid event handlers.
 Void require_prestate_predicate(const DiscreteTimeHybridAutomatonInterface& automaton,
                                 HybridEnclosure& source, DiscreteEvent event,
                                 const ContinuousPredicate& predicate) {
-    const DifferenceAlgebraicEquation& equation = automaton.equation(source.location());
-    const EffectiveScalarMultivariateFunction indicator_function =
-        make_constraint_function(equation.state_space(),
-                                 algebraic_sort(equation.auxiliary_assignments()),
-                                 predicate, Sign::POSITIVE);
-    const auto parameter_indicator = compose(indicator_function, source.state_function());
-    source.new_parameter_constraint(event, parameter_indicator >= ExactNumber(0));
+    const EffectiveScalarMultivariateFunction indicator =
+        EvolutionDetail::discrete_source_indicator(automaton, source, predicate);
+    EvolutionDetail::restrict_source_guard(source, event, indicator);
 }
 
 // In the certified path only, limit each alternative to the CLOSURE of the

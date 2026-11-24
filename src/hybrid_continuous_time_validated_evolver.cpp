@@ -42,6 +42,7 @@
 #include "function/function_model.hpp"
 #include "function/function_patch.hpp"
 #include "hybrid_crossing_analysis.hpp"
+#include "hybrid_guard_predicate.hpp"
 #include "hybrid_outer_flow.hpp"
 #include "hybrid_parameters.hpp"
 #include "hybrid_step_results.hpp"
@@ -493,7 +494,8 @@ Void HybridContinuousTimeEvolverBase<ValidatedTag>::
             if (activation != EvolutionDetail::HybridInitialGuardActivation::EXCLUDED) {
                 if (policy.resets_initially && EvolutionDetail::permits_initial_reset(activation, semantics)) {
                     HybridEnclosure immediate_jump_set = invariant_set;
-                    immediate_jump_set.new_activation(event, transition.guard_function, transition.source_arguments);
+                    EvolutionDetail::restrict_source_guard(
+                        immediate_jump_set, event, transition.guard_function, transition.source_arguments);
                     if (!definitely(immediate_jump_set.is_empty())) {
                         // UPPER retains possible (including spurious) jumps.
                         // LOWER never selects only the guard-active part of a

@@ -135,3 +135,39 @@ Next, extract shared graph/transition validation and composition code beyond
 virtual interfaces before introducing `DiscreteTimeHybridAutomaton` and
 its time-specialized interface. Its tick order and event semantics require a
 separate, testable definition. Keep `decoupling` paving independent.
+
+## Integer-time hybrid tick scheduler — first Evolution slice (v6.39)
+
+The native System contract fixes a discrete step `n -> n+1`. Guards and
+progression invariants are classified on the same pre-step source state.
+Every possible event yields an independent reset successor in its target
+mode; progression is permitted only where **all** event invariants hold.
+Both reset and progression consume one tick. There are no zero-time chains,
+implicit event priorities or compositions of simultaneous resets.
+
+`HybridDiscreteTimeStepPlanner` provides a numerical-kernel-independent
+structural scheduler: its evidence callback supplies certified
+`FALSE`, `TRUE` or `UNKNOWN` for each source-set event predicate.
+For urgent events, the invariant evidence is derived as the logical
+complement of the guard evidence (and **not** independently tested).
+For permissive events, an explicit invariant is evaluated. Each possible
+branch is returned separately; uncertainty never silently discards a
+branch. The `certain` field certifies only universal satisfaction of
+that branch's **precondition** over the source set, and is explicitly
+**not** a validated LOWER reachability or image certificate.
+
+The planner returns source and successor integer indices and separate
+transition/progression branch metadata, but **does not** compute set-valued
+images, evaluate symbolic predicates, choose inclusion inputs, integrate
+flows, or construct a numerical Orbit. The current continuous hybrid backend
+uses continuous HybridEnclosure and HybridTime and is intentionally not
+reused for discrete timing. Future validated and approximate hybrid
+discrete evolvers must supply independently justified evaluation and
+image kernels and reuse only semantics-compatible work scheduling and
+publication components. Direct free-input references in event expressions
+remain unsupported by the current model.
+
+Tests verify empty event sets, all urgent guard truth values, overlapping
+permissive advancement and reset, multiple simultaneous events, uncertain
+progression, blocked progression and missing source locations. All existing
+continuous evolution kernels are unchanged. Format remains deferred.

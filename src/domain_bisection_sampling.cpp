@@ -52,17 +52,6 @@ Void bisect_axis(const UpperBoxType& box, SizeType axis, Nat leaves,
 
 namespace EvolutionDetail {
 
-Nat bisection_count(Nat depth, Bool coarse) {
-    if (coarse && depth != 0u)
-        --depth;
-    Nat count = 1u;
-    for (Nat i = 0u; i < depth; ++i) {
-        ARIADNE_PRECONDITION(count <= std::numeric_limits<Nat>::max() / 2u);
-        count *= 2u;
-    }
-    return count;
-}
-
 std::vector<UpperBoxType> bisect_domain(
     const UpperBoxType& domain, const std::vector<Nat>& counts) {
     ARIADNE_PRECONDITION(counts.size() == domain.dimension());

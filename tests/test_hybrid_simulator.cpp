@@ -153,29 +153,21 @@ class TestHybridSimulator : public Ariadne::Testing::ContextFixture {
     Void test_box_sampling() {
         auto system = flow_system();
         HybridSimulator simulator(system);
-        simulator.configuration().set_fineness(1u);
+        simulator.configuration().set_sampling_counts(SamplingCounts{{x, 2u}, {y, 3u}});
         HybridUpperBox box(q, RealSpace({
                                   x, y
         }),
                            UpperBoxType({{0, 1}, {1, 2}}));
-        SizeType minces = 0u;
-        for (auto type: {DiscretizationHybridType::HMince, DiscretizationHybridType::HRecombine}) {
-            simulator.configuration().set_d_type(type);
-            auto orbit = simulator.orbit(box, q, system.state_space(), HybridTime(0.0_x, 3));
-            ARIADNE_TESTING_PROVE(orbit.number_of_trajectories() > 0u);
-            if (type == DiscretizationHybridType::HMince)
-                minces = orbit.number_of_trajectories();
-            else
-                ARIADNE_TESTING_PROVE(orbit.number_of_trajectories() <= minces);
-            for (SizeType i = 0u; i < orbit.number_of_trajectories(); ++i) {
-                auto p = orbit.curve(static_cast<Nat>(i), 0u).begin()->second;
-                ARIADNE_TESTING_PROVE(p[0].raw().get_d() >= 0.0 && p[0].raw().get_d() <= 1.0);
-                ARIADNE_TESTING_PROVE(p[1].raw().get_d() >= 1.0 && p[1].raw().get_d() <= 2.0);
-            }
-            std::ostringstream description;
-            description << simulator.configuration();
-            ARIADNE_TESTING_PROVE(description.str().find(type == DiscretizationHybridType::HMince ? "Mince" : "Recombine") != std::string::npos);
+        auto orbit = simulator.orbit(box, q, system.state_space(), HybridTime(0.0_x, 3));
+        ARIADNE_TESTING_EXPECT_EQUAL(orbit.number_of_trajectories(), 6u);
+        for (SizeType i = 0u; i < orbit.number_of_trajectories(); ++i) {
+            auto p = orbit.curve(static_cast<Nat>(i), 0u).begin()->second;
+            ARIADNE_TESTING_PROVE(p[0].raw().get_d() >= 0.0 && p[0].raw().get_d() <= 1.0);
+            ARIADNE_TESTING_PROVE(p[1].raw().get_d() >= 1.0 && p[1].raw().get_d() <= 2.0);
         }
+        std::ostringstream description;
+        description << simulator.configuration();
+        ARIADNE_TESTING_PROVE(description.str().find("sampling_counts") != std::string::npos);
         HybridUpperBox flat(q, RealSpace({
                                    x, y
         }),

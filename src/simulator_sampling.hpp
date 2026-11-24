@@ -34,24 +34,17 @@
 
 namespace Ariadne::EvolutionDetail {
 
-/** @brief Sample a continuous initial domain by deterministic bisection.
- * Explicit subspace counts control their respective coordinate; otherwise
- * Mince resolves every non-flat axis at subdivisions, Recombine at one
- * lower resolution, and None takes the domain centre.
+/** @brief Sample at centres of axis-wise subdivided initial boxes.
+ * Unspecified or flat axes contribute one subinterval.
  */
 VectorFieldSimulator::ApproximateListPointType sample_vector_field_initial_points(
-    const UpperBoxType& initial_box, const RealSpace& space,
-    const subspace& selected_subspace, DiscretisationType discretisation,
-    Nat subdivisions);
+    const UpperBoxType& domain, const RealSpace& space,
+    const SamplingCounts& counts);
 
-/** @brief Sample a hybrid initial domain directly without grid widening.
- * HMince uses fineness per non-degenerate axis; HRecombine uses one
- * fewer bisection. Every resulting point stays in the original box.
- */
+/** @brief Hybrid midpoint sampling with the same per-axis counts. */
 HybridSimulator::HybridApproximateListPointType sample_hybrid_initial_points(
     const UpperBoxType& domain, DiscreteLocation location,
-    const RealSpace& space, DiscretizationHybridType discretisation,
-    Nat fineness);
+    const RealSpace& space, const SamplingCounts& counts);
 
 } // namespace Ariadne::EvolutionDetail
 

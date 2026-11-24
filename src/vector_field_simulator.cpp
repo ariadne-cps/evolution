@@ -120,10 +120,8 @@ auto VectorFieldSimulator::orbit(const RealBoxType& init_bx, const TerminationTy
 
 auto VectorFieldSimulator::orbit(UpperBoxType& initial_box, const TerminationType& termination) const
     -> OrbitType {
-    Nat subdivisions = _configuration->is_using_subspace() ? 0u : _configuration->num_subdivisions();
     ApproximateListPointType pointList = EvolutionDetail::sample_vector_field_initial_points(
-        initial_box, _system->state_space(), _configuration->get_subspace(),
-        _configuration->discretisation_type(), subdivisions);
+        initial_box, _system->state_space(), _configuration->sampling_counts());
     return orbit(pointList, termination);
 }
 
@@ -190,16 +188,14 @@ void VectorFieldSimulator::_simulate_from_point(Pair<SizeType, ApproximatePointT
     }
 }
 
-VectorFieldSimulatorConfiguration::VectorFieldSimulatorConfiguration() : _step_size(0.125_x, dp), _num_subdivisions(2), _discretisation_type(DiscretisationType::Recombine), _subspace() {
+VectorFieldSimulatorConfiguration::VectorFieldSimulatorConfiguration() : _step_size(0.125_x, dp), _sampling_counts() {
 }
 
 OutputStream&
     VectorFieldSimulatorConfiguration::_write(OutputStream& os) const {
     os << "VectorFieldSimulatorConfiguration("
        << "\n  step_size=" << step_size()
-       << "\n  discretisation_type=" << discretisation_type()
-       << "\n  num_subdivisions=" << num_subdivisions()
-       << "\n  subspace=" << get_subspace()
+       << "\n  sampling_counts=" << sampling_counts()
        << ")\n";
     return os;
 }

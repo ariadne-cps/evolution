@@ -265,7 +265,7 @@ auto HybridSimulator::orbit(const HybridUpperBox& initial_box, DiscreteLocation 
     HybridApproximateListPointType pointList = EvolutionDetail::sample_hybrid_initial_points(
         initial_box.euclidean_set(space[loc]), loc,
         this->_sys_ptr->continuous_state_space(loc),
-        _configuration->d_type(), _configuration->fineness());
+        _configuration->sampling_counts());
     return orbit(pointList, termination);
 }
 
@@ -366,13 +366,12 @@ auto HybridSimulator::orbit(const HybridApproximateListPointType& init_list,
     return orbitList;
 }
 
-HybridSimulatorConfiguration::HybridSimulatorConfiguration() : _step_size(0.125, double_precision), _fineness(0), _discretization_type(DiscretizationHybridType::HMince) {}
+HybridSimulatorConfiguration::HybridSimulatorConfiguration() : _step_size(0.125, double_precision), _sampling_counts() {}
 
 OutputStream& HybridSimulatorConfiguration::_write(OutputStream& os) const {
     os << "HybridSimulatorConfiguration("
        << "\n  step_size=" << step_size()
-       << "\n  fineness=" << fineness()
-       << "\n  discretization type=" << d_type()
+       << "\n  sampling_counts=" << sampling_counts()
        << "\n)";
     return os;
 }

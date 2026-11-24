@@ -44,12 +44,6 @@ namespace Ariadne::EvolutionDetail {
 std::vector<UpperBoxType> bisect_domain(
     const UpperBoxType& domain, const std::vector<Nat>& counts);
 
-/** @brief Number of intervals per non-degenerate coordinate at the given depth.
- *  Recombine deliberately uses one fewer bisection than Mince: it is a
- *  lower-resolution heuristic, not a reconstruction of paving recombination.
- */
-Nat bisection_count(Nat depth, Bool coarse);
-
 } // namespace Ariadne::EvolutionDetail
 
 #endif // ARIADNE_EVOLUTION_DOMAIN_BISECTION_SAMPLING_HPP

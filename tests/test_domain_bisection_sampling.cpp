@@ -69,12 +69,6 @@ class TestDomainBisectionSampling : public Testing::ContextFixture {
             EvolutionDetail::bisect_domain(domain, {0u, 1u}));
     }
 
-    Void test_policy_resolution() {
-        ARIADNE_TESTING_EXPECT_EQUAL(EvolutionDetail::bisection_count(0u, false), 1u);
-        ARIADNE_TESTING_EXPECT_EQUAL(EvolutionDetail::bisection_count(3u, false), 8u);
-        ARIADNE_TESTING_EXPECT_EQUAL(EvolutionDetail::bisection_count(3u, true), 4u);
-        ARIADNE_TESTING_EXPECT_EQUAL(EvolutionDetail::bisection_count(0u, true), 1u);
-    }
 };
 } // namespace
 
@@ -82,6 +76,5 @@ int main(int argc, char** argv) {
     ARIADNE_TESTING_SUITE("test_domain_bisection_sampling");
     ARIADNE_TESTING_ADD_TEST(TestDomainBisectionSampling, test_two_axis_order_and_coordinates);
     ARIADNE_TESTING_ADD_TEST(TestDomainBisectionSampling, test_unequal_counts_and_flat_axis);
-    ARIADNE_TESTING_ADD_TEST(TestDomainBisectionSampling, test_policy_resolution);
     return Ariadne::Testing::run_logging_suite(ariadne_test_suite, argc, argv);
 }

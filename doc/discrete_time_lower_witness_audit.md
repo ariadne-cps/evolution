@@ -1,0 +1,97 @@
+# Ordinary discrete-time equations: witness-based LOWER audit
+
+Checkpoint v6.53 (24 November 2026); repository `ariadne-cps/evolution`,
+branch `multifunction`.
+
+## Distinguish the four notions used in Ariadne
+
+- **LOWER:** every published bounded enclosure `E` has at least one
+  actually reachable witness, i.e. `E ∩ R != ∅`. The enclosure is
+  **not** required to lie inside `R`.
+- **INNER:** every represented point is actually reachable:
+  `I ⊆ R`. This is strictly stronger than the project-specific LOWER
+  witness contract and is not claimed by the validated evolver.
+- **UPPER:** the numerical enclosure conservatively includes all
+  evolution possibilities for the source and branch it represents.
+  Correct images of selected branches alone need not be exhaustive.
+- **OUTER:** all reachable points are covered by the union of the
+  computed UPPER enclosures: `R ⊆ ⋃ U_i`. This additionally requires
+  *complete exploration* of all applicable evolution alternatives.
+
+For any bounded LOWER enclosure `E` with reachable witness `r`,
+every point `x∈E` satisfies
+`distance(x,R) <= distance(x,r) <= diameter(E)`.
+There is no need to compute a distance in code; the diameter supplies
+the bound automatically. If `E` has no reachable witness, the
+diameter argument does not establish LOWER correctness.
+
+## Why the deterministic discrete map needs no separate INNER kernel
+
+Assume a **known nonempty initial enclosure** `E_0` with a real
+initial witness `r_0`, and a deterministic map `f` defined along
+its evolution. Suppose `apply_discrete_time_map_step` always returns
+a sound UPPER image `E_(n+1)` of `f(E_n)`. Inductively,
+`r_n∈E_n` implies `r_(n+1)=f(r_n)∈f(E_n)⊆E_(n+1)`.
+Thus a single unsplit enclosure retains a reachable witness at
+each tick, even when it is geometrically much larger than the true
+reachable set. This proves the LOWER witness obligation on this
+supported subset; it does **not** prove INNER.
+
+The current `DiscreteTimeEvolver<ValidatedTag>::_evolution`
+subdivides only under `Semantics::UPPER`, where preserving the
+complete cover is appropriate. In LOWER, it propagates the unsplit
+enclosure or, when configured for premature termination and the
+radius budget is exceeded, publishes **no successor** on that path.
+That distinction is mathematically necessary: splitting a
+witness-bearing enclosure does not prove that *every* child contains
+a reachable witness.
+
+For an ordinary deterministic `IteratedMap`, there are no hybrid
+guarded resets or alternative transitions. By propagating all map
+images, a finite-horizon UPPER computation can additionally be OUTER
+if it exhaustively covers its intended initial set and completes
+the horizon. Its OUTER status must not be inferred from the word
+UPPER alone in systems with branching, truncation or incomplete
+exploration.
+
+## Limits of this audit
+
+The argument assumes an initial source with a **known witness**.
+An arbitrary constrained initial enclosure can be empty, and the
+current `Enclosure::is_empty()` may return INDETERMINATE for
+feasibility. The public `orbit` overload does not demand an explicit
+witness/non-emptiness certificate from every constrained caller.
+Do not mark that general case as proven LOWER without a separate
+input precondition or constructive feasibility certificate.
+
+We are auditing only ordinary discrete equations. For hybrid LOWER,
+each emitted branch needs a witness. A guard certified fully active
+preserves the existing witness through the reset; a merely possible
+guard does not. LOWER cannot silently split a source or retain a
+branch solely because a UPPER guard test was unresolved.
+
+## Regression coverage and acceptance
+
+The new `test_discrete_time_evolver::test_lower_witness_and_upper_subdivision`
+checks an analytic witness for the affine map `x[n+1]=x[n]+1`
+from `x0=0` through two ticks, verifies LOWER never subdivides
+even if UPPER subdivisions are enabled, and checks a nonlinear
+`x[n+1]=x[n]^2` witness at `x0=0`. Existing tests cover
+zero-horizon behavior and LOWER premature termination. Witness
+coverage is grounded in these explicit analytic trajectories rather
+than a fabricated inner enclosure or a measured distance.
+
+These tests are submitted but not considered passed until the
+functional GitHub CI completes for this exact commit; in addition
+to the ordinary discrete suite, existing continuous and discrete
+hybrid tests must stay green. Format remains outside the gate.
+
+## Capacity matrix delta
+
+Ordinary discrete equations / Validated LOWER:
+**audit established for known nonempty initial enclosures**, provided
+the deterministic numerical image is sound and no additional
+branching/partitioning is introduced. The unconstrained full API
+contract for arbitrary potentially empty initial enclosures remains
+an explicit open assumption. This audit introduces no new
+Approximate evolver or inclusion semantics.

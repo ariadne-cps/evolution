@@ -329,3 +329,28 @@ and flow-localized roots. Neither is reused for integer-time ticks.
 All changes are confined to Evolution on `multifunction`.
 Format is deliberately deferred until the full redesign.
 Functional CI must validate the new scheduler before advancing.
+
+## v6.53 — Ordinary discrete LOWER witness audit and semantic terminology
+
+Ariadne's terms are **LOWER** (every published enclosure contains a
+reachable witness) and **UPPER** (each represented image encloses the
+appropriate possibilities). They are deliberately distinct from
+**INNER** (all represented points are reachable) and **OUTER**
+(exhaustive union of UPPER images covers every reachable point).
+For bounded LOWER enclosures, any represented point is within the
+enclosure's diameter of a reachable witness; no separate distance
+evaluation is needed.
+
+For deterministic `IteratedMap` evolution from a known nonempty
+initial enclosure, the sound map image propagates a witness.
+UPPER-only subdivision and optional LOWER early termination preserve
+the witness contract. A focused regression verifies affine and
+nonlinear examples, prevents LOWER subdivision even when upper
+subdivisions are enabled, and preserves existing stopping-policy
+tests. See [the audit](discrete_time_lower_witness_audit.md).
+Arbitrary constrained sources with unknown feasibility are **not**
+yet proved to contain a witness; avoid calling the entire general
+LOWER API fully audited without this qualification.
+
+No hybrid or inclusion algorithm is modified by this audit;
+the continuous and discrete hybrid regression suites remain required.

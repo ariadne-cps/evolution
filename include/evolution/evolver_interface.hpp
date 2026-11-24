@@ -44,8 +44,8 @@ class Orbit;
 //! \brief The semantics used to determine the trajectories of the system.
 //! \see EvolverInterface
 enum class Semantics : std::uint8_t {
-    LOWER, //!< Under-approximation with trajectories terminating at spacial discontinuities.
-    UPPER  //!< Over-approximations with all possibilities included as spacial discontinuities.
+    LOWER, //!< Every published bounded enclosure retains at least one reachable witness; not INNER.
+    UPPER  //!< Conservatively encloses the represented evolution possibilities; OUTER needs complete coverage.
 };
 
 /** @brief Paradigm-specific evolution contract. Unsupported paradigms are incomplete. */

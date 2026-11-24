@@ -102,6 +102,48 @@ class TestDiscreteTimeEvolver : public Ariadne::Testing::ContextFixture {
         ARIADNE_TESTING_EXPECT_EXCEPTION(evolver.orbit(incompatible, Integer(1), Semantics::UPPER));
     }
 
+    Void test_lower_witness_and_upper_subdivision() {
+        const RealVariable x("x");
+        const IteratedMap translation({next(x) = x + 1});
+        DiscreteTimeEvolver<ValidatedTag> evolver(translation);
+        const auto initial = evolver.enclosure(ExactBoxType({{-1.0_x, 1.0_x}}));
+        evolver.configuration().set_enable_subdivisions(true);
+        evolver.configuration().set_enable_premature_termination(false);
+        evolver.configuration().set_maximum_enclosure_radius(0.75);
+
+        // Ariadne LOWER is witness-preserving, not INNER: for x0=0,
+        // x_n=n must remain inside every propagated unsplit enclosure.
+        // A subdivision would not guarantee a witness in *each* child.
+        const auto lower = evolver.orbit(initial, Integer(2), Semantics::LOWER);
+        ARIADNE_TESTING_EXPECT_EQUAL(lower.final().size(), 1u);
+        ARIADNE_TESTING_EXPECT_EQUAL(lower.reach().size(), 2u);
+        ARIADNE_TESTING_EXPECT_EQUAL(lower.intermediate().size(), 2u);
+        const auto final_bounds = lower.final()[0u].euclidean_set().bounding_box()[0u];
+        ARIADNE_TESTING_PROVE(final_bounds.lower_bound().raw().get_d() <= 2.0);
+        ARIADNE_TESTING_PROVE(final_bounds.upper_bound().raw().get_d() >= 2.0);
+
+        // UPPER may subdivide; the same configured radius must not cause
+        // the LOWER algorithm to generate uncertified child enclosures.
+        const auto upper = evolver.orbit(initial, Integer(1), Semantics::UPPER);
+        ARIADNE_TESTING_PROVE(upper.final().size() > 1u);
+
+        // Nonlinear image: a point witness survives even when the computed
+        // enclosure is wider than the exact reachable set.
+        const IteratedMap quadratic({next(x) = x * x});
+        DiscreteTimeEvolver<ValidatedTag> nonlinear(quadratic);
+        nonlinear.configuration().set_enable_subdivisions(true);
+        nonlinear.configuration().set_enable_premature_termination(false);
+        nonlinear.configuration().set_maximum_enclosure_radius(0.75);
+        const auto nonlinear_lower = nonlinear.orbit(
+            nonlinear.enclosure(ExactBoxType({{-1.0_x, 1.0_x}})),
+            Integer(1), Semantics::LOWER);
+        ARIADNE_TESTING_EXPECT_EQUAL(nonlinear_lower.final().size(), 1u);
+        const auto quadratic_bounds =
+            nonlinear_lower.final()[0u].euclidean_set().bounding_box()[0u];
+        ARIADNE_TESTING_PROVE(quadratic_bounds.lower_bound().raw().get_d() <= 0.0);
+        ARIADNE_TESTING_PROVE(quadratic_bounds.upper_bound().raw().get_d() >= 0.0);
+    }
+
     Void test_evolve() {
         typedef DoublePrecision PR;
         DoublePrecision pr;
@@ -198,6 +240,7 @@ class TestDiscreteTimeEvolver : public Ariadne::Testing::ContextFixture {
 int main(int argc, const char* argv[]) {
     ARIADNE_TESTING_SUITE("test_discrete_time_evolver");
     ARIADNE_TESTING_ADD_TEST(TestDiscreteTimeEvolver, test_stopping_policies);
+    ARIADNE_TESTING_ADD_TEST(TestDiscreteTimeEvolver, test_lower_witness_and_upper_subdivision);
     ARIADNE_TESTING_ADD_TEST(TestDiscreteTimeEvolver, test_evolve);
     ARIADNE_TESTING_ADD_TEST(TestDiscreteTimeEvolver, test_subdivide);
     return Ariadne::Testing::run_logging_suite(ariadne_test_suite, argc, argv);

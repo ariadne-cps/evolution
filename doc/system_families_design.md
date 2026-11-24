@@ -575,3 +575,52 @@ unresolved timed/parameterized first-entry crossings, even though
 the no-event nonautonomous case is now supported. The v6.61 CI
 detected this test failure; v6.62 must pass the functional CI
 on its own commit before acceptance. Format remains nonblocking.
+
+## v6.63 — Certified first boundary witness for a unique timed/parameterised URGENT crossing
+
+The clocked/parameterized equation LOWER path now tests a narrow
+constructive first-crossing certificate before its fallback to
+no-blocker propagation or conservative termination. It requires:
+
+1. Exactly one validated reach tube for the step, preserving a
+   correlated parameter/time chart (no unstructured box image).
+2. A source URGENT guard strictly negative over the entire initial
+   enclosure and strictly positive over the entire *hypothetical
+   uninterrupted* endpoint enclosure.
+3. Every competing blocking event excluded from the entire tube
+   (INVARIANT <= 0; other URGENT/IMPACT/PROGRESS strictly negative).
+
+Continuity of the deterministic flow then ensures that every real
+source trajectory has a first boundary crossing within the step,
+and no competing blocker invalidates it. The guard-equality slice
+of the validated tube contains at least one genuinely reached
+boundary point. This is a valid LOWER witness, even though the
+slice remains an outer enclosure; there is no INNER calculation or
+numerical distance evaluation. The reset is applied to that
+witness-bearing slice, and the successor retains its event history
+and correlated time/parameter functions. The code does not infer
+a precise crossing time or enumerate merely possible UPPER jumps.
+
+A failure to prove the strict sign change or exclude competing
+blocking events falls back to the existing conservative stopping
+policy. An optional PERMISSIVE guard remains optional and may be
+ignored. The old autonomous geometry-aware crossing path and
+all UPPER candidate generation remain unchanged.
+
+New dedicated tests prove an actual URGENT crossing for a
+time-dependent equation `x'=1+t` and a fixed-parameter equation
+`x'=p`, for both flat/tree backends. The initial condition is
+`x=0`, the certified guard is `x>=1/64`, and the reset is
+`x'=x+1`: each final LOWER enclosure must contain the exact
+state `1+1/64`, with the expected event history and binding.
+A second negative regression uses competing URGENT boundaries
+`x>=1/128` and `x>=1/64` and requires that LOWER never
+invent a target final state from conflicting tube intersections.
+
+**Matrix status:** hybrid continuous / equation / Validated LOWER
+remains ◐ because cases without strict endpoint sign change,
+tangent IMPACT, concurrent crossings and other complex guard
+geometries still terminate conservatively. The additional
+crossing case has been implemented but is not accepted until
+all functional CI passes on this checkpoint. No unrelated matrix
+cell or tested numerical semantics have been weakened.

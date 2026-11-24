@@ -210,6 +210,79 @@ class TestHybridConstantParameters : public Testing::ContextFixture {
             }
     }
 
+    void test_lower_certified_crossing_during_clocked_step() {
+        // Both explicit clock and fixed-parameter modes admit a real
+        // URGENT first crossing when the whole source is before the
+        // boundary and every uninterrupted endpoint is beyond it.
+        for (bool timed: {false, true})
+            for (bool tree: {false, true}) {
+                const auto parameter_box = timed ? RealVariablesBox() : RealVariablesBox({2 <= p <= 3});
+                const DiscreteEvent crossing("crossing");
+                ContinuousTimeHybridAutomaton system;
+                if (timed) {
+                    system.new_mode(source, OrdinaryDifferentialAlgebraicEquation(
+                        {dot(x) = 1 + t}, parameter_box, t));
+                    system.new_mode(target, OrdinaryDifferentialAlgebraicEquation(
+                        {dot(x) = 0}, parameter_box, t));
+                } else {
+                    system.new_mode(source, OrdinaryDifferentialAlgebraicEquation(
+                        {dot(x) = p}, parameter_box));
+                    system.new_mode(target, OrdinaryDifferentialAlgebraicEquation(
+                        {dot(x) = 0}, parameter_box));
+                }
+                system.new_transition(source, crossing, target,
+                    {next(x) = x + 1}, x >= Real(1 / 64_q), EventKind::URGENT);
+                HybridContinuousTimeEvolver<ValidatedTag> evolver(system);
+                configure(evolver, tree);
+                const auto orbit = evolver.orbit(initial(evolver), HybridTime(0.125_x, 1),
+                                                Semantics::LOWER);
+                ARIADNE_TESTING_REQUIRE(orbit.final().size() == 1u);
+                const auto& final = orbit.final()[0u];
+                ARIADNE_TESTING_EXPECT_EQUAL(final.location(), target);
+                ARIADNE_TESTING_REQUIRE(final.previous_events().size() == 1u);
+                ARIADNE_TESTING_EXPECT_EQUAL(final.previous_events()[0u], crossing);
+                // This numerical value is the exact reset of the true
+                // first boundary state x=1/64, independent of p and t.
+                ARIADNE_TESTING_PROVE(subset(
+                    ExactIntervalType(1.015625_x, 1.015625_x),
+                    cast_exact_interval(final.state_function()[0u].range())));
+                if (!timed)
+                    binding(final);
+            }
+    }
+
+    void test_lower_crossing_with_competing_urgent_guard() {
+        // Two distinct blocking events can become active during one
+        // validated step. Neither candidate may be published under
+        // LOWER without excluding the other first crossing.
+        for (bool timed: {false, true}) {
+            const auto parameter_box = timed ? RealVariablesBox() : RealVariablesBox({2 <= p <= 3});
+            ContinuousTimeHybridAutomaton system;
+            if (timed) {
+                system.new_mode(source, OrdinaryDifferentialAlgebraicEquation(
+                    {dot(x) = 1 + t}, parameter_box, t));
+                system.new_mode(target, OrdinaryDifferentialAlgebraicEquation(
+                    {dot(x) = 0}, parameter_box, t));
+            } else {
+                system.new_mode(source, OrdinaryDifferentialAlgebraicEquation(
+                    {dot(x) = p}, parameter_box));
+                system.new_mode(target, OrdinaryDifferentialAlgebraicEquation(
+                    {dot(x) = 0}, parameter_box));
+            }
+            system.new_transition(source, DiscreteEvent("later"), target,
+                {next(x) = x + 1}, x >= Real(1 / 64_q), EventKind::URGENT);
+            system.new_transition(source, DiscreteEvent("earlier"), target,
+                {next(x) = x + 2}, x >= Real(1 / 128_q), EventKind::URGENT);
+            HybridContinuousTimeEvolver<ValidatedTag> evolver(system);
+            configure(evolver, false);
+            const auto lower = evolver.orbit(initial(evolver), HybridTime(0.125_x, 1),
+                                            Semantics::LOWER);
+            ARIADNE_TESTING_EXPECT_EQUAL(lower.final().size(), 0u);
+            // An UPPER branch may still over-approximate both candidates;
+            // LOWER must not choose one by an uncertified tube filter.
+        }
+    }
+
     void test_inclusion_flow_and_method_gates() {
         for (bool timed: {false, true})
             for (bool boxes: {false, true})
@@ -384,6 +457,8 @@ int main(int argc, char** argv) {
     ARIADNE_TESTING_ADD_TEST(TestHybridConstantParameters, test_equation_flow_and_continuation);
     ARIADNE_TESTING_ADD_TEST(TestHybridConstantParameters, test_lower_timed_equation_without_parameters);
     ARIADNE_TESTING_ADD_TEST(TestHybridConstantParameters, test_lower_clocked_event_witnesses);
+    ARIADNE_TESTING_ADD_TEST(TestHybridConstantParameters, test_lower_certified_crossing_during_clocked_step);
+    ARIADNE_TESTING_ADD_TEST(TestHybridConstantParameters, test_lower_crossing_with_competing_urgent_guard);
     ARIADNE_TESTING_ADD_TEST(TestHybridConstantParameters, test_inclusion_flow_and_method_gates);
     ARIADNE_TESTING_ADD_TEST(TestHybridConstantParameters, test_immediate_parameter_guard_reset_and_auxiliary);
     ARIADNE_TESTING_ADD_TEST(TestHybridConstantParameters, test_timed_parameter_guard_and_reset);

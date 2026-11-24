@@ -104,7 +104,9 @@ auto DiscreteTimeEvolver<ApproximateTag>::orbit(
         for (Integer step = 0; step < stop; ++step) {
             state = Point<FloatDPApproximation>(
                 evaluate(system().update_function(), Vector<FloatDPApproximation>(state)));
-            const FloatDP next_tick = tick + FloatDP(1, dp);
+            // Compute the tick from the exact integer index: raw FloatDP
+            // addition yields Bounds<FloatDP>, not a FloatDP.
+            const FloatDP next_tick(step + Integer(1), near, dp);
             if (next_tick == tick)
                 throw std::overflow_error("Discrete approximate tick exceeds floating-point time precision");
             tick = next_tick;

@@ -874,3 +874,19 @@ capability promotion. Previous v6.68 through v6.71 commits did not
 pass the complete five-workflow gate. Acceptance requires successful
 Ubuntu, macOS, Windows, Coverage and Sanitizers on this exact commit.
 Format stays nonblocking.
+
+## v6.73 — Approximate discrete tick conversion compile fix
+
+The new `DiscreteTimeEvolver<ApproximateTag>` used
+`tick + FloatDP(1, dp)` and attempted to assign the result to a
+`FloatDP`. Ariadne's raw `FloatDP` addition intentionally yields
+`Bounds<FloatDP>`, so compilation fails under Clang/GCC with this
+conversion. The discrete time label is now computed directly from the
+exact integer loop index via `FloatDP(step + Integer(1), near, dp)`,
+avoiding interval-to-scalar narrowing and cumulative rounding drift.
+The previous equality guard still prevents unrepresentable consecutive
+floating-point tick labels. State propagation, auxiliary recomputation,
+initial sampling, orbit tests, CMake test registration, and the
+unified evolver terminology remain untouched. This correction must
+pass the five functional workflows on its own commit; it is not yet
+considered validated.

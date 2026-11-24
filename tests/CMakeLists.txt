@@ -39,6 +39,7 @@ set(UNIT_TESTS
     test_enclosure_recombination
     test_enclosure_precision
     test_discrete_time_evolver
+    test_discrete_time_approximate_evolver
     test_continuous_time_evolver
     test_continuous_time_evolver_header
     test_continuous_time_approximate_evolver

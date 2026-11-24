@@ -5,7 +5,7 @@ This is the implementation roadmap adopted in design v6.20 on 22 November
 
 | Native family | Validated evolution | Numerical simulation | Current status |
 | --- | --- | --- | --- |
-| Discrete time (`DifferenceAlgebraicEquation`) | `DiscreteTimeEvolver<ValidatedTag>` | `DiscreteTimeEvolver<ApproximateTag>` | Validated exists; approximate planned |
+| Discrete time (`DifferenceAlgebraicEquation`) | `DiscreteTimeEvolver<ValidatedTag>` | `DiscreteTimeEvolver<ApproximateTag>` | Validated UPPER/LOWER and approximate point trajectories implemented |
 | Continuous time (ODAE / ODAI) | `ContinuousTimeEvolver<ValidatedTag>` | `ContinuousTimeEvolver<ApproximateTag>` | Validated accepts both with explicit time; approximate accepts ODAE and structured ODAI with explicit time, fixed parameters and an explicit input policy |
 | Hybrid discrete time | `HybridDiscreteTimeEvolver<ValidatedTag>` | `HybridDiscreteTimeEvolver<ApproximateTag>` | Validated deterministic UPPER public; bounded-input inclusion progression and state-only transitions to deterministic modes supported; inclusion targets/auxiliaries, LOWER and approximate pending |
 | Hybrid continuous time | `HybridContinuousTimeEvolver<ValidatedTag>` | `HybridContinuousTimeEvolver<ApproximateTag>` | ODAE/ODAI timed UPPER evolution; approximate ODAE/structured ODAI supports external time, fixed parameters and explicit input policies; further contact handling planned |
@@ -815,3 +815,30 @@ The previously green v6.67 is still the validated baseline. v6.68 and
 v6.69 failed compilation; this correction is only accepted after the
 five functional workflows pass on the exact new SHA. Format remains
 nonblocking.
+
+## v6.71 — Approximate deterministic discrete-time equations
+
+Implements `DiscreteTimeEvolver<ApproximateTag>` for the native
+`DifferenceAlgebraicEquation`. It exposes only point-trajectory
+`orbit(points, integer_horizon)`, plus an overload taking an
+initial box and sampling it once, via the existing
+paving-independent `sample_vector_field_initial_points` helper.
+The default is exactly one initial midpoint; optional
+`SamplingCounts` chooses the number of deterministic bisection
+subintervals on each named, nonflat axis. Explicit labelled points
+are reordered by state variables and never resampled. The result
+contains the initial sample and a point for every integer tick,
+with output auxiliary variables recomputed at each point.
+Empty initial lists, zero/negative horizons, missing labels,
+incompatible box dimensions, and flat-coordinate sampling have
+dedicated regression checks. The new specialization is exposed
+through the public umbrella header and `EvolutionTraits` and
+does not accept `Semantics::UPPER` or `Semantics::LOWER`.
+
+This introduces no paving dependency, new numerical approximation
+semantics, extra test-specific compiler options, or Windows
+timeout override. Hybrid-discrete and inclusion Approximate
+remain separate future increments. The implementation is
+published as a candidate and requires all five functional CI
+workflows on the exact commit before its capability is marked
+validated. Format remains nonblocking.

@@ -76,8 +76,10 @@ static_assert(std::is_constructible_v<ApproximateContinuous, const OrdinaryDiffe
 static_assert(HasEvolutionTraits<ValidatedTag, DifferenceAlgebraicEquation>);
 static_assert(std::is_same_v<DiscreteTimeEvolver<ValidatedTag>::SystemType,
                              DifferenceAlgebraicEquation>);
-static_assert(!HasEvolutionTraits<ApproximateTag, DifferenceAlgebraicEquation>);
-static_assert(!CompleteType<DiscreteTimeEvolver<ApproximateTag>>);
+static_assert(HasEvolutionTraits<ApproximateTag, DifferenceAlgebraicEquation>);
+static_assert(CompleteType<DiscreteTimeEvolver<ApproximateTag>>);
+static_assert(HasSampledOrbit<DiscreteTimeEvolver<ApproximateTag>>);
+static_assert(!HasSetSemantics<DiscreteTimeEvolver<ApproximateTag>>);
 static_assert(!CompleteType<ContinuousTimeEvolver<ExactTag>>);
 static_assert(!std::is_constructible_v<ApproximateContinuous, const OrdinaryDifferentialAlgebraicInclusion&>);
 static_assert(!std::is_constructible_v<ApproximateContinuous, const DifferenceAlgebraicEquation&>);

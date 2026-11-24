@@ -67,6 +67,11 @@ template<class P, class SYS>
 struct EvolutionTraits;
 
 template<>
+struct EvolutionTraits<ApproximateTag, DifferenceAlgebraicEquation> {
+    using EvolverType = DiscreteTimeEvolver<ApproximateTag>;
+};
+
+template<>
 struct EvolutionTraits<ValidatedTag, DifferenceAlgebraicEquation> {
     using EvolverType = DiscreteTimeEvolver<ValidatedTag>;
     using EnclosureType = LabelledEnclosure;

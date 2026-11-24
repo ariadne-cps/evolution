@@ -33,6 +33,7 @@
 #include "evolution/continuous_dynamics.hpp"
 #include "evolution/continuous_time_approximate_evolver.hpp"
 #include "evolution/continuous_time_evolver.hpp"
+#include "evolution/discrete_time_approximate_evolver.hpp"
 #include "evolution/discrete_time_evolver.hpp"
 #include "evolution/enclosure.hpp"
 #include "evolution/enclosure_augmented_paving.hpp"

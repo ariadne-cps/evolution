@@ -989,3 +989,18 @@ unchanged. The dedicated test targets remain responsible for
 assertions; no tests, CMake policies or CI checks have been weakened.
 This change is not considered validated before its five functional
 GitHub workflow results are successful. Format is nonblocking.
+
+## v6.79 — Repair distinct validated/approximate time-aware test objects
+
+The Debug build of `test_ordinary_dynamics_contract.cpp` reported two
+different `ContinuousTimeEvolver` specializations declared with the
+same local identifier `timed_evolver` in one scope. The resulting
+redeclaration made the approximate `step_size()` assertion resolve
+against `ContinuousTimeEvolver<ValidatedTag>`, which has no such
+configuration method. The local objects are renamed to
+`validated_timed_continuous_evolver` and
+`approximate_timed_continuous_evolver`; the original assertions
+and their respective numerical capabilities remain unchanged.
+This is a compilation repair, not a relaxation of coverage or
+a change in runtime semantics. CI must validate the exact resulting
+commit on all five functional workflows. Format remains nonblocking.

@@ -64,8 +64,8 @@ class TestOrdinaryDynamicsContract : public Ariadne::Testing::ContextFixture {
         ARIADNE_TESTING_EXPECT_EQUAL(timed.dimension(), 1u);
         ARIADNE_TESTING_EXPECT_EQUAL(timed.function().argument_size(), 2u);
         ARIADNE_TESTING_EXPECT_EQUAL(parameterised.function().argument_size(), 2u);
-        ContinuousTimeEvolver<ValidatedTag> timed_evolver(timed, integrator);
-        ARIADNE_TESTING_PROVE(timed_evolver.system().has_explicit_time());
+        ContinuousTimeEvolver<ValidatedTag> validated_timed_continuous_evolver(timed, integrator);
+        ARIADNE_TESTING_PROVE(validated_timed_continuous_evolver.system().has_explicit_time());
         ARIADNE_TESTING_EXPECT_EQUAL(timed.auxiliary_space().size(), 0u);
         // Time-aware auxiliary outputs use the separate clock argument.
         RealVariable output("output");
@@ -84,8 +84,8 @@ class TestOrdinaryDynamicsContract : public Ariadne::Testing::ContextFixture {
         PreconditionedGradedTaylorSeriesIntegrator preconditioned(step_maximum_error = 1e-5);
         ARIADNE_TESTING_EXPECT_THROWS(std::invalid_argument,
                                       ContinuousTimeEvolver<ValidatedTag>(parameterised, preconditioned));
-        ContinuousTimeEvolver<ApproximateTag> timed_evolver(timed);
-        ARIADNE_TESTING_PROVE(timed_evolver.configuration().step_size().raw().get_d() > 0);
+        ContinuousTimeEvolver<ApproximateTag> approximate_timed_continuous_evolver(timed);
+        ARIADNE_TESTING_PROVE(approximate_timed_continuous_evolver.configuration().step_size().raw().get_d() > 0);
         ARIADNE_TESTING_EXPECT_THROWS(std::invalid_argument, (void)ContinuousTimeEvolver<ApproximateTag>(parameterised));
     }
 

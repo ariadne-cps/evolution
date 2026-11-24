@@ -17,6 +17,7 @@ set(UNIT_TESTS
     test_hybrid_evolution_tree
     test_hybrid_step_contracts
     test_hybrid_discrete_time_step_planner
+    test_hybrid_discrete_time_step_image
     test_hybrid_crossing
     test_hybrid_inclusions
     test_hybrid_inclusion_impacts

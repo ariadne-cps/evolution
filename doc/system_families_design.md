@@ -171,3 +171,36 @@ Tests verify empty event sets, all urgent guard truth values, overlapping
 permissive advancement and reset, multiple simultaneous events, uncertain
 progression, blocked progression and missing source locations. All existing
 continuous evolution kernels are unchanged. Format remains deferred.
+
+## Reused deterministic discrete hybrid image kernel (v6.40)
+
+`HybridDiscreteTimeStepImage::apply` is the first numerical step adapter for
+one branch returned by the existing integer-time planner. It uses
+`Enclosure::apply_discrete_time_map_step` for deterministic progression,
+`HybridEnclosure::apply_reset` for event-labelled transitions, and
+System's `make_reset_function` for symbolic reset composition. Transition
+resets are ordered by the *target state space* rather than the order of
+assignments in user input, preserving the target's coordinate layout.
+
+The adapter handles immutable, independently declared
+`DifferenceAlgebraicEquation` source and destination modes. An event reset
+consumes one tick and preserves its event provenance; the map is not applied
+before a reset. Progression applies the equation map and advances the tick
+through the existing enclosure primitive. The incoming source enclosure
+remains unmodified; results are independent branches. The planner continues
+to determine branch possibilities from pre-step evidence and the adapter
+must not be mistaken for a numerical proof of those predicates. Applying
+the branch image to the full source enclosure is suitable only as an
+UPPER over-approximation until source restrictions are computed.
+
+Inclusion source and inclusion destination modes are **explicitly rejected**
+by this first adapter: their set-valued images and input-dependent auxiliary
+correlations require dedicated rigor. No nominal input is sampled and no
+claim of LOWER certification is made. No scheduling, work queues, numerical
+integration engine, Orbit type or existing continuous evolver is changed.
+
+Tests exercise progression/reset at exactly one tick, independent event
+provenance and preservation of the source enclosure, coordinate order for
+reversed reset assignments, and explicit rejection of unsupported inclusion
+branches. The Evolution CI must validate this adapter before it is used by
+a high-level discrete hybrid evolver. Format remains deferred.

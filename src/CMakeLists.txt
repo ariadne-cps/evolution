@@ -6,6 +6,7 @@ add_library(EVOLUTION_SRC OBJECT
     iterated_map_evolver.cpp
     vector_field_evolver.cpp
     vector_field_simulator.cpp
+    simulator_paving_sampling.cpp
     first_order_pde.cpp
     hybrid_orbit.cpp
     hybrid_enclosure.cpp

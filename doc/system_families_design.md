@@ -890,3 +890,22 @@ initial sampling, orbit tests, CMake test registration, and the
 unified evolver terminology remain untouched. This correction must
 pass the five functional workflows on its own commit; it is not yet
 considered validated.
+
+## v6.74 — Restore distinct evolver variables in installed C++ tutorial
+
+The repository-wide terminology rename replaced two previously distinct
+local identifiers in `tutorial/tutorial_evolution.cpp` with the same
+`evolver` variable name in a single `main()` scope. It consequently
+made the installed tutorial invalid C++: the approximate continuous
+evolver and validated discrete evolver must remain distinct types and
+objects. Their local identifiers are now `approximate_evolver` and
+`discrete_evolver`, with each configuration and orbit call using the
+corresponding object. Model definitions, result assertions, time
+budgets, and evolution algorithms are untouched. This restores the
+original distinction rather than removing tutorial checks.
+
+On v6.73 the installed C++ tutorial step failed for observed
+Ubuntu Release jobs; other CI jobs also failed and require their
+own diagnosis. This fix does not claim to resolve those independent
+test-compile issues. Only five functional workflow successes on
+this exact new SHA can validate the checkpoint.

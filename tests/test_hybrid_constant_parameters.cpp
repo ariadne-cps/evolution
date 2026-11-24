@@ -134,31 +134,80 @@ class TestHybridConstantParameters : public Testing::ContextFixture {
         }
     }
 
-    void test_lower_clocked_guard_rejected_without_false_witness() {
-        for (bool timed: {false, true}) {
-            ContinuousTimeHybridAutomaton system;
-            const auto parameters = timed ? RealVariablesBox() : RealVariablesBox({2 <= p <= 3});
-            if (timed) {
-                system.new_mode(source, OrdinaryDifferentialAlgebraicEquation(
-                    {dot(x) = 1 + t}, parameters, t));
-                system.new_mode(target, OrdinaryDifferentialAlgebraicEquation(
-                    {dot(x) = 0}, parameters, t));
-            } else {
-                system.new_mode(source, OrdinaryDifferentialAlgebraicEquation(
-                    {dot(x) = p}, parameters));
-                system.new_mode(target, OrdinaryDifferentialAlgebraicEquation(
-                    {dot(x) = 0}, parameters));
+    void test_lower_clocked_event_witnesses() {
+        for (bool timed: {false, true})
+            for (bool tree: {false, true}) {
+                const RealVariablesBox parameters = timed ? RealVariablesBox() : RealVariablesBox({2 <= p <= 3});
+
+                // The guard is certainly excluded over the whole tube.
+                // LOWER must propagate one uninterrupted real witness.
+                ContinuousTimeHybridAutomaton excluded;
+                if (timed)
+                    excluded.new_mode(source, OrdinaryDifferentialAlgebraicEquation(
+                        {dot(x) = 0}, parameters, t));
+                else
+                    excluded.new_mode(source, OrdinaryDifferentialAlgebraicEquation(
+                        {dot(x) = 0}, parameters));
+                excluded.new_transition(source, DiscreteEvent("inactive"), source,
+                                        {next(x) = x}, x >= 2, EventKind::URGENT);
+                HybridContinuousTimeEvolver<ValidatedTag> safe(excluded);
+                configure(safe, tree);
+                const auto uninterrupted = safe.orbit(initial(safe), HybridTime(0.125_x, 1),
+                                                      Semantics::LOWER);
+                ARIADNE_TESTING_REQUIRE(uninterrupted.final().size() == 1u);
+                ARIADNE_TESTING_EXPECT_EQUAL(uninterrupted.final()[0u].location(), source);
+                ARIADNE_TESTING_EXPECT_EQUAL(uninterrupted.final()[0u].previous_events().size(), 0u);
+
+                // An URGENT guard certified over the whole initial set
+                // produces a genuine immediate reset under LOWER.
+                ContinuousTimeHybridAutomaton active;
+                if (timed) {
+                    active.new_mode(source, OrdinaryDifferentialAlgebraicEquation(
+                        {dot(x) = 0}, parameters, t));
+                    active.new_mode(target, OrdinaryDifferentialAlgebraicEquation(
+                        {dot(x) = 0}, parameters, t));
+                } else {
+                    active.new_mode(source, OrdinaryDifferentialAlgebraicEquation(
+                        {dot(x) = 0}, parameters));
+                    active.new_mode(target, OrdinaryDifferentialAlgebraicEquation(
+                        {dot(x) = 0}, parameters));
+                }
+                const DiscreteEvent jump("active");
+                active.new_transition(source, jump, target, {next(x) = x + 1},
+                                      x >= -1, EventKind::URGENT);
+                HybridContinuousTimeEvolver<ValidatedTag> taking(active);
+                configure(taking, tree);
+                const auto reset = taking.orbit(initial(taking), HybridTime(0.125_x, 1),
+                                                Semantics::LOWER);
+                ARIADNE_TESTING_REQUIRE(reset.final().size() == 1u);
+                ARIADNE_TESTING_EXPECT_EQUAL(reset.final()[0u].location(), target);
+                ARIADNE_TESTING_REQUIRE(reset.final()[0u].previous_events().size() == 1u);
+                ARIADNE_TESTING_EXPECT_EQUAL(reset.final()[0u].previous_events()[0u], jump);
+                ARIADNE_TESTING_PROVE(subset(ExactIntervalType(1, 1),
+                    cast_exact_interval(reset.final()[0u].state_function()[0u].range())));
+
+                // An unresolved initial guard may intersect an UPPER
+                // source, but it does not certify any LOWER reset.
+                ContinuousTimeHybridAutomaton unresolved;
+                if (timed) {
+                    unresolved.new_mode(source, OrdinaryDifferentialAlgebraicEquation(
+                        {dot(x) = 0}, parameters, t));
+                    unresolved.new_mode(target, OrdinaryDifferentialAlgebraicEquation(
+                        {dot(x) = 0}, parameters, t));
+                } else {
+                    unresolved.new_mode(source, OrdinaryDifferentialAlgebraicEquation(
+                        {dot(x) = 0}, parameters));
+                    unresolved.new_mode(target, OrdinaryDifferentialAlgebraicEquation(
+                        {dot(x) = 0}, parameters));
+                }
+                unresolved.new_transition(source, DiscreteEvent("boundary"), target,
+                                          {next(x) = x + 1}, x >= 0, EventKind::URGENT);
+                HybridContinuousTimeEvolver<ValidatedTag> uncertain(unresolved);
+                configure(uncertain, tree);
+                const auto stop = uncertain.orbit(initial(uncertain), HybridTime(0.125_x, 1),
+                                                 Semantics::LOWER);
+                ARIADNE_TESTING_EXPECT_EQUAL(stop.final().size(), 0u);
             }
-            system.new_transition(source, DiscreteEvent("choice"), target,
-                                  {next(x) = x}, x >= 0, EventKind::URGENT);
-            HybridContinuousTimeEvolver<ValidatedTag> evolver(system);
-            configure(evolver, false);
-            // An UPPER guard intersection alone does not certify a
-            // reachable reset on the clocked/parameterized path.
-            ARIADNE_TESTING_EXPECT_THROWS(std::invalid_argument,
-                evolver.orbit(initial(evolver), HybridTime(0.125_x, 1),
-                             Semantics::LOWER));
-        }
     }
 
     void test_inclusion_flow_and_method_gates() {
@@ -334,7 +383,7 @@ int main(int argc, char** argv) {
     ARIADNE_TESTING_SUITE("test_hybrid_constant_parameters");
     ARIADNE_TESTING_ADD_TEST(TestHybridConstantParameters, test_equation_flow_and_continuation);
     ARIADNE_TESTING_ADD_TEST(TestHybridConstantParameters, test_lower_timed_equation_without_parameters);
-    ARIADNE_TESTING_ADD_TEST(TestHybridConstantParameters, test_lower_clocked_guard_rejected_without_false_witness);
+    ARIADNE_TESTING_ADD_TEST(TestHybridConstantParameters, test_lower_clocked_event_witnesses);
     ARIADNE_TESTING_ADD_TEST(TestHybridConstantParameters, test_inclusion_flow_and_method_gates);
     ARIADNE_TESTING_ADD_TEST(TestHybridConstantParameters, test_immediate_parameter_guard_reset_and_auxiliary);
     ARIADNE_TESTING_ADD_TEST(TestHybridConstantParameters, test_timed_parameter_guard_and_reset);

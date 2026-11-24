@@ -509,3 +509,44 @@ LOWER cell **remains partial** until guarded timed and
 parameterised branches can be handled without spurious witnesses.
 Format remains outside the acceptance gate. The v6.60 CI result
 must be checked on its own commit.
+
+## v6.61 — Certified no-crossing and immediate-reset LOWER paths with hybrid events
+
+Previously, timed and constant-parameter hybrid equation modes with any
+event were rejected under LOWER, despite the autonomous equation path
+already supporting whole-source immediate guards. This iteration adds
+a **witness-preserving guarded subset**.
+
+Initial event processing uses the existing certified
+`classify_initial_guard` and `permits_initial_reset`. A fully
+activated guard may publish an immediate LOWER reset; an unresolved
+blocking guard prevents flow continuation. Invariant conditions must
+hold throughout the original initial source. During each clocked
+equation integration step, every validated reach tube is checked
+against all blocking conditions via `HybridEnclosure::range_of`,
+preserving dependencies on state, time and fixed parameters:
+INVARIANT requires upper bound <= 0; URGENT, PROGRESS and IMPACT
+require a strictly negative guard upper bound. If a proof is
+unavailable, LOWER terminates that branch without creating a
+potentially spurious reset or restricted flow enclosure.
+PERMISSIVE events can be ignored as a valid nondeterministic
+choice; a possible UPPER candidate is never advertised as LOWER.
+
+The new regression covers both flat and tree backends, with
+time-explicit or parameterized dynamics: excluded URGENT guards
+permit LOWER progress, full-source URGENT guards cause a genuine
+immediate reset and event history, and unresolved initial
+activation produces no fabricated LOWER final state. Existing
+event-free clocked and parameterized tests remain unchanged, as
+do the autonomous geometry-aware crossing tests. System's
+DifferenceAlgebraicEquation API is unaffected.
+
+This does **not** establish completeness of LOWER for all
+continuous-time hybrid equations: a blocking guard that becomes
+active during a step currently causes conservative termination
+rather than a certified timed reset. Providing a first-entry
+certificate in the enlarged state/time/parameter chart is the
+remaining mathematical work. Thus the capacity matrix cell
+"Hybrid continuous / equation / Validated LOWER" stays ◐, now
+covering more event-bearing cases, pending full functional CI
+on the exact v6.61 checkpoint. Format is non-blocking.

@@ -44,12 +44,12 @@ int main() {
     List<DottedRealAssignment> dynamics;
     dynamics.append(dot(x) = -x);
     OrdinaryDifferentialAlgebraicEquation decay(dynamics);
-    ContinuousTimeEvolver<ApproximateTag> approximate_evolver(decay);
-    approximate_evolver.configuration().set_step_size(0.05);
-    approximate_evolver.configuration().set_sampling_count(x, 1u);
+    ContinuousTimeEvolver<ApproximateTag> approximate_continuous_evolver(decay);
+    approximate_continuous_evolver.configuration().set_step_size(0.05);
+    approximate_continuous_evolver.configuration().set_sampling_count(x, 1u);
 
     RealExpressionBoundedConstraintSet initial({0.9_dec <= x <= 1.1_dec});
-    auto simulated = approximate_evolver.orbit(initial, 0.1_dec);
+    auto simulated = approximate_continuous_evolver.orbit(initial, 0.1_dec);
     const auto ncurves = simulated.curves().size();
     if (ncurves != 1u) {
         throw std::runtime_error("Expected one short continuous trajectory");
@@ -80,9 +80,9 @@ int main() {
     List<PrimedRealAssignment> updates;
     updates.append(next(x) = 0.5_dec * x);
     DifferenceAlgebraicEquation contraction(updates);
-    DiscreteTimeEvolver<ValidatedTag> discrete_evolver(contraction);
-    discrete_evolver.configuration().set_maximum_enclosure_radius(1.0);
-    auto discrete = discrete_evolver.orbit(initial, DifferenceAlgebraicEquation::TimeType(1), Semantics::UPPER);
+    DiscreteTimeEvolver<ValidatedTag> validated_discrete_evolver(contraction);
+    validated_discrete_evolver.configuration().set_maximum_enclosure_radius(1.0);
+    auto discrete = validated_discrete_evolver.orbit(initial, DifferenceAlgebraicEquation::TimeType(1), Semantics::UPPER);
     std::cout << "Discrete evolution: " << discrete.final().size()
               << " final enclosure(s)\n";
 

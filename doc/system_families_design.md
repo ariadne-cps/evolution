@@ -909,3 +909,14 @@ Ubuntu Release jobs; other CI jobs also failed and require their
 own diagnosis. This fix does not claim to resolve those independent
 test-compile issues. Only five functional workflow successes on
 this exact new SHA can validate the checkpoint.
+
+## v6.75 — Fully descriptive tutorial evolver identifiers
+
+The installed C++ tutorial now uses `approximate_continuous_evolver`
+for `ContinuousTimeEvolver<ApproximateTag>` and
+`validated_discrete_evolver` for `DiscreteTimeEvolver<ValidatedTag>`.
+All corresponding configuration and orbit calls use the renamed
+objects. This is an identifier-only change: no model, simulation,
+validation, sampling, assertion or CMake behavior was changed.
+Acceptance still requires passing the five functional CI workflows
+on the new commit; Format remains nonblocking.

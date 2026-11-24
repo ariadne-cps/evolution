@@ -428,3 +428,32 @@ sets lack a certificate under this finite-point strategy. All other
 cells are unchanged. Regression tests for known feasible and
 infeasible constraints are added; the continuous and hybrid
 discrete suites must also remain green. Format stays excluded.
+
+## v6.58 — LOWER admission parity with ordinary continuous time
+
+After comparing the ordinary continuous and discrete `orbit`
+entry points, the additional v6.57 finite-point witness
+admission gate was removed from the discrete path. Both
+`ValidatedTag` ordinary equation evolvers use the same
+initial-source nonemptiness assumptions; their numerical
+UPPER enclosures preserve an actual witness under LOWER as
+long as a witness exists initially and each published
+LOWER branch retains it. The discrete path explicitly
+never subdivides under LOWER; the analytic witness
+regressions stay in place. A new regression protects
+constrained but feasible sources that the finite-point
+search would have rejected.
+
+**Capacity matrix:** discrete ordinary equation / Validated
+LOWER is now marked *implemented*, on equal footing with
+continuous ordinary equation / Validated LOWER, not a
+stronger separately certified paradigm. This does not
+turn LOWER into INNER or UPPER into OUTER.
+
+The continuous `_append_initial_set` preprocessing has
+an unconditional size-based split, including for LOWER.
+This existing divergence from witness-preserving branching
+has been flagged for a focused separate review and must
+not be hidden by an extra admission gate on discrete
+evolution. All existing continuous and hybrid suites
+remain mandatory in CI.

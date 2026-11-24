@@ -28,8 +28,6 @@
 
 #include "evolution/discrete_time_evolver.hpp"
 
-#include <stdexcept>
-
 #include "algebra/vector.hpp"
 #include "evolution/enclosure.hpp"
 #include "evolution/orbit.hpp"
@@ -48,55 +46,6 @@
 namespace Ariadne {
 
 namespace {
-
-// Constructive sufficient witness certificate for a parameterised
-// enclosure. An empty or unproven source must never be published under
-// LOWER merely because its emptiness cannot be established.
-// A point in the reduced parameter domain is feasible if validated
-// evaluations of ALL constraint models lie entirely inside their bounds.
-// This test is deliberately incomplete: failure means "no certificate",
-// not "the constrained source is empty".
-Bool has_certified_initial_witness(const Enclosure& initial) {
-    const ExactBoxType domain = initial.reduced_domain();
-    if (definitely(domain.is_empty()))
-        return false;
-    if (initial.number_of_constraints() == 0u)
-        return true;
-
-    const auto certifies = [&](const ExactBoxType& point) {
-        for (SizeType i = 0u; i != initial.number_of_constraints(); ++i) {
-            const auto& constraint = initial.constraint(i);
-            const UpperIntervalType image = point.dimension() == 0u
-                ? constraint.function().range()
-                : Ariadne::apply(constraint.function(), point);
-            if (!definitely(Ariadne::subset(image, constraint.bounds())))
-                return false;
-        }
-        return true;
-    };
-    if (domain.dimension() == 0u)
-        return certifies(domain);
-    if (!definitely(domain.is_bounded()))
-        return false;
-
-    const auto midpoint = domain.midpoint();
-    ExactBoxType point(domain.dimension());
-    for (SizeType i = 0u; i != domain.dimension(); ++i)
-        point[i] = ExactIntervalType(midpoint[i], midpoint[i]);
-    if (certifies(point))
-        return true;
-
-    // Two further finite candidates are useful when a satisfiable
-    // constraint excludes the centre. A failed search remains
-    // conservative; it never claims that the initial set is empty.
-    for (SizeType i = 0u; i != domain.dimension(); ++i)
-        point[i] = ExactIntervalType(domain[i].lower_bound(), domain[i].lower_bound());
-    if (certifies(point))
-        return true;
-    for (SizeType i = 0u; i != domain.dimension(); ++i)
-        point[i] = ExactIntervalType(domain[i].upper_bound(), domain[i].upper_bound());
-    return certifies(point);
-}
 
 template<class ES>
 List<ES> subdivide(const ES& enclosure) {
@@ -135,13 +84,6 @@ Orbit<DiscreteTimeEvolver<ValidatedTag>::EnclosureType>
               const TerminationType& termination,
               Semantics semantics) const {
     ARIADNE_PRECONDITION(this->system().state_auxiliary_space() == initial_set.state_auxiliary_space())
-    // LOWER needs a reachable witness in every published enclosure.
-    // Without a certified initial witness, even the zero-horizon
-    // initial enclosure could violate this contract. UPPER is unaffected.
-    if (semantics == Semantics::LOWER &&
-        !has_certified_initial_witness(initial_set.euclidean_set()))
-        throw std::invalid_argument(
-            "Discrete-time LOWER requires a certified nonempty initial parameter witness");
     Orbit<EnclosureType> orbit(initial_set);
     EnclosureListType final;
     EnclosureListType reachable;

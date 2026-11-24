@@ -147,3 +147,49 @@ points provides a proof. This checkpoint strengthens the **soundness
 contract for accepted inputs**, not completeness of admissible inputs.
 No extra numerical or paradigm capability is claimed. The exact new
 commit's functional CI must pass before this version is accepted.
+
+## v6.58 — Align LOWER admission with ordinary continuous evolution
+
+The v6.57 `has_certified_initial_witness` gate and its finite
+midpoint/endpoints search have been **withdrawn** from ordinary
+discrete evolution. The ordinary continuous validated `orbit`
+does not demand this extra witness search at the input boundary,
+and imposing it only on discrete deterministic equations rejected
+feasible constrained sets unsupported by the search strategy.
+Both ordinary temporal families now retain the same initial-source
+admission assumptions rather than requiring a stronger special
+certificate in discrete time.
+
+A LOWER evolution from a genuinely nonempty initial source retains
+a reachable witness along a sound deterministic unsplit map image.
+This invariant needs no INNER image, distance calculation, or
+discrete-only point search. The source's nonemptiness remains a
+caller/model precondition analogous to ordinary continuous LOWER;
+no claim is made that arbitrary empty or indeterminate constrained
+sources are automatically certified.
+
+The regression introduced in v6.57 has been replaced by a direct
+non-overrestriction test: the feasible constrained initial set
+`x in [1/4, 1/2]` lies strictly inside the enclosure domain
+`[-1,1]`, so neither its centre nor its endpoints certifies
+feasibility. LOWER must accept it and propagate the known witness
+`x0=3/8` one tick to `x1=11/8`. Existing tests keep the
+analytic affine and nonlinear witnesses, the UPPER-only
+subdivision and LOWER non-splitting policies, and the
+continuous/discrete hybrid regression suites.
+
+**Parity caveat discovered by code inspection:** in continuous
+validated evolution, `_append_initial_set` splits oversized
+initial enclosures without consulting `Semantics`; this should
+be reviewed separately against the no-uncertified-LOWER-branch
+contract. It does not justify adding a stricter initial
+certificate to ordinary discrete evolution and is not changed
+in this checkpoint.
+
+Capacity matrix delta: ordinary discrete equation / Validated
+LOWER is **implemented under the same initial-source assumptions
+as ordinary continuous equation / Validated LOWER**. The
+numerical algorithm has not changed, except removal of the
+v6.57 admission restriction. Functional CI must pass on v6.58
+before promoting the checkpoint to validated; Format remains
+outside the acceptance gate.

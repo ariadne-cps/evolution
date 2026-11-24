@@ -26,11 +26,11 @@
  *  @brief Box-domain sampling for continuous and hybrid evolution.
  */
 
-#include "simulator_sampling.hpp"
+#include "evolution/simulator_sampling.hpp"
 
 #include <vector>
 
-#include "domain_bisection_sampling.hpp"
+#include "evolution/domain_bisection_sampling.hpp"
 #include "symbolic/space.hpp"
 #include "utility/macros.hpp"
 

@@ -26,7 +26,7 @@
  *  @brief Verify sampling cardinality, ordering, and domain membership.
  */
 
-#include "simulator_sampling.hpp"
+#include "evolution/simulator_sampling.hpp"
 
 #include "logging/test_runner.hpp"
 #include "symbolic/space.hpp"

@@ -26,7 +26,7 @@
  *  @brief Paving-independent recursive domain bisection.
  */
 
-#include "domain_bisection_sampling.hpp"
+#include "evolution/domain_bisection_sampling.hpp"
 
 #include <limits>
 #include <utility>

@@ -1,5 +1,5 @@
 /***************************************************************************
- *            src/simulator_sampling.hpp
+ *            evolution/simulator_sampling.hpp
  *
  *  Copyright  2026  Luca Geretti
  *
@@ -22,7 +22,7 @@
  *  along with Ariadne Evolution. If not, see <https://www.gnu.org/licenses/>.
  */
 
-/** @file src/simulator_sampling.hpp
+/** @file evolution/simulator_sampling.hpp
  *  @brief Private sampling API for continuous and hybrid simulations.
  */
 

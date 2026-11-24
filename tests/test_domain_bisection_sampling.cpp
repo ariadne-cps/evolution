@@ -26,7 +26,7 @@
  *  @brief Verify deterministic bisection without paving.
  */
 
-#include "domain_bisection_sampling.hpp"
+#include "evolution/domain_bisection_sampling.hpp"
 #include "logging/test_runner.hpp"
 
 #include "ariadne-testing.hpp"

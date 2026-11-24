@@ -32,7 +32,7 @@
 
 #include "algebra/algebra.hpp"
 #include "evolution/hybrid_orbit.hpp"
-#include "simulator_sampling.hpp"
+#include "evolution/simulator_sampling.hpp"
 #include "evolution/hybrid_time.hpp"
 #include "function/formula.hpp"
 #include "function/function.hpp"

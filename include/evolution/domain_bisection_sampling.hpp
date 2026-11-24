@@ -1,5 +1,5 @@
 /***************************************************************************
- *            src/domain_bisection_sampling.hpp
+ *            evolution/domain_bisection_sampling.hpp
  *
  *  Copyright  2026  Luca Geretti
  *
@@ -22,7 +22,7 @@
  *  along with Ariadne Evolution. If not, see <https://www.gnu.org/licenses/>.
  */
 
-/** @file src/domain_bisection_sampling.hpp
+/** @file evolution/domain_bisection_sampling.hpp
  *  @brief Paving-independent subdivision of box domains for sampling.
  */
 

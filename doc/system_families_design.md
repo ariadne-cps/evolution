@@ -796,3 +796,22 @@ sampling policy, test expectation or public include path changes.
 The v6.67 five-workflow baseline was fully passing; v6.68 was
 not validated. Accept this change only after successful functional CI
 on the new commit. Format remains nonblocking.
+
+## v6.70 — Uniform test compilation and no Windows timeout override
+
+The two temporary sampler-specific include directories introduced in v6.69
+have been removed from `tests/CMakeLists.txt`. Both sampling headers were
+moved from `src/` to the normal `include/evolution/` header hierarchy;
+all source and test includes now use `evolution/...`. All tests compile
+through the same CMake loop and the same default public include path, with
+no target-specific exceptions. The sampling implementation and tests remain
+unchanged, including the no-paving behavior and one-midpoint default.
+
+The special `if(WIN32 AND CMAKE_BUILD_TYPE STREQUAL "Debug")` block that
+overrode the CTest timeout to 600 seconds for two evolver suites has also
+been removed. CTest's ordinary timeout rules now apply uniformly.
+
+The previously green v6.67 is still the validated baseline. v6.68 and
+v6.69 failed compilation; this correction is only accepted after the
+five functional workflows pass on the exact new SHA. Format remains
+nonblocking.

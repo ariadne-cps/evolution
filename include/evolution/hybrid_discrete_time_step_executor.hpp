@@ -55,8 +55,13 @@ struct HybridDiscreteTimeStepExecution {
 //! \brief Compose the existing hybrid tick planner with validated images.
 //! \details The evidence callback must certify predicates over the same
 //! complete source enclosure and its correlated auxiliaries. UNKNOWN admits
-//! both alternatives, and images are applied to the full source set; this is
-//! only an UPPER over-approximation. LOWER evolution is not supported.
+//! both alternatives. execute_certified restricts each branch to a
+//! closed, validated over-approximation of the pre-state satisfying the
+//! corresponding guard or all progression invariants. This may include
+//! predicate boundaries and does not establish LOWER reachability.
+//! execute() with an external evidence callback retains its original
+//! full-source imaging contract: the callback alone cannot authorize a
+//! numerical restriction. LOWER evolution is not supported.
 //! Currently only deterministic equation source and target modes are
 //! supported; inclusion modes are rejected, not sampled. The caller must
 //! maintain consistency between source_index and the enclosure's global

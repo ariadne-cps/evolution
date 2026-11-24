@@ -136,6 +136,67 @@ class TestHybridDiscreteTimePredicateEvaluator : public Ariadne::Testing::Contex
         ARIADNE_TESTING_PROVE(!result.successors[1u].branch.certain);
     }
 
+    Void test_certified_prestate_restriction_and_callback_compatibility() {
+        const RealVariable x("x"), a("a");
+        const DiscreteLocation mode(1), target(2);
+        const DiscreteEvent event("split");
+        DiscreteTimeHybridAutomaton automaton;
+        automaton.new_mode(mode, DifferenceAlgebraicEquation(
+            List<PrimedRealAssignment>{next(x) = x + 1},
+            List<RealAssignment>{let(a) = x}));
+        automaton.new_mode(target, DifferenceAlgebraicEquation(
+            List<PrimedRealAssignment>{next(x) = x}));
+        // A correlated auxiliary determines the split. The guard and
+        // invariant cover different pre-state subsets at a nonzero boundary.
+        automaton.new_permissive_transition(mode, event, target,
+                                            {next(x) = x + 10},
+                                            a >= 1/2_q, x <= 1/4_q);
+        const HybridEnclosure source = initial(mode);
+        const auto restricted = HybridDiscreteTimeStepExecutor::execute_certified(
+            automaton, source, Integer(0));
+        ARIADNE_TESTING_EXPECT_EQUAL(restricted.successors.size(), 2u);
+        ARIADNE_TESTING_PROVE(restricted.successors[0u].branch.kind == Kind::TRANSITION);
+        ARIADNE_TESTING_PROVE(restricted.successors[1u].branch.kind == Kind::PROGRESSION);
+        ARIADNE_TESTING_PROVE(!restricted.successors[0u].branch.certain);
+        ARIADNE_TESTING_PROVE(!restricted.successors[1u].branch.certain);
+        ARIADNE_TESTING_EXPECT_EQUAL(restricted.successors[0u].enclosure.number_of_constraints(), 1u);
+        ARIADNE_TESTING_EXPECT_EQUAL(restricted.successors[1u].enclosure.number_of_constraints(), 1u);
+        ARIADNE_TESTING_EXPECT_EQUAL(source.number_of_constraints(), 0u);
+        ARIADNE_TESTING_EXPECT_EQUAL(source.previous_events().size(), 0u);
+
+        // The legacy callback path still images the full enclosure:
+        // evidence supplied by a caller is not a numerical cut certificate.
+        const auto unknown = [](DiscreteLocation, DiscreteEvent,
+                                DiscreteTimePredicateRole, const ContinuousPredicate&) {
+            return Evidence::UNKNOWN;
+        };
+        const auto full = HybridDiscreteTimeStepExecutor::execute(
+            automaton, source, Integer(0), unknown);
+        ARIADNE_TESTING_EXPECT_EQUAL(full.successors.size(), 2u);
+        ARIADNE_TESTING_EXPECT_EQUAL(full.successors[0u].enclosure.number_of_constraints(), 0u);
+        ARIADNE_TESTING_EXPECT_EQUAL(full.successors[1u].enclosure.number_of_constraints(), 0u);
+    }
+
+    Void test_urgent_complement_restriction() {
+        const RealVariable x("x");
+        const DiscreteLocation mode(1), target(2);
+        const DiscreteEvent event("urgent");
+        DiscreteTimeHybridAutomaton automaton;
+        automaton.new_mode(mode, DifferenceAlgebraicEquation(
+            List<PrimedRealAssignment>{next(x) = x + 1}));
+        automaton.new_mode(target, DifferenceAlgebraicEquation(
+            List<PrimedRealAssignment>{next(x) = x}));
+        automaton.new_urgent_transition(mode, event, target,
+                                        {next(x) = x + 10}, x >= 1/2_q);
+        const auto result = HybridDiscreteTimeStepExecutor::execute_certified(
+            automaton, initial(mode), Integer(0));
+        ARIADNE_TESTING_EXPECT_EQUAL(result.successors.size(), 2u);
+        ARIADNE_TESTING_EXPECT_EQUAL(result.successors[0u].enclosure.number_of_constraints(), 1u);
+        ARIADNE_TESTING_EXPECT_EQUAL(result.successors[1u].enclosure.number_of_constraints(), 1u);
+        ARIADNE_TESTING_PROVE(result.successors[0u].branch.kind == Kind::TRANSITION);
+        ARIADNE_TESTING_PROVE(result.successors[1u].branch.kind == Kind::PROGRESSION);
+    }
+
     Void test_reject_inclusion_and_wrong_space() {
         const RealVariable x("x"), u("u"), y("y");
         const DiscreteLocation mode(1);
@@ -161,6 +222,8 @@ int main(int argc, char** argv) {
     ARIADNE_TESTING_ADD_TEST(TestHybridDiscreteTimePredicateEvaluator, test_correlated_auxiliary_is_not_independent);
     ARIADNE_TESTING_ADD_TEST(TestHybridDiscreteTimePredicateEvaluator, test_certified_upper_tick);
     ARIADNE_TESTING_ADD_TEST(TestHybridDiscreteTimePredicateEvaluator, test_boundary_keeps_both_upper_alternatives);
+    ARIADNE_TESTING_ADD_TEST(TestHybridDiscreteTimePredicateEvaluator, test_certified_prestate_restriction_and_callback_compatibility);
+    ARIADNE_TESTING_ADD_TEST(TestHybridDiscreteTimePredicateEvaluator, test_urgent_complement_restriction);
     ARIADNE_TESTING_ADD_TEST(TestHybridDiscreteTimePredicateEvaluator, test_reject_inclusion_and_wrong_space);
     return Ariadne::Testing::run_logging_suite(ariadne_test_suite, argc, argv);
 }

@@ -45,3 +45,26 @@ modified.
 Next: check CI; continue with sound UPPER image refinement and quantified
 input handling before introducing inclusion modes. Implement the
 approximate family separately, and leave Python/tutorial parity last.
+
+## v6.46: pre-state certified branch refinement
+
+For `execute_certified` only, each branch is imaged from an independent
+copy of the source with validated parameter constraints encoding the
+**closed** pre-state predicate region. A transition receives its guard,
+while a progression receives the intersection of every event's
+progression invariant (the complement of each urgent guard, or the
+explicit permissive invariant). The indicators use System's
+`make_constraint_function` with sorted algebraic substitution and are
+composed with the original source state map, preserving dependencies.
+A nonnegative indicator condition includes the boundary even when the
+symbolic predicate is strict, so this operation is a sound outer
+relaxation, not a certified equality with the exact admissible subset.
+
+The older callback-based `execute` method still produces full-source
+images: the arbitrary callback does not supply a numerical restriction
+certificate. No LOWER claim, branch priority, zero-time transition,
+implicit fusion or difference-inclusion sampling is added. The
+regression verifies permissive split guards including a dependent
+auxiliary, the urgent guard's complement, independent constraints for
+each alternative, no mutation of the original source, and unchanged
+callback-based semantics. CI on the new commit is pending until checked.

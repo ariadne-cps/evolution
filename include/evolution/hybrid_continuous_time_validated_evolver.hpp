@@ -412,7 +412,8 @@ class HybridContinuousTimeEvolverBase<ValidatedTag>
     Void _create(const SystemType& system, const FunctionFactoryType& factory);
     Void _validate_mode(DiscreteLocation, Semantics) const;
     Void _evolve_inclusion(const HybridEnclosure&, const Real& final_time, HybridEvolutionStepResult&) const;
-    Void _evolve_outer_equation(const HybridEnclosure&, const Real& final_time, HybridEvolutionStepResult&) const;
+    Void _evolve_outer_equation(const HybridEnclosure&, const Real& final_time,
+                               Semantics semantics, HybridEvolutionStepResult&) const;
     std::shared_ptr<IntegratorInterface> _integrator_ptr;
     std::shared_ptr<const SelectedParametricMultifunctionIntegrator> _inclusion_integrator_ptr;
     std::shared_ptr<const FirstOrderMultifunctionIntegrator> _box_integrator_ptr;

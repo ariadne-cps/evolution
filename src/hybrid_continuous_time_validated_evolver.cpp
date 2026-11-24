@@ -331,15 +331,9 @@ Void HybridContinuousTimeEvolverBase<ValidatedTag>::_validate_mode(DiscreteLocat
     // global time and fixed physical parameters. The same outer image is
     // therefore also a valid LOWER enclosure without an INNER algorithm.
     //
-    // The clocked/parameterized event path, however, only constructs UPPER
-    // candidates by intersecting an outer tube with possibly active guards.
-    // Such a candidate need not contain any genuine jumping trajectory;
-    // never silently interpret it as a LOWER reset or continuation.
-    if (semantics == Semantics::LOWER && (timed || parameterized) &&
-        !this->system().events(location).empty())
-        throw std::invalid_argument(
-            "LOWER for timed/parameterized hybrid equations with events requires certified witness-preserving crossings");
-
+    // Clocked/parameterized LOWER may take only full-source immediate
+    // resets and continuous steps proven free of blocking events.
+    // A possibly active UPPER guard is not a witnessed LOWER jump.
     if (timed) {
         if (dynamic_cast<const PreconditionedGradedTaylorSeriesIntegrator*>(this->_integrator_ptr.get()) != nullptr)
             throw std::invalid_argument("Timed hybrid evolution does not support preconditioning");
@@ -487,6 +481,22 @@ Void HybridContinuousTimeEvolverBase<ValidatedTag>::
 
     // Set the flowable set, storing the invariant set as a base for jumps
     HybridEnclosure flowable_set = invariant_set;
+    const bool guarded_clocked_lower =
+        semantics == Semantics::LOWER &&
+        (this->system().time_variable(initial_set.location()).has_value() ||
+         EvolutionDetail::hybrid_parameter_space(this->system(), initial_set.location()).dimension() != 0u);
+    bool safely_flowable = true;
+    if (guarded_clocked_lower) {
+        // Restricting an UPPER source to an invariant does not prove
+        // that the restricted set still contains a LOWER witness.
+        for (const auto& entry: transitions) {
+            const auto& predicate = entry.second;
+            if (predicate.event_kind == EventKind::INVARIANT &&
+                !definitely(initial_set.range_of(predicate.guard_function,
+                                                 predicate.source_arguments).upper_bound() <= 0))
+                safely_flowable = false;
+        }
+    }
 
     // Compute possibly initially active events
     Set<DiscreteEvent> events = transitions.keys();
@@ -504,6 +514,9 @@ Void HybridContinuousTimeEvolverBase<ValidatedTag>::
         const auto policy = EvolutionDetail::transition_policy(transition.event_kind);
         if (policy.inspect_initial_activation) {
             const auto activation = EvolutionDetail::classify_initial_guard(invariant_set, transition);
+            if (guarded_clocked_lower && policy.blocks_flow &&
+                activation != EvolutionDetail::HybridInitialGuardActivation::EXCLUDED)
+                safely_flowable = false;
             if (activation != EvolutionDetail::HybridInitialGuardActivation::EXCLUDED) {
                 if (policy.resets_initially && EvolutionDetail::permits_initial_reset(activation, semantics)) {
                     HybridEnclosure immediate_jump_set = invariant_set;
@@ -534,8 +547,11 @@ Void HybridContinuousTimeEvolverBase<ValidatedTag>::
         }
     }
 
-    // Put the flowable set in the starting sets for ordinary evolution
-    if (!definitely(flowable_set.is_empty())) {
+    // An uncertain blocking guard on a restricted outer source cannot
+    // establish an actual LOWER flow witness. Full-source resets above
+    // remain admissible, but unsafe continuous branches are dropped.
+    if ((!guarded_clocked_lower || safely_flowable) &&
+        !definitely(flowable_set.is_empty())) {
         result.continue_with(flowable_set);
     }
 }
@@ -815,7 +831,7 @@ Void HybridContinuousTimeEvolverBase<ValidatedTag>::
         return;
     }
     if (this->system().time_variable(location) || EvolutionDetail::hybrid_parameter_space(this->system(), location).dimension() != 0u) {
-        this->_evolve_outer_equation(starting_set, final_time, result);
+        this->_evolve_outer_equation(starting_set, final_time, semantics, result);
         return;
     }
     const auto dynamic = this->system().dynamic_function(location);
@@ -918,7 +934,8 @@ Void HybridContinuousTimeEvolverBase<ValidatedTag>::_evolve_inclusion(
 }
 
 Void HybridContinuousTimeEvolverBase<ValidatedTag>::_evolve_outer_equation(
-    const HybridEnclosure& initial, const Real& final_time, HybridEvolutionStepResult& result) const {
+    const HybridEnclosure& initial, const Real& final_time,
+    Semantics semantics, HybridEvolutionStepResult& result) const {
     const auto remaining = StepSizeType(FloatDPBounds(final_time, dp).upper_raw()) -
                            StepSizeType(initial.time_range().lower_bound().raw());
     const auto maximum_step = EvolutionDetail::limit_step_to_remaining_time(configuration().maximum_step_size(), remaining);
@@ -929,7 +946,36 @@ Void HybridContinuousTimeEvolverBase<ValidatedTag>::_evolve_outer_equation(
         initial.continuous_set().constant_parameter_function(EvolutionDetail::hybrid_parameter_space(system(), initial.location()).dimension()), maximum_step, *this->_integrator_ptr);
     const auto applied = EvolutionDetail::apply_integration_step(initial.continuous_set(), numerical.step,
                                                                  numerical.arguments, Semantics::UPPER);
-    result = EvolutionDetail::publish_outer_step(initial, applied, _extract_transitions(initial.location()), final_time,
+    const auto transitions = this->_extract_transitions(initial.location());
+    if (semantics == Semantics::LOWER) {
+        // All blocking predicates must be safe on the entire certified
+        // state/time/parameter tube. Otherwise neither restricting the
+        // UPPER tube nor selecting a possible jump preserves a witness.
+        for (const auto& tube: applied.reach) {
+            HybridEnclosure reach = initial;
+            reach.replace_continuous_set(tube);
+            for (const auto& entry: transitions) {
+                const auto& transition = entry.second;
+                if (!EvolutionDetail::transition_policy(transition.event_kind).blocks_flow)
+                    continue;
+                const auto range = reach.range_of(transition.guard_function, transition.source_arguments);
+                const bool safe = transition.event_kind == EventKind::INVARIANT
+                    ? definitely(range.upper_bound() <= 0)
+                    : definitely(range.upper_bound() < 0);
+                if (!safe) {
+                    result.stop_reason = HybridEvolutionStopReason::NO_CONTINUATION;
+                    return;
+                }
+            }
+        }
+        // A fully admissible unbranched tube carries the same reachable
+        // witness. Optional PERMISSIVE jumps can be ignored; UPPER
+        // candidate intersections must not be emitted as LOWER jumps.
+        result = EvolutionDetail::publish_outer_step(initial, applied, {}, final_time,
+                                                     std::min(numerical.step.time_step().get_d(), remaining.get_d()));
+        return;
+    }
+    result = EvolutionDetail::publish_outer_step(initial, applied, transitions, final_time,
                                                  std::min(numerical.step.time_step().get_d(), remaining.get_d()));
 }
 

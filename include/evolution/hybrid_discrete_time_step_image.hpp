@@ -41,10 +41,13 @@ namespace Ariadne {
  *  HybridDiscreteTimeStepPlanner; applying an image to the full source enclosure
  *  is an UPPER over-approximation of a possibly enabled branch, not LOWER proof.
  *
- *  The current kernel requires deterministic source and destination modes.
- *  It rejects bounded-input inclusion modes rather than selecting/fixing
- *  inputs or falsely claiming a validated set-valued image.
- *  It performs no scheduling and does not assemble an Orbit.
+ *  Deterministic equations remain supported. For bounded-input difference
+ *  inclusions, only event-free UPPER progression without auxiliary outputs
+ *  is implemented: each tick introduces fresh independent INPUT parameters
+ *  and composes the validated map over their full box domain.
+ *  Inclusion transitions, input-dependent auxiliary outputs and unsupported
+ *  target modes still throw, never sample or truncate the UPPER result.
+ *  This operation performs no scheduling and does not assemble an Orbit.
  */
 class HybridDiscreteTimeStepImage {
   public:

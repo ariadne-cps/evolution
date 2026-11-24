@@ -67,8 +67,39 @@ HybridEnclosure HybridDiscreteTimeStepImage::apply(
         throw std::invalid_argument("Discrete hybrid image source mode does not exist");
     if (source.state_space() != automaton.state_space(location))
         throw std::invalid_argument("Discrete hybrid image source state space mismatch");
+    if (automaton.has_inclusion(location)) {
+        const DifferenceAlgebraicInclusion& inclusion = automaton.inclusion(location);
+        // This first set-valued UPPER kernel handles only event-free modes
+        // without auxiliary outputs. Quantified inputs are new independent
+        // parameter coordinates at every tick, never fixed samples.
+        if (branch.kind != HybridDiscreteTimeBranchKind::PROGRESSION ||
+            branch.target != location || branch.event ||
+            !automaton.events(location).empty() ||
+            inclusion.auxiliary_space().dimension() != 0u ||
+            source.auxiliary_space().dimension() != 0u)
+            throw std::invalid_argument(
+                "Validated inclusion progression requires no events or auxiliary outputs");
+
+        Enclosure evolved = source.continuous_set();
+        const SizeType input_offset = evolved.number_of_parameters();
+        evolved.adjoin_parameters(inclusion.inputs(), EnclosureVariableKind::INPUT);
+        const ExactBoxType domain = evolved.parameter_domain();
+        const auto& factory = evolved.configuration().function_factory();
+        auto inputs = factory.create_zeros(inclusion.number_of_inputs(), domain);
+        for (SizeType j = 0u; j != inclusion.number_of_inputs(); ++j)
+            inputs[j] = factory.create_coordinate(domain, input_offset + j);
+
+        // Compose f(x,u) with the current validated state and the freshly
+        // appended input coordinates; preserve the previous tick's inputs.
+        const auto updated_state = compose(inclusion.update_function(),
+                                           join(evolved.state_function(), inputs));
+        evolved.apply_parameterised_fixed_evolve_step(updated_state, StepSizeType(1, 0u));
+        HybridEnclosure next = source;
+        next.replace_continuous_set(evolved);
+        return next;
+    }
     if (!automaton.has_equation(location))
-        throw std::invalid_argument("Validated discrete inclusion images are not implemented");
+        throw std::invalid_argument("Unknown discrete hybrid mode dynamics");
 
     const DifferenceAlgebraicEquation& equation = automaton.equation(location);
     if (source.auxiliary_space().size() != 0u && source.auxiliary_space() != equation.auxiliary_space())

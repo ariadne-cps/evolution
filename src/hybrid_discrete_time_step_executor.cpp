@@ -82,8 +82,14 @@ HybridDiscreteTimeStepExecution execute_impl(
     Bool restrict_prestate) {
     if (!automaton.has_mode(source.location()))
         throw std::invalid_argument("Discrete hybrid step source mode does not exist");
-    if (!automaton.has_equation(source.location()))
-        throw std::invalid_argument("Validated discrete inclusion images are not implemented");
+    if (!automaton.has_equation(source.location())) {
+        if (!automaton.has_inclusion(source.location()) ||
+            !automaton.events(source.location()).empty() ||
+            automaton.inclusion(source.location()).auxiliary_space().dimension() != 0u ||
+            source.auxiliary_space().dimension() != 0u)
+            throw std::invalid_argument(
+                "Validated inclusion UPPER requires an event-free mode without auxiliary outputs");
+    }
 
     const HybridDiscreteTimeStepPlan plan =
         HybridDiscreteTimeStepPlanner::plan(automaton, source.location(), source_index, evaluate);

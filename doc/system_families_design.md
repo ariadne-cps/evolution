@@ -282,3 +282,48 @@ symbolically correlated auxiliary assignments, urgent branching,
 time advancement, immutability, inclusion rejection and state-space
 mismatches. Functional CI is required to validate this new component.
 Format remains deferred as requested.
+
+## Bounded deterministic hybrid UPPER exploration (v6.43)
+
+`HybridDiscreteTimeUpperScheduler::evolve` composes the certified
+single-tick executor into a finite-horizon breadth-first exploration.
+Every possible successor is retained as its own `HybridEnclosure` at
+the next integer index. The result
+`HybridDiscreteTimeUpperExploration` is a tree of nodes containing
+the sample index, enclosure, stable parent index, and incoming branch
+metadata (event, target and predicate certainty). Leaves are explicitly
+classified as `HORIZON` or `BLOCKED`: an eventless progression is not
+a blocked state, while a state admitting neither progression nor jump
+is retained as a terminal at its original sample index.
+
+The initial enclosure is never modified. Scheduling is breadth-first,
+with independent source copies for all branches and no implicit
+priority, reset chaining or zero-time event. The requested terminal
+index is inclusive. A caller-specified positive `maximum_nodes` is a
+hard limit: exceeding it throws, rather than discarding potentially
+reachable branches and silently returning an unsound UPPER result.
+No automatic merging or deduplication is performed, so combinatorial
+growth remains explicit.
+
+The caller supplies an integer `initial_index` that must correspond to
+the initial enclosure's global-time map. The scheduler does not yet
+enforce that consistency numerically, nor does it implement
+subdivision, constrained branch images or robust inclusion modes.
+This is *not* yet the public
+`HybridDiscreteTimeEvolver<ValidatedTag>`, and no LOWER
+semantics are claimed. The existing certified guard evaluator
+and numerical image kernel preserve conservative UPPER branches.
+Unsupported inclusion source modes throw instead of being sampled.
+Test coverage includes linear progression, inclusive horizon, stable
+parent links, permissive branching, event provenance, blocked leaves,
+hard budget rejection, invalid horizons and inclusion rejection.
+
+The crossing analysis files are intentionally kept separate:
+`hybrid_crossing` exposes the public typed numerical certificate
+contract, whereas `hybrid_crossing_analysis` is an internal
+continuous-time numerical analysis algorithm based on Lie derivatives
+and flow-localized roots. Neither is reused for integer-time ticks.
+
+All changes are confined to Evolution on `multifunction`.
+Format is deliberately deferred until the full redesign.
+Functional CI must validate the new scheduler before advancing.

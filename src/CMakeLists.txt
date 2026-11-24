@@ -28,5 +28,6 @@ add_library(EVOLUTION_SRC OBJECT
     hybrid_discrete_time_step_image.cpp
     hybrid_discrete_time_step_executor.cpp
     hybrid_discrete_time_predicate_evaluator.cpp
+    hybrid_discrete_time_upper_scheduler.cpp
 )
 target_include_directories(EVOLUTION_SRC PRIVATE "${PROJECT_SOURCE_DIR}/include/evolution")

@@ -204,3 +204,42 @@ provenance and preservation of the source enclosure, coordinate order for
 reversed reset assignments, and explicit rejection of unsupported inclusion
 branches. The Evolution CI must validate this adapter before it is used by
 a high-level discrete hybrid evolver. Format remains deferred.
+
+## Deterministic hybrid discrete one-tick execution (v6.41)
+
+`HybridDiscreteTimeStepExecutor::execute` composes the already existing
+`HybridDiscreteTimeStepPlanner` with
+`HybridDiscreteTimeStepImage::apply`. Its input is one source
+`HybridEnclosure`, the source integer index and a certified predicate-evidence
+callback. It returns a plan index pair and a vector of independent successor
+enclosures paired with the original branch metadata. No single successor
+is preferred, and every possible transition or progression branch is
+computed from an unmodified copy of the same source set. An empty vector
+indicates that the supplied evidence excludes every branch.
+
+This is an *UPPER deterministic one-tick adapter*, not a full
+`HybridDiscreteTimeEvolver<ValidatedTag>` implementation or a new
+numerical engine. It preserves event provenance and relies on existing
+enclosure map and reset operations to advance global time by one.
+The caller must keep the supplied integer source index consistent with
+the source enclosure time, and the callback must classify all predicates
+over that enclosure, preserving correlation with declared auxiliary
+outputs. A `certain` branch precondition is never a LOWER image certificate.
+The executor intentionally does not intersect branch-specific predicates
+before applying their images; unconditional source-set images are conservative
+UPPER supersets. No lower semantics or reachability proof is inferred.
+
+The executor rejects inclusion source modes and any unsupported target
+image through existing kernel checks; it never chooses nominal inputs.
+Failure of any branch aborts the entire execution rather than returning
+an incomplete set of possible successors. It does not schedule repeated
+ticks, subdivide sets, assemble an Orbit or change continuous-time evolution.
+
+The planner now also validates every returned three-valued predicate
+evidence, including permissive guard and invariant callbacks, instead of
+silently interpreting an invalid enum as UNKNOWN or TRUE. Focused tests
+cover overlapping permissive successors, unknown evidence, urgent
+transition/progression alternatives, fully blocked steps, inclusion
+rejection, event provenance and source-set immutability. The existing
+regression matrix must validate the new code. Format remains deferred
+until completion of the full redesign.

@@ -33,6 +33,15 @@
 namespace Ariadne {
 namespace {
 
+DiscreteTimePredicateEvidence checked_evidence(DiscreteTimePredicateEvidence value) {
+    switch (value) {
+        case DiscreteTimePredicateEvidence::TRUE:
+        case DiscreteTimePredicateEvidence::FALSE:
+        case DiscreteTimePredicateEvidence::UNKNOWN: return value;
+        default: throw std::invalid_argument("Unknown predicate evidence");
+    }
+}
+
 DiscreteTimePredicateEvidence complement(DiscreteTimePredicateEvidence value) {
     switch (value) {
         case DiscreteTimePredicateEvidence::TRUE: return DiscreteTimePredicateEvidence::FALSE;
@@ -58,16 +67,16 @@ HybridDiscreteTimeStepPlan HybridDiscreteTimeStepPlanner::plan(
     Bool progression_certain = true;
 
     for (const DiscreteEvent& event: automaton.events(source)) {
-        const auto guard = evaluate(source, event, DiscreteTimePredicateRole::GUARD,
-                                    automaton.guard_predicate(source, event));
+        const auto guard = checked_evidence(evaluate(source, event, DiscreteTimePredicateRole::GUARD,
+                                    automaton.guard_predicate(source, event)));
         DiscreteTimePredicateEvidence invariant;
         if (automaton.transition_kind(source, event) == DiscreteTimeTransitionKind::URGENT) {
             // Derive from guard classification: the two predicates are
             // mathematical complements, not independently sampled facts.
             invariant = complement(guard);
         } else if (automaton.transition_kind(source, event) == DiscreteTimeTransitionKind::PERMISSIVE) {
-            invariant = evaluate(source, event, DiscreteTimePredicateRole::PROGRESSION_INVARIANT,
-                                 automaton.invariant_predicate(source, event));
+            invariant = checked_evidence(evaluate(source, event, DiscreteTimePredicateRole::PROGRESSION_INVARIANT,
+                                 automaton.invariant_predicate(source, event)));
         } else {
             throw std::invalid_argument("Unknown discrete hybrid transition kind");
         }

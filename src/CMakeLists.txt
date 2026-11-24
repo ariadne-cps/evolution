@@ -26,5 +26,6 @@ add_library(EVOLUTION_SRC OBJECT
     hybrid_continuous_time_validated_evolver.cpp
     hybrid_discrete_time_step_planner.cpp
     hybrid_discrete_time_step_image.cpp
+    hybrid_discrete_time_step_executor.cpp
 )
 target_include_directories(EVOLUTION_SRC PRIVATE "${PROJECT_SOURCE_DIR}/include/evolution")

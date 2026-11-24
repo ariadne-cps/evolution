@@ -119,6 +119,31 @@ class TestHybridDiscreteTimeStepPlanner : public Ariadne::Testing::ContextFixtur
                 constant(static_cast<Evidence>(255))));
     }
 
+    Void test_invalid_permissive_evidence() {
+        DiscreteTimeHybridAutomaton automaton;
+        const DiscreteLocation source(1), target(2);
+        const DiscreteEvent event("optional");
+        const RealVariable x("x");
+        automaton.new_mode(source, dynamics());
+        automaton.new_mode(target, dynamics());
+        automaton.new_permissive_transition(source, event, target,
+                                            {next(x) = x}, x >= 0, x <= 2);
+
+        const auto invalid_guard = [](DiscreteLocation, DiscreteEvent, Role role,
+                                      const ContinuousPredicate&) {
+            return role == Role::GUARD ? static_cast<Evidence>(255) : Evidence::TRUE;
+        };
+        const auto invalid_invariant = [](DiscreteLocation, DiscreteEvent, Role role,
+                                          const ContinuousPredicate&) {
+            return role == Role::PROGRESSION_INVARIANT
+                ? static_cast<Evidence>(255) : Evidence::TRUE;
+        };
+        ARIADNE_TESTING_EXPECT_THROWS(std::invalid_argument,
+            HybridDiscreteTimeStepPlanner::plan(automaton, source, Integer(0), invalid_guard));
+        ARIADNE_TESTING_EXPECT_THROWS(std::invalid_argument,
+            HybridDiscreteTimeStepPlanner::plan(automaton, source, Integer(0), invalid_invariant));
+    }
+
     Void test_permissive_overlap_and_simultaneous_events() {
         DiscreteTimeHybridAutomaton automaton;
         const DiscreteLocation source(1), a(2), b(3);
@@ -184,6 +209,7 @@ int main(int argc, char** argv) {
     ARIADNE_TESTING_ADD_TEST(TestHybridDiscreteTimeStepPlanner, test_no_events);
     ARIADNE_TESTING_ADD_TEST(TestHybridDiscreteTimeStepPlanner, test_urgent_complement);
     ARIADNE_TESTING_ADD_TEST(TestHybridDiscreteTimeStepPlanner, test_invalid_predicate_evidence);
+    ARIADNE_TESTING_ADD_TEST(TestHybridDiscreteTimeStepPlanner, test_invalid_permissive_evidence);
     ARIADNE_TESTING_ADD_TEST(TestHybridDiscreteTimeStepPlanner, test_permissive_overlap_and_simultaneous_events);
     ARIADNE_TESTING_ADD_TEST(TestHybridDiscreteTimeStepPlanner, test_unknown_invariant_and_blocked_progress);
     return Ariadne::Testing::run_logging_suite(ariadne_test_suite, argc, argv);

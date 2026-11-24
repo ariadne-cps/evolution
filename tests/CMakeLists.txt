@@ -63,3 +63,7 @@ endif()
 
 add_custom_target(tests)
 add_dependencies(tests ${UNIT_TESTS})
+
+# Sampling stays an Evolution-private implementation with no paving dependency.
+target_include_directories(test_domain_bisection_sampling PRIVATE "${PROJECT_SOURCE_DIR}/src")
+target_include_directories(test_simulator_sampling_contract PRIVATE "${PROJECT_SOURCE_DIR}/src")

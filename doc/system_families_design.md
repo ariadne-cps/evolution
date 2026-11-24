@@ -781,3 +781,18 @@ nonbox constrained sets; in particular, sampling centres of a bounding
 box must not be represented as satisfying arbitrary nonlinear
 constraints. This stage requires its own five functional workflow
 passes before being considered accepted. Format remains nonblocking.
+
+## v6.69 — Restore test-local includes for private box samplers
+
+The paving-independent sampler migration imported `domain_bisection_sampling.hpp`
+and `simulator_sampling.hpp` into `src/`, but left out the original
+`decoupling` CMake target-local include directories for the two imported
+regressions. The resulting `test_domain_bisection_sampling.cpp` compile
+failed before tests could run because its private header was not on the
+test target's include path. Restore both target-local
+`target_include_directories(... PRIVATE "${PROJECT_SOURCE_DIR}/src")`
+directives exactly as in `decoupling`. No production source,
+sampling policy, test expectation or public include path changes.
+The v6.67 five-workflow baseline was fully passing; v6.68 was
+not validated. Accept this change only after successful functional CI
+on the new commit. Format remains nonblocking.

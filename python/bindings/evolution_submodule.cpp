@@ -126,10 +126,10 @@ Void export_orbit(pybind11::module& module, const char* name) {
 }
 
 template<class SIM>
-Void export_simulator(pybind11::module& module, const char* name);
+Void export_approximate_evolver(pybind11::module& module, const char* name);
 
 template<>
-Void export_simulator<ContinuousTimeEvolver<ApproximateTag>>(pybind11::module& module, const char* name) {
+Void export_approximate_evolver<ContinuousTimeEvolver<ApproximateTag>>(pybind11::module& module, const char* name) {
     typedef ContinuousTimeEvolver<ApproximateTag>::TerminationType TerminationType;
     typedef ContinuousTimeEvolver<ApproximateTag>::ApproximateListPointType ApproximateListPointType;
     typedef ContinuousTimeEvolver<ApproximateTag>::OrbitType OrbitType;
@@ -139,23 +139,23 @@ Void export_simulator<ContinuousTimeEvolver<ApproximateTag>>(pybind11::module& m
 
     pybind11::class_<LabelledInterpolatedCurve, pybind11::bases<LabelledDrawable2dInterface>> labelled_interpolated_curve_class(module, "LabelledInterpolatedCurve");
 
-    pybind11::class_<OrbitType, pybind11::bases<LabelledDrawable2dInterface>> simulator_orbit_class(module, "ApproximatePointOrbit");
-    simulator_orbit_class.def("curves", &OrbitType::curves);
+    pybind11::class_<OrbitType, pybind11::bases<LabelledDrawable2dInterface>> evolver_orbit_class(module, "ApproximatePointOrbit");
+    evolver_orbit_class.def("curves", &OrbitType::curves);
 
-    pybind11::class_<ContinuousTimeEvolver<ApproximateTag>> simulator_class(module, name);
-    simulator_class.def(pybind11::init<const OrdinaryDifferentialAlgebraicEquation&>());
-    simulator_class.def("configuration", pybind11::overload_cast<>(&ContinuousTimeEvolver<ApproximateTag>::configuration), reference_internal);
-    simulator_class.def("orbit", (OrbitType (ContinuousTimeEvolver<ApproximateTag>::*)(const ApproximateListPointType&, const TerminationType&) const) & ContinuousTimeEvolver<ApproximateTag>::orbit);
-    simulator_class.def("orbit", pybind11::overload_cast<const ApproximateListPointType&, const TerminationType&>(&ContinuousTimeEvolver<ApproximateTag>::orbit, pybind11::const_));
-    simulator_class.def("orbit", pybind11::overload_cast<const RealExpressionBoundedConstraintSet&, const TerminationType&>(&ContinuousTimeEvolver<ApproximateTag>::orbit, pybind11::const_));
-    simulator_class.def("orbit", pybind11::overload_cast<const RealBoxType&, const TerminationType&>(&ContinuousTimeEvolver<ApproximateTag>::orbit, pybind11::const_));
+    pybind11::class_<ContinuousTimeEvolver<ApproximateTag>> evolver_class(module, name);
+    evolver_class.def(pybind11::init<const OrdinaryDifferentialAlgebraicEquation&>());
+    evolver_class.def("configuration", pybind11::overload_cast<>(&ContinuousTimeEvolver<ApproximateTag>::configuration), reference_internal);
+    evolver_class.def("orbit", (OrbitType (ContinuousTimeEvolver<ApproximateTag>::*)(const ApproximateListPointType&, const TerminationType&) const) & ContinuousTimeEvolver<ApproximateTag>::orbit);
+    evolver_class.def("orbit", pybind11::overload_cast<const ApproximateListPointType&, const TerminationType&>(&ContinuousTimeEvolver<ApproximateTag>::orbit, pybind11::const_));
+    evolver_class.def("orbit", pybind11::overload_cast<const RealExpressionBoundedConstraintSet&, const TerminationType&>(&ContinuousTimeEvolver<ApproximateTag>::orbit, pybind11::const_));
+    evolver_class.def("orbit", pybind11::overload_cast<const RealBoxType&, const TerminationType&>(&ContinuousTimeEvolver<ApproximateTag>::orbit, pybind11::const_));
 
     typedef typename ContinuousTimeEvolver<ApproximateTag>::ConfigurationType ConfigurationType;
-    pybind11::class_<ConfigurationType> simulator_configuration_class(module, "ContinuousTimeApproximateEvolverConfiguration");
-    simulator_configuration_class.def("set_step_size", &ConfigurationType::set_step_size);
-    simulator_configuration_class.def("set_sampling_count", &ConfigurationType::set_sampling_count);
-    simulator_configuration_class.def("clear_sampling_counts", &ConfigurationType::clear_sampling_counts);
-    simulator_configuration_class.def("__repr__", &__cstr__<ConfigurationType>);
+    pybind11::class_<ConfigurationType> evolver_configuration_class(module, "ContinuousTimeApproximateEvolverConfiguration");
+    evolver_configuration_class.def("set_step_size", &ConfigurationType::set_step_size);
+    evolver_configuration_class.def("set_sampling_count", &ConfigurationType::set_sampling_count);
+    evolver_configuration_class.def("clear_sampling_counts", &ConfigurationType::clear_sampling_counts);
+    evolver_configuration_class.def("__repr__", &__cstr__<ConfigurationType>);
 }
 
 template<class EV>
@@ -215,7 +215,7 @@ Void evolution_submodule(pybind11::module& module) {
 
     export_list_set<LabelledEnclosure>(module, "LabelledEnclosureListSet");
 
-    export_simulator<ContinuousTimeEvolver<ApproximateTag>>(module, "ContinuousTimeApproximateEvolver");
+    export_approximate_evolver<ContinuousTimeEvolver<ApproximateTag>>(module, "ContinuousTimeApproximateEvolver");
 
     export_evolver_interface<DiscreteTimeEvolver<ValidatedTag>::Interface>(module, "DiscreteTimeEvolverInterface");
     export_evolver_interface<ContinuousTimeEvolver<ValidatedTag>::Interface>(module, "ContinuousTimeEvolverInterface");

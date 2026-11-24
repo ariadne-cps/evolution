@@ -2,7 +2,7 @@ include(CTest)
 set(UNIT_TESTS
     test_approximate_inclusions
     test_domain_bisection_sampling
-    test_simulator_sampling_contract
+    test_initial_point_sampling_contract
     test_approximate_constant_parameters
     test_hybrid_constant_parameters
     test_constant_parameter_maps

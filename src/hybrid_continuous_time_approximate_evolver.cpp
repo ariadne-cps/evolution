@@ -23,7 +23,7 @@
  */
 
 /** @file src/hybrid_continuous_time_approximate_evolver.cpp
- *  @brief Implement hybrid simulator operations.
+ *  @brief Implement hybrid evolver operations.
  */
 
 #include "evolution/hybrid_continuous_time_approximate_evolver.hpp"
@@ -32,7 +32,7 @@
 
 #include "algebra/algebra.hpp"
 #include "evolution/hybrid_orbit.hpp"
-#include "evolution/simulator_sampling.hpp"
+#include "evolution/initial_point_sampling.hpp"
 #include "evolution/hybrid_time.hpp"
 #include "function/formula.hpp"
 #include "function/function.hpp"

@@ -11,7 +11,7 @@ evolution capabilities with bounded scenarios:
    and one endpoint method.
 3. `DiscreteTimeEvolver<ValidatedTag>` — take one validated step of a contracting map.
 4. `HybridContinuousTimeEvolver<ApproximateTag> and HybridContinuousTimeEvolver<ValidatedTag>` — specify a two-mode
-   discrete-only automaton, create a simulator, then compute a short
+   discrete-only automaton, create a evolver, then compute a short
    validated orbit for a separate continuous single-mode hybrid system,
    followed by an ODAI mode using explicit reach and endpoint approximations.
 5. **FirstOrderPDE` — construct a validated, owning PDE model using

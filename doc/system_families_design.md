@@ -34,7 +34,7 @@ creep belong to continuous localization, not discrete ticks. Generalization
 must expose these capabilities rather than implying equivalent certificates.
 
 Validated evolvers produce sets with their supported approximation semantics.
-Simulators produce approximate sampled trajectories. Sampling a trajectory
+Evolvers produce approximate sampled trajectories. Sampling a trajectory
 does not provide a validated enclosure, and API similarity cannot grant LOWER,
 implicit DAE/DAI, multipatch or preconditioning support.
 
@@ -746,7 +746,7 @@ five workflows before acceptance. Format remains nonblocking.
 
 Copied `sampling_counts.hpp`, `domain_bisection_sampling.hpp/.cpp`, and
 `test_domain_bisection_sampling.cpp` from evolution/decoupling byte-for-byte.
-Adapted `simulator_sampling.hpp/.cpp` solely to the renamed current
+Adapted `initial_point_sampling.hpp/.cpp` solely to the renamed current
 `ContinuousTimeEvolver<ApproximateTag>` and
 `HybridContinuousTimeEvolver<ApproximateTag>` API types, retaining the
 same midpoint-of-domain-leaves algorithm. Copied its separate sampling
@@ -762,7 +762,7 @@ functional CI. Format remains nonblocking.
 
 Both `ContinuousTimeEvolver<ApproximateTag>` and
 `HybridContinuousTimeEvolver<ApproximateTag>` now call the same
-paving-independent `simulator_sampling` adapters brought from
+paving-independent `initial_point_sampling` adapters brought from
 `decoupling`. The prior paving/grid-based sample generation, artificial
 widening and associated configuration knobs are removed. Their named
 coordinate counts use `SamplingCounts` identically: the default is
@@ -785,7 +785,7 @@ passes before being considered accepted. Format remains nonblocking.
 ## v6.69 — Restore test-local includes for private box samplers
 
 The paving-independent sampler migration imported `domain_bisection_sampling.hpp`
-and `simulator_sampling.hpp` into `src/`, but left out the original
+and `initial_point_sampling.hpp` into `src/`, but left out the original
 `decoupling` CMake target-local include directories for the two imported
 regressions. The resulting `test_domain_bisection_sampling.cpp` compile
 failed before tests could run because its private header was not on the
@@ -842,3 +842,35 @@ remain separate future increments. The implementation is
 published as a candidate and requires all five functional CI
 workflows on the exact commit before its capability is marked
 validated. Format remains nonblocking.
+
+## v6.72 — Unified evolver terminology and nonconst orbit test fixes
+
+All occurrences of the former alternative terminology have been
+removed from repository-controlled filenames, source text, test names,
+documentation, tutorials and Python bindings. The three renamed
+sampling artifacts are now `initial_point_sampling.hpp`,
+`initial_point_sampling.cpp`, and
+`test_initial_point_sampling_contract.cpp`. The build registrations
+and every corresponding include directive follow the new paths.
+The Python binding export helper is called
+`export_approximate_evolver`, without altering exported modern
+evolver type names or numerical behavior. The obsolete-name negative
+assertions were removed from the Python suite because preserving their
+old string literals would violate the strict terminology rule;
+the existing positive paradigm export checks remain.
+
+The imported hybrid approximate sampling regression was declaring
+sampled orbit objects const even though the existing hybrid
+`Orbit::curve` and `Orbit::curves` readers are nonconst methods.
+The test now declares those orbit variables nonconst, retaining all
+cardinality, domain-membership, flat-axis and endpoint assertions.
+The newly introduced approximate discrete-time test likewise
+retains nonconst orbit variables when calling the corresponding
+accessors. No new per-test compiler flags, target include directories
+or Windows timeouts have been introduced.
+
+This is an API spelling/compilation repair only, not a numerical
+capability promotion. Previous v6.68 through v6.71 commits did not
+pass the complete five-workflow gate. Acceptance requires successful
+Ubuntu, macOS, Windows, Coverage and Sanitizers on this exact commit.
+Format stays nonblocking.

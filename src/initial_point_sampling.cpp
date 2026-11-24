@@ -1,5 +1,5 @@
 /***************************************************************************
- *            src/simulator_sampling.cpp
+ *            src/initial_point_sampling.cpp
  *
  *  Copyright  2026  Luca Geretti
  *
@@ -22,11 +22,11 @@
  *  along with Ariadne Evolution. If not, see <https://www.gnu.org/licenses/>.
  */
 
-/** @file src/simulator_sampling.cpp
+/** @file src/initial_point_sampling.cpp
  *  @brief Box-domain sampling for continuous and hybrid evolution.
  */
 
-#include "evolution/simulator_sampling.hpp"
+#include "evolution/initial_point_sampling.hpp"
 
 #include <vector>
 

@@ -80,7 +80,7 @@ with the current clock after a reset. A state-only augmented paving cannot
 represent nonempty time-dependent auxiliary outputs and rejects that operation;
 joint state/time enclosure drawing remains available.
 
-The continuous and hybrid equation simulators use RK4's native timed overload.
+The continuous and hybrid equation evolvers use RK4's native timed overload.
 Every stage evaluates the appropriate external time; the method never appends
 a differential clock to the state. Guards, invariants, resets and auxiliary
 outputs use the sample's global clock. Single and multiple trajectories share
@@ -115,7 +115,7 @@ Analytic regressions verify `x'=t`, source-clock correlations, auxiliary
 identities through structural operations, `x'=t+u` with an uncertain arrival,
 timed invariants/guards/resets on both autonomous and nonautonomous fields,
 structured/box methods and flat/tree backends. Separate RK4 tests integrate
-`t^2` from a nonzero initial time and check stage-time evaluation. Simulator
+`t^2` from a nonzero initial time and check stage-time evaluation. Evolver
 tests cover single/multiple trajectories, timed outputs, reset clock continuity
 and a non-dyadic final horizon. No additional differential clock is present in
 the tested physical state spaces.

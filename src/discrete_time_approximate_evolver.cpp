@@ -30,7 +30,7 @@
 
 #include <stdexcept>
 
-#include "evolution/simulator_sampling.hpp"
+#include "evolution/initial_point_sampling.hpp"
 #include "function/functional.hpp"
 #include "function/function.hpp"
 

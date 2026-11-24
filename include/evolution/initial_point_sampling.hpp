@@ -1,5 +1,5 @@
 /***************************************************************************
- *            evolution/simulator_sampling.hpp
+ *            evolution/initial_point_sampling.hpp
  *
  *  Copyright  2026  Luca Geretti
  *
@@ -22,12 +22,12 @@
  *  along with Ariadne Evolution. If not, see <https://www.gnu.org/licenses/>.
  */
 
-/** @file evolution/simulator_sampling.hpp
+/** @file evolution/initial_point_sampling.hpp
  *  @brief Private sampling API for continuous and hybrid simulations.
  */
 
-#ifndef ARIADNE_EVOLUTION_SIMULATOR_SAMPLING_HPP
-#define ARIADNE_EVOLUTION_SIMULATOR_SAMPLING_HPP
+#ifndef ARIADNE_EVOLUTION_INITIAL_POINT_SAMPLING_HPP
+#define ARIADNE_EVOLUTION_INITIAL_POINT_SAMPLING_HPP
 
 #include "evolution/hybrid_continuous_time_approximate_evolver.hpp"
 #include "evolution/continuous_time_approximate_evolver.hpp"
@@ -48,4 +48,4 @@ HybridContinuousTimeEvolver<ApproximateTag>::HybridApproximateListPointType samp
 
 } // namespace Ariadne::EvolutionDetail
 
-#endif // ARIADNE_EVOLUTION_SIMULATOR_SAMPLING_HPP
+#endif // ARIADNE_EVOLUTION_INITIAL_POINT_SAMPLING_HPP

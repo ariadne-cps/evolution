@@ -8,7 +8,7 @@
 [![Coverage Status](https://github.com/ariadne-cps/evolution/actions/workflows/coverage.yml/badge.svg)](https://github.com/ariadne-cps/evolution/actions/workflows/coverage.yml)
 [![codecov](https://codecov.io/gh/ariadne-cps/evolution/branch/main/graph/badge.svg)](https://codecov.io/gh/ariadne-cps/evolution)
 
-Ariadne Evolution is the standalone C++20 numerical evolution layer for continuous, discrete, and hybrid dynamical systems: enclosures, orbits, simulators, evolvers, numerical propagation methods, and first-order PDE evolution.
+Ariadne Evolution is the standalone C++20 numerical evolution layer for continuous, discrete, and hybrid dynamical systems: enclosures, orbits, evolvers, evolvers, numerical propagation methods, and first-order PDE evolution.
 Although independently maintained and usable, this repository is also part of the [Ariadne repository structure](https://github.com/ariadne-cps/ariadne/blob/main/doc/structure.md).
 
 ## Layout
@@ -19,7 +19,7 @@ The canonical `ContinuousTimeEvolver<P>` and `HybridContinuousTimeEvolver<P>`
 select approximate sampled trajectories with `ApproximateTag` or validated
 set evolution with `ValidatedTag`. `DiscreteTimeEvolver<ValidatedTag>` retains
 discrete map evolution; its approximate specialization is planned. There is no
-default paradigm. The former simulator names and headers are removed.
+default paradigm. The former evolver names and headers are removed.
 See [paradigm contracts](doc/evolver_paradigms_design.md) for inputs, results,
 interfaces and Python template subscriptions. Numerical integration is shared
 by continuous validated evolution and hybrid modes where certificates agree.
@@ -189,7 +189,7 @@ without fixed model parameters; `HybridContinuousTimeEvolver<ApproximateTag>` al
 timed equation modes, guards, invariants, resets and auxiliary outputs. These
 paradigms also select their configuration classes. Python selects specializations
 with `ContinuousTimeEvolver[ApproximateTag]` and `[ValidatedTag]`.
-Simulator input sampling for inclusions and constant model parameters remains
+Evolver input sampling for inclusions and constant model parameters remains
 planned. The [four-family design](doc/system_families_design.md) also plans native
 discrete and hybrid discrete-time simulation/evolution, shared infrastructure,
 and explicit continuous-to-discrete converters. Those new APIs and converters

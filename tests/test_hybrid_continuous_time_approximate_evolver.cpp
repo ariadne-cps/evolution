@@ -23,7 +23,7 @@
  */
 
 /** @file tests/test_hybrid_continuous_time_approximate_evolver.cpp
- *  @brief Test hybrid simulator behavior and numerical invariants.
+ *  @brief Test hybrid evolver behavior and numerical invariants.
  */
 
 #include <cmath>
@@ -78,52 +78,52 @@ class TestHybridContinuousTimeApproximateEvolver : public Ariadne::Testing::Cont
 
   public:
     Void test_labelled_flow() {
-        HybridContinuousTimeEvolver<ApproximateTag> simulator(flow_system());
-        simulator.configuration().set_step_size(0.25);
+        HybridContinuousTimeEvolver<ApproximateTag> evolver(flow_system());
+        evolver.configuration().set_step_size(0.25);
         PointType reordered(q, RealSpace({y, x}), FloatDPApproximationPoint({2.0_x, 0.0_x}, dp));
         HybridRealPoint real(q, RealSpace({x, y}), RealPoint({Real(0), Real(2)}));
-        auto single = simulator.orbit(point(), HybridTime(1.0_x, 3));
-        auto permuted = simulator.orbit(reordered, HybridTime(1.0_x, 3));
-        auto from_real = simulator.orbit(real, HybridTime(1.0_x, 3));
+        auto single = evolver.orbit(point(), HybridTime(1.0_x, 3));
+        auto permuted = evolver.orbit(reordered, HybridTime(1.0_x, 3));
+        auto from_real = evolver.orbit(real, HybridTime(1.0_x, 3));
         expect_endpoint(single.curves()[0], 1.0, 1.0, 2.0, 5.0);
         expect_endpoint(permuted.curves()[0], 1.0, 1.0, 2.0, 5.0);
         expect_endpoint(from_real.curves()[0], 1.0, 1.0, 2.0, 5.0);
-        auto list = simulator.orbit(PointList{point(), reordered}, HybridTime(1.0_x, 3));
+        auto list = evolver.orbit(PointList{point(), reordered}, HybridTime(1.0_x, 3));
         ARIADNE_TESTING_EXPECT_EQUAL(list.number_of_trajectories(), 2u);
         expect_endpoint(list.curves(0)[0], 1.0, 1.0, 2.0, 5.0);
         expect_endpoint(list.curves(1)[0], 1.0, 1.0, 2.0, 5.0);
         HybridTerminationCriterion no_phantom_event(Real(1), Integer(3), Set<DiscreteEvent>{DiscreteEvent()});
-        auto fresh = simulator.orbit(PointList{point()}, no_phantom_event);
+        auto fresh = evolver.orbit(PointList{point()}, no_phantom_event);
         expect_endpoint(fresh.curves(0u)[0], 1.0, 1.0, 2.0, 5.0);
-        auto none = simulator.orbit(PointList{}, HybridTime(1.0_x, 3));
+        auto none = evolver.orbit(PointList{}, HybridTime(1.0_x, 3));
         ARIADNE_TESTING_EXPECT_EQUAL(none.number_of_trajectories(), 0u);
-        auto zero = simulator.orbit(point(), HybridTime(0.0_x, 3));
+        auto zero = evolver.orbit(point(), HybridTime(0.0_x, 3));
         expect_endpoint(zero.curves()[0], 0.0, 0.0, 2.0, 4.0);
-        ARIADNE_TESTING_EXPECT_EXCEPTION(simulator.configuration().set_step_size(0.0));
-        ARIADNE_TESTING_EXPECT_EXCEPTION(simulator.configuration().set_step_size(-0.25));
-        const auto& configured = simulator;
+        ARIADNE_TESTING_EXPECT_EXCEPTION(evolver.configuration().set_step_size(0.0));
+        ARIADNE_TESTING_EXPECT_EXCEPTION(evolver.configuration().set_step_size(-0.25));
+        const auto& configured = evolver;
         ARIADNE_TESTING_EXPECT_EQUAL(configured.configuration().step_size().raw().get_d(), 0.25);
     }
     Void test_transitions_and_termination() {
         auto system = flow_system();
         system.new_mode(target, {dot(x) = 0, dot(y) = 0}, {let(z) = x + 2 * y});
         system.new_transition(q, jump, target, {next(x) = 0, next(y) = y}, x >= Real(1 / 4_q), EventKind::URGENT);
-        HybridContinuousTimeEvolver<ApproximateTag> simulator(system);
-        simulator.configuration().set_step_size(0.25);
+        HybridContinuousTimeEvolver<ApproximateTag> evolver(system);
+        evolver.configuration().set_step_size(0.25);
         for (unsigned verbosity: {0u, 100u}) {
             LogVerbosityScope logging(verbosity);
             HybridTerminationCriterion stop(Real(1), Integer(3), Set<DiscreteEvent>{jump});
-            auto single = simulator.orbit(point(), stop);
+            auto single = evolver.orbit(point(), stop);
             ARIADNE_TESTING_EXPECT_EQUAL(single.size(), 2u);
             ARIADNE_TESTING_EXPECT_EQUAL(single.curves()[1].location(), target);
             expect_endpoint(single.curves()[0], 0.5, 0.5, 2.0, 4.5);
             expect_endpoint(single.curves()[1], 0.5, 0.0, 2.0, 4.0);
-            auto multiple = simulator.orbit(PointList{point()}, stop);
+            auto multiple = evolver.orbit(PointList{point()}, stop);
             ARIADNE_TESTING_EXPECT_EQUAL(multiple.size(0u), 2u);
             expect_endpoint(multiple.curves(0u)[1], 0.5, 0.0, 2.0, 4.0);
-            auto continued = simulator.orbit(point(), HybridTime(1.0_x, 3));
+            auto continued = evolver.orbit(point(), HybridTime(1.0_x, 3));
             expect_endpoint(continued.curves()[1], 1.0, 0.0, 2.0, 4.0);
-            auto continued_list = simulator.orbit(PointList{point()}, HybridTime(1.0_x, 3));
+            auto continued_list = evolver.orbit(PointList{point()}, HybridTime(1.0_x, 3));
             expect_endpoint(continued_list.curves(0u)[1], 1.0, 0.0, 2.0, 4.0);
         }
     }
@@ -135,31 +135,31 @@ class TestHybridContinuousTimeApproximateEvolver : public Ariadne::Testing::Cont
             ProgressAutomaton progress;
             progress.new_mode(q, {dot(x) = 1, dot(y) = 0}, {let(z) = x + 2 * y});
             progress.new_invariant(q, x <= 1, block);
-            HybridContinuousTimeEvolver<ApproximateTag> simulator(kind == EventKind::INVARIANT
+            HybridContinuousTimeEvolver<ApproximateTag> evolver(kind == EventKind::INVARIANT
                                                                       ? static_cast<const ContinuousTimeHybridAutomatonInterface&>(base)
                                                                       : static_cast<const ContinuousTimeHybridAutomatonInterface&>(progress));
             for (unsigned verbosity: {0u, 100u}) {
                 LogVerbosityScope logging(verbosity);
-                auto stopped = simulator.orbit(point(2.0), HybridTime(1.0_x, 3));
+                auto stopped = evolver.orbit(point(2.0), HybridTime(1.0_x, 3));
                 ARIADNE_TESTING_EXPECT_EQUAL(stopped.curve(0u).size(), 1u);
                 expect_endpoint(stopped.curves()[0], 0.0, 2.0, 2.0, 6.0);
-                auto stopped_list = simulator.orbit(PointList{point(2.0)}, HybridTime(1.0_x, 3));
+                auto stopped_list = evolver.orbit(PointList{point(2.0)}, HybridTime(1.0_x, 3));
                 ARIADNE_TESTING_EXPECT_EQUAL(stopped_list.curve(0u, 0u).size(), 1u);
-                auto valid = simulator.orbit(point(), HybridTime(0.5_x, 3));
+                auto valid = evolver.orbit(point(), HybridTime(0.5_x, 3));
                 expect_endpoint(valid.curves()[0], 0.5, 0.5, 2.0, 4.5);
             }
         }
     }
     Void test_box_sampling() {
         auto system = flow_system();
-        HybridContinuousTimeEvolver<ApproximateTag> simulator(system);
+        HybridContinuousTimeEvolver<ApproximateTag> evolver(system);
         HybridUpperBox box(q, RealSpace({x, y}), UpperBoxType({{0, 1}, {1, 2}}));
-        const auto default_orbit = simulator.orbit(
+        auto default_orbit = evolver.orbit(
             box, q, system.state_space(), HybridTime(0.0_x, 3));
         ARIADNE_TESTING_EXPECT_EQUAL(default_orbit.number_of_trajectories(), 1u);
 
-        simulator.configuration().set_sampling_counts(SamplingCounts{{x, 3u}, {y, 2u}});
-        const auto sampled = simulator.orbit(box, q, system.state_space(), HybridTime(0.0_x, 3));
+        evolver.configuration().set_sampling_counts(SamplingCounts{{x, 3u}, {y, 2u}});
+        auto sampled = evolver.orbit(box, q, system.state_space(), HybridTime(0.0_x, 3));
         ARIADNE_TESTING_EXPECT_EQUAL(sampled.number_of_trajectories(), 6u);
         for (SizeType i = 0u; i < sampled.number_of_trajectories(); ++i) {
             const auto p = sampled.curve(static_cast<Nat>(i), 0u).begin()->second;
@@ -168,14 +168,14 @@ class TestHybridContinuousTimeApproximateEvolver : public Ariadne::Testing::Cont
         }
 
         HybridUpperBox flat(q, RealSpace({x, y}), UpperBoxType({{0, 0}, {1, 2}}));
-        const auto flat_orbit = simulator.orbit(flat, q, system.state_space(), HybridTime(0.0_x, 3));
+        auto flat_orbit = evolver.orbit(flat, q, system.state_space(), HybridTime(0.0_x, 3));
         ARIADNE_TESTING_EXPECT_EQUAL(flat_orbit.number_of_trajectories(), 2u);
-        simulator.configuration().clear_sampling_counts();
-        const auto singleton = simulator.orbit(
+        evolver.configuration().clear_sampling_counts();
+        auto singleton = evolver.orbit(
             HybridBoundedConstraintSet(q, {x == 0, y == 2}), HybridTime(0.0_x, 3));
         ARIADNE_TESTING_EXPECT_EQUAL(singleton.number_of_trajectories(), 1u);
         expect_endpoint(singleton.curves(0u)[0], 0.0, 0.0, 2.0, 4.0);
-        ARIADNE_TESTING_EXPECT_EXCEPTION(simulator.configuration().set_sampling_count(x, 0u));
+        ARIADNE_TESTING_EXPECT_EXCEPTION(evolver.configuration().set_sampling_count(x, 0u));
     }
 
 };

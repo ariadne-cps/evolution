@@ -24,8 +24,6 @@ def test_paradigm_contracts():
     assert approximate is not validated
     assert a.DiscreteTimeEvolver[a.ValidatedTag] is a.DiscreteTimeValidatedEvolver
     assert a.HybridContinuousTimeEvolver[a.ApproximateTag] is a.HybridContinuousTimeApproximateEvolver
-    for old_name in ("ContinuousTimeSimulator", "HybridContinuousTimeSimulator"):
-        assert not hasattr(a, old_name)
     case = unittest.TestCase()
     with case.assertRaises(KeyError):
         a.DiscreteTimeEvolver[a.ApproximateTag]
@@ -120,9 +118,9 @@ def test_ordinary_equation_consumers():
     assert parameterised_orbit.reach().size() >= 2
     with unittest.TestCase().assertRaises(ValueError):
         parameterised_evolver.orbit(initial, a.Real(1)/16, a.Semantics.LOWER)
-    timed_simulator = a.ContinuousTimeEvolver[a.ApproximateTag](timed)
-    timed_simulator.configuration().set_step_size(0.03125)
-    timed_simulator.orbit(initial, a.Real(1)/16)
+    timed_evolver = a.ContinuousTimeEvolver[a.ApproximateTag](timed)
+    timed_evolver.configuration().set_step_size(0.03125)
+    timed_evolver.orbit(initial, a.Real(1)/16)
     for field in (parameterised,):
         with unittest.TestCase().assertRaises(ValueError):
             a.ContinuousTimeEvolver[a.ApproximateTag](field)

@@ -84,8 +84,8 @@ class TestOrdinaryDynamicsContract : public Ariadne::Testing::ContextFixture {
         PreconditionedGradedTaylorSeriesIntegrator preconditioned(step_maximum_error = 1e-5);
         ARIADNE_TESTING_EXPECT_THROWS(std::invalid_argument,
                                       ContinuousTimeEvolver<ValidatedTag>(parameterised, preconditioned));
-        ContinuousTimeEvolver<ApproximateTag> timed_simulator(timed);
-        ARIADNE_TESTING_PROVE(timed_simulator.configuration().step_size().raw().get_d() > 0);
+        ContinuousTimeEvolver<ApproximateTag> timed_evolver(timed);
+        ARIADNE_TESTING_PROVE(timed_evolver.configuration().step_size().raw().get_d() > 0);
         ARIADNE_TESTING_EXPECT_THROWS(std::invalid_argument, (void)ContinuousTimeEvolver<ApproximateTag>(parameterised));
     }
 

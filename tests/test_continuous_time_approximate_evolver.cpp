@@ -23,7 +23,7 @@
  */
 
 /** @file tests/test_continuous_time_approximate_evolver.cpp
- *  @brief Test vector field simulator behavior and numerical invariants.
+ *  @brief Test vector field evolver behavior and numerical invariants.
  */
 
 #include <cmath>
@@ -62,15 +62,15 @@ class TestContinuousTimeApproximateEvolver : public Ariadne::Testing::ContextFix
     Void test_linear_flow_and_input_labels() {
         RealVariable x("x"), y("y"), z("z"), missing("missing");
         OrdinaryDifferentialAlgebraicEquation field({dot(x) = 1, dot(y) = 0}, {let(z) = x + 2 * y});
-        ContinuousTimeEvolver<ApproximateTag> simulator(field);
-        simulator.configuration().set_step_size(0.25);
+        ContinuousTimeEvolver<ApproximateTag> evolver(field);
+        evolver.configuration().set_step_size(0.25);
         using PointType = ContinuousTimeEvolver<ApproximateTag>::ApproximatePointType;
         using Points = ContinuousTimeEvolver<ApproximateTag>::ApproximateListPointType;
         PointType start(RealSpace({x, y}), FloatDPApproximationPoint({0.0_x, 2.0_x}, dp));
         PointType reordered(RealSpace({y, x}), FloatDPApproximationPoint({2.0_x, 0.0_x}, dp));
         for (unsigned verbosity: {0u, 100u}) {
             LogVerbosityScope logging(verbosity);
-            auto orbit = simulator.orbit(Points{start, reordered}, Real(1));
+            auto orbit = evolver.orbit(Points{start, reordered}, Real(1));
             ARIADNE_TESTING_EXPECT_EQUAL(orbit.curves().size(), 2u);
             for (const auto& curve: orbit.curves()) {
                 const auto& endpoint = curve.end();
@@ -80,17 +80,17 @@ class TestContinuousTimeApproximateEvolver : public Ariadne::Testing::ContextFix
                 ARIADNE_TESTING_PROVE(std::abs(endpoint->second[curve.space()[z]].raw().get_d() - 5.0) < 1e-12);
             }
         }
-        ARIADNE_TESTING_EXPECT_EQUAL(simulator.orbit(Points{}, Real(1)).curves().size(), 0u);
-        ARIADNE_TESTING_EXPECT_EQUAL(simulator.orbit(Points{start}, Real(0)).curve(0).size(), 1u);
+        ARIADNE_TESTING_EXPECT_EQUAL(evolver.orbit(Points{}, Real(1)).curves().size(), 0u);
+        ARIADNE_TESTING_EXPECT_EQUAL(evolver.orbit(Points{start}, Real(0)).curve(0).size(), 1u);
         PointType incompatible(RealSpace({missing, y}), FloatDPApproximationPoint({0.0_x, 2.0_x}, dp));
-        ARIADNE_TESTING_EXPECT_EXCEPTION(simulator.orbit(Points{incompatible}, Real(1)));
+        ARIADNE_TESTING_EXPECT_EXCEPTION(evolver.orbit(Points{incompatible}, Real(1)));
     }
 
     Void test_configuration_and_sampling() {
         RealVariable x("x"), y("y"), unknown("unknown");
         OrdinaryDifferentialAlgebraicEquation field({dot(x) = 0, dot(y) = 0});
-        ContinuousTimeEvolver<ApproximateTag> simulator(field);
-        auto& config = simulator.configuration();
+        ContinuousTimeEvolver<ApproximateTag> evolver(field);
+        auto& config = evolver.configuration();
         ARIADNE_TESTING_EXPECT_EXCEPTION(config.set_step_size(0.0));
         ARIADNE_TESTING_EXPECT_EXCEPTION(config.set_step_size(-1.0));
         ARIADNE_TESTING_EXPECT_EXCEPTION(config.set_sampling_count(x, 0u));
@@ -105,18 +105,18 @@ class TestContinuousTimeApproximateEvolver : public Ariadne::Testing::ContextFix
         config.set_sampling_counts(SamplingCounts{});
         ARIADNE_TESTING_PROVE(config.sampling_counts().empty());
         config.set_sampling_counts(SamplingCounts{{x, 2u}});
-        const auto& configured = simulator;
+        const auto& configured = evolver;
         ARIADNE_TESTING_EXPECT_EQUAL(configured.configuration().sampling_counts().size(), 1u);
         UpperBoxType box({
             {0, 1},
             {0, 1}
         });
-        auto divided = simulator.orbit(box, Real(0));
+        auto divided = evolver.orbit(box, Real(0));
         ARIADNE_TESTING_EXPECT_EQUAL(divided.curves().size(), 2u);
         config.set_sampling_counts(SamplingCounts{{unknown, 2u}});
-        ARIADNE_TESTING_EXPECT_EXCEPTION(simulator.orbit(box, Real(0)));
+        ARIADNE_TESTING_EXPECT_EXCEPTION(evolver.orbit(box, Real(0)));
         config.clear_sampling_counts();
-        auto sampled = simulator.orbit(box, Real(0));
+        auto sampled = evolver.orbit(box, Real(0));
         ARIADNE_TESTING_EXPECT_EQUAL(sampled.curves().size(), 1u);
         std::ostringstream description;
         const ConfigurationInterface& base = config;
@@ -137,22 +137,22 @@ class TestContinuousTimeApproximateEvolver : public Ariadne::Testing::ContextFix
 
         Real time = 1.0_dec;
 
-        ContinuousTimeEvolver<ApproximateTag> simulator(vanderpol);
-        simulator.configuration().set_step_size(0.05);
+        ContinuousTimeEvolver<ApproximateTag> evolver(vanderpol);
+        evolver.configuration().set_step_size(0.05);
 
         Nat trajectory_number = 4;
 
         for (Nat t = 1; t <= trajectory_number; t++) {
-            simulator.configuration().set_sampling_count(x, t);
-            ARIADNE_TESTING_NOTE(simulator.configuration());
+            evolver.configuration().set_sampling_count(x, t);
+            ARIADNE_TESTING_NOTE(evolver.configuration());
 
-            Orbit<ListPointType> orbit = simulator.orbit(initial_set, time);
+            Orbit<ListPointType> orbit = evolver.orbit(initial_set, time);
 
             List<LabelledInterpolatedCurve> curves = orbit.curves();
 
             ARIADNE_TESTING_EXPECT_EQUAL(curves.size(), t);
 
-            simulator.configuration().clear_sampling_counts();
+            evolver.configuration().clear_sampling_counts();
         }
     }
 
@@ -169,24 +169,24 @@ class TestContinuousTimeApproximateEvolver : public Ariadne::Testing::ContextFix
 
         Real time = 1.0_dec;
 
-        ContinuousTimeEvolver<ApproximateTag> simulator(vanderpol);
-        simulator.configuration().set_step_size(0.05);
+        ContinuousTimeEvolver<ApproximateTag> evolver(vanderpol);
+        evolver.configuration().set_step_size(0.05);
 
         Nat trajectory_number = 4;
 
         for (Nat first = 1; first <= trajectory_number; first++) {
             for (Nat second = 1; second <= trajectory_number; second++) {
-                simulator.configuration().set_sampling_count(x, first);
-                simulator.configuration().set_sampling_count(y, second);
-                ARIADNE_TESTING_NOTE(simulator.configuration());
+                evolver.configuration().set_sampling_count(x, first);
+                evolver.configuration().set_sampling_count(y, second);
+                ARIADNE_TESTING_NOTE(evolver.configuration());
 
-                Orbit<ListPointType> orbit = simulator.orbit(initial_set, time);
+                Orbit<ListPointType> orbit = evolver.orbit(initial_set, time);
 
                 List<LabelledInterpolatedCurve> curves = orbit.curves();
 
                 ARIADNE_TESTING_EXPECT_EQUAL(curves.size(), first * second);
 
-                simulator.configuration().clear_sampling_counts();
+                evolver.configuration().clear_sampling_counts();
             }
         }
     }
@@ -204,22 +204,22 @@ class TestContinuousTimeApproximateEvolver : public Ariadne::Testing::ContextFix
 
         Real time = 6.3_dec;
 
-        ContinuousTimeEvolver<ApproximateTag> simulator(vanderpol);
-        simulator.configuration().set_step_size(0.05);
-        simulator.configuration().set_sampling_count(x, 1);
-        simulator.configuration().set_sampling_count(y, 1);
+        ContinuousTimeEvolver<ApproximateTag> evolver(vanderpol);
+        evolver.configuration().set_step_size(0.05);
+        evolver.configuration().set_sampling_count(x, 1);
+        evolver.configuration().set_sampling_count(y, 1);
 
-        ARIADNE_TESTING_NOTE(simulator.configuration());
+        ARIADNE_TESTING_NOTE(evolver.configuration());
 
-        Orbit<ListPointType> orbit = simulator.orbit(initial_set, time);
+        Orbit<ListPointType> orbit = evolver.orbit(initial_set, time);
 
         LabelledFigure fig({-2.5_dec <= x <= 2.5_dec, -2.5_dec <= y <= 2.5_dec});
         fig << orbit;
-        fig.write("test_real_expr_continuous_time_simulator_xy");
+        fig.write("test_real_expr_continuous_time_evolver_xy");
 
         LabelledFigure fig2({0 <= TimeVariable() <= 6.3_dec, 0 <= z <= 2.5_dec});
         fig2 << orbit;
-        fig2.write("test_real_expr_continuous_time_simulator_tz");
+        fig2.write("test_real_expr_continuous_time_evolver_tz");
     }
 
     Void test_multiple_real_box_vdp_cycle() {
@@ -235,22 +235,22 @@ class TestContinuousTimeApproximateEvolver : public Ariadne::Testing::ContextFix
 
         Real time = 6.3_dec;
 
-        ContinuousTimeEvolver<ApproximateTag> simulator(vanderpol);
-        simulator.configuration().set_step_size(0.05);
-        simulator.configuration().set_sampling_count(x, 1);
-        simulator.configuration().set_sampling_count(y, 1);
+        ContinuousTimeEvolver<ApproximateTag> evolver(vanderpol);
+        evolver.configuration().set_step_size(0.05);
+        evolver.configuration().set_sampling_count(x, 1);
+        evolver.configuration().set_sampling_count(y, 1);
 
-        ARIADNE_TESTING_NOTE(simulator.configuration());
+        ARIADNE_TESTING_NOTE(evolver.configuration());
 
-        Orbit<ListPointType> orbit = simulator.orbit(initial_set, time);
+        Orbit<ListPointType> orbit = evolver.orbit(initial_set, time);
 
         LabelledFigure fig({-2.5_dec <= x <= 2.5_dec, -3 <= y <= 3});
         fig << orbit;
-        fig.write("test_real_box_list_continuous_time_simulator_xy");
+        fig.write("test_real_box_list_continuous_time_evolver_xy");
 
         LabelledFigure fig2({0 <= TimeVariable() <= 6.3_dec, 0 <= z <= 2.5_dec});
         fig2 << orbit;
-        fig2.write("test_real_box_list_continuous_time_simulator_tz");
+        fig2.write("test_real_box_list_continuous_time_evolver_tz");
     }
 };
 

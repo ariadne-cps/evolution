@@ -32,7 +32,7 @@
 
 #include "algebra/algebra.hpp"
 #include "evolution/orbit.hpp"
-#include "evolution/simulator_sampling.hpp"
+#include "evolution/initial_point_sampling.hpp"
 #include "function/formula.hpp"
 #include "function/function.hpp"
 #include "function/functional.hpp"

@@ -319,10 +319,10 @@ class TestGlobalTime : public Testing::ContextFixture {
 
     void test_approximate_equation_evolution_uses_external_time() {
         const OrdinaryDifferentialAlgebraicEquation equation({dot(x) = t}, {let(a) = x + t});
-        ContinuousTimeEvolver<ApproximateTag> simulator(equation);
-        simulator.configuration().set_step_size(0.03125);
+        ContinuousTimeEvolver<ApproximateTag> evolver(equation);
+        evolver.configuration().set_step_size(0.03125);
         const ContinuousTimeEvolver<ApproximateTag>::ApproximatePointType initial(RealSpace({x}), FloatDPApproximationPoint({0.0_x}, dp));
-        auto orbit = simulator.orbit(ContinuousTimeEvolver<ApproximateTag>::ApproximateListPointType{initial}, Real(0.1_dec));
+        auto orbit = evolver.orbit(ContinuousTimeEvolver<ApproximateTag>::ApproximateListPointType{initial}, Real(0.1_dec));
         const auto& curve = orbit.curve(0u);
         ARIADNE_TESTING_EXPECT_WITHIN(curve.end()->first.get_d(), 0.1, 1e-15);
         ARIADNE_TESTING_EXPECT_WITHIN(curve.end()->second[curve.space()[x]].raw().get_d(), 0.005, 1e-14);

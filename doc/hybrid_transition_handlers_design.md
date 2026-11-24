@@ -3,7 +3,7 @@
 The hybrid evolver separates numerical capabilities, event policy, crossing
 analysis, geometric guard operations and orchestration. The broader
 [four-family roadmap](system_families_design.md) places this work before the
-remaining continuous capabilities, discrete hybrid systems and simulators.
+remaining continuous capabilities, discrete hybrid systems and evolvers.
 Event policies, guard handlers and crossing analysis are separate private
 components. Public crossing data distinguish geometry from typed numerical
 evidence while retaining the numerical rules and constraint order of the
@@ -178,7 +178,7 @@ analytic witnesses and exclusion bounds for new mathematical checks; do not
 replace them with tests which merely repeat policy-table entries.
 
 Format is currently non-blocking by decision; maintain the functional
-compiler/test/coverage/sanitizer checks before expanding numerical capabilities. Keep simulator work
+compiler/test/coverage/sanitizer checks before expanding numerical capabilities. Keep evolver work
 after the required hybrid capabilities. Full Python/C++ tutorial parity and
 the bindings it needs remain the final Evolution task.
 

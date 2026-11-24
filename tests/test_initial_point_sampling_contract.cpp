@@ -1,5 +1,5 @@
 /***************************************************************************
- *            tests/test_simulator_sampling_contract.cpp
+ *            tests/test_initial_point_sampling_contract.cpp
  *
  *  Copyright  2026  Luca Geretti
  *
@@ -22,11 +22,11 @@
  *  along with Ariadne Evolution. If not, see <https://www.gnu.org/licenses/>.
  */
 
-/** @file tests/test_simulator_sampling_contract.cpp
+/** @file tests/test_initial_point_sampling_contract.cpp
  *  @brief Verify sampling cardinality, ordering, and domain membership.
  */
 
-#include "evolution/simulator_sampling.hpp"
+#include "evolution/initial_point_sampling.hpp"
 
 #include "logging/test_runner.hpp"
 #include "symbolic/space.hpp"
@@ -36,7 +36,7 @@
 using namespace Ariadne;
 
 namespace {
-class TestSimulatorSamplingContract : public Testing::ContextFixture {
+class TestEvolverSamplingContract : public Testing::ContextFixture {
   public:
     using Testing::ContextFixture::ContextFixture;
 
@@ -104,8 +104,8 @@ class TestSimulatorSamplingContract : public Testing::ContextFixture {
 } // namespace
 
 int main(int argc, char** argv) {
-    ARIADNE_TESTING_SUITE("test_simulator_sampling_contract");
-    ARIADNE_TESTING_ADD_TEST(TestSimulatorSamplingContract, test_continuous_counts_and_membership);
-    ARIADNE_TESTING_ADD_TEST(TestSimulatorSamplingContract, test_hybrid_counts_and_flat_coordinate);
+    ARIADNE_TESTING_SUITE("test_initial_point_sampling_contract");
+    ARIADNE_TESTING_ADD_TEST(TestEvolverSamplingContract, test_continuous_counts_and_membership);
+    ARIADNE_TESTING_ADD_TEST(TestEvolverSamplingContract, test_hybrid_counts_and_flat_coordinate);
     return Ariadne::Testing::run_logging_suite(ariadne_test_suite, argc, argv);
 }

@@ -30,13 +30,13 @@ def main():
     assert automaton.has_transition(idle, activate)
     assert automaton.target(active, deactivate) == idle
 
-    simulator = HybridContinuousTimeEvolver[ApproximateTag](automaton)
+    evolver = HybridContinuousTimeEvolver[ApproximateTag](automaton)
     horizon = HybridTime(Real(Rational(1)), Integer(2))
     assert horizon.discrete_time() == Integer(2)
     assert Semantics.UPPER != Semantics.LOWER
     print(f"Hybrid simulation model: {automaton.number_of_modes()} modes")
     print(f"Hybrid budget: {horizon.continuous_time()}, {horizon.discrete_time()}")
-    print(f"Simulator: {type(simulator).__name__}")
+    print(f"Evolver: {type(evolver).__name__}")
 
 
 if __name__ == "__main__":

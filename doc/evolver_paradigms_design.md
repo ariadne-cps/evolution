@@ -12,7 +12,7 @@ The numerical paradigm is an explicit template argument, without a default:
 The canonical family headers include the implemented specializations. Each
 specialization owns its numerical implementation, in a corresponding
 `*_approximate_evolver` or `*_validated_evolver` header/source. The former
-simulator names and headers are removed, without compatibility aliases or
+evolver names and headers are removed, without compatibility aliases or
 wrappers. Discrete iteration keeps its own numerical kernel.
 
 ## Distinct interfaces and results

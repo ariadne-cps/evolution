@@ -44,12 +44,12 @@ int main() {
     List<DottedRealAssignment> dynamics;
     dynamics.append(dot(x) = -x);
     OrdinaryDifferentialAlgebraicEquation decay(dynamics);
-    ContinuousTimeEvolver<ApproximateTag> simulator(decay);
-    simulator.configuration().set_step_size(0.05);
-    simulator.configuration().set_sampling_count(x, 1u);
+    ContinuousTimeEvolver<ApproximateTag> evolver(decay);
+    evolver.configuration().set_step_size(0.05);
+    evolver.configuration().set_sampling_count(x, 1u);
 
     RealExpressionBoundedConstraintSet initial({0.9_dec <= x <= 1.1_dec});
-    auto simulated = simulator.orbit(initial, 0.1_dec);
+    auto simulated = evolver.orbit(initial, 0.1_dec);
     const auto ncurves = simulated.curves().size();
     if (ncurves != 1u) {
         throw std::runtime_error("Expected one short continuous trajectory");
@@ -100,14 +100,14 @@ int main() {
         automaton.target(active, deactivate) != idle) {
         throw std::runtime_error("Hybrid transition relation is incorrect");
     }
-    HybridContinuousTimeEvolver<ApproximateTag> hybrid_continuous_time_simulator(automaton);
+    HybridContinuousTimeEvolver<ApproximateTag> hybrid_continuous_time_evolver(automaton);
     HybridTime budget(1.0_x, 2);
     if (budget.discrete_time() != Integer(2)) {
         throw std::runtime_error("Incorrect hybrid jump budget");
     }
     std::cout << "Hybrid evolution: " << automaton.locations().size()
               << " modes, budget " << budget << "\n";
-    (void)hybrid_continuous_time_simulator;
+    (void)hybrid_continuous_time_evolver;
 
     // Hybrid validated evolution with continuous dynamics in a single mode.
     // No events are enabled: this isolates the continuous flow in a hybrid

@@ -62,9 +62,10 @@ struct HybridDiscreteTimeStepExecution {
 //! execute() with an external evidence callback retains its original
 //! full-source imaging contract: the callback alone cannot authorize a
 //! numerical restriction. LOWER evolution is not supported.
-//! Deterministic equations and event-free bounded-input inclusion
-//! progression without auxiliary outputs are supported. Other inclusion
-//! operations throw instead of sampling or returning partial results.
+//! Deterministic equations and bounded-input inclusions with state-only
+//! events targeting deterministic equations and no auxiliary outputs are
+//! supported. Input-dependent guard and auxiliary expressions remain
+//! unsupported; no numerical input is sampled.
 //! The caller must
 //! maintain consistency between source_index and the enclosure's global
 //! time function. This is a single-step adapter, not an orbit scheduler.

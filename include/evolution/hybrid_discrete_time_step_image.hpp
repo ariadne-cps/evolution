@@ -42,11 +42,11 @@ namespace Ariadne {
  *  is an UPPER over-approximation of a possibly enabled branch, not LOWER proof.
  *
  *  Deterministic equations remain supported. For bounded-input difference
- *  inclusions, only event-free UPPER progression without auxiliary outputs
- *  is implemented: each tick introduces fresh independent INPUT parameters
- *  and composes the validated map over their full box domain.
- *  Inclusion transitions, input-dependent auxiliary outputs and unsupported
- *  target modes still throw, never sample or truncate the UPPER result.
+ *  inclusions without auxiliary outputs, UPPER progression uses fresh
+ *  independent bounded INPUT coordinates at every tick. State-only guards
+ *  and resets to deterministic equation modes are also supported; jumps do
+ *  not consume a fresh input. Inclusion targets and auxiliary outputs
+ *  remain unsupported, never sampled or silently truncated.
  *  This operation performs no scheduling and does not assemble an Orbit.
  */
 class HybridDiscreteTimeStepImage {

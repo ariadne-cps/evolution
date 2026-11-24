@@ -29,6 +29,7 @@
 #include "evolution/hybrid_discrete_time_step_executor.hpp"
 #include "evolution/hybrid_discrete_time_predicate_evaluator.hpp"
 #include "hybrid_discrete_time_predicate_function.hpp"
+#include "hybrid_discrete_time_inclusion_capability.hpp"
 #include "hybrid_guard_predicate.hpp"
 
 #include <stdexcept>
@@ -82,14 +83,10 @@ HybridDiscreteTimeStepExecution execute_impl(
     Bool restrict_prestate) {
     if (!automaton.has_mode(source.location()))
         throw std::invalid_argument("Discrete hybrid step source mode does not exist");
-    if (!automaton.has_equation(source.location())) {
-        if (!automaton.has_inclusion(source.location()) ||
-            !automaton.events(source.location()).empty() ||
-            automaton.inclusion(source.location()).auxiliary_space().dimension() != 0u ||
-            source.auxiliary_space().dimension() != 0u)
-            throw std::invalid_argument(
-                "Validated inclusion UPPER requires an event-free mode without auxiliary outputs");
-    }
+    if (automaton.has_inclusion(source.location()))
+        EvolutionDetail::validate_discrete_inclusion_source(automaton, source);
+    else if (!automaton.has_equation(source.location()))
+        throw std::invalid_argument("Unknown discrete hybrid source dynamics");
 
     const HybridDiscreteTimeStepPlan plan =
         HybridDiscreteTimeStepPlanner::plan(automaton, source.location(), source_index, evaluate);

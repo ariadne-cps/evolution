@@ -27,6 +27,7 @@
  */
 
 #include "evolution/hybrid_discrete_time_step_image.hpp"
+#include "hybrid_discrete_time_inclusion_capability.hpp"
 
 #include <stdexcept>
 
@@ -56,6 +57,35 @@ List<PrimedRealAssignment> ordered_reset(const List<PrimedRealAssignment>& reset
     return ordered;
 }
 
+// A reset from either dynamics family depends on the pre-state and consumes
+// one tick. Inclusion inputs are introduced only for a progression branch.
+HybridEnclosure apply_tick_reset(const DiscreteTimeHybridAutomatonInterface& automaton,
+                                 const HybridEnclosure& source,
+                                 const HybridDiscreteTimePlannedBranch& branch,
+                                 const RealSpace& source_space,
+                                 const List<RealAssignment>& source_auxiliaries) {
+    if (branch.kind != HybridDiscreteTimeBranchKind::TRANSITION || !branch.event)
+        throw std::invalid_argument("Invalid discrete hybrid transition branch metadata");
+    const DiscreteLocation location = source.location();
+    const DiscreteEvent event = *branch.event;
+    if (!automaton.has_transition(location, event) ||
+        automaton.target(location, event) != branch.target)
+        throw std::invalid_argument("Discrete hybrid transition branch is not in the system");
+    if (!automaton.has_equation(branch.target))
+        throw std::invalid_argument("Validated discrete inclusion target outputs are not implemented");
+
+    const auto& destination = automaton.equation(branch.target);
+    const auto reset = ordered_reset(automaton.reset_assignments(location, event),
+                                     destination.state_space());
+    const auto reset_function = make_reset_function(source_space, source_auxiliaries, reset);
+    HybridEnclosure next = source;
+    next.apply_reset(event, branch.target, destination.state_space(),
+                     reset_function, destination.auxiliary_space(),
+                     destination.auxiliary_function());
+    next.set_time_function(next.time_function() + StepSizeType(1, 0u));
+    return next;
+}
+
 } // namespace
 
 HybridEnclosure HybridDiscreteTimeStepImage::apply(
@@ -69,17 +99,16 @@ HybridEnclosure HybridDiscreteTimeStepImage::apply(
         throw std::invalid_argument("Discrete hybrid image source state space mismatch");
     if (automaton.has_inclusion(location)) {
         const DifferenceAlgebraicInclusion& inclusion = automaton.inclusion(location);
-        // This first set-valued UPPER kernel handles only event-free modes
-        // without auxiliary outputs. Quantified inputs are new independent
-        // parameter coordinates at every tick, never fixed samples.
+        EvolutionDetail::validate_discrete_inclusion_source(automaton, source);
+        if (branch.kind == HybridDiscreteTimeBranchKind::TRANSITION)
+            return apply_tick_reset(automaton, source, branch, inclusion.state_space(),
+                                    inclusion.auxiliary_assignments());
         if (branch.kind != HybridDiscreteTimeBranchKind::PROGRESSION ||
-            branch.target != location || branch.event ||
-            !automaton.events(location).empty() ||
-            inclusion.auxiliary_space().dimension() != 0u ||
-            source.auxiliary_space().dimension() != 0u)
-            throw std::invalid_argument(
-                "Validated inclusion progression requires no events or auxiliary outputs");
+            branch.target != location || branch.event)
+            throw std::invalid_argument("Invalid discrete hybrid inclusion progression metadata");
 
+        // Only progression chooses the full independent input box. Guard
+        // restrictions were placed on the pre-state by the executor.
         Enclosure evolved = source.continuous_set();
         const SizeType input_offset = evolved.number_of_parameters();
         evolved.adjoin_parameters(inclusion.inputs(), EnclosureVariableKind::INPUT);
@@ -119,27 +148,8 @@ HybridEnclosure HybridDiscreteTimeStepImage::apply(
         next.replace_continuous_set(evolved);
         return next;
     }
-    if (branch.kind != HybridDiscreteTimeBranchKind::TRANSITION || !branch.event)
-        throw std::invalid_argument("Invalid discrete hybrid transition branch metadata");
-
-    const DiscreteEvent event = *branch.event;
-    if (!automaton.has_transition(location, event) || automaton.target(location, event) != branch.target)
-        throw std::invalid_argument("Discrete hybrid transition branch is not in the system");
-    if (!automaton.has_equation(branch.target))
-        throw std::invalid_argument("Validated discrete inclusion target outputs are not implemented");
-
-    const DifferenceAlgebraicEquation& destination = automaton.equation(branch.target);
-    const auto reset = ordered_reset(automaton.reset_assignments(location, event),
-                                     destination.state_space());
-    const auto reset_function = make_reset_function(equation.state_space(),
-                                                    equation.auxiliary_assignments(), reset);
-    next.apply_reset(event, branch.target, destination.state_space(),
-                     reset_function, destination.auxiliary_space(),
-                     destination.auxiliary_function());
-    // HybridEnclosure::apply_reset intentionally preserves global time.
-    // A discrete hybrid transition consumes exactly one tick, just like a map.
-    next.set_time_function(next.time_function() + StepSizeType(1, 0u));
-    return next;
+    return apply_tick_reset(automaton, next, branch, equation.state_space(),
+                            equation.auxiliary_assignments());
 }
 
 } // namespace Ariadne

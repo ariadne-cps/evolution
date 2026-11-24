@@ -31,6 +31,7 @@
 
 #include <stdexcept>
 #include "evolution/hybrid_enclosure.hpp"
+#include "hybrid_discrete_time_inclusion_capability.hpp"
 #include "symbolic/assignment.hpp"
 #include "system/discrete_time_hybrid_automaton_interface.hpp"
 #include "system/system_function.hpp"
@@ -45,11 +46,20 @@ inline EffectiveScalarMultivariateFunction discrete_source_indicator(
     const DiscreteLocation location = source.location();
     if (!automaton.has_mode(location))
         throw std::invalid_argument("Discrete hybrid predicate source mode does not exist");
-    if (!automaton.has_equation(location))
-        throw std::invalid_argument("Certified discrete inclusion predicate evaluation is not implemented");
-    const DifferenceAlgebraicEquation& equation = automaton.equation(location);
-    if (source.state_space() != equation.state_space())
+    if (source.state_space() != automaton.state_space(location))
         throw std::invalid_argument("Discrete hybrid predicate source state space mismatch");
+    if (automaton.has_inclusion(location)) {
+        // System permits state/auxiliary event arguments, never free inputs.
+        // With no auxiliaries, predicates refer only to the pre-tick state.
+        validate_discrete_inclusion_source(automaton, source);
+        const auto& inclusion = automaton.inclusion(location);
+        return make_constraint_function(inclusion.state_space(),
+                                        algebraic_sort(inclusion.auxiliary_assignments()),
+                                        predicate, Sign::POSITIVE);
+    }
+    if (!automaton.has_equation(location))
+        throw std::invalid_argument("Unknown discrete hybrid predicate dynamics");
+    const auto& equation = automaton.equation(location);
     return make_constraint_function(equation.state_space(),
                                     algebraic_sort(equation.auxiliary_assignments()),
                                     predicate, Sign::POSITIVE);

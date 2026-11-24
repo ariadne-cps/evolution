@@ -66,7 +66,9 @@ class HybridDiscreteTimeEvolverConfiguration<ValidatedTag> : public Configuratio
 //! \brief Public UPPER subset of validated hybrid discrete-time evolution.
 //! \details All possible certified branches consume one tick; uncertain
 //! predicates retain alternatives. No branch priority, time-zero jump,
-//! guard restriction or merging is imposed. Difference inclusions are rejected.
+//! implicit merging is imposed. Bounded-input inclusion progressions and
+//! state-only transitions to deterministic equation modes are supported
+//! without auxiliary outputs. Only progressions introduce fresh inputs.
 //! LOWER is unsupported, even if a branch precondition is certain.
 //! A blocked leaf is not an orbit.final() enclosure: retrieve it via
 //! orbit_with_blocked() or inspect provenance through explore().

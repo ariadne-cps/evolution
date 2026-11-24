@@ -27,6 +27,7 @@
  */
 
 #include "hybrid_transition_handlers.hpp"
+#include "hybrid_guard_predicate.hpp"
 
 #include "function/function.hpp"
 #include "logging/logging.hpp"
@@ -202,14 +203,16 @@ using JumpHandler = HybridJumpCandidate (*)(const HybridGuardContext&,
 HybridJumpCandidate activate_source(const HybridGuardContext& context,
                                     const EffectiveVectorMultivariateFunction&, const TimingData&) {
     auto result = initial_candidate(context);
-    result.enclosure.new_activation(context.transition.event, context.transition.guard_function);
+    restrict_source_guard(result.enclosure, context.transition.event, context.transition.guard_function,
+                          context.transition.source_arguments);
     return result;
 }
 
 HybridJumpCandidate activate_tube(const HybridGuardContext& context,
                                   const EffectiveVectorMultivariateFunction&, const TimingData& timing) {
     auto result = tube_candidate(context, timing);
-    result.enclosure.new_activation(context.transition.event, context.transition.guard_function);
+    restrict_source_guard(result.enclosure, context.transition.event, context.transition.guard_function,
+                          context.transition.source_arguments);
     return result;
 }
 
@@ -355,19 +358,17 @@ HybridJumpGuardCapability jump_guard_capability(EventKind event, const CrossingD
 
 HybridInitialGuardActivation classify_initial_guard(
     const HybridEnclosure& invariant_valid_source, const TransitionData& transition) {
-    if (definitely(invariant_valid_source.is_empty()))
-        return HybridInitialGuardActivation::EXCLUDED;
-
-    // This certificate is about every source point, not merely every point
-    // left after intersecting the guard. Never promote a partial candidate.
-    if (definitely(invariant_valid_source.range_of(transition.guard_function, transition.source_arguments).lower_bound() > 0))
-        return HybridInitialGuardActivation::FULL_SOURCE;
-
-    HybridEnclosure candidate = invariant_valid_source;
-    candidate.new_activation(transition.event, transition.guard_function, transition.source_arguments);
-    return definitely(candidate.is_empty())
-             ? HybridInitialGuardActivation::EXCLUDED
-             : HybridInitialGuardActivation::UNRESOLVED;
+    switch (classify_source_guard(invariant_valid_source, transition.guard_function,
+                                  transition.source_arguments)) {
+        case HybridSourceGuardStatus::EXCLUDED:
+            return HybridInitialGuardActivation::EXCLUDED;
+        case HybridSourceGuardStatus::UNRESOLVED:
+            return HybridInitialGuardActivation::UNRESOLVED;
+        case HybridSourceGuardStatus::FULL_SOURCE:
+            return HybridInitialGuardActivation::FULL_SOURCE;
+        default:
+            ARIADNE_FAIL_MSG("Unhandled hybrid source guard status");
+    }
 }
 
 bool permits_initial_reset(HybridInitialGuardActivation activation, Semantics semantics) {

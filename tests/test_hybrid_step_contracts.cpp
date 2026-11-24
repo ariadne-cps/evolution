@@ -26,6 +26,7 @@
  *  @brief Test hybrid step contracts behavior and numerical invariants.
  */
 
+#include "../src/hybrid_guard_predicate.hpp"
 #include "../src/hybrid_step_results.hpp"
 #include "../src/hybrid_transition_handlers.hpp"
 #include "evolution/hybrid_continuous_time_evolver.hpp"
@@ -270,6 +271,40 @@ class TestHybridStepContracts : public Testing::ContextFixture {
         ARIADNE_TESTING_PROVE(permits_initial_reset(full, Semantics::LOWER));
         ARIADNE_TESTING_EXPECT_EXCEPTION(
             permits_initial_reset(full, static_cast<Semantics>(255u)));
+    }
+
+    void test_shared_source_guard_matches_continuous_activation() {
+        LinearGuardScenario scenario(ExactBoxType({
+                                         {-0.25_x, 0.25_x},
+                                         {      0,      0}
+        }), Dyadic(0.25_x));
+        const auto partial = scenario.transition(EventKind::URGENT, scenario.x);
+        HybridEnclosure common = scenario.initial;
+        HybridEnclosure original = scenario.initial;
+        restrict_source_guard(common, partial.event, partial.guard_function,
+                              partial.source_arguments);
+        original.new_activation(partial.event, partial.guard_function,
+                                partial.source_arguments);
+        ARIADNE_TESTING_EXPECT_EQUAL(common.number_of_constraints(), 1u);
+        ARIADNE_TESTING_EXPECT_EQUAL(common.number_of_constraints(), original.number_of_constraints());
+        ARIADNE_TESTING_EXPECT_EQUAL(scenario.initial.number_of_constraints(), 0u);
+        ARIADNE_TESTING_PROVE(!definitely(common.is_empty()));
+        ARIADNE_TESTING_EXPECT_EQUAL(classify_source_guard(
+            scenario.initial, partial.guard_function, partial.source_arguments),
+            HybridSourceGuardStatus::UNRESOLVED);
+        const auto excluded = scenario.transition(EventKind::URGENT, scenario.x - 1);
+        const auto full = scenario.transition(EventKind::URGENT, scenario.x + 1);
+        ARIADNE_TESTING_EXPECT_EQUAL(classify_source_guard(
+            scenario.initial, excluded.guard_function, excluded.source_arguments),
+            HybridSourceGuardStatus::EXCLUDED);
+        ARIADNE_TESTING_EXPECT_EQUAL(classify_source_guard(
+            scenario.initial, full.guard_function, full.source_arguments),
+            HybridSourceGuardStatus::FULL_SOURCE);
+        // The continuous hybrid LOWER policy still requires whole-source evidence.
+        ARIADNE_TESTING_PROVE(!permits_initial_reset(
+            classify_initial_guard(scenario.initial, partial), Semantics::LOWER));
+        ARIADNE_TESTING_PROVE(permits_initial_reset(
+            classify_initial_guard(scenario.initial, partial), Semantics::UPPER));
     }
 
     void test_unresolved_geometry_preserves_upper_lower_rules() {
@@ -800,6 +835,7 @@ int main(int argc, char** argv) {
     ARIADNE_TESTING_ADD_TEST(TestHybridStepContracts, test_transverse_and_permissive_handlers_keep_distinct_time_maps);
     ARIADNE_TESTING_ADD_TEST(TestHybridStepContracts, test_impact_direction_and_source_candidate_elapsed_time);
     ARIADNE_TESTING_ADD_TEST(TestHybridStepContracts, test_initial_guard_activation_classifies_the_complete_source);
+    ARIADNE_TESTING_ADD_TEST(TestHybridStepContracts, test_shared_source_guard_matches_continuous_activation);
     ARIADNE_TESTING_ADD_TEST(TestHybridStepContracts, test_unresolved_geometry_preserves_upper_lower_rules);
     ARIADNE_TESTING_ADD_TEST(TestHybridStepContracts, test_grazing_split_keeps_primary_and_additional_branch_order);
     ARIADNE_TESTING_ADD_TEST(TestHybridStepContracts, test_full_steps_use_independent_endpoint_and_keep_hybrid_metadata);

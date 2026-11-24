@@ -35,8 +35,8 @@
 
 namespace Ariadne {
 
-/** @brief IteratedMap: compile-time correspondence between systems, evolvers and enclosures. */
-class IteratedMap;
+/** @brief DifferenceAlgebraicEquation: compile-time correspondence between systems, evolvers and enclosures. */
+class DifferenceAlgebraicEquation;
 /** @brief OrdinaryDifferentialAlgebraicEquation: compile-time correspondence between systems, evolvers and enclosures. */
 class OrdinaryDifferentialAlgebraicEquation;
 /** @brief OrdinaryDifferentialAlgebraicInclusion: compile-time correspondence between systems, evolvers and enclosures. */
@@ -67,7 +67,7 @@ template<class P, class SYS>
 struct EvolutionTraits;
 
 template<>
-struct EvolutionTraits<ValidatedTag, IteratedMap> {
+struct EvolutionTraits<ValidatedTag, DifferenceAlgebraicEquation> {
     using EvolverType = DiscreteTimeEvolver<ValidatedTag>;
     using EnclosureType = LabelledEnclosure;
 };

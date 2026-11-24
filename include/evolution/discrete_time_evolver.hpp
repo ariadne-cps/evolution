@@ -40,15 +40,15 @@
 #include "evolution/evolver_interface.hpp"
 #include "function/function_interface.hpp"
 #include "logging/logging.hpp"
-#include "system/iterated_map.hpp"
+#include "system/difference_algebraic_equation.hpp"
 #include "utility/tuple.hpp"
 
 namespace Ariadne {
 
 /** @brief Enclosure represents evolution by iteration of discrete-time maps. */
 class Enclosure;
-/** @brief IteratedMap represents evolution by iteration of discrete-time maps. */
-class IteratedMap;
+/** @brief DifferenceAlgebraicEquation represents evolution by iteration of discrete-time maps. */
+class DifferenceAlgebraicEquation;
 template<class ES>
 class Orbit;
 
@@ -56,16 +56,16 @@ class Orbit;
 template<>
 class DiscreteTimeEvolverConfiguration<ValidatedTag>;
 
-/*! \brief A class for computing the evolution of an iterated map.
+/*! \brief A class for computing the evolution of an difference equation.
  */
 template<>
 class DiscreteTimeEvolver<ValidatedTag>
-    : public EvolverInterface<ValidatedTag, IteratedMap, LabelledEnclosure, Integer> {
+    : public EvolverInterface<ValidatedTag, DifferenceAlgebraicEquation, LabelledEnclosure, Integer> {
   public:
     using Paradigm = ValidatedTag;
-    typedef EvolverInterface<ValidatedTag, IteratedMap, LabelledEnclosure, Integer> Interface;
+    typedef EvolverInterface<ValidatedTag, DifferenceAlgebraicEquation, LabelledEnclosure, Integer> Interface;
     typedef DiscreteTimeEvolverConfiguration<ValidatedTag> ConfigurationType;
-    typedef IteratedMap SystemType;
+    typedef DifferenceAlgebraicEquation SystemType;
     typedef Integer TimeType;
     typedef Integer TerminationType;
     typedef LabelledEnclosure EnclosureType;

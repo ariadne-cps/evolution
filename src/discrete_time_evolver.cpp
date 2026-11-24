@@ -23,7 +23,7 @@
  */
 
 /** @file src/discrete_time_evolver.cpp
- *  @brief Implement iterated map evolver operations.
+ *  @brief Implement difference equation evolver operations.
  */
 
 #include "evolution/discrete_time_evolver.hpp"
@@ -37,7 +37,7 @@
 #include "function/taylor_function.decl.hpp"
 #include "logging/logging.hpp"
 #include "symbolic/assignment.hpp"
-#include "system/iterated_map.hpp"
+#include "system/difference_algebraic_equation.hpp"
 #include "utility/array.hpp"
 #include "utility/macros.hpp"
 #include "utility/stlio.hpp"

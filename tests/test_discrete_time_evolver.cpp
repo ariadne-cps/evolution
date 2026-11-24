@@ -23,7 +23,7 @@
  */
 
 /** @file tests/test_discrete_time_evolver.cpp
- *  @brief Test iterated map evolver behavior and numerical invariants.
+ *  @brief Test difference equation evolver behavior and numerical invariants.
  */
 
 #include <fstream>
@@ -48,7 +48,7 @@
 #include "logging/test_runner.hpp"
 #include "numeric/rational.hpp"
 #include "set/list_set.hpp"
-#include "system/iterated_map.hpp"
+#include "system/difference_algebraic_equation.hpp"
 #include "utility/tuple.hpp"
 
 #include "ariadne-testing.hpp"
@@ -63,7 +63,7 @@ class TestDiscreteTimeEvolver : public Ariadne::Testing::ContextFixture {
   public:
     Void test_stopping_policies() {
         RealVariable x("x"), other("other");
-        IteratedMap map(List<PrimedRealAssignment>{next(x) = x + 1});
+        DifferenceAlgebraicEquation map(List<PrimedRealAssignment>{next(x) = x + 1});
         DiscreteTimeEvolver<ValidatedTag> evolver(map);
         auto initial = evolver.enclosure(ExactBoxType({
             {-1.0_x, 1.0_x}
@@ -104,7 +104,7 @@ class TestDiscreteTimeEvolver : public Ariadne::Testing::ContextFixture {
 
     Void test_lower_witness_and_upper_subdivision() {
         const RealVariable x("x");
-        const IteratedMap translation(List<PrimedRealAssignment>{next(x) = x + 1});
+        const DifferenceAlgebraicEquation translation(List<PrimedRealAssignment>{next(x) = x + 1});
         DiscreteTimeEvolver<ValidatedTag> evolver(translation);
         const auto initial = evolver.enclosure(ExactBoxType({{-1.0_x, 1.0_x}}));
         evolver.configuration().set_enable_subdivisions(true);
@@ -129,7 +129,7 @@ class TestDiscreteTimeEvolver : public Ariadne::Testing::ContextFixture {
 
         // Nonlinear image: a point witness survives even when the computed
         // enclosure is wider than the exact reachable set.
-        const IteratedMap quadratic(List<PrimedRealAssignment>{next(x) = x * x});
+        const DifferenceAlgebraicEquation quadratic(List<PrimedRealAssignment>{next(x) = x * x});
         DiscreteTimeEvolver<ValidatedTag> nonlinear(quadratic);
         nonlinear.configuration().set_enable_subdivisions(true);
         nonlinear.configuration().set_enable_premature_termination(false);
@@ -153,7 +153,7 @@ class TestDiscreteTimeEvolver : public Ariadne::Testing::ContextFixture {
         Real a = 1.3_dec;
         Real b = 0.3_dec;
         RealVariable x("x"), y("y");
-        IteratedMap henon({next(x) = a - x * x + b * y, next(y) = x});
+        DifferenceAlgebraicEquation henon({next(x) = a - x * x + b * y, next(y) = x});
         ARIADNE_TESTING_NOTE(henon);
 
         // Define the initial set
@@ -186,7 +186,7 @@ class TestDiscreteTimeEvolver : public Ariadne::Testing::ContextFixture {
         }
 
         // Set up the evolution parameters and grid
-        IteratedMap::TimeType time(6);
+        DifferenceAlgebraicEquation::TimeType time(6);
 
         // Set up the evaluators
         DiscreteTimeEvolver<ValidatedTag> evolver(henon);
@@ -216,11 +216,11 @@ class TestDiscreteTimeEvolver : public Ariadne::Testing::ContextFixture {
         Real a = 1.3_dec;
         Real b = 0.3_dec;
         RealVariable x("x"), y("y");
-        IteratedMap henon({next(x) = a - x * x + b * y, next(y) = x});
+        DifferenceAlgebraicEquation henon({next(x) = a - x * x + b * y, next(y) = x});
 
         RealExpressionBoundedConstraintSet initial_set({0.4_dec <= x <= 0.7_dec, 0.9_dec <= y <= 1.1_dec});
 
-        IteratedMap::TimeType time(6);
+        DifferenceAlgebraicEquation::TimeType time(6);
 
         DiscreteTimeEvolver<ValidatedTag> evolver(henon);
         evolver.configuration().set_maximum_enclosure_radius(0.1);

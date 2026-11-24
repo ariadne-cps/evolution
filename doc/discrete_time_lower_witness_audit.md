@@ -107,3 +107,43 @@ quadratic regression models now explicitly construct
 LOWER non-splitting requirement, and the test expectations are unchanged.
 The v6.53 failure was a test compilation bug, not a failure of LOWER
 semantics. v6.54 remains pending CI on its own commit.
+
+## v6.57 — Constructive witness gate for constrained LOWER sources
+
+The ordinary discrete validated public `orbit` entry now checks a
+**sufficient** certificate before publishing any LOWER enclosure.
+For an initial `Enclosure` with no parameter constraints, a nonempty
+parameter domain supplies the witness. For constrained sources,
+`has_certified_initial_witness` checks the midpoint and two
+parameter-domain vertices (all-lower, all-upper) using validated
+interval evaluation of every parameter constraint model. A candidate
+is certified only if its whole validated function range is contained
+in the permitted constraint interval. Passing therefore constructs a
+feasible parameter value; it does not merely fail to prove emptiness.
+
+If no tested candidate certifies all constraints, LOWER rejects the
+request with `std::invalid_argument` **even at zero horizon**.
+This is a conservative failure of certification, not a claim that
+the underlying mathematical initial set is empty. UPPER semantics
+and its exploration are unchanged.
+
+For an accepted source, the deterministic `DifferenceAlgebraicEquation`
+map transports a known witness at each tick, since numerical images
+enclose the map image and LOWER never subdivides. Its bounded enclosure
+diameter automatically bounds the distance to a reachable witness.
+The entry check does not compute a distance and does not claim INNER.
+
+The new discrete regression tests cover a strictly feasible
+constraint at the midpoint, a feasible constraint away from the
+midpoint, a provably impossible constrained source rejected at
+both zero and positive horizons, and the original analytic witness
+propagation. Existing ordinary continuous, hybrid continuous and
+hybrid discrete test suites remain mandatory in CI.
+
+**Matrix:** Ordinary discrete equation / Validated LOWER remains
+partial in the sense that feasible arbitrary constrained initial
+sets may be rejected when none of the finitely tested candidate
+points provides a proof. This checkpoint strengthens the **soundness
+contract for accepted inputs**, not completeness of admissible inputs.
+No extra numerical or paradigm capability is claimed. The exact new
+commit's functional CI must pass before this version is accepted.

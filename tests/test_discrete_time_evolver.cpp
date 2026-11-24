@@ -144,6 +144,46 @@ class TestDiscreteTimeEvolver : public Ariadne::Testing::ContextFixture {
         ARIADNE_TESTING_PROVE(quadratic_bounds.upper_bound().raw().get_d() >= 0.0);
     }
 
+    Void test_lower_constrained_initial_witness_certificate() {
+        const RealVariable x("x");
+        const DifferenceAlgebraicEquation map(
+            List<PrimedRealAssignment>{next(x) = x + 1});
+        DiscreteTimeEvolver<ValidatedTag> evolver(map);
+        const auto identity = EffectiveVectorMultivariateFunction::identity(1u);
+        const auto coordinate = identity[0];
+
+        // A strictly feasible central parameter is a constructive
+        // initial witness. LOWER must accept it at horizon zero and
+        // propagate the same witness without subdivision.
+        auto feasible = evolver.enclosure(ExactBoxType({{-1.0_x, 1.0_x}}));
+        feasible.new_positive_state_constraint(coordinate + Real(1 / 2_q));
+        const auto zero = evolver.orbit(feasible, Integer(0), Semantics::LOWER);
+        ARIADNE_TESTING_EXPECT_EQUAL(zero.final().size(), 1u);
+        const auto propagated = evolver.orbit(feasible, Integer(2), Semantics::LOWER);
+        ARIADNE_TESTING_EXPECT_EQUAL(propagated.final().size(), 1u);
+        ARIADNE_TESTING_EXPECT_EQUAL(propagated.reach().size(), 2u);
+        const auto bounds = propagated.final()[0u].euclidean_set().bounding_box()[0u];
+        ARIADNE_TESTING_PROVE(bounds.lower_bound().raw().get_d() <= 2.0);
+        ARIADNE_TESTING_PROVE(bounds.upper_bound().raw().get_d() >= 2.0);
+
+        // A feasible source excluding the midpoint is also accepted
+        // when a different parameter value proves all constraints.
+        auto near_upper = evolver.enclosure(ExactBoxType({{-1.0_x, 1.0_x}}));
+        near_upper.new_positive_state_constraint(coordinate - Real(3 / 4_q));
+        const auto upper_witness = evolver.orbit(near_upper, Integer(0), Semantics::LOWER);
+        ARIADNE_TESTING_EXPECT_EQUAL(upper_witness.final().size(), 1u);
+
+        // An impossible constrained enclosure must not be emitted as
+        // LOWER, including at zero horizon. This is NOT a requirement
+        // to compute an INNER approximation or an explicit distance.
+        auto impossible = evolver.enclosure(ExactBoxType({{-1.0_x, 1.0_x}}));
+        impossible.new_positive_state_constraint(coordinate - Real(2));
+        ARIADNE_TESTING_EXPECT_THROWS(std::invalid_argument,
+            evolver.orbit(impossible, Integer(0), Semantics::LOWER));
+        ARIADNE_TESTING_EXPECT_THROWS(std::invalid_argument,
+            evolver.orbit(impossible, Integer(1), Semantics::LOWER));
+    }
+
     Void test_evolve() {
         typedef DoublePrecision PR;
         DoublePrecision pr;
@@ -241,6 +281,7 @@ int main(int argc, const char* argv[]) {
     ARIADNE_TESTING_SUITE("test_discrete_time_evolver");
     ARIADNE_TESTING_ADD_TEST(TestDiscreteTimeEvolver, test_stopping_policies);
     ARIADNE_TESTING_ADD_TEST(TestDiscreteTimeEvolver, test_lower_witness_and_upper_subdivision);
+    ARIADNE_TESTING_ADD_TEST(TestDiscreteTimeEvolver, test_lower_constrained_initial_witness_certificate);
     ARIADNE_TESTING_ADD_TEST(TestDiscreteTimeEvolver, test_evolve);
     ARIADNE_TESTING_ADD_TEST(TestDiscreteTimeEvolver, test_subdivide);
     return Ariadne::Testing::run_logging_suite(ariadne_test_suite, argc, argv);

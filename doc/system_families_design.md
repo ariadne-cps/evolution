@@ -402,3 +402,29 @@ submodule churn while the coordinated CI is still running.
 System's functional checks and all Evolution suites (continuous,
 discrete and hybrid) remain required; Format remains non-blocking.
 No matrix capability changes are claimed by this compile-only fix.
+
+## v6.57 — Ordinary discrete validated LOWER: reject uncertified initial witnesses
+
+The previously documented open initial-feasibility condition is now
+enforced at the `DiscreteTimeEvolver<ValidatedTag>::orbit` boundary.
+An unsplit bounded parameter box without constraints is a valid
+nonempty source. A constrained source is accepted for LOWER only
+if validated evaluation at a candidate parameter point certifies
+**all** constraints simultaneously. Uncertified sources throw even
+at horizon zero. Failure of finite candidate search does **not**
+imply actual emptiness; this is a sufficient, deliberately
+incomplete certificate. UPPER is not restricted by this check.
+
+The mathematical invariant remains that each published LOWER
+enclosure contains at least one actually reachable trajectory point;
+the enclosure diameter bounds the distance to that witness. LOWER
+is not INNER, and UPPER is not automatically OUTER. For a
+deterministic difference equation, the unsplit validated image
+propagates the certificate.
+
+**Capacity matrix delta:** ordinary discrete equation / Validated
+LOWER stays **partial** because some nonempty constrained initial
+sets lack a certificate under this finite-point strategy. All other
+cells are unchanged. Regression tests for known feasible and
+infeasible constraints are added; the continuous and hybrid
+discrete suites must also remain green. Format stays excluded.

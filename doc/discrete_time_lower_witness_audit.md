@@ -95,3 +95,15 @@ branching/partitioning is introduced. The unconstrained full API
 contract for arbitrary potentially empty initial enclosures remains
 an explicit open assumption. This audit introduces no new
 Approximate evolver or inclusion semantics.
+
+## v6.54 — Compile fix, no semantic changes
+
+The v6.53 Debug CI failed to compile `test_discrete_time_evolver.cpp`
+because the single-element brace arguments to the `IteratedMap`
+constructor were ambiguous between the copy constructor and
+`IteratedMap(const List<PrimedRealAssignment>&)`. Both the affine and
+quadratic regression models now explicitly construct
+`List<PrimedRealAssignment>`. The mathematical witness argument, the
+LOWER non-splitting requirement, and the test expectations are unchanged.
+The v6.53 failure was a test compilation bug, not a failure of LOWER
+semantics. v6.54 remains pending CI on its own commit.

@@ -104,7 +104,7 @@ class TestDiscreteTimeEvolver : public Ariadne::Testing::ContextFixture {
 
     Void test_lower_witness_and_upper_subdivision() {
         const RealVariable x("x");
-        const IteratedMap translation({next(x) = x + 1});
+        const IteratedMap translation(List<PrimedRealAssignment>{next(x) = x + 1});
         DiscreteTimeEvolver<ValidatedTag> evolver(translation);
         const auto initial = evolver.enclosure(ExactBoxType({{-1.0_x, 1.0_x}}));
         evolver.configuration().set_enable_subdivisions(true);
@@ -129,7 +129,7 @@ class TestDiscreteTimeEvolver : public Ariadne::Testing::ContextFixture {
 
         // Nonlinear image: a point witness survives even when the computed
         // enclosure is wider than the exact reachable set.
-        const IteratedMap quadratic({next(x) = x * x});
+        const IteratedMap quadratic(List<PrimedRealAssignment>{next(x) = x * x});
         DiscreteTimeEvolver<ValidatedTag> nonlinear(quadratic);
         nonlinear.configuration().set_enable_subdivisions(true);
         nonlinear.configuration().set_enable_premature_termination(false);

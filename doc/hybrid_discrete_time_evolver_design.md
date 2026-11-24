@@ -172,3 +172,26 @@ Next: verify functional CI; correct regressions without weakening
 semantic expectations. Only then expand inclusion auxiliary or target
 capabilities and eventually introduce approximate discrete evolvers.
 Python binding and tutorial parity remain the final phase.
+
+## v6.52 — Regression expectation corrected after v6.50 inclusion support
+
+Debug CI for v6.50 (`0cdb905`) reports a failing case
+`test_hybrid_discrete_time_predicate_evaluator: reject_inclusion_and_wrong_space`.
+The test expected `std::invalid_argument` when classifying `x >= 0`
+in an inclusion `x[n+1] = x[n] + u[n]`, with independent bounded input,
+no auxiliary outputs, and pre-state `x in [0,1]`. That source capability
+was intentionally implemented by v6.50; no exception is therefore correct.
+The failure is an **outdated test expectation**, not evidence that the
+supported classifier should be disabled.
+
+The revised test requires three validated predicate outcomes (TRUE for
+`x >= -1`, FALSE for `x >= 2`, and UNKNOWN at the `x >= 0`
+boundary). It **retains negative coverage** with a separate inclusion
+containing an input-dependent auxiliary assignment and with a mismatched
+equation state space; both must throw. No numerical implementation is
+modified and no accepted model is silently rejected. The rest of the
+continuous and discrete regression suites remain in the CI gate.
+
+The v6.50 result remains marked *failed*; the correction commit's CI
+must complete on Ubuntu, macOS, Windows, Coverage and Sanitizers before
+promoting this checkpoint to validated. Format remains non-blocking.

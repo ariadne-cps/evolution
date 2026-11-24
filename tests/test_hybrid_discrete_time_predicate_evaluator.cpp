@@ -272,17 +272,38 @@ class TestHybridDiscreteTimePredicateEvaluator : public Ariadne::Testing::Contex
         ARIADNE_TESTING_PROVE(result.successors[1u].branch.kind == Kind::PROGRESSION);
     }
 
-    Void test_reject_inclusion_and_wrong_space() {
-        const RealVariable x("x"), u("u"), y("y");
+    Void test_supported_inclusion_and_rejected_cases() {
+        const RealVariable x("x"), u("u"), y("y"), a("a");
         const DiscreteLocation mode(1);
         DiscreteTimeHybridAutomaton inclusion;
         inclusion.new_mode(mode, DifferenceAlgebraicInclusion(
             List<PrimedRealAssignment>{next(x) = x + u},
             RealVariablesBox({-1 <= u <= 1})));
         const auto source = initial(mode);
-        ARIADNE_TESTING_EXPECT_THROWS(std::invalid_argument,
-            HybridDiscreteTimePredicateEvaluator::classify(inclusion, source, x >= 0));
 
+        // The state-only predicate is now supported for a bounded-input
+        // inclusion without auxiliaries. On x in [0,1], x >= 0 touches
+        // the boundary and remains UNKNOWN rather than a false certificate.
+        ARIADNE_TESTING_PROVE(HybridDiscreteTimePredicateEvaluator::classify(
+            inclusion, source, x >= 0) == Evidence::UNKNOWN);
+        ARIADNE_TESTING_PROVE(HybridDiscreteTimePredicateEvaluator::classify(
+            inclusion, source, x >= -1) == Evidence::TRUE);
+        ARIADNE_TESTING_PROVE(HybridDiscreteTimePredicateEvaluator::classify(
+            inclusion, source, x >= 2) == Evidence::FALSE);
+
+        // Keep an actual unsupported inclusion rejection in the same test:
+        // input-dependent auxiliary outputs do not yet have a numerical
+        // representation for certified hybrid discrete guard evaluation.
+        DiscreteTimeHybridAutomaton with_auxiliary;
+        with_auxiliary.new_mode(mode, DifferenceAlgebraicInclusion(
+            List<PrimedRealAssignment>{next(x) = x + u},
+            List<RealAssignment>{let(a) = x + u},
+            RealVariablesBox({-1 <= u <= 1})));
+        ARIADNE_TESTING_EXPECT_THROWS(std::invalid_argument,
+            HybridDiscreteTimePredicateEvaluator::classify(
+                with_auxiliary, source, x >= 0));
+
+        // A mismatched state space is still a contract violation.
         DiscreteTimeHybridAutomaton equation;
         equation.new_mode(mode, DifferenceAlgebraicEquation(
             List<PrimedRealAssignment>{next(y) = y}));
@@ -301,6 +322,6 @@ int main(int argc, char** argv) {
     ARIADNE_TESTING_ADD_TEST(TestHybridDiscreteTimePredicateEvaluator, test_boundary_keeps_both_upper_alternatives);
     ARIADNE_TESTING_ADD_TEST(TestHybridDiscreteTimePredicateEvaluator, test_certified_prestate_restriction_and_callback_compatibility);
     ARIADNE_TESTING_ADD_TEST(TestHybridDiscreteTimePredicateEvaluator, test_urgent_complement_restriction);
-    ARIADNE_TESTING_ADD_TEST(TestHybridDiscreteTimePredicateEvaluator, test_reject_inclusion_and_wrong_space);
+    ARIADNE_TESTING_ADD_TEST(TestHybridDiscreteTimePredicateEvaluator, test_supported_inclusion_and_rejected_cases);
     return Ariadne::Testing::run_logging_suite(ariadne_test_suite, argc, argv);
 }

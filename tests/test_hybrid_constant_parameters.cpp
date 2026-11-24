@@ -402,6 +402,54 @@ class TestHybridConstantParameters : public Testing::ContextFixture {
             }
     }
 
+    void test_lower_urgent_at_closed_step_endpoint() {
+        // A guard that is strictly negative initially but exactly zero
+        // at the validated endpoint still has a constructive first
+        // crossing. This case needs >= 0 at the endpoint, not > 0.
+        for (bool parameterized: {false, true})
+            for (bool tree: {false, true}) {
+                const RealVariablesBox parameters = parameterized
+                    ? RealVariablesBox({2 <= p <= 3}) : RealVariablesBox();
+                const DiscreteEvent crossing("closed_endpoint_crossing");
+                ContinuousTimeHybridAutomaton system;
+                system.new_mode(source, OrdinaryDifferentialAlgebraicEquation(
+                    {dot(x) = 0}, parameters, t));
+                system.new_mode(target, OrdinaryDifferentialAlgebraicEquation(
+                    {dot(x) = 0}, parameters, t));
+                system.new_transition(source, crossing, target,
+                    {next(x) = x + 1}, t >= Real(1 / 32_q), EventKind::URGENT);
+                HybridContinuousTimeEvolver<ValidatedTag> evolver(system);
+                configure(evolver, tree);
+
+                const auto at_endpoint = evolver.orbit(initial(evolver),
+                    HybridTime(0.0625_x, 1), Semantics::LOWER);
+                ARIADNE_TESTING_REQUIRE(at_endpoint.final().size() == 1u);
+                const auto& final = at_endpoint.final()[0u];
+                ARIADNE_TESTING_EXPECT_EQUAL(final.location(), target);
+                ARIADNE_TESTING_REQUIRE(final.previous_events().size() == 1u);
+                ARIADNE_TESTING_EXPECT_EQUAL(final.previous_events()[0u], crossing);
+                ARIADNE_TESTING_PROVE(subset(
+                    ExactIntervalType(1, 1),
+                    cast_exact_interval(final.state_function()[0u].range())));
+                ARIADNE_TESTING_PROVE(subset(
+                    ExactIntervalType(0.03125_x, 0.03125_x),
+                    cast_exact_interval(final.time_function().range())));
+                if (parameterized)
+                    binding(final);
+
+                // The same guard is strictly excluded before its first
+                // contact; the shorter horizon must not invent a jump.
+                const auto before = evolver.orbit(initial(evolver),
+                    HybridTime(0.015625_x, 1), Semantics::LOWER);
+                ARIADNE_TESTING_REQUIRE(before.final().size() == 1u);
+                ARIADNE_TESTING_EXPECT_EQUAL(before.final()[0u].location(), source);
+                ARIADNE_TESTING_EXPECT_EQUAL(before.final()[0u].previous_events().size(), 0u);
+                ARIADNE_TESTING_PROVE(subset(
+                    ExactIntervalType(0.015625_x, 0.015625_x),
+                    cast_exact_interval(before.final()[0u].time_function().range())));
+            }
+    }
+
     void test_inclusion_flow_and_method_gates() {
         for (bool timed: {false, true})
             for (bool boxes: {false, true})
@@ -580,6 +628,7 @@ int main(int argc, char** argv) {
     ARIADNE_TESTING_ADD_TEST(TestHybridConstantParameters, test_lower_crossing_with_competing_urgent_guard);
     ARIADNE_TESTING_ADD_TEST(TestHybridConstantParameters, test_lower_joint_clock_parameter_guard);
     ARIADNE_TESTING_ADD_TEST(TestHybridConstantParameters, test_lower_guard_depending_on_clock_and_parameter);
+    ARIADNE_TESTING_ADD_TEST(TestHybridConstantParameters, test_lower_urgent_at_closed_step_endpoint);
     ARIADNE_TESTING_ADD_TEST(TestHybridConstantParameters, test_inclusion_flow_and_method_gates);
     ARIADNE_TESTING_ADD_TEST(TestHybridConstantParameters, test_immediate_parameter_guard_reset_and_auxiliary);
     ARIADNE_TESTING_ADD_TEST(TestHybridConstantParameters, test_timed_parameter_guard_and_reset);

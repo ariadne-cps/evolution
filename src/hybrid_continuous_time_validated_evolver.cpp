@@ -967,8 +967,12 @@ Void HybridContinuousTimeEvolverBase<ValidatedTag>::_evolve_outer_equation(
                     continue;
                 const auto at_start = initial.range_of(crossing.guard_function, crossing.source_arguments);
                 const auto at_finish = endpoint.range_of(crossing.guard_function, crossing.source_arguments);
+                // A certified nonnegative endpoint also guarantees a real
+                // first zero (possibly at the step endpoint) by continuity.
+                // Strict positivity would unnecessarily exclude closed
+                // boundary contacts where the guard is exactly zero.
                 if (!definitely(at_start.upper_bound() < 0) ||
-                    !definitely(at_finish.lower_bound() > 0))
+                    !definitely(at_finish.lower_bound() >= 0))
                     continue;
                 bool no_competing_blocker = true;
                 for (const auto& other_entry: transitions) {

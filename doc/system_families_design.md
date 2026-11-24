@@ -706,3 +706,38 @@ Ubuntu/macOS Debug test execution on this incorrect time assertion.
 Acceptance of this fix requires separate successful Ubuntu, macOS,
 Windows, Coverage and Sanitizers workflows on its new commit SHA;
 Format is nonblocking.
+
+## v6.67 — URGENT LOWER crossing certified at a closed step endpoint
+
+The clocked/parameterized equation LOWER first-crossing certificate
+no longer requires the hypothetical uninterrupted endpoint guard to
+be **strictly positive**. If the guard is certified strictly negative
+on the complete initial source and **nonnegative** on the complete
+validated endpoint, continuity of the deterministic flow guarantees
+that at least one (indeed each source trajectory's) first zero occurs
+within the closed step. Other blockers must still be certified inactive
+over the entire reach tube, and the single structured validated tube
+and guard-equality reset mechanism are unchanged. An interval endpoint
+that merely *possibly* contains zero does **not** pass this gate.
+
+The new regression `test_lower_urgent_at_closed_step_endpoint`
+uses a global-time URGENT guard `t>=1/32` and zero state flow, with
+and without trajectory-constant physical parameters and on both flat
+and tree backends. At the exact integration-step endpoint, LOWER must
+record the real reset witness `x=1` at `t=1/32` and its event and
+parameter history. The same model with the shorter horizon `1/64`
+must remain in the source mode without inventing an event.
+
+Only the single endpoint-sign condition in the validated hybrid
+equation kernel and its dedicated regression are changed. All
+previous positive and negative tests remain active; UPPER, autonomous,
+hybrid discrete, inclusion, and Python behavior are not altered.
+Continuous hybrid equation LOWER remains partial (◐): tangential
+IMPACT, competing crossing geometry, undecidable endpoint signs and
+other complex first-entry cases remain conservative.
+
+At publication, v6.66 Ubuntu and macOS had passed on
+`106657f2f097afee82c3a2a18390ffc9df8a9cf1`, while Windows,
+Coverage and Sanitizers were still being checked. This v6.67
+checkpoint requires its **own** successful functional CI across all
+five workflows before acceptance. Format remains nonblocking.

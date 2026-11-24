@@ -757,3 +757,27 @@ these helpers, eliminating their grid/paving sampling paths. The validated
 algorithms and per-step `InputSamplingPolicy` are unaffected. Neither
 this stage nor a subsequent commit is accepted without its own five-way
 functional CI. Format remains nonblocking.
+
+## v6.68 (stage 2) — Approximate initializers use decoupling's sampling core
+
+Both `ContinuousTimeEvolver<ApproximateTag>` and
+`HybridContinuousTimeEvolver<ApproximateTag>` now call the same
+paving-independent `simulator_sampling` adapters brought from
+`decoupling`. The prior paving/grid-based sample generation, artificial
+widening and associated configuration knobs are removed. Their named
+coordinate counts use `SamplingCounts` identically: the default is
+a single midpoint, explicitly requested per-axis counts multiply, and
+degenerate dimensions contribute one unique sample. Explicit point
+inputs are not resampled. Time integration, RK4 sampling for inclusion
+inputs, guards, resets and other numerical semantics are unaffected.
+
+Both existing Approximate regression suites now check cardinality and
+domain membership, including a flat-coordinate case. The two
+`decoupling` unit suites are retained unchanged. The C++ tutorial and
+Python configuration binding use the new sampling-count API, removing
+obsolete grid-oriented methods. This commit does not introduce
+Approximate discrete evolution or an initial distribution over general
+nonbox constrained sets; in particular, sampling centres of a bounding
+box must not be represented as satisfying arbitrary nonlinear
+constraints. This stage requires its own five functional workflow
+passes before being considered accepted. Format remains nonblocking.

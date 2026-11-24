@@ -33,30 +33,13 @@
 #include "evolution/evolver.decl.hpp"
 #include "evolution/hybrid_continuous_time_evolver_interface.hpp"
 #include "evolution/input_sampling.hpp"
-#include "hybrid/hybrid_paving.hpp"
+#include "evolution/sampling_counts.hpp"
 #include "hybrid/hybrid_set.hpp"
 #include "logging/logging.hpp"
 #include "numeric/numeric.hpp"
 #include "symbolic/valuation.hpp"
 
 namespace Ariadne {
-
-/** @brief DiscretizationHybridType represents simulation algorithms for hybrid dynamical systems. */
-enum class DiscretizationHybridType {
-    HMince,
-    HRecombine
-};
-
-/** @brief Apply the requested operation. */
-inline OutputStream& operator<<(OutputStream& os, const DiscretizationHybridType& dtype) {
-    if (dtype == DiscretizationHybridType::HMince) {
-        os << "Mince";
-    } else {
-        os << "Recombine";
-    }
-
-    return os;
-}
 
 /** @brief HybridTerminationCriterion represents simulation algorithms for hybrid dynamical systems. */
 class HybridTerminationCriterion;
@@ -147,11 +130,8 @@ class HybridContinuousTimeEvolverConfiguration<ApproximateTag> : public Configur
     virtual ~HybridContinuousTimeEvolverConfiguration() = default;
 
   private:
-    //! \brief The step size for integration.
-    //! Decreasing this value increases the accuracy of the computation.
     FloatDPApproximation _step_size;
-    Nat _fineness;
-    DiscretizationHybridType _discretization_type;
+    SamplingCounts _sampling_counts;
 
   public:
     const FloatDPApproximation& step_size() const { return _step_size; }
@@ -159,10 +139,18 @@ class HybridContinuousTimeEvolverConfiguration<ApproximateTag> : public Configur
         ARIADNE_PRECONDITION(decide(value > 0));
         _step_size = FloatDPApproximation(value, double_precision);
     }
-    const Nat& fineness() const { return _fineness; }
-    Void set_fineness(Nat value) { _fineness = value; }
-    Void set_d_type(DiscretizationHybridType type) { _discretization_type = type; }
-    const DiscretizationHybridType& d_type() const { return _discretization_type; }
+    Void set_sampling_counts(SamplingCounts counts) {
+        for (const auto& entry: counts)
+            ARIADNE_PRECONDITION(entry.second > 0u);
+        _sampling_counts = std::move(counts);
+    }
+    Void set_sampling_count(RealVariable variable, Nat count) {
+        ARIADNE_PRECONDITION(count > 0u);
+        ARIADNE_PRECONDITION(!_sampling_counts.has_key(variable));
+        _sampling_counts.insert(variable, count);
+    }
+    Void clear_sampling_counts() { _sampling_counts.remove_keys(_sampling_counts.keys()); }
+    const SamplingCounts& sampling_counts() const { return _sampling_counts; }
 
     /** @brief Perform the specified evolution operation. */
     virtual OutputStream& _write(OutputStream& os) const;

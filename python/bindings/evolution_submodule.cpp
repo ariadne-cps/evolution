@@ -153,8 +153,8 @@ Void export_simulator<ContinuousTimeEvolver<ApproximateTag>>(pybind11::module& m
     typedef typename ContinuousTimeEvolver<ApproximateTag>::ConfigurationType ConfigurationType;
     pybind11::class_<ConfigurationType> simulator_configuration_class(module, "ContinuousTimeApproximateEvolverConfiguration");
     simulator_configuration_class.def("set_step_size", &ConfigurationType::set_step_size);
-    simulator_configuration_class.def("set_discretisation_type", &ConfigurationType::set_discretisation_type);
-    simulator_configuration_class.def("set_num_subdivisions", &ConfigurationType::set_num_subdivisions);
+    simulator_configuration_class.def("set_sampling_count", &ConfigurationType::set_sampling_count);
+    simulator_configuration_class.def("clear_sampling_counts", &ConfigurationType::clear_sampling_counts);
     simulator_configuration_class.def("__repr__", &__cstr__<ConfigurationType>);
 }
 

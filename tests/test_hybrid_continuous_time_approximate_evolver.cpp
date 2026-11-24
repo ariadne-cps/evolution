@@ -153,39 +153,31 @@ class TestHybridContinuousTimeApproximateEvolver : public Ariadne::Testing::Cont
     Void test_box_sampling() {
         auto system = flow_system();
         HybridContinuousTimeEvolver<ApproximateTag> simulator(system);
-        simulator.configuration().set_fineness(1u);
-        HybridUpperBox box(q, RealSpace({
-                                  x, y
-        }),
-                           UpperBoxType({{0, 1}, {1, 2}}));
-        SizeType minces = 0u;
-        for (auto type: {DiscretizationHybridType::HMince, DiscretizationHybridType::HRecombine}) {
-            simulator.configuration().set_d_type(type);
-            auto orbit = simulator.orbit(box, q, system.state_space(), HybridTime(0.0_x, 3));
-            ARIADNE_TESTING_PROVE(orbit.number_of_trajectories() > 0u);
-            if (type == DiscretizationHybridType::HMince)
-                minces = orbit.number_of_trajectories();
-            else
-                ARIADNE_TESTING_PROVE(orbit.number_of_trajectories() <= minces);
-            for (SizeType i = 0u; i < orbit.number_of_trajectories(); ++i) {
-                auto p = orbit.curve(static_cast<Nat>(i), 0u).begin()->second;
-                ARIADNE_TESTING_PROVE(p[0].raw().get_d() >= 0.0 && p[0].raw().get_d() <= 1.0);
-                ARIADNE_TESTING_PROVE(p[1].raw().get_d() >= 1.0 && p[1].raw().get_d() <= 2.0);
-            }
-            std::ostringstream description;
-            description << simulator.configuration();
-            ARIADNE_TESTING_PROVE(description.str().find(type == DiscretizationHybridType::HMince ? "Mince" : "Recombine") != std::string::npos);
+        HybridUpperBox box(q, RealSpace({x, y}), UpperBoxType({{0, 1}, {1, 2}}));
+        const auto default_orbit = simulator.orbit(
+            box, q, system.state_space(), HybridTime(0.0_x, 3));
+        ARIADNE_TESTING_EXPECT_EQUAL(default_orbit.number_of_trajectories(), 1u);
+
+        simulator.configuration().set_sampling_counts(SamplingCounts{{x, 3u}, {y, 2u}});
+        const auto sampled = simulator.orbit(box, q, system.state_space(), HybridTime(0.0_x, 3));
+        ARIADNE_TESTING_EXPECT_EQUAL(sampled.number_of_trajectories(), 6u);
+        for (SizeType i = 0u; i < sampled.number_of_trajectories(); ++i) {
+            const auto p = sampled.curve(static_cast<Nat>(i), 0u).begin()->second;
+            ARIADNE_TESTING_PROVE(p[0].raw().get_d() >= 0.0 && p[0].raw().get_d() <= 1.0);
+            ARIADNE_TESTING_PROVE(p[1].raw().get_d() >= 1.0 && p[1].raw().get_d() <= 2.0);
         }
-        HybridUpperBox flat(q, RealSpace({
-                                   x, y
-        }),
-                            UpperBoxType({{0, 0}, {1, 2}}));
-        auto flat_orbit = simulator.orbit(flat, q, system.state_space(), HybridTime(0.0_x, 3));
-        ARIADNE_TESTING_PROVE(flat_orbit.number_of_trajectories() > 0u);
-        auto singleton = simulator.orbit(HybridBoundedConstraintSet(q, {x == 0, y == 2}), HybridTime(0.0_x, 3));
+
+        HybridUpperBox flat(q, RealSpace({x, y}), UpperBoxType({{0, 0}, {1, 2}}));
+        const auto flat_orbit = simulator.orbit(flat, q, system.state_space(), HybridTime(0.0_x, 3));
+        ARIADNE_TESTING_EXPECT_EQUAL(flat_orbit.number_of_trajectories(), 2u);
+        simulator.configuration().clear_sampling_counts();
+        const auto singleton = simulator.orbit(
+            HybridBoundedConstraintSet(q, {x == 0, y == 2}), HybridTime(0.0_x, 3));
         ARIADNE_TESTING_EXPECT_EQUAL(singleton.number_of_trajectories(), 1u);
         expect_endpoint(singleton.curves(0u)[0], 0.0, 0.0, 2.0, 4.0);
+        ARIADNE_TESTING_EXPECT_EXCEPTION(simulator.configuration().set_sampling_count(x, 0u));
     }
+
 };
 
 int main(int argc, char* argv[]) {

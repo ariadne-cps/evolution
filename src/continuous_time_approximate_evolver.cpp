@@ -32,6 +32,7 @@
 
 #include "algebra/algebra.hpp"
 #include "evolution/orbit.hpp"
+#include "simulator_sampling.hpp"
 #include "function/formula.hpp"
 #include "function/function.hpp"
 #include "function/functional.hpp"
@@ -100,58 +101,6 @@ List<LabelledPoint<X>> make_state_auxiliary_point(const List<LabelledPoint<X>>& 
     return pointLst;
 }
 
-BinaryTreePaving create_paving(UpperBoxType box, Space<Real> spc, subspace sspc) {
-    for (const auto& entry: sspc) {
-        ARIADNE_PRECONDITION(spc.contains(entry.first));
-    }
-    Nat divider = 1u;
-    FloatDP eps_box(0.01_q, Ariadne::ROUND_TO_NEAREST, dp);
-
-    // Widen Initial set
-    box = widen(box, eps_box);
-
-    // Point<FloatDP> tmpPointCenter = Point(box.centre());
-    Point<FloatDP> tmpPointCenter = Point(box.lower_bounds());
-    Vector<FloatDP> origin(tmpPointCenter.dimension(), FloatDP(0, dp));
-    Vector<FloatDP> lengths(box.widths().size(), FloatDP(0, dp));
-
-    // Widening a finite coordinate by eps_box>0 gives it positive width.
-    // In zero dimensions, lower_bounds() and midpoint() are both empty points.
-    for (SizeType i = 0; i < tmpPointCenter.dimension(); i++) {
-        divider = 1;
-        if (sspc.has_key(spc[i])) {
-            Nat val = sspc.get(spc[i]);
-            divider = val;
-        }
-        lengths[i] = (box[i].width().raw() / divider).value();
-        origin[i] = tmpPointCenter[i];
-    }
-    Grid grid(origin, lengths);
-    BinaryTreePaving gridPaving(grid);
-
-    return gridPaving;
-}
-
-List<LabelledPoint<FloatDPApproximation>> create_point_list(BinaryTreePaving& paving, RealSpace spc, DiscretisationType discretisation_type, Nat mince_dimension) {
-    if (discretisation_type == DiscretisationType::Mince)
-        paving.mince(mince_dimension);
-    else if (discretisation_type == DiscretisationType::Recombine)
-        paving.recombine();
-
-    BinaryTreePaving::ConstIterator iter = paving.begin();
-    List<LabelledPoint<FloatDPApproximation>> result(paving.size(), LabelledPoint(spc, Point<FloatDPApproximation>()));
-    SizeType k(0);
-    for (; iter != paving.end(); ++iter) {
-        UpperBoxType cell = iter->box();
-        auto midpoint = cell.centre();
-        LabelledPoint<FloatDPApproximation> pt(spc, midpoint);
-        result.at(k) = LabelledPoint<FloatDPApproximation>(spc, pt);
-        k++;
-    }
-
-    return result;
-}
-
 ContinuousTimeEvolver<ApproximateTag>::ContinuousTimeEvolver(const OrdinaryDifferentialAlgebraicEquation& system)
     : ContinuousTimeEvolver(system, RealValuation{}) {}
 
@@ -192,12 +141,8 @@ auto ContinuousTimeEvolver<ApproximateTag>::orbit(const RealBoxType& init_bx, co
 
 auto ContinuousTimeEvolver<ApproximateTag>::orbit(UpperBoxType& initial_box, const TerminationType& termination) const
     -> OrbitType {
-    BinaryTreePaving gridPaving = create_paving(initial_box, _system->state_space(), _configuration->get_subspace());
-    Nat subdivisions = _configuration->is_using_subspace() ? 0u : _configuration->num_subdivisions();
-    gridPaving.adjoin_outer_approximation(initial_box, subdivisions);
-    ApproximateListPointType pointList = create_point_list(gridPaving, _system->state_space(),
-                                                           _configuration->discretisation_type(), subdivisions);
-    return orbit(pointList, termination);
+    return orbit(EvolutionDetail::sample_vector_field_initial_points(
+        initial_box, _system->state_space(), _configuration->sampling_counts()), termination);
 }
 
 auto ContinuousTimeEvolver<ApproximateTag>::orbit(const ApproximateListPointType& initial_points, const TerminationType& termination) const -> OrbitType {
@@ -270,16 +215,14 @@ void ContinuousTimeEvolver<ApproximateTag>::_simulate_from_point(Pair<SizeType, 
     }
 }
 
-ContinuousTimeEvolverConfiguration<ApproximateTag>::ContinuousTimeEvolverConfiguration() : _step_size(0.125_x, dp), _num_subdivisions(2), _discretisation_type(DiscretisationType::Recombine), _subspace() {
+ContinuousTimeEvolverConfiguration<ApproximateTag>::ContinuousTimeEvolverConfiguration() : _step_size(0.125_x, dp), _sampling_counts() {
 }
 
 OutputStream&
     ContinuousTimeEvolverConfiguration<ApproximateTag>::_write(OutputStream& os) const {
     os << "ContinuousTimeEvolverConfiguration<ApproximateTag>("
        << "\n  step_size=" << step_size()
-       << "\n  discretisation_type=" << discretisation_type()
-       << "\n  num_subdivisions=" << num_subdivisions()
-       << "\n  subspace=" << get_subspace()
+       << "\n  sampling_counts=" << sampling_counts()
        << ")\n";
     return os;
 }

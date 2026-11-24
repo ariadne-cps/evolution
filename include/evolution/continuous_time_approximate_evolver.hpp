@@ -35,6 +35,7 @@
 #include "evolution/evolver_interface.hpp"
 #include "evolution/input_sampling.hpp"
 #include "evolution/orbit.hpp"
+#include "evolution/sampling_counts.hpp"
 #include "geometry/point.hpp"
 #include "logging/logging.hpp"
 #include "numeric/float.decl.hpp"
@@ -45,25 +46,6 @@
 #include "threading/workload.hpp"
 
 namespace Ariadne {
-
-/** @brief DiscretisationType: numerical simulation of continuous vector-field systems. */
-enum class DiscretisationType {
-    None,
-    Mince,
-    Recombine
-};
-
-/** @brief Perform the specified evolution operation. */
-inline OutputStream& operator<<(OutputStream& os, const DiscretisationType& dtype) {
-    if (dtype == DiscretisationType::Mince) {
-        os << "Mince";
-    } else if (dtype == DiscretisationType::Recombine) {
-        os << "Recombine";
-    } else {
-        os << "None";
-    }
-    return os;
-}
 
 /** @brief OrdinaryDifferentialAlgebraicEquation: numerical simulation of continuous vector-field systems. */
 class OrdinaryDifferentialAlgebraicEquation;
@@ -76,9 +58,6 @@ class RealExpressionBoundedConstraintSet;
 
 template<class T>
 class Orbit;
-
-//! \brief The subdivision depth associated with each variable of a subspace grid.
-using subspace = Map<RealVariable, Nat>;
 
 /*! \brief A class for computing the simulated evolution of a continuous system.
  */
@@ -166,11 +145,8 @@ class ContinuousTimeEvolverConfiguration<ApproximateTag> : public ConfigurationI
     virtual ~ContinuousTimeEvolverConfiguration() = default;
 
   private:
-    //! \brief The fixed integration step size to use.
     FloatDPApproximation _step_size;
-    Nat _num_subdivisions;
-    DiscretisationType _discretisation_type;
-    subspace _subspace;
+    SamplingCounts _sampling_counts;
 
   public:
     Void set_step_size(double h) {
@@ -179,37 +155,19 @@ class ContinuousTimeEvolverConfiguration<ApproximateTag> : public ConfigurationI
     }
     const FloatDPApproximation& step_size() const { return _step_size; }
 
-    Void set_discretisation_type(DiscretisationType discretisation_type) { _discretisation_type = discretisation_type; }
-    const DiscretisationType& discretisation_type() const { return _discretisation_type; }
-
-    Void set_num_subdivisions(Nat num_subdivisions) { _num_subdivisions = num_subdivisions; }
-    const Nat& num_subdivisions() const { return _num_subdivisions; }
-
-    /** @brief Perform the specified evolution operation. */
-    Void insert_subspace(RealVariable v, Nat n) {
-        /** @brief Construct the object. */
-        ARIADNE_PRECONDITION(n > 0u);
-        /** @brief Construct the object. */
-        ARIADNE_PRECONDITION(!_subspace.has_key(v));
-        _subspace.insert(v, n);
-    }
-
-    /** @brief Perform the specified evolution operation. */
-    Void remove_keys() {
-        _subspace.remove_keys(_subspace.keys());
-    }
-
-    /** @brief Perform the specified evolution operation. */
-    Void set_subspace(subspace _subspace_) {
-        for (const auto& entry: _subspace_) {
+    //! \brief Named counts of initial sampling subintervals; default one per axis.
+    Void set_sampling_counts(SamplingCounts counts) {
+        for (const auto& entry: counts)
             ARIADNE_PRECONDITION(entry.second > 0u);
-        }
-        _subspace = _subspace_;
+        _sampling_counts = std::move(counts);
     }
-
-    Bool is_using_subspace() const { return !_subspace.empty(); }
-
-    const subspace& get_subspace() const { return _subspace; }
+    Void set_sampling_count(RealVariable variable, Nat count) {
+        ARIADNE_PRECONDITION(count > 0u);
+        ARIADNE_PRECONDITION(!_sampling_counts.has_key(variable));
+        _sampling_counts.insert(variable, count);
+    }
+    Void clear_sampling_counts() { _sampling_counts.remove_keys(_sampling_counts.keys()); }
+    const SamplingCounts& sampling_counts() const { return _sampling_counts; }
 
     /** @brief Perform the specified evolution operation. */
     virtual OutputStream& _write(OutputStream& os) const;

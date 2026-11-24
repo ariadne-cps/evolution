@@ -46,8 +46,7 @@ int main() {
     OrdinaryDifferentialAlgebraicEquation decay(dynamics);
     ContinuousTimeEvolver<ApproximateTag> simulator(decay);
     simulator.configuration().set_step_size(0.05);
-    simulator.configuration().set_num_subdivisions(0);
-    simulator.configuration().insert_subspace(x, 1);
+    simulator.configuration().set_sampling_count(x, 1u);
 
     RealExpressionBoundedConstraintSet initial({0.9_dec <= x <= 1.1_dec});
     auto simulated = simulator.orbit(initial, 0.1_dec);

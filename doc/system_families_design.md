@@ -920,3 +920,27 @@ objects. This is an identifier-only change: no model, simulation,
 validation, sampling, assertion or CMake behavior was changed.
 Acceptance still requires passing the five functional CI workflows
 on the new commit; Format remains nonblocking.
+
+## v6.76 — Disambiguate approximate and validated hybrid-continuous tutorial evolvers
+
+The installed C++ tutorial contained a second name collision introduced
+by the earlier repository-wide identifier normalization:
+`HybridContinuousTimeEvolver<ApproximateTag>` and
+`HybridContinuousTimeEvolver<ValidatedTag>` were both declared in
+`main()` under the same identifier. This causes a C++ redefinition
+error and incorrectly resolves the subsequent validated-only
+`set_integrator`, step-size, enclosure-radius, and UPPER orbit calls
+against the approximate type. The two local objects are now named
+`approximate_hybrid_continuous_evolver` and
+`validated_hybrid_continuous_evolver` respectively, with every
+call matched to its intended paradigm. This follows the explicit
+`approximate_continuous_evolver` and `validated_discrete_evolver`
+conventions established in v6.75. The tutorial checks, mathematical
+models, numerical algorithms, test registrations and CMake rules
+are unchanged. No special include path or timeout is added.
+
+This corrects the specific installed tutorial compilation errors
+reported at the v6.75 checkpoint. Other Debug, sanitizer and platform
+errors, if any, require independent diagnosis. Acceptance is conditional
+on passing Ubuntu, macOS, Windows, Coverage and Sanitizers for this
+exact new commit. Format remains nonblocking.

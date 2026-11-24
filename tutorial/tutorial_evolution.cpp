@@ -100,14 +100,14 @@ int main() {
         automaton.target(active, deactivate) != idle) {
         throw std::runtime_error("Hybrid transition relation is incorrect");
     }
-    HybridContinuousTimeEvolver<ApproximateTag> hybrid_continuous_time_evolver(automaton);
+    HybridContinuousTimeEvolver<ApproximateTag> approximate_hybrid_continuous_evolver(automaton);
     HybridTime budget(1.0_x, 2);
     if (budget.discrete_time() != Integer(2)) {
         throw std::runtime_error("Incorrect hybrid jump budget");
     }
     std::cout << "Hybrid evolution: " << automaton.locations().size()
               << " modes, budget " << budget << "\n";
-    (void)hybrid_continuous_time_evolver;
+    (void)approximate_hybrid_continuous_evolver;
 
     // Hybrid validated evolution with continuous dynamics in a single mode.
     // No events are enabled: this isolates the continuous flow in a hybrid
@@ -116,17 +116,17 @@ int main() {
     List<DottedRealAssignment> hybrid_dynamics;
     hybrid_dynamics.append(dot(x) = -x);
     flow_automaton.new_mode(idle, hybrid_dynamics);
-    HybridContinuousTimeEvolver<ValidatedTag> hybrid_continuous_time_evolver(flow_automaton);
-    hybrid_continuous_time_evolver.set_integrator(TaylorPicardIntegrator(StepMaximumError(1e-5)));
-    hybrid_continuous_time_evolver.configuration().set_maximum_step_size(0.05);
-    hybrid_continuous_time_evolver.configuration().set_maximum_enclosure_radius(1.0);
+    HybridContinuousTimeEvolver<ValidatedTag> validated_hybrid_continuous_evolver(flow_automaton);
+    validated_hybrid_continuous_evolver.set_integrator(TaylorPicardIntegrator(StepMaximumError(1e-5)));
+    validated_hybrid_continuous_evolver.configuration().set_maximum_step_size(0.05);
+    validated_hybrid_continuous_evolver.configuration().set_maximum_enclosure_radius(1.0);
     // ExactBoxType uses double-exact bounds: use dyadic values 7/8 and 9/8,
     // not non-dyadic decimal fractions.
     HybridExactBox hybrid_initial(idle, flow_automaton.continuous_state_space(idle),
                                   ExactBoxType{
                                       {0.875_x, 1.125_x}
     });
-    auto hybrid_orbit = hybrid_continuous_time_evolver.orbit(hybrid_initial, HybridTime(Real(1 / 20_q), Integer(1)), Semantics::UPPER);
+    auto hybrid_orbit = validated_hybrid_continuous_evolver.orbit(hybrid_initial, HybridTime(Real(1 / 20_q), Integer(1)), Semantics::UPPER);
     std::cout << "HybridContinuousTimeEvolver<ValidatedTag>: " << hybrid_orbit.final().size()
               << " final enclosure(s)\n";
 

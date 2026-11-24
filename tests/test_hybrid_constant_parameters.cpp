@@ -375,9 +375,29 @@ class TestHybridConstantParameters : public Testing::ContextFixture {
                     ARIADNE_TESTING_PROVE(subset(
                         ExactIntervalType(1, 1),
                         cast_exact_interval(final.state_function()[0u].range())));
+                    // HybridTime(T, 1) stops on the first jump, so the
+                    // returned final enclosure is the reached reset state
+                    // at the crossing time, not necessarily at time T.
+                    ARIADNE_TESTING_PROVE(definitely(
+                        final.time_range().upper_bound() < Real(0.125_x)));
+
+                    // Permit continued evolution after the one URGENT jump.
+                    // This separately checks the time-horizon contract,
+                    // without weakening the event-limited witness assertion.
+                    const auto continued = evolver.orbit(initial(evolver),
+                        HybridTime(0.125_x, 2), Semantics::LOWER);
+                    ARIADNE_TESTING_REQUIRE(continued.final().size() == 1u);
+                    const auto& at_horizon = continued.final()[0u];
+                    ARIADNE_TESTING_EXPECT_EQUAL(at_horizon.location(), target);
+                    ARIADNE_TESTING_REQUIRE(at_horizon.previous_events().size() == 1u);
+                    ARIADNE_TESTING_EXPECT_EQUAL(at_horizon.previous_events()[0u], crossing);
+                    binding(at_horizon);
+                    ARIADNE_TESTING_PROVE(subset(
+                        ExactIntervalType(1, 1),
+                        cast_exact_interval(at_horizon.state_function()[0u].range())));
                     ARIADNE_TESTING_PROVE(subset(
                         ExactIntervalType(0.125_x, 0.125_x),
-                        cast_exact_interval(final.time_function().range())));
+                        cast_exact_interval(at_horizon.time_function().range())));
                 }
             }
     }

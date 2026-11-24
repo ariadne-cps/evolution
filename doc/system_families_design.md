@@ -677,3 +677,32 @@ was prepared. Acceptance of v6.65 requires separate successful
 Ubuntu, macOS, Windows, Coverage and Sanitizers workflows on its own
 SHA; no prior SHA is substituted for that gate. Format remains
 nonblocking. Hybrid continuous equation LOWER stays partial (◐).
+
+## v6.66 — Fix the v6.65 regression's event-limit versus horizon-time expectation
+
+The new `test_lower_guard_depending_on_clock_and_parameter`
+reported a failed check for `t=1/8` despite reaching the certified
+URGENT reset state. This was an **incorrect test expectation**, not
+evidence of a LOWER numerical-kernel defect. In
+`_process_jumped_set`, `HybridTime(1/8, 1)` stops upon the first
+completed event with `DISCRETE_LIMIT` and records the reset
+enclosure at the **crossing time**, not at the global time horizon.
+
+The corrected test preserves that event-limited orbit and its
+witness/event/parameter assertions, and additionally proves that the
+reset occurs strictly before the horizon. A separate orbit with
+`HybridTime(1/8, 2)` allows the single jump followed by continuous
+evolution in the stationary target mode, and checks the exact horizon
+time, target, one-event history, parameter binding and reached state
+`x=1`. The competing-URGENT negative cases remain unchanged. No
+test has been removed; no algorithm, semantics or model parameters
+have been weakened or modified. Hybrid continuous/equation LOWER
+remains partial (◐).
+
+v6.64 passed Ubuntu, macOS, Windows, Coverage and Sanitizers on
+`c68deeec6cfe96d19fa862f1e38d1e02e5734a1c`. v6.65
+(`115d7413c000480276511dc05d4bde25599c319b`) failed
+Ubuntu/macOS Debug test execution on this incorrect time assertion.
+Acceptance of this fix requires separate successful Ubuntu, macOS,
+Windows, Coverage and Sanitizers workflows on its new commit SHA;
+Format is nonblocking.

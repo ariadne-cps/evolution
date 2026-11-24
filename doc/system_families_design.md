@@ -651,3 +651,29 @@ Sanitizers. The v6.63 checkpoint was still being validated when this
 test-only increment was prepared; do not infer its acceptance from the
 v6.62 CI or infer acceptance of this v6.64 commit before its own five
 functional workflows complete. Format remains nonblocking.
+
+
+## v6.65 — Physical-parameter and clock-dependent URGENT guard regression
+
+This checkpoint adds one focused C++ regression and does **not** change
+the validated numerical kernel, the capability matrix, or the UPPER path.
+For the joint equation `x'=p+t`, with `p in [2,3]` and initially
+`x=t=0`, the URGENT condition `x>=t+p/256` must certify a LOWER
+first crossing. The reset `x'=x-t-p/256+1` maps that real boundary
+to `x=1`; the final result must contain this witness, retain the
+physical parameter binding, target mode, single event, and exact
+horizon time. Both flat/tree evolution backends are exercised.
+
+The same two backends also exercise a second, earlier URGENT condition
+`x>=t+p/512`, with a distinct reset, to ensure that the first
+boundary cannot be incorrectly selected as a certified unique
+crossing when another blocking event is present. The expected LOWER
+final collection is empty in that deliberately unresolved case.
+All previous hybrid continuous/discrete, autonomous, UPPER and
+inclusion regressions remain intact.
+
+The v6.64 functional CI was still running when this test-only commit
+was prepared. Acceptance of v6.65 requires separate successful
+Ubuntu, macOS, Windows, Coverage and Sanitizers workflows on its own
+SHA; no prior SHA is substituted for that gate. Format remains
+nonblocking. Hybrid continuous equation LOWER stays partial (◐).

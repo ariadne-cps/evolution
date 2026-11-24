@@ -334,6 +334,54 @@ class TestHybridConstantParameters : public Testing::ContextFixture {
         }
     }
 
+    void test_lower_guard_depending_on_clock_and_parameter() {
+        // This exercises the physical-parameter coordinate in the same
+        // source guard as the global clock, not merely in the ODE field.
+        // The two positive signs are strict at the certified endpoint.
+        for (bool tree: {false, true})
+            for (bool competing: {false, true}) {
+                const RealVariablesBox parameters({2 <= p <= 3});
+                const DiscreteEvent crossing("parameter_clock_crossing");
+                ContinuousTimeHybridAutomaton system;
+                system.new_mode(source, OrdinaryDifferentialAlgebraicEquation(
+                    {dot(x) = p + t}, parameters, t));
+                system.new_mode(target, OrdinaryDifferentialAlgebraicEquation(
+                    {dot(x) = 0}, parameters, t));
+                system.new_transition(source, crossing, target,
+                    {next(x) = x - t - p / 256 + 1},
+                    x >= t + p / 256, EventKind::URGENT);
+                if (competing) {
+                    // This strictly earlier blocker invalidates a unique
+                    // first-crossing certificate for the later transition.
+                    system.new_transition(source, DiscreteEvent("earlier"), target,
+                        {next(x) = x - t - p / 512 + 2},
+                        x >= t + p / 512, EventKind::URGENT);
+                }
+                HybridContinuousTimeEvolver<ValidatedTag> evolver(system);
+                configure(evolver, tree);
+                const auto lower = evolver.orbit(initial(evolver),
+                    HybridTime(0.125_x, 1), Semantics::LOWER);
+                if (competing) {
+                    ARIADNE_TESTING_EXPECT_EQUAL(lower.final().size(), 0u);
+                } else {
+                    ARIADNE_TESTING_REQUIRE(lower.final().size() == 1u);
+                    const auto& final = lower.final()[0u];
+                    ARIADNE_TESTING_EXPECT_EQUAL(final.location(), target);
+                    ARIADNE_TESTING_REQUIRE(final.previous_events().size() == 1u);
+                    ARIADNE_TESTING_EXPECT_EQUAL(final.previous_events()[0u], crossing);
+                    binding(final);
+                    // On the true crossing x-t-p/256=0, so the reset
+                    // maps the reachable first boundary to exactly x=1.
+                    ARIADNE_TESTING_PROVE(subset(
+                        ExactIntervalType(1, 1),
+                        cast_exact_interval(final.state_function()[0u].range())));
+                    ARIADNE_TESTING_PROVE(subset(
+                        ExactIntervalType(0.125_x, 0.125_x),
+                        cast_exact_interval(final.time_function().range())));
+                }
+            }
+    }
+
     void test_inclusion_flow_and_method_gates() {
         for (bool timed: {false, true})
             for (bool boxes: {false, true})
@@ -511,6 +559,7 @@ int main(int argc, char** argv) {
     ARIADNE_TESTING_ADD_TEST(TestHybridConstantParameters, test_lower_certified_crossing_during_clocked_step);
     ARIADNE_TESTING_ADD_TEST(TestHybridConstantParameters, test_lower_crossing_with_competing_urgent_guard);
     ARIADNE_TESTING_ADD_TEST(TestHybridConstantParameters, test_lower_joint_clock_parameter_guard);
+    ARIADNE_TESTING_ADD_TEST(TestHybridConstantParameters, test_lower_guard_depending_on_clock_and_parameter);
     ARIADNE_TESTING_ADD_TEST(TestHybridConstantParameters, test_inclusion_flow_and_method_gates);
     ARIADNE_TESTING_ADD_TEST(TestHybridConstantParameters, test_immediate_parameter_guard_reset_and_auxiliary);
     ARIADNE_TESTING_ADD_TEST(TestHybridConstantParameters, test_timed_parameter_guard_and_reset);

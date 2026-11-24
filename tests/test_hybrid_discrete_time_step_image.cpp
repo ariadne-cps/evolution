@@ -29,6 +29,9 @@
 #include <stdexcept>
 
 #include "evolution/hybrid_discrete_time_step_image.hpp"
+#include "function/taylor_function.hpp"
+#include "hybrid/hybrid_set.hpp"
+#include "numeric/rational.hpp"
 #include "logging/test_runner.hpp"
 #include "system/discrete_time_hybrid_automaton.hpp"
 #include "ariadne-testing.hpp"

@@ -377,3 +377,28 @@ The four-notion matrix (LOWER/INNER/UPPER/OUTER) is unchanged.
 Ordinary discrete equation LOWER remains audited for known nonempty
 initial sources, with arbitrary constrained-source witness evidence
 still open. Format remains intentionally outside acceptance.
+
+## v6.56 — Paradigm test migration after removing IteratedMap
+
+The v6.55 API migration removed the legacy public `IteratedMap` class
+from System and from Evolution, but `test_evolver_paradigms.cpp`
+still contained two negative `static_assert` checks naming that
+obsolete type. This is a **test compilation regression**, not a
+failure of validated numerical evolution or the LOWER witness contract.
+
+The assertions now explicitly check that
+`EvolutionTraits<ValidatedTag, DifferenceAlgebraicEquation>` exists
+and selects `DiscreteTimeEvolver<ValidatedTag>`, while
+`EvolutionTraits<ApproximateTag, DifferenceAlgebraicEquation>`
+is unavailable and a continuous approximate evolver cannot be
+constructed from a discrete difference equation. The previous
+negative capability checks are not relaxed.
+
+An audit of the current C++ source, public headers, test suites and
+Python/tutorial entry points in Evolution identified no other
+operational references to `IteratedMap` in the inspected files.
+The change keeps System at gitlink `7df54dc`, avoiding unnecessary
+submodule churn while the coordinated CI is still running.
+System's functional checks and all Evolution suites (continuous,
+discrete and hybrid) remain required; Format remains non-blocking.
+No matrix capability changes are claimed by this compile-only fix.

@@ -73,11 +73,14 @@ static_assert(HasEvolutionTraits<ApproximateTag, OrdinaryDifferentialAlgebraicEq
 static_assert(HasEvolutionTraits<ValidatedTag, OrdinaryDifferentialAlgebraicInclusion>);
 static_assert(HasEvolutionTraits<ApproximateTag, OrdinaryDifferentialAlgebraicInclusion>);
 static_assert(std::is_constructible_v<ApproximateContinuous, const OrdinaryDifferentialAlgebraicInclusion&, const InputSamplingPolicy&>);
-static_assert(!HasEvolutionTraits<ApproximateTag, IteratedMap>);
+static_assert(HasEvolutionTraits<ValidatedTag, DifferenceAlgebraicEquation>);
+static_assert(std::is_same_v<DiscreteTimeEvolver<ValidatedTag>::SystemType,
+                             DifferenceAlgebraicEquation>);
+static_assert(!HasEvolutionTraits<ApproximateTag, DifferenceAlgebraicEquation>);
 static_assert(!CompleteType<DiscreteTimeEvolver<ApproximateTag>>);
 static_assert(!CompleteType<ContinuousTimeEvolver<ExactTag>>);
 static_assert(!std::is_constructible_v<ApproximateContinuous, const OrdinaryDifferentialAlgebraicInclusion&>);
-static_assert(!std::is_constructible_v<ApproximateContinuous, const IteratedMap&>);
+static_assert(!std::is_constructible_v<ApproximateContinuous, const DifferenceAlgebraicEquation&>);
 
 class TestEvolverParadigms : public Testing::ContextFixture {
   public:

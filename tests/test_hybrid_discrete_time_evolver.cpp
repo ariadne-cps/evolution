@@ -262,6 +262,58 @@ class TestHybridDiscreteTimeEvolver : public Ariadne::Testing::ContextFixture {
         ARIADNE_TESTING_EXPECT_EQUAL(continued.final().front().auxiliary_space(), RealSpace({a}));
     }
 
+    Void test_state_only_event_from_auxiliary_inclusion_upper() {
+        const RealVariable x("x"), u("u"), a("a");
+        const DiscreteLocation source_mode(1), target_mode(2);
+        const DiscreteEvent event("state_guard");
+        DiscreteTimeHybridAutomaton system;
+        system.new_mode(source_mode, DifferenceAlgebraicInclusion(
+            List<PrimedRealAssignment>{next(x) = x + a},
+            List<RealAssignment>{let(a) = x + u},
+            RealVariablesBox({-1 <= u <= 1})));
+        system.new_mode(target_mode, DifferenceAlgebraicEquation(
+            List<PrimedRealAssignment>{next(x) = x}));
+        // The event depends on x alone. Its predicate and reset must not
+        // be evaluated using an unconstrained or sampled auxiliary a.
+        system.new_permissive_transition(source_mode, event, target_mode,
+            {next(x) = x + 3}, x >= 0, x <= 1);
+        Evolver evolver(system);
+        const HybridEnclosure original = initial(source_mode);
+        const auto history = evolver.explore(original,
+            Termination(Integer(0), Integer(1)), Semantics::UPPER);
+        ARIADNE_TESTING_EXPECT_EQUAL(history.nodes.size(), 3u);
+        ARIADNE_TESTING_EXPECT_EQUAL(history.nodes[0u].enclosure.auxiliary_space(), RealSpace({a}));
+        ARIADNE_TESTING_EXPECT_EQUAL(history.nodes[0u].enclosure.continuous_set().number_of_parameters(), 2u);
+
+        SizeType reset_count = 0u, progress_count = 0u;
+        for (SizeType i = 1u; i != history.nodes.size(); ++i) {
+            const auto& successor = history.nodes[i].enclosure;
+            ARIADNE_TESTING_EXPECT_EQUAL(successor.time_range().lower_bound().raw().get_d(), 1.0);
+            if (successor.location() == target_mode) {
+                ++reset_count;
+                ARIADNE_TESTING_EXPECT_EQUAL(successor.auxiliary_space().dimension(), 0u);
+                ARIADNE_TESTING_EXPECT_EQUAL(successor.continuous_set().number_of_parameters(), 2u);
+                ARIADNE_TESTING_EXPECT_EQUAL(successor.previous_events().size(), 1u);
+                ARIADNE_TESTING_PROVE(successor.previous_events()[0u] == event);
+            } else {
+                ++progress_count;
+                ARIADNE_TESTING_PROVE(successor.location() == source_mode);
+                ARIADNE_TESTING_EXPECT_EQUAL(successor.auxiliary_space(), RealSpace({a}));
+                ARIADNE_TESTING_EXPECT_EQUAL(successor.continuous_set().number_of_parameters(), 3u);
+                const auto box = successor.state_bounding_box()[0u];
+                ARIADNE_TESTING_PROVE(box.lower_bound().raw().get_d() <= -1.0);
+                ARIADNE_TESTING_PROVE(box.upper_bound().raw().get_d() >= 1.0);
+            }
+        }
+        ARIADNE_TESTING_EXPECT_EQUAL(reset_count, 1u);
+        ARIADNE_TESTING_EXPECT_EQUAL(progress_count, 1u);
+        ARIADNE_TESTING_EXPECT_EQUAL(original.continuous_set().number_of_parameters(), 1u);
+        ARIADNE_TESTING_EXPECT_EQUAL(original.auxiliary_space().dimension(), 0u);
+        const auto orb = evolver.orbit(original,
+            Termination(Integer(0), Integer(1)), Semantics::UPPER);
+        ARIADNE_TESTING_EXPECT_EQUAL(orb.final().size(), 2u);
+    }
+
     Void test_rejections() {
         const RealVariable x("x"), u("u");
         const DiscreteLocation mode(1);
@@ -303,6 +355,7 @@ int main(int argc, char** argv) {
     ARIADNE_TESTING_ADD_TEST(TestHybridDiscreteTimeEvolver, test_public_guarded_inclusion_upper_orbit);
     ARIADNE_TESTING_ADD_TEST(TestHybridDiscreteTimeEvolver, test_public_transition_into_inclusion_and_continue_upper);
     ARIADNE_TESTING_ADD_TEST(TestHybridDiscreteTimeEvolver, test_event_free_input_auxiliary_upper_orbit);
+    ARIADNE_TESTING_ADD_TEST(TestHybridDiscreteTimeEvolver, test_state_only_event_from_auxiliary_inclusion_upper);
     ARIADNE_TESTING_ADD_TEST(TestHybridDiscreteTimeEvolver, test_rejections);
     return Ariadne::Testing::run_logging_suite(ariadne_test_suite, argc, argv);
 }

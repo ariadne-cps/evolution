@@ -1359,3 +1359,65 @@ has exactly the sole `#include "ariadne-evolution.hpp"`.
 This checkpoint is **published but requires all five workflows** on
 the exact v6.92 commit before it is accepted. At v6.91 observation,
 Ubuntu/macOS succeeded; Windows, Coverage and Sanitizers were pending.
+
+## v6.93 — State-only hybrid discrete events from input-auxiliary inclusions
+
+UPPER validated hybrid discrete inclusion modes with algebraic
+`a[n]=g(x[n],u[n])` may now have outgoing events whose **guard,
+progression invariant and reset expressions all depend on state alone**.
+The previous blanket rejection of every event from an
+auxiliary-bearing inclusion was unnecessarily restrictive:
+a pre-state condition `p(x[n])` and state-only reset
+`x[n+1]=r(x[n])` do not require an input-dependent auxiliary
+substitution. They can be validated with the already certified
+state-only predicate and reset kernels.
+
+`validate_discrete_inclusion_source` now checks the syntactic
+arguments of each outgoing guard, invariant and reset assignment
+against the source state space. For a source inclusion with
+auxiliaries, any reference to one of its auxiliary variables in
+any of those three expression classes causes an explicit
+`std::invalid_argument`, including at zero horizon and in direct
+step-image entry points. No dependency is silently eliminated by
+numerical sampling. Events to inclusion target modes carrying
+input-dependent auxiliaries remain unsupported.
+
+In the accepted case, the hybrid source is first prepared with the
+full `u[n]` box and the correlated mapping `a[n]=g(x[n],u[n])`.
+The independently restricted branches use source-state guards and
+invariants. A state-only reset consumes one tick but **does not
+allocate another current input**; its event provenance and target
+equation-mode auxiliary labels follow the existing reset kernel.
+A progression uses the same current input as `a[n]`, advances the
+state and attaches independent `u[n+1]`. The two UPPER branches
+remain distinct; neither can be discarded for an UNKNOWN guard.
+No changes are made to the System declaration or equation dynamics.
+
+New tests cover direct step images and a public
+`HybridDiscreteTimeEvolver<ValidatedTag>::explore/orbit` over a
+permissive event with state-only guard, invariant and reset:
+two distinct successors, one reset and one inclusion progression,
+time-one advancement, exact input coordinate counts, final image
+coverage, provenance and nonmutation of the original source.
+Separate negative tests exercise auxiliary-dependent *guard*,
+*invariant* and *reset*, preserving a strict semantic boundary.
+The existing negative test for auxiliary-bearing inclusion targets
+remains active.
+
+The UPPER hybrid discrete inclusion cell remains **partial**:
+input-auxiliary-dependent events and inclusion reset targets with
+auxiliaries still need a separate correlation-preserving
+implementation. Validated LOWER is unchanged and absent.
+The user-facing tutorial stays at one public include,
+`ariadne-evolution.hpp`, without any unimplemented examples.
+The journal is the only place that records future work.
+
+CI qualification: the v6.92 commit
+`90ab0fc41ce8d4f9d06d3a8ccb97c47ecea561de` had no check
+runs or commit statuses and was not reflected in the PR #32 head
+as of the 25 November 2026 inspection, despite being the actual
+`multifunction` branch tip. The GitHub workflow triggers are
+`push: main` and `pull_request`, not direct pushes to
+`multifunction`. Thus v6.92 is **not** CI-validated, and neither
+will v6.93 be considered accepted without genuine CI evidence on
+its own SHA. Do not borrow the five green v6.91 checks.

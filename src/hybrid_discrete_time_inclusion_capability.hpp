@@ -36,11 +36,12 @@
 namespace Ariadne::EvolutionDetail {
 
 //! \brief Check the common capability boundary for a validated inclusion mode.
-//! \details Input-dependent auxiliary outputs are supported in event-free
-//! inclusion source modes only. Guard, invariant and reset evaluation using
-//! input-dependent auxiliary outputs requires a separate certified contract.
-//! Inclusion targets with auxiliary outputs remain excluded. This gate is
-//! applied even at zero horizon.
+//! \details An auxiliary-bearing inclusion may have outgoing events only
+//! when their guard, invariant and reset expressions depend on state alone.
+//! Predicates or resets that reference input-dependent auxiliary outputs
+//! require a separate certified correlation-aware implementation.
+//! Inclusion targets with auxiliary outputs remain excluded.
+//! Apply this gate even at zero horizon and at direct numerical entry points.
 inline Void validate_discrete_inclusion_source(
     const DiscreteTimeHybridAutomatonInterface& automaton,
     const HybridEnclosure& source) {
@@ -52,10 +53,23 @@ inline Void validate_discrete_inclusion_source(
     if (source.auxiliary_space().dimension() != 0u &&
         source.auxiliary_space() != inclusion.auxiliary_space())
         throw std::invalid_argument("Validated discrete inclusion source auxiliary-space mismatch");
-    if (has_auxiliary && !automaton.events(location).empty())
-        throw std::invalid_argument(
-            "Validated discrete inclusion input-dependent auxiliaries with events are not yet supported");
+    // A guard/invariant/reset depending only on state does not consume or
+    // constrain the independent current input, even when the source mode
+    // has auxiliary outputs a(x,u). Reject only the event expressions that
+    // actually depend on auxiliary variables: substituting those into a
+    // state-only indicator or reset map would be unsound.
+    const Set<UntypedVariable> state_variables(make_set(inclusion.state_space().variables()));
     for (const DiscreteEvent& event: automaton.events(location)) {
+        if (has_auxiliary) {
+            if (!subset(automaton.guard_predicate(location, event).arguments(), state_variables) ||
+                !subset(automaton.invariant_predicate(location, event).arguments(), state_variables))
+                throw std::invalid_argument(
+                    "Validated inclusion event guard/invariant with input-dependent auxiliary is unsupported");
+            for (const PrimedRealAssignment& assignment: automaton.reset_assignments(location, event))
+                if (!subset(assignment.rhs.arguments(), state_variables))
+                    throw std::invalid_argument(
+                        "Validated inclusion event reset with input-dependent auxiliary is unsupported");
+        }
         const DiscreteLocation destination = automaton.target(location, event);
         if (!automaton.has_equation(destination) && !automaton.has_inclusion(destination))
             throw std::invalid_argument("Validated discrete inclusion event target has unsupported dynamics");
@@ -65,8 +79,8 @@ inline Void validate_discrete_inclusion_source(
     }
 }
 
-//! \brief Attach the full current input box to an event-free inclusion
-//! source whose output depends on current input, including at zero horizon.
+//! \brief Attach the full current input box to an auxiliary-bearing
+//! inclusion source, including at zero horizon and before state-only events.
 //! Earlier INPUT axes remain independent and correlated with the state.
 inline HybridEnclosure prepare_discrete_inclusion_source(
     const DiscreteTimeHybridAutomatonInterface& automaton,

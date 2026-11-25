@@ -48,8 +48,11 @@ namespace Ariadne {
  *  because the closed restriction includes the boundary.
  *  No LOWER image guarantee follows from the returned evidence.
  *
- *  Bounded-input inclusion modes are rejected because independent input
- *  selection and input-dependent auxiliary correlations are not yet handled.
+ *  Bounded-input inclusion modes with no auxiliaries support state-only
+ *  predicates. Auxiliary-bearing inclusion modes also support state-only
+ *  predicates; events referring to their input-dependent auxiliary
+ *  values remain explicitly rejected until a correlation-aware contract
+ *  is available.
  */
 class HybridDiscreteTimePredicateEvaluator {
   public:

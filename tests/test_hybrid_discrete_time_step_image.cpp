@@ -271,6 +271,40 @@ class TestHybridDiscreteTimeStepImage : public Ariadne::Testing::ContextFixture 
         ARIADNE_TESTING_EXPECT_EQUAL(source.auxiliary_space().dimension(), 0u);
     }
 
+    Void test_input_dependent_event_reset_and_invariant_rejected() {
+        const RealVariable x("x"), u("u"), a("a");
+        const DiscreteLocation mode(1), target(2);
+        const DiscreteEvent reset_event("aux_reset"), invariant_event("aux_invariant");
+        const DifferenceAlgebraicInclusion source_system(
+            List<PrimedRealAssignment>{next(x) = x + a},
+            List<RealAssignment>{let(a) = x + u},
+            RealVariablesBox({-1 <= u <= 1}));
+        const DifferenceAlgebraicEquation target_system(
+            List<PrimedRealAssignment>{next(x) = x});
+        const HybridEnclosure source(HybridExactBox(mode, RealSpace({x}),
+            ExactBoxType({{0.0_x, 1.0_x}})), configuration());
+
+        DiscreteTimeHybridAutomaton reset_automaton;
+        reset_automaton.new_mode(mode, source_system);
+        reset_automaton.new_mode(target, target_system);
+        reset_automaton.new_urgent_transition(mode, reset_event, target,
+            {next(x) = a + 3}, x >= 0);
+        const HybridDiscreteTimePlannedBranch progress{
+            HybridDiscreteTimeBranchKind::PROGRESSION, mode, std::nullopt, false};
+        ARIADNE_TESTING_EXPECT_THROWS(std::invalid_argument,
+            HybridDiscreteTimeStepImage::apply(reset_automaton, source, progress));
+
+        DiscreteTimeHybridAutomaton invariant_automaton;
+        invariant_automaton.new_mode(mode, source_system);
+        invariant_automaton.new_mode(target, target_system);
+        invariant_automaton.new_permissive_transition(mode, invariant_event, target,
+            {next(x) = x}, x >= 0, a <= 1);
+        ARIADNE_TESTING_EXPECT_THROWS(std::invalid_argument,
+            HybridDiscreteTimeStepImage::apply(invariant_automaton, source, progress));
+        ARIADNE_TESTING_EXPECT_EQUAL(source.auxiliary_space().dimension(), 0u);
+        ARIADNE_TESTING_EXPECT_EQUAL(source.continuous_set().number_of_parameters(), 1u);
+    }
+
     Void test_input_dependent_auxiliary_event_rejected() {
         const RealVariable x("x"), u("u"), a("a");
         const DiscreteLocation mode(1), target(2);
@@ -300,6 +334,7 @@ int main(int argc, char** argv) {
     ARIADNE_TESTING_ADD_TEST(TestHybridDiscreteTimeStepImage, test_reject_inclusion_target_with_input_dependent_auxiliaries);
     ARIADNE_TESTING_ADD_TEST(TestHybridDiscreteTimeStepImage, test_fresh_input_at_every_inclusion_tick);
     ARIADNE_TESTING_ADD_TEST(TestHybridDiscreteTimeStepImage, test_event_free_input_dependent_auxiliary);
+    ARIADNE_TESTING_ADD_TEST(TestHybridDiscreteTimeStepImage, test_input_dependent_event_reset_and_invariant_rejected);
     ARIADNE_TESTING_ADD_TEST(TestHybridDiscreteTimeStepImage, test_input_dependent_auxiliary_event_rejected);
     ARIADNE_TESTING_ADD_TEST(TestHybridDiscreteTimeStepImage, test_inclusion_reset_does_not_choose_new_input);
     return Ariadne::Testing::run_logging_suite(ariadne_test_suite, argc, argv);

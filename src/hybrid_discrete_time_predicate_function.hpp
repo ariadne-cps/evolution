@@ -50,7 +50,10 @@ inline EffectiveScalarMultivariateFunction discrete_source_indicator(
         throw std::invalid_argument("Discrete hybrid predicate source state space mismatch");
     if (automaton.has_inclusion(location)) {
         // System permits state/auxiliary event arguments, never free inputs.
-        // With no auxiliaries, predicates refer only to the pre-tick state.
+        // The capability gate permits only state-only predicates for an
+        // inclusion with input-dependent auxiliaries. In that supported case
+        // algebraic substitution leaves the predicate state-only and its
+        // validated indicator uses the full correlated pre-state.
         validate_discrete_inclusion_source(automaton, source);
         const auto& inclusion = automaton.inclusion(location);
         return make_constraint_function(inclusion.state_space(),

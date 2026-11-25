@@ -45,8 +45,10 @@ namespace Ariadne {
  *  inclusions, UPPER progression uses independent whole-box inputs.
  *  Event-free inclusion modes also support input-dependent algebraic
  *  auxiliaries, bound to current-index inputs from zero horizon onward.
- *  Source modes with auxiliary-dependent events and auxiliary-bearing
- *  inclusion targets remain explicitly unsupported. No inputs are sampled.
+ *  State-only guard, invariant and reset expressions are supported even
+ *  when the source mode carries algebraic input-dependent auxiliaries.
+ *  Events that reference these auxiliaries and inclusion targets carrying
+ *  auxiliaries remain explicitly unsupported. No inputs are sampled.
  *  This operation performs no scheduling and does not assemble an Orbit.
  */
 class HybridDiscreteTimeStepImage {

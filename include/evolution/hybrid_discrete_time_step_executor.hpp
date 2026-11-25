@@ -63,9 +63,10 @@ struct HybridDiscreteTimeStepExecution {
 //! full-source imaging contract: the callback alone cannot authorize a
 //! numerical restriction. LOWER evolution is not supported.
 //! Deterministic equations and bounded-input inclusions with state-only
-//! events targeting deterministic equations and no auxiliary outputs are
-//! supported. Input-dependent guard and auxiliary expressions remain
-//! unsupported; no numerical input is sampled.
+//! events are supported, including source modes with algebraic
+//! input-dependent auxiliaries. An auxiliary-dependent guard, invariant
+//! or reset remains unsupported. Inclusion targets with auxiliaries are
+//! also unsupported. No numerical input is sampled.
 //! The caller must
 //! maintain consistency between source_index and the enclosure's global
 //! time function. This is a single-step adapter, not an orbit scheduler.

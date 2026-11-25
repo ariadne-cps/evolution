@@ -108,6 +108,11 @@ struct EvolutionTraits<ValidatedTag, ContinuousDynamics> {
 };
 
 template<>
+struct EvolutionTraits<ApproximateTag, DiscreteTimeHybridAutomatonInterface> {
+    using EvolverType = HybridDiscreteTimeEvolver<ApproximateTag>;
+};
+
+template<>
 struct EvolutionTraits<ValidatedTag, DiscreteTimeHybridAutomatonInterface> {
     using EvolverType = HybridDiscreteTimeEvolver<ValidatedTag>;
     using EnclosureType = HybridEnclosure;

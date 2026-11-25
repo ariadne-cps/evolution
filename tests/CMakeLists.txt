@@ -24,6 +24,7 @@ set(UNIT_TESTS
     test_hybrid_discrete_time_predicate_evaluator
     test_hybrid_discrete_time_upper_scheduler
     test_hybrid_discrete_time_evolver
+    test_hybrid_discrete_time_approximate_evolver
     test_hybrid_crossing
     test_hybrid_inclusions
     test_hybrid_inclusion_impacts

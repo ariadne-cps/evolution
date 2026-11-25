@@ -1043,3 +1043,57 @@ inclusions remain separate pending work.
 The checkpoint remains a candidate until Ubuntu, macOS, Windows,
 Coverage and Sanitizers are all green on the exact commit. Format
 stays nonblocking; test-target CMake settings remain uniform.
+
+## v6.81 candidate — Branch-complete sampled hybrid-discrete evolution
+
+`HybridDiscreteTimeEvolver<ApproximateTag>` advances a concrete point
+through the native `DiscreteTimeHybridAutomatonInterface`. Each
+enabled guard admits a separate transition at the following integer
+index, and permissive progression simultaneously admits its own
+separate branch when its progression invariant allows it. **No
+implicit transition priority or selection** is imposed: multiple
+activations continue as multiple point trajectories, preserving
+their common prefix, event choices, initial-seed identity, and
+individual locations. Each transition applies its reset directly
+to the source pre-state without first applying the map. Ordinary
+progression uses the mode's update; both take one tick.
+A blocked path is retained with explicit `blocked` provenance.
+
+An append-only branch-aware
+`HybridDiscreteTimeApproximateOrbit` returns full independent
+`HybridDiscreteTimeApproximatePath` objects. The prior fixed-size
+hybrid `Orbit<Vector<HybridPoint>>` cannot dynamically fork the
+number of trajectories; this specialized type avoids both silent
+branch loss and artificial merging. In particular, the
+specialization does not claim the generic single-point
+`EvolverInterface<ApproximateTag,...>` contract, whose
+result shape would preclude a fanout. No UPPER/LOWER set
+semantics are claimed.
+
+`InputSamplingPolicy` remains separate from initial sampling.
+Every inclusion source selects an input sample per state/tick,
+and input-dependent progression computes a single chosen
+numerical image; choices are shared by transitions from that
+same source path. A descendant can select a fresh sample at its
+next index. Initial boxes use `sample_hybrid_initial_points`
+and thus the same paving-independent `SamplingCounts`
+as the continuous approximate methods (one midpoint default).
+The per-call maximum path budget defaults to 10000 paths;
+exceeding it aborts rather than truncating a branch.
+
+The implementation uses the existing single-tick scheduler
+for urgent/permissive guard and progression logic. Source
+predicates evaluate the numerically sampled pre-state with
+their declared algebraic assignments; an exactly zero
+indicator is treated as unknown and all admissible alternatives
+remain in the approximate exploration, rather than guessing
+boundary priority. Tests cover simultaneous permissive
+events, urgent competition, multi-tick continuation, blocked
+paths, exact event histories, initial cardinalities, and
+explicit budget failure. This is finite point-path enumeration,
+not exhaustive exploration over an initial set or input set.
+
+As with every implementation checkpoint, the five
+functional workflows must pass on the exact commit for
+acceptance. Format remains nonblocking. No test-specific
+include directories or Windows timeouts are added.

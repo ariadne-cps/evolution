@@ -35,5 +35,6 @@ add_library(EVOLUTION_SRC OBJECT
     hybrid_discrete_time_predicate_evaluator.cpp
     hybrid_discrete_time_upper_scheduler.cpp
     hybrid_discrete_time_evolver.cpp
+    hybrid_discrete_time_approximate_evolver.cpp
 )
 target_include_directories(EVOLUTION_SRC PRIVATE "${PROJECT_SOURCE_DIR}/include/evolution")

@@ -38,9 +38,15 @@
 
 namespace Ariadne::EvolutionDetail {
 
+//! \brief Indicator together with the enclosure argument layout.
+struct DiscreteSourceIndicator {
+    EffectiveScalarMultivariateFunction function;
+    EnclosureFunctionArguments arguments;
+};
+
 //! \brief Build a positive-side indicator of a discrete pre-state predicate.
-//! \details Equation auxiliaries are substituted, not treated as free inputs.
-inline EffectiveScalarMultivariateFunction discrete_source_indicator(
+//! \details Inclusion auxiliaries remain correlated with their current inputs.
+inline DiscreteSourceIndicator discrete_source_indicator(
     const DiscreteTimeHybridAutomatonInterface& automaton,
     const HybridEnclosure& source, const ContinuousPredicate& predicate) {
     const DiscreteLocation location = source.location();
@@ -49,23 +55,29 @@ inline EffectiveScalarMultivariateFunction discrete_source_indicator(
     if (source.state_space() != automaton.state_space(location))
         throw std::invalid_argument("Discrete hybrid predicate source state space mismatch");
     if (automaton.has_inclusion(location)) {
-        // System permits state/auxiliary event arguments, never free inputs.
-        // The capability gate permits only state-only predicates for an
-        // inclusion with input-dependent auxiliaries. In that supported case
-        // algebraic substitution leaves the predicate state-only and its
-        // validated indicator uses the full correlated pre-state.
         validate_discrete_inclusion_source(automaton, source);
         const auto& inclusion = automaton.inclusion(location);
-        return make_constraint_function(inclusion.state_space(),
-                                        algebraic_sort(inclusion.auxiliary_assignments()),
-                                        predicate, Sign::POSITIVE);
+        if (inclusion.auxiliary_space().dimension() != 0u) {
+            // Keep a as an argument rather than substituting a(x,u) into
+            // an indicator over x alone. The enclosure supplies the exact
+            // correlated (x,a(x,u_current)) validated parameter map.
+            return {make_constraint_function(inclusion.state_auxiliary_space(),
+                                             List<RealAssignment>{},
+                                             predicate, Sign::POSITIVE),
+                    EnclosureFunctionArguments::STATE_AUXILIARY};
+        }
+        return {make_constraint_function(inclusion.state_space(),
+                                         List<RealAssignment>{},
+                                         predicate, Sign::POSITIVE),
+                EnclosureFunctionArguments::STATE};
     }
     if (!automaton.has_equation(location))
         throw std::invalid_argument("Unknown discrete hybrid predicate dynamics");
     const auto& equation = automaton.equation(location);
-    return make_constraint_function(equation.state_space(),
-                                    algebraic_sort(equation.auxiliary_assignments()),
-                                    predicate, Sign::POSITIVE);
+    return {make_constraint_function(equation.state_space(),
+                                     algebraic_sort(equation.auxiliary_assignments()),
+                                     predicate, Sign::POSITIVE),
+            EnclosureFunctionArguments::STATE};
 }
 
 } // namespace Ariadne::EvolutionDetail

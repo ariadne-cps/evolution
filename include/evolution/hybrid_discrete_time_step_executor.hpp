@@ -62,12 +62,13 @@ struct HybridDiscreteTimeStepExecution {
 //! execute() with an external evidence callback retains its original
 //! full-source imaging contract: the callback alone cannot authorize a
 //! numerical restriction. LOWER evolution is not supported.
-//! Deterministic equations and bounded-input inclusions with state-only
-//! events are supported, including source modes with algebraic
-//! input-dependent auxiliaries. An auxiliary-dependent guard, invariant
-//! or reset remains unsupported. A reset into an inclusion target with
-//! input-dependent auxiliary outputs installs independent target inputs
-//! only after the source reset has been evaluated. No input is sampled.
+//! Deterministic equations and bounded-input inclusions are supported,
+//! including source modes with algebraic input-dependent auxiliaries.
+//! An auxiliary-dependent guard, invariant
+//! or reset is evaluated through the correlated (state, auxiliary)
+//! enclosure. A reset into an inclusion target with algebraic outputs
+//! installs independent target inputs only after the source reset.
+//! No input is sampled.
 //! The caller must
 //! maintain consistency between source_index and the enclosure's global
 //! time function. This is a single-step adapter, not an orbit scheduler.

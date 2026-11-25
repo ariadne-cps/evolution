@@ -332,7 +332,7 @@ class TestHybridDiscreteTimeUpperScheduler : public Ariadne::Testing::ContextFix
         ARIADNE_TESTING_EXPECT_EQUAL(orbit.blocked.size(), 0u);
     }
 
-    Void test_inclusion_auxiliary_current_input_and_rejected_event() {
+    Void test_inclusion_auxiliary_current_input_and_guard() {
         const RealVariable x("x"), u("u"), a("a");
         const DiscreteLocation mode(1), target(2);
         DiscreteTimeHybridAutomaton system;
@@ -360,19 +360,33 @@ class TestHybridDiscreteTimeUpperScheduler : public Ariadne::Testing::ContextFix
             progressed.nodes[1u].enclosure.continuous_set().variable_kinds()[2u],
             EnclosureVariableKind::INPUT);
 
-        // An event that actually refers to a(x,u) must still be rejected
-        // before constructing any UPPER exploration, including horizon zero.
+        // The correlated auxiliary guard a=x+u is now supported.
+        // At zero horizon the current input exists; at one tick both
+        // closed UPPER alternatives must remain present.
         const DiscreteEvent event("auxiliary_guard");
         system.new_mode(target, DifferenceAlgebraicEquation(
             List<PrimedRealAssignment>{next(x) = x}));
         system.new_urgent_transition(mode, event, target,
-                                     {next(x) = x}, a >= 0);
-        ARIADNE_TESTING_EXPECT_THROWS(std::invalid_argument,
-            HybridDiscreteTimeUpperScheduler::evolve(
-                system, initial(mode), Integer(0), Integer(0), 10u));
-        ARIADNE_TESTING_EXPECT_THROWS(std::invalid_argument,
-            HybridDiscreteTimeUpperScheduler::evolve(
-                system, initial(mode), Integer(0), Integer(1), 10u));
+                                     {next(x) = a}, a >= 0);
+        const auto with_event_zero = HybridDiscreteTimeUpperScheduler::evolve(
+            system, initial(mode), Integer(0), Integer(0), 10u);
+        ARIADNE_TESTING_EXPECT_EQUAL(with_event_zero.nodes.size(), 1u);
+        ARIADNE_TESTING_EXPECT_EQUAL(
+            with_event_zero.nodes[0u].enclosure.continuous_set().number_of_parameters(), 2u);
+        const auto with_event = HybridDiscreteTimeUpperScheduler::evolve(
+            system, initial(mode), Integer(0), Integer(1), 10u);
+        ARIADNE_TESTING_EXPECT_EQUAL(with_event.nodes.size(), 3u);
+        ARIADNE_TESTING_EXPECT_EQUAL(with_event.terminals.size(), 2u);
+        ARIADNE_TESTING_PROVE(with_event.nodes[1u].enclosure.location() == target);
+        ARIADNE_TESTING_PROVE(with_event.nodes[2u].enclosure.location() == mode);
+        ARIADNE_TESTING_EXPECT_EQUAL(
+            with_event.nodes[1u].enclosure.continuous_set().number_of_parameters(), 2u);
+        ARIADNE_TESTING_EXPECT_EQUAL(
+            with_event.nodes[2u].enclosure.continuous_set().number_of_parameters(), 3u);
+        ARIADNE_TESTING_EXPECT_EQUAL(
+            with_event.nodes[1u].enclosure.number_of_constraints(), 1u);
+        ARIADNE_TESTING_EXPECT_EQUAL(
+            with_event.nodes[2u].enclosure.number_of_constraints(), 1u);
     }
 };
 
@@ -386,6 +400,6 @@ int main(int argc, char** argv) {
     ARIADNE_TESTING_ADD_TEST(TestHybridDiscreteTimeUpperScheduler, test_validated_event_free_inclusion_orbit);
     ARIADNE_TESTING_ADD_TEST(TestHybridDiscreteTimeUpperScheduler, test_state_guarded_inclusion_fanout_and_orbit);
     ARIADNE_TESTING_ADD_TEST(TestHybridDiscreteTimeUpperScheduler, test_inclusion_target_reset_then_independent_input_progression);
-    ARIADNE_TESTING_ADD_TEST(TestHybridDiscreteTimeUpperScheduler, test_inclusion_auxiliary_current_input_and_rejected_event);
+    ARIADNE_TESTING_ADD_TEST(TestHybridDiscreteTimeUpperScheduler, test_inclusion_auxiliary_current_input_and_guard);
     return Ariadne::Testing::run_logging_suite(ariadne_test_suite, argc, argv);
 }

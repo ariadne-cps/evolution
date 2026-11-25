@@ -391,9 +391,24 @@ class TestHybridDiscreteTimeEvolver : public Ariadne::Testing::ContextFixture {
         inclusion.new_mode(target, DifferenceAlgebraicEquation(
             List<PrimedRealAssignment>{next(x) = x}));
         inclusion.new_urgent_transition(mode, event, target, {next(x) = x}, a >= 0);
-        Evolver no_sampling(inclusion);
-        ARIADNE_TESTING_EXPECT_THROWS(std::invalid_argument,
-            no_sampling.orbit(initial(mode), Termination(Integer(0), Integer(1)), Semantics::UPPER));
+        Evolver validated(inclusion);
+        const auto source = initial(mode);
+        const auto tree = validated.explore(
+            source, Termination(Integer(0), Integer(1)), Semantics::UPPER);
+        // a=x+u spans negative and positive values. The urgent guard
+        // must retain BOTH the reset and the complementary progression.
+        ARIADNE_TESTING_EXPECT_EQUAL(tree.nodes.size(), 3u);
+        ARIADNE_TESTING_EXPECT_EQUAL(tree.nodes[0u].enclosure.auxiliary_space(), RealSpace({a}));
+        ARIADNE_TESTING_EXPECT_EQUAL(
+            tree.nodes[0u].enclosure.continuous_set().number_of_parameters(), 2u);
+        ARIADNE_TESTING_EXPECT_EQUAL(tree.nodes[1u].enclosure.number_of_constraints(), 1u);
+        ARIADNE_TESTING_EXPECT_EQUAL(tree.nodes[2u].enclosure.number_of_constraints(), 1u);
+        ARIADNE_TESTING_EXPECT_EQUAL(tree.nodes[1u].enclosure.continuous_set().number_of_parameters(), 2u);
+        ARIADNE_TESTING_EXPECT_EQUAL(tree.nodes[2u].enclosure.continuous_set().number_of_parameters(), 3u);
+        const auto orbit = validated.orbit(
+            source, Termination(Integer(0), Integer(1)), Semantics::UPPER);
+        ARIADNE_TESTING_EXPECT_EQUAL(orbit.final().size(), 2u);
+        ARIADNE_TESTING_EXPECT_EQUAL(source.auxiliary_space().dimension(), 0u);
     }
 };
 

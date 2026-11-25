@@ -304,6 +304,16 @@ class TestHybridDiscreteTimePredicateEvaluator : public Ariadne::Testing::Contex
             with_auxiliary, source, x >= -1) == Evidence::TRUE);
         ARIADNE_TESTING_PROVE(HybridDiscreteTimePredicateEvaluator::classify(
             with_auxiliary, source, x >= 2) == Evidence::FALSE);
+        // The guard reads a[0]=x[0]+u[0] over the SAME correlated state
+        // and the entire independent input box u[0] in [-1,1].
+        // On x[0] in [0,1], a spans [-1,2] rather than a sample.
+        ARIADNE_TESTING_PROVE(HybridDiscreteTimePredicateEvaluator::classify(
+            with_auxiliary, source, a >= 0) == Evidence::UNKNOWN);
+        ARIADNE_TESTING_PROVE(HybridDiscreteTimePredicateEvaluator::classify(
+            with_auxiliary, source, a >= -2) == Evidence::TRUE);
+        ARIADNE_TESTING_PROVE(HybridDiscreteTimePredicateEvaluator::classify(
+            with_auxiliary, source, a >= 3) == Evidence::FALSE);
+        ARIADNE_TESTING_EXPECT_EQUAL(source.continuous_set().number_of_parameters(), 1u);
 
         // A mismatched state space is still a contract violation.
         DiscreteTimeHybridAutomaton equation;

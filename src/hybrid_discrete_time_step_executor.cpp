@@ -42,9 +42,10 @@ namespace {
 Void require_prestate_predicate(const DiscreteTimeHybridAutomatonInterface& automaton,
                                 HybridEnclosure& source, DiscreteEvent event,
                                 const ContinuousPredicate& predicate) {
-    const EffectiveScalarMultivariateFunction indicator =
+    const auto indicator =
         EvolutionDetail::discrete_source_indicator(automaton, source, predicate);
-    EvolutionDetail::restrict_source_guard(source, event, indicator);
+    EvolutionDetail::restrict_source_guard(source, event,
+                                           indicator.function, indicator.arguments);
 }
 
 // In the certified path only, limit each alternative to the CLOSURE of the
@@ -110,11 +111,16 @@ HybridDiscreteTimeStepExecution execute_impl(
 HybridDiscreteTimeStepExecution HybridDiscreteTimeStepExecutor::execute_certified(
     const DiscreteTimeHybridAutomatonInterface& automaton,
     const HybridEnclosure& source, Integer source_index) {
+    // The certified planner must classify and restrict exactly the same
+    // current-input-augmented enclosure as the numerical branch image.
+    const HybridEnclosure prepared = automaton.has_inclusion(source.location())
+        ? EvolutionDetail::prepare_discrete_inclusion_source(automaton, source)
+        : source;
     const auto evaluate = [&](DiscreteLocation, DiscreteEvent,
                               DiscreteTimePredicateRole, const ContinuousPredicate& predicate) {
-        return HybridDiscreteTimePredicateEvaluator::classify(automaton, source, predicate);
+        return HybridDiscreteTimePredicateEvaluator::classify(automaton, prepared, predicate);
     };
-    return execute_impl(automaton, source, source_index, evaluate, true);
+    return execute_impl(automaton, prepared, source_index, evaluate, true);
 }
 
 HybridDiscreteTimeStepExecution HybridDiscreteTimeStepExecutor::execute(

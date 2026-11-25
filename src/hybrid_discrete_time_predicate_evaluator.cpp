@@ -38,9 +38,14 @@ DiscreteTimePredicateEvidence HybridDiscreteTimePredicateEvaluator::classify(
     const DiscreteTimeHybridAutomatonInterface& automaton,
     const HybridEnclosure& source,
     const ContinuousPredicate& predicate) {
-    const EffectiveScalarMultivariateFunction indicator =
-        EvolutionDetail::discrete_source_indicator(automaton, source, predicate);
-    switch (EvolutionDetail::classify_source_guard(source, indicator)) {
+    // Public direct classification also needs a full current input box.
+    const HybridEnclosure prepared = automaton.has_inclusion(source.location())
+        ? EvolutionDetail::prepare_discrete_inclusion_source(automaton, source)
+        : source;
+    const auto indicator =
+        EvolutionDetail::discrete_source_indicator(automaton, prepared, predicate);
+    switch (EvolutionDetail::classify_source_guard(
+        prepared, indicator.function, indicator.arguments)) {
         case EvolutionDetail::HybridSourceGuardStatus::FULL_SOURCE:
             return DiscreteTimePredicateEvidence::TRUE;
         case EvolutionDetail::HybridSourceGuardStatus::EXCLUDED:

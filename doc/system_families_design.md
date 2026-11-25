@@ -1589,3 +1589,63 @@ at the time of investigation. The v6.96 commit
 requires all five workflows (including Debug,
 Sanitizers and the installed Release tutorial)
 to pass on its own SHA before acceptance.
+
+## v6.97 — Shared correlated state/auxiliary layout for hybrid discrete UPPER events
+
+The public `EnclosureFunctionArguments` now includes `STATE_AUXILIARY`,
+mapping directly to the existing validated `state_auxiliary_function()`.
+This mapping is `s -> (x(s), a(s))`; for bounded-input inclusions,
+`a(s)=g(x(s),u_current(s))`. It does not introduce independent
+auxiliary coordinates and retains all state/input/history constraints.
+
+The existing System functions have already eliminated explicit
+algebraic dependencies from the evolution update. The new change
+completes the same composition for hybrid discrete event operations:
+- For an inclusion with algebraic outputs, the predicate indicator
+  is built over `join(state_space, auxiliary_space)` with no second
+  substitution, and its explicit argument layout is
+  `STATE_AUXILIARY`. A predicate without auxiliary references
+  follows the same layout. Inclusion modes with no outputs and
+  deterministic equation modes retain the existing state-only path.
+- The public predicate evaluator prepares the current full input
+  box even when invoked directly on an unprepared initial enclosure.
+  The certified step executor uses that identical prepared source
+  for three-valued predicate evaluation, branch restriction and
+  subsequent image construction. The restriction to a closed
+  necessary pre-state candidate is performed over the *same*
+  correlated `(x,a)` function as classification.
+- An inclusion-source reset that references its auxiliaries now
+  constructs its function over `(x,a)` and invokes
+  `HybridEnclosure::apply_reset` with `STATE_AUXILIARY`,
+  rather than trying to substitute input-dependent auxiliaries
+  into a function of state only. The reset still consumes exactly
+  the current source input. Any target inclusion input is a new
+  independent full-box coordinate installed *after* the jump.
+- The prior capability gate rejecting any auxiliary reference
+  in the source guard, invariant or reset is removed. The System
+  declaration continues to enforce that every event expression
+  references only declared source state/auxiliary variables:
+  free input symbols cannot bypass the auxiliary contract.
+
+Direct numerical tests are extended for input-dependent resets and
+invariants. The certified executor exercises both URGENT and
+PERMISSIVE events with correlated auxiliary guards, independent
+UNKNOWN branches, one necessary closed constraint per branch,
+source immutability, event provenance and source/target input
+dimension counts. A public orbit and scheduler regression now
+admit the same input-dependent guard and demand both UPPER
+successors. Direct classifier tests prove TRUE/FALSE/UNKNOWN on
+`a=x+u` over the full `u in [-1,1]` input box.
+
+The regression cases which previously expected auxiliary-guard
+rejection are **replaced by positive behavior tests**, not skipped.
+The old equation-only and state-only tests remain unchanged, and
+hybrid LOWER remains unsupported. The installed C++ tutorial is
+unchanged and continues to contain exactly the single
+`#include "ariadne-evolution.hpp"` with implemented examples only.
+
+Acceptance requires Ubuntu, macOS, Windows, Coverage and
+Sanitizers on this exact v6.97 commit. At preparation time the
+v6.96 Ubuntu, macOS, Coverage and Sanitizers workflows were green;
+Windows was still running. Earlier CI results do not validate the
+new STATE_AUXILIARY paths.

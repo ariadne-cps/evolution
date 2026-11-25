@@ -100,7 +100,8 @@ enum class EnclosureFunctionArguments : std::uint8_t { STATE,
                                                        STATE_TIME,
                                                        STATE_PARAMETERS,
                                                        STATE_TIME_PARAMETERS,
-                                                       STATE_INPUTS };
+                                                       STATE_INPUTS,
+                                                       STATE_AUXILIARY };
 
 constexpr Bool enclosure_has_time_argument(EnclosureFunctionArguments arguments) {
     return arguments == EnclosureFunctionArguments::STATE_TIME || arguments == EnclosureFunctionArguments::STATE_TIME_PARAMETERS;

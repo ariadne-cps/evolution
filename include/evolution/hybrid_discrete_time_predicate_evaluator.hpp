@@ -48,11 +48,10 @@ namespace Ariadne {
  *  because the closed restriction includes the boundary.
  *  No LOWER image guarantee follows from the returned evidence.
  *
- *  Bounded-input inclusion modes with no auxiliaries support state-only
- *  predicates. Auxiliary-bearing inclusion modes also support state-only
- *  predicates; events referring to their input-dependent auxiliary
- *  values remain explicitly rejected until a correlation-aware contract
- *  is available.
+ *  Bounded-input inclusion modes support predicates over state and
+ *  algebraic auxiliary outputs. The current independent input box is
+ *  represented by correlated INPUT coordinates, so auxiliary guards
+ *  preserve state/input dependencies in TRUE/FALSE/UNKNOWN evidence.
  */
 class HybridDiscreteTimePredicateEvaluator {
   public:

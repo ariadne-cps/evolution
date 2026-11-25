@@ -530,6 +530,8 @@ ValidatedVectorMultivariateFunctionPatch Enclosure::argument_function(EnclosureF
             return join(join(_state_function, _time_function), constant_parameter_function(parameter_count));
         case EnclosureFunctionArguments::STATE_INPUTS:
             return join(_state_function, input_parameter_function(parameter_count));
+        case EnclosureFunctionArguments::STATE_AUXILIARY:
+            return this->state_auxiliary_function();
         default:
             throw std::invalid_argument("Unknown enclosure function argument layout");
     }

@@ -76,13 +76,27 @@ HybridEnclosure apply_tick_reset(const DiscreteTimeHybridAutomatonInterface& aut
     const RealSpace destination_space = automaton.state_space(branch.target);
     const auto reset = ordered_reset(automaton.reset_assignments(location, event),
                                      destination_space);
-    const auto reset_function = make_reset_function(source_space, source_auxiliaries, reset);
+    const Bool correlated_auxiliary =
+        automaton.has_inclusion(location) &&
+        automaton.inclusion(location).auxiliary_space().dimension() != 0u;
+    // For an inclusion, use the existing correlated map (x,a(x,u[n]))
+    // directly, not an a(x,u[n]) substitution into a state-only function.
+    // The source's current input is distinct from the arrival input.
+    const RealSpace reset_arguments = correlated_auxiliary
+        ? join(source_space, source.auxiliary_space()) : source_space;
+    const auto reset_function = make_reset_function(
+        reset_arguments,
+        correlated_auxiliary ? List<RealAssignment>{} : source_auxiliaries,
+        reset);
+    const EnclosureFunctionArguments source_layout = correlated_auxiliary
+        ? EnclosureFunctionArguments::STATE_AUXILIARY
+        : EnclosureFunctionArguments::STATE;
     HybridEnclosure next = source;
     if (automaton.has_equation(branch.target)) {
         const auto& destination = automaton.equation(branch.target);
         next.apply_reset(event, branch.target, destination_space,
                          reset_function, destination.auxiliary_space(),
-                         destination.auxiliary_function());
+                         destination.auxiliary_function(), source_layout);
     } else if (automaton.has_inclusion(branch.target)) {
         const auto& destination = automaton.inclusion(branch.target);
         // Reset is evaluated on the pre-tick source only, with no target
@@ -91,7 +105,7 @@ HybridEnclosure apply_tick_reset(const DiscreteTimeHybridAutomatonInterface& aut
         const EffectiveVectorMultivariateFunction empty_auxiliary =
             make_auxiliary_function(destination_space, List<RealAssignment>{});
         next.apply_reset(event, branch.target, destination_space,
-                         reset_function, RealSpace{}, empty_auxiliary);
+                         reset_function, RealSpace{}, empty_auxiliary, source_layout);
         if (destination.auxiliary_space().dimension() != 0u) {
             // At arrival n+1 a fresh whole-box u[n+1] is needed for
             // a[n+1]=g(x[n+1],u[n+1]). This input did not participate in

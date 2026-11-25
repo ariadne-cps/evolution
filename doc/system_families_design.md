@@ -1540,3 +1540,52 @@ Ubuntu, macOS, Windows, Coverage and Sanitizers matrix for the
 tutorial runs. The preceding v6.94 had Ubuntu, macOS,
 Coverage and Sanitizers green on observation, Windows in progress;
 its checks are not transferable to the new commit.
+
+## v6.96 — Correct exact extremal witnesses in validated UPPER reset tests
+
+The v6.95 macOS Debug CI reported failure in
+`test_hybrid_discrete_time_step_image` case
+`reset_into_auxiliary_inclusion_with_fresh_arrival_input`:
+the final-state lower-bound expectation was `<=0`, which
+was not a reachable witness for the fixture.
+
+For the **exact fixture** `x[0]=0`, reset
+`x[1]=x[0]+1=1`, output `a[1]=x[1]+u[1]`,
+`u[1] in [-1,1]`, and progression `x[2]=x[1]+a[1]`,
+the final set is the entire interval `[1,3]`.
+The prior check `lower_bound<=0` was mathematically
+incorrect and the prior upper check `upper_bound>=2`
+did not cover the attainable maximum. The corrected
+test verifies **both** exact extremal witnesses:
+`lower_bound<=1` and `upper_bound>=3`.
+The source immutability, arrival auxiliary relation
+`a[1]-x[1]-u[1]=0`, parameter kinds, event
+provenance and time advancement checks are unchanged.
+
+The public hybrid evolver's related v6.95 scenario
+starts with `x[0] in [0,1]`, resets
+`x[1]=x[0]+3 in [3,4]`, then uses
+`a[1]=x[1]+u[1]` and `x[2]=2*x[1]+u[1]`,
+with `u[1] in [-1,1]`. Its exact reachable interval
+is `[5,9]`, **not** `[5,8]`.
+Strengthen the public UPPER regression upper extremum
+to `>=9` while keeping the lower `<=5`.
+These corrections improve semantic fidelity rather
+than weakening tests to satisfy a regression.
+
+No production algorithm, interface, tutorial, or
+capability matrix is changed in this checkpoint.
+In particular the tutorial retains exactly one
+`#include "ariadne-evolution.hpp"` and contains
+only currently supported examples. Guard and reset
+expressions that refer to input-dependent source
+auxiliaries remain unsupported.
+
+The v6.94 predecessor had all five workflows green
+on its own SHA. The v6.95 macOS Release completed
+successfully while Debug failed in this test;
+the other v6.95 workflows were still progressing
+at the time of investigation. The v6.96 commit
+requires all five workflows (including Debug,
+Sanitizers and the installed Release tutorial)
+to pass on its own SHA before acceptance.

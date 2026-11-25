@@ -354,8 +354,10 @@ class TestHybridDiscreteTimeEvolver : public Ariadne::Testing::ContextFixture {
         ARIADNE_TESTING_EXPECT_EQUAL(
             final.time_range().lower_bound().raw().get_d(), 2.0);
         const auto bounds = final.state_bounding_box()[0u];
+        // Source x[0] in [0,1], reset x[1]=x[0]+3 in [3,4],
+        // then x[2]=2*x[1]+u[1] covers the entire [5,9].
         ARIADNE_TESTING_PROVE(bounds.lower_bound().raw().get_d() <= 5.0);
-        ARIADNE_TESTING_PROVE(bounds.upper_bound().raw().get_d() >= 8.0);
+        ARIADNE_TESTING_PROVE(bounds.upper_bound().raw().get_d() >= 9.0);
         const auto result = evolver.orbit(source,
             Termination(Integer(0), Integer(2)), Semantics::UPPER);
         ARIADNE_TESTING_EXPECT_EQUAL(result.final().size(), 1u);

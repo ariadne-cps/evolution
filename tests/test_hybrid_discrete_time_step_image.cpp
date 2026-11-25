@@ -206,9 +206,11 @@ class TestHybridDiscreteTimeStepImage : public Ariadne::Testing::ContextFixture 
         ARIADNE_TESTING_EXPECT_EQUAL(continued.continuous_set().number_of_parameters(), 3u);
         ARIADNE_TESTING_EXPECT_EQUAL(continued.auxiliary_space(), RealSpace({a}));
         ARIADNE_TESTING_EXPECT_EQUAL(continued.time_range().lower_bound().raw().get_d(), 2.0);
+        // x[0]=0, reset x[1]=1, a[1]=1+u[1] with u[1] in [-1,1].
+        // The progression yields x[2]=2+u[1], hence the full [1,3].
         const auto bounds = continued.state_bounding_box()[0u];
-        ARIADNE_TESTING_PROVE(bounds.lower_bound().raw().get_d() <= 0.0);
-        ARIADNE_TESTING_PROVE(bounds.upper_bound().raw().get_d() >= 2.0);
+        ARIADNE_TESTING_PROVE(bounds.lower_bound().raw().get_d() <= 1.0);
+        ARIADNE_TESTING_PROVE(bounds.upper_bound().raw().get_d() >= 3.0);
         ARIADNE_TESTING_EXPECT_EQUAL(initial.continuous_set().number_of_parameters(), 1u);
         ARIADNE_TESTING_EXPECT_EQUAL(initial.auxiliary_space().dimension(), 0u);
     }

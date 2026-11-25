@@ -1170,3 +1170,34 @@ configuration, and explicit negative cases. Existing ordinary discrete
 LOWER/equation suites and both hybrid families stay in the full CI gate.
 Acceptance requires passing Ubuntu, macOS, Windows, Coverage and Sanitizers
 on the exact v6.87 commit. Format is nonblocking.
+
+## v6.88 — Multi-input correlation and conservative subdivision regression
+
+The v6.87 UPPER ordinary difference-inclusion implementation is exercised
+with two independently bounded inputs per tick and a genuinely constrained
+source state. The test keeps the effective coordinate-function owner alive,
+adds two source constraints, and verifies their retention across two ticks.
+Four new INPUT coordinates represent the independently selected `u[n]`
+and `v[n]` at both indices, retaining the single initial state parameter.
+Explicit reachable witnesses with `x[0]=3/8` at the two extreme input
+sequences must remain inside the final UPPER enclosure. A separate test
+enables subdivision above a configured radius and demands that the resulting
+union still covers both extreme one-step input/state choices; no child branch
+may be discarded. The generic validated `EvolverInterface` route is exercised.
+
+This checkpoint changes only tests and documentation, not production
+numerics, System declarations, or the capability matrix. The underlying
+auxiliary-output limitation remains: `a[n]=g(x[n],u[n])` would require
+a representation that correlates the input selected for a given tick
+with both the resulting update and its auxiliary value. The current
+`Enclosure` auxiliary argument layouts support state, time and fixed
+physical parameters but do not yet encode this per-tick INPUT dependency.
+Do not install a state-only auxiliary mapping in its place or claim
+validated support for such output modes.
+
+Acceptance of this v6.88 regression checkpoint requires five successful
+functional workflows on its own SHA; v6.87 Ubuntu, macOS and Coverage were
+green at the latest observation, while Windows and Sanitizers were still
+in progress. No CI result can be borrowed from another SHA. Format remains
+outside the functional gate; existing discrete equation LOWER and both
+hybrid-family suites stay active.

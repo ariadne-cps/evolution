@@ -73,6 +73,66 @@ class TestDiscreteTimeInclusionEvolver : public Ariadne::Testing::ContextFixture
         ARIADNE_TESTING_EXPECT_EQUAL(copy->system().state_space(), RealSpace({x}));
     }
 
+    Void test_constrained_multidimensional_inputs_preserve_history() {
+        const RealVariable x("x"), u("u"), v("v");
+        const DifferenceAlgebraicInclusion inclusion(
+            List<PrimedRealAssignment>{next(x) = x + u + v},
+            RealVariablesBox({-1 <= u <= 1, 0 <= v <= 2}));
+        DiscreteTimeInclusionEvolver evolver(inclusion);
+        const auto identity = EffectiveVectorMultivariateFunction::identity(1u);
+        const auto coordinate = identity[0u];
+        auto initial = evolver.enclosure(ExactBoxType({{-1.0_x, 1.0_x}}));
+        initial.new_positive_state_constraint(coordinate - Real(1 / 4_q));
+        initial.new_negative_state_constraint(coordinate - Real(1 / 2_q));
+
+        const auto result = evolver.orbit(initial, Integer(2), Semantics::UPPER);
+        ARIADNE_TESTING_EXPECT_EQUAL(result.final().size(), 1u);
+        ARIADNE_TESTING_EXPECT_EQUAL(result.final()[0u].number_of_parameters(), 5u);
+        ARIADNE_TESTING_EXPECT_EQUAL(result.final()[0u].euclidean_set().number_of_constraints(), 2u);
+        for (SizeType i = 1u; i != 5u; ++i)
+            ARIADNE_TESTING_EXPECT_EQUAL(result.final()[0u].variable_kinds()[i],
+                                         EnclosureVariableKind::INPUT);
+
+        // A single feasible source x0=3/8 and distinct extreme input
+        // sequences are represented by the same UPPER enclosure.
+        // Both tick choices are free; no first-tick input is frozen.
+        const auto bounds = result.final()[0u].euclidean_set().bounding_box()[0u];
+        ARIADNE_TESTING_PROVE(bounds.lower_bound().raw().get_d() <= -1.625);
+        ARIADNE_TESTING_PROVE(bounds.upper_bound().raw().get_d() >= 6.375);
+        ARIADNE_TESTING_EXPECT_EQUAL(initial.number_of_parameters(), 1u);
+        ARIADNE_TESTING_EXPECT_EQUAL(initial.euclidean_set().number_of_constraints(), 2u);
+
+        // The public validated interface must retain its own UPPER orbit.
+        const DiscreteTimeInclusionEvolver::Interface& generic = evolver;
+        const auto interface_result = generic.orbit(initial, Integer(1), Semantics::UPPER);
+        ARIADNE_TESTING_EXPECT_EQUAL(interface_result.final().size(), 1u);
+    }
+
+    Void test_upper_subdivision_keeps_all_successors() {
+        const RealVariable x("x"), u("u");
+        const DifferenceAlgebraicInclusion inclusion(
+            List<PrimedRealAssignment>{next(x) = x + u},
+            RealVariablesBox({-1 <= u <= 1}));
+        DiscreteTimeInclusionEvolver evolver(inclusion);
+        evolver.configuration().set_enable_subdivisions(true);
+        evolver.configuration().set_maximum_enclosure_radius(0.75);
+        const auto initial = evolver.enclosure(ExactBoxType({{-1.0_x, 1.0_x}}));
+        const auto result = evolver.orbit(initial, Integer(1), Semantics::UPPER);
+        ARIADNE_TESTING_PROVE(result.final().size() > 1u);
+        bool covers_negative = false;
+        bool covers_positive = false;
+        for (const auto& leaf : result.final()) {
+            const auto extent = leaf.euclidean_set().bounding_box()[0u];
+            covers_negative = covers_negative ||
+                              extent.lower_bound().raw().get_d() <= -2.0;
+            covers_positive = covers_positive ||
+                              extent.upper_bound().raw().get_d() >= 2.0;
+        }
+        ARIADNE_TESTING_PROVE(covers_negative);
+        ARIADNE_TESTING_PROVE(covers_positive);
+        ARIADNE_TESTING_EXPECT_EQUAL(initial.number_of_parameters(), 1u);
+    }
+
     Void test_rejection_is_explicit_even_at_zero_horizon() {
         const RealVariable x("x"), y("y"), u("u"), a("a");
         const DifferenceAlgebraicInclusion inclusion(
@@ -108,6 +168,8 @@ class TestDiscreteTimeInclusionEvolver : public Ariadne::Testing::ContextFixture
 int main(int argc, const char* argv[]) {
     ARIADNE_TESTING_SUITE("test_discrete_time_inclusion_evolver");
     ARIADNE_TESTING_ADD_TEST(TestDiscreteTimeInclusionEvolver, test_full_box_each_tick_and_copy);
+    ARIADNE_TESTING_ADD_TEST(TestDiscreteTimeInclusionEvolver, test_constrained_multidimensional_inputs_preserve_history);
+    ARIADNE_TESTING_ADD_TEST(TestDiscreteTimeInclusionEvolver, test_upper_subdivision_keeps_all_successors);
     ARIADNE_TESTING_ADD_TEST(TestDiscreteTimeInclusionEvolver, test_rejection_is_explicit_even_at_zero_horizon);
     return Ariadne::Testing::run_logging_suite(ariadne_test_suite, argc, argv);
 }

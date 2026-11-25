@@ -58,7 +58,9 @@ List<PrimedRealAssignment> ordered_reset(const List<PrimedRealAssignment>& reset
 }
 
 // A reset from either dynamics family depends on the pre-state and consumes
-// one tick. Inclusion inputs are introduced only for a progression branch.
+// one tick. The reset itself never samples or consumes a destination input;
+// an input-dependent auxiliary at the destination instead needs a new full
+// input box at the arrival index, independent of the source's input history.
 HybridEnclosure apply_tick_reset(const DiscreteTimeHybridAutomatonInterface& automaton,
                                  const HybridEnclosure& source,
                                  const HybridDiscreteTimePlannedBranch& branch,
@@ -83,16 +85,19 @@ HybridEnclosure apply_tick_reset(const DiscreteTimeHybridAutomatonInterface& aut
                          destination.auxiliary_function());
     } else if (automaton.has_inclusion(branch.target)) {
         const auto& destination = automaton.inclusion(branch.target);
-        if (destination.auxiliary_space().dimension() != 0u)
-            throw std::invalid_argument("Validated discrete inclusion target auxiliaries are not supported");
-        // Reset is evaluated on the pre-tick source. No input is sampled
-        // at arrival. A target inclusion uses only its state mapping here;
-        // its next progression introduces a fresh independent input box.
+        // Reset is evaluated on the pre-tick source only, with no target
+        // input. Drop the source auxiliary labels before setting the target
+        // algebraic outputs (which refer to the *arrival* input).
         const EffectiveVectorMultivariateFunction empty_auxiliary =
             make_auxiliary_function(destination_space, List<RealAssignment>{});
         next.apply_reset(event, branch.target, destination_space,
-                         reset_function, destination.auxiliary_space(),
-                         empty_auxiliary);
+                         reset_function, RealSpace{}, empty_auxiliary);
+        if (destination.auxiliary_space().dimension() != 0u) {
+            // At arrival n+1 a fresh whole-box u[n+1] is needed for
+            // a[n+1]=g(x[n+1],u[n+1]). This input did not participate in
+            // the reset and cannot change its pre-state correlations.
+            next = EvolutionDetail::prepare_discrete_inclusion_source(automaton, next);
+        }
     } else {
         throw std::invalid_argument("Discrete hybrid transition has unsupported target dynamics");
     }

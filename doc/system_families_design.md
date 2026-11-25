@@ -1476,3 +1476,67 @@ v6.94 fix accepted without full Debug/Release and sanitizer checks
 on the exact commit. Continue to investigate any crash or
 constraint failure reported by subsequent CI runs; do not change
 the underlying mathematics or suppress the test for a green metric.
+
+## v6.95 — Validated UPPER reset arrival into inclusion targets with input-dependent outputs
+
+The hybrid discrete UPPER reset kernel now supports a transition **into**
+a bounded-input `DifferenceAlgebraicInclusion` that declares algebraic
+outputs `a[n]=g(x[n],u[n])`. The target input is a *new independent
+whole-box input at the arrival index*; it is neither sampled nor used
+while evaluating the reset.
+
+A one-tick jump from source mode q to target mode r proceeds in
+strict order:
+
+1. Restrict the source to the closed validated guard candidate, with
+   its existing source variables, constraints, history and correlated
+   auxiliaries intact.
+2. Construct and evaluate the reset `x_r[n+1]=R(x_q[n],a_q[n])`
+   from the **source model**. Existing capability gates reject any
+   source-auxiliary dependency requiring unsupported input-aware
+   symbolic reset evaluation.
+3. Apply the reset with an initially empty target auxiliary space,
+   record the event, switch location and increment the integer tick.
+   The source's historical INPUT axes remain present when they may
+   correlate with the reset state.
+4. If the destination inclusion has outputs, append a new independent
+   `u_r[n+1]` box and bind `a_r[n+1]=g_r(x_r[n+1],u_r[n+1])`
+   using the existing `STATE_INPUTS` mechanism. No target input
+   influences the preceding reset, and no next-state progression
+   occurs at this arrival tick.
+5. A subsequent progression from r consumes precisely
+   `u_r[n+1]`, computes the validated UPPER state image, and appends
+   another fresh target input for index n+2.
+
+This follows the same time semantics for equation-to-inclusion and
+inclusion-to-inclusion jumps. A source inclusion with input-dependent
+outputs may jump only under already supported **state-only** guard,
+invariant and reset expressions. A source equation retains its
+existing symbolic auxiliary substitution.
+
+Added step-image regressions cover equation-to-auxiliary-inclusion,
+auxiliary-inclusion-to-auxiliary-inclusion, correct arrival labels,
+independent INPUT axis counts, exact algebraic residual correlation,
+reset-state independence of new target inputs, clock advancement,
+event provenance, following progression and original-source
+immutability. A public hybrid validated UPPER regression verifies
+the corresponding integer-time branch history and final orbit.
+Earlier negative expectations that rejected all such destinations
+are deliberately replaced by equivalent positive semantic coverage;
+the unsupported source-auxiliary-dependent guard/invariant/reset
+rejections remain active.
+
+The matrix still shows **partial** Validated UPPER for discrete
+hybrid inclusions: source event predicates and resets that
+reference input-dependent auxiliary outputs remain unsupported
+(and LOWER is not implemented). This patch does not introduce a
+new algorithmic semantics for those unsupported branches.
+
+The user-facing tutorial is left unchanged, with exactly the
+single `#include "ariadne-evolution.hpp"` and only implemented
+worked examples. Acceptance is conditional on a full passing
+Ubuntu, macOS, Windows, Coverage and Sanitizers matrix for the
+**exact v6.95 SHA**, including Debug and installed Release
+tutorial runs. The preceding v6.94 had Ubuntu, macOS,
+Coverage and Sanitizers green on observation, Windows in progress;
+its checks are not transferable to the new commit.

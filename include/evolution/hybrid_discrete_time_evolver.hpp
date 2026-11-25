@@ -71,9 +71,11 @@ class HybridDiscreteTimeEvolverConfiguration<ValidatedTag> : public Configuratio
 //! without auxiliary outputs, and also when the source inclusion has
 //! input-dependent algebraic auxiliaries provided the event guard,
 //! invariant and reset depend on state only. Events explicitly referring
-//! to such auxiliaries remain unsupported. Full input boxes are
-//! attached at the current index and each progression introduces a
-//! new independent input box.
+//! to such auxiliaries remain unsupported. A transition into an
+//! auxiliary-bearing inclusion target installs a fresh independent
+//! arrival input only after applying the source reset. Full input
+//! boxes are attached at the current index; each progression introduces
+//! a new independent input box.
 //! LOWER is unsupported, even if a branch precondition is certain.
 //! A blocked leaf is not an orbit.final() enclosure: retrieve it via
 //! orbit_with_blocked() or inspect provenance through explore().

@@ -47,8 +47,11 @@ namespace Ariadne {
  *  auxiliaries, bound to current-index inputs from zero horizon onward.
  *  State-only guard, invariant and reset expressions are supported even
  *  when the source mode carries algebraic input-dependent auxiliaries.
- *  Events that reference these auxiliaries and inclusion targets carrying
- *  auxiliaries remain explicitly unsupported. No inputs are sampled.
+ *  Events that reference source input-dependent auxiliaries remain
+ *  explicitly unsupported. Resets into inclusion targets with algebraic
+ *  auxiliaries are supported: the reset uses only source variables,
+ *  and a fresh independent target input box defines outputs at arrival.
+ *  No inputs are sampled.
  *  This operation performs no scheduling and does not assemble an Orbit.
  */
 class HybridDiscreteTimeStepImage {

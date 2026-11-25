@@ -314,6 +314,55 @@ class TestHybridDiscreteTimeEvolver : public Ariadne::Testing::ContextFixture {
         ARIADNE_TESTING_EXPECT_EQUAL(orb.final().size(), 2u);
     }
 
+    Void test_public_reset_into_inclusion_with_auxiliary_and_continue() {
+        const RealVariable x("x"), u("u"), a("a");
+        const DiscreteLocation source_mode(1), target_mode(2);
+        const DiscreteEvent jump("arrival_input");
+        DiscreteTimeHybridAutomaton automaton;
+        automaton.new_mode(source_mode, DifferenceAlgebraicEquation(
+            List<PrimedRealAssignment>{next(x) = x}));
+        automaton.new_mode(target_mode, DifferenceAlgebraicInclusion(
+            List<PrimedRealAssignment>{next(x) = x + a},
+            List<RealAssignment>{let(a) = x + u},
+            RealVariablesBox({-1 <= u <= 1})));
+        // Strictly enabled on the entire initial x in [0,1], so
+        // this horizon has one transition branch and one continuation.
+        automaton.new_urgent_transition(source_mode, jump, target_mode,
+                                        {next(x) = x + 3}, x >= -1);
+        Evolver evolver(automaton);
+        const HybridEnclosure source = initial(source_mode);
+        const auto history = evolver.explore(source,
+            Termination(Integer(0), Integer(2)), Semantics::UPPER);
+        ARIADNE_TESTING_EXPECT_EQUAL(history.nodes.size(), 3u);
+        ARIADNE_TESTING_PROVE(history.nodes[1u].enclosure.location() == target_mode);
+        ARIADNE_TESTING_EXPECT_EQUAL(
+            history.nodes[1u].enclosure.continuous_set().number_of_parameters(), 2u);
+        ARIADNE_TESTING_EXPECT_EQUAL(
+            history.nodes[1u].enclosure.auxiliary_space(), RealSpace({a}));
+        ARIADNE_TESTING_EXPECT_EQUAL(
+            history.nodes[1u].enclosure.continuous_set().variable_kinds()[1u],
+            EnclosureVariableKind::INPUT);
+        ARIADNE_TESTING_PROVE(history.nodes[1u].incoming_branch.has_value());
+        ARIADNE_TESTING_PROVE(history.nodes[1u].incoming_branch->event.has_value());
+        ARIADNE_TESTING_PROVE(*history.nodes[1u].incoming_branch->event == jump);
+        const auto& final = history.nodes[2u].enclosure;
+        ARIADNE_TESTING_PROVE(final.location() == target_mode);
+        ARIADNE_TESTING_EXPECT_EQUAL(final.continuous_set().number_of_parameters(), 3u);
+        ARIADNE_TESTING_EXPECT_EQUAL(final.auxiliary_space(), RealSpace({a}));
+        ARIADNE_TESTING_EXPECT_EQUAL(
+            final.continuous_set().variable_kinds()[2u], EnclosureVariableKind::INPUT);
+        ARIADNE_TESTING_EXPECT_EQUAL(
+            final.time_range().lower_bound().raw().get_d(), 2.0);
+        const auto bounds = final.state_bounding_box()[0u];
+        ARIADNE_TESTING_PROVE(bounds.lower_bound().raw().get_d() <= 5.0);
+        ARIADNE_TESTING_PROVE(bounds.upper_bound().raw().get_d() >= 8.0);
+        const auto result = evolver.orbit(source,
+            Termination(Integer(0), Integer(2)), Semantics::UPPER);
+        ARIADNE_TESTING_EXPECT_EQUAL(result.final().size(), 1u);
+        ARIADNE_TESTING_EXPECT_EQUAL(source.continuous_set().number_of_parameters(), 1u);
+        ARIADNE_TESTING_EXPECT_EQUAL(source.auxiliary_space().dimension(), 0u);
+    }
+
     Void test_rejections() {
         const RealVariable x("x"), u("u");
         const DiscreteLocation mode(1);
@@ -356,6 +405,7 @@ int main(int argc, char** argv) {
     ARIADNE_TESTING_ADD_TEST(TestHybridDiscreteTimeEvolver, test_public_transition_into_inclusion_and_continue_upper);
     ARIADNE_TESTING_ADD_TEST(TestHybridDiscreteTimeEvolver, test_event_free_input_auxiliary_upper_orbit);
     ARIADNE_TESTING_ADD_TEST(TestHybridDiscreteTimeEvolver, test_state_only_event_from_auxiliary_inclusion_upper);
+    ARIADNE_TESTING_ADD_TEST(TestHybridDiscreteTimeEvolver, test_public_reset_into_inclusion_with_auxiliary_and_continue);
     ARIADNE_TESTING_ADD_TEST(TestHybridDiscreteTimeEvolver, test_rejections);
     return Ariadne::Testing::run_logging_suite(ariadne_test_suite, argc, argv);
 }

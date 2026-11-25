@@ -40,7 +40,8 @@ namespace Ariadne::EvolutionDetail {
 //! when their guard, invariant and reset expressions depend on state alone.
 //! Predicates or resets that reference input-dependent auxiliary outputs
 //! require a separate certified correlation-aware implementation.
-//! Inclusion targets with auxiliary outputs remain excluded.
+//! Inclusion targets with auxiliary outputs are prepared at reset arrival
+//! with an independent full target input box, after evaluating the reset.
 //! Apply this gate even at zero horizon and at direct numerical entry points.
 inline Void validate_discrete_inclusion_source(
     const DiscreteTimeHybridAutomatonInterface& automaton,
@@ -73,9 +74,8 @@ inline Void validate_discrete_inclusion_source(
         const DiscreteLocation destination = automaton.target(location, event);
         if (!automaton.has_equation(destination) && !automaton.has_inclusion(destination))
             throw std::invalid_argument("Validated discrete inclusion event target has unsupported dynamics");
-        if (automaton.has_inclusion(destination) &&
-            automaton.inclusion(destination).auxiliary_space().dimension() != 0u)
-            throw std::invalid_argument("Validated discrete inclusion target auxiliaries are not supported");
+        // A target inclusion with auxiliary outputs is admitted: its
+        // fresh arrival input is bound *after* the source reset image.
     }
 }
 

@@ -1649,3 +1649,23 @@ Sanitizers on this exact v6.97 commit. At preparation time the
 v6.96 Ubuntu, macOS, Coverage and Sanitizers workflows were green;
 Windows was still running. Earlier CI results do not validate the
 new STATE_AUXILIARY paths.
+
+## v6.98 — Fix test call sites for explicit discrete indicator layout
+
+macOS Clang (and other v6.97 functional builds) exposed a compile-time
+regression, not a certified-numerics failure: the test
+`test_discrete_source_guard_uses_shared_certificates` still passed
+the complete `DiscreteSourceIndicator` to the pre-existing
+`classify_source_guard` and `restrict_source_guard` interfaces.
+The indicator helper was extended in v6.97 to return both
+`function` and `arguments`, so those two call sites must pass
+both fields explicitly. The test additionally asserts
+`arguments == EnclosureFunctionArguments::STATE` for its equation
+fixture, preserving a strong check on the original state-only path.
+
+This is a test-only compatibility correction; neither production code
+nor numerical assertions are weakened. The validated correlation-aware
+guard/reset implementation and the installed umbrella-only tutorial
+are unchanged. The 5-job functional CI gate must pass on this v6.98
+SHA; prior red v6.97 results do not indicate a numerical defect until
+the test builds and executes.

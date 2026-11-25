@@ -104,8 +104,11 @@ class TestHybridDiscreteTimePredicateEvaluator : public Ariadne::Testing::Contex
                                Evidence discrete_expected) {
             const auto indicator =
                 EvolutionDetail::discrete_source_indicator(automaton, source, predicate);
+            ARIADNE_TESTING_EXPECT_EQUAL(indicator.arguments,
+                                         EnclosureFunctionArguments::STATE);
             ARIADNE_TESTING_EXPECT_EQUAL(
-                EvolutionDetail::classify_source_guard(source, indicator), expected);
+                EvolutionDetail::classify_source_guard(source, indicator.function,
+                                                       indicator.arguments), expected);
             ARIADNE_TESTING_PROVE(
                 HybridDiscreteTimePredicateEvaluator::classify(automaton, source, predicate)
                 == discrete_expected);
@@ -117,7 +120,8 @@ class TestHybridDiscreteTimePredicateEvaluator : public Ariadne::Testing::Contex
         const auto indicator = EvolutionDetail::discrete_source_indicator(
             automaton, source, a >= 1/2_q);
         HybridEnclosure restricted = source;
-        EvolutionDetail::restrict_source_guard(restricted, DiscreteEvent("discrete"), indicator);
+        EvolutionDetail::restrict_source_guard(restricted, DiscreteEvent("discrete"),
+                                               indicator.function, indicator.arguments);
         ARIADNE_TESTING_EXPECT_EQUAL(restricted.number_of_constraints(), 1u);
         ARIADNE_TESTING_EXPECT_EQUAL(source.number_of_constraints(), 0u);
     }

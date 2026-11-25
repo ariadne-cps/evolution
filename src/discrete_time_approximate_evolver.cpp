@@ -28,16 +28,20 @@
 
 #include "evolution/discrete_time_approximate_evolver.hpp"
 
+#include <cmath>
 #include <stdexcept>
+#include <vector>
 
 #include "evolution/initial_point_sampling.hpp"
-#include "function/functional.hpp"
 #include "function/function.hpp"
+#include "function/functional.hpp"
 
 namespace Ariadne {
 namespace {
 
-using PointType = DiscreteTimeEvolver<ApproximateTag>::ApproximatePointType;
+using Evolver = DiscreteTimeEvolver<ApproximateTag>;
+using PointType = Evolver::ApproximatePointType;
+using ValueVector = Vector<FloatDPApproximation>;
 
 Point<FloatDPApproximation> canonical_state(const PointType& given,
                                             const RealSpace& state_space) {
@@ -50,12 +54,24 @@ Point<FloatDPApproximation> canonical_state(const PointType& given,
     return state;
 }
 
-PointType with_auxiliary(const DifferenceAlgebraicEquation& system,
-                         const Point<FloatDPApproximation>& state) {
+ValueVector combine_arguments(const Point<FloatDPApproximation>& state,
+                              const ValueVector& inputs) {
+    ValueVector arguments(state.dimension() + inputs.size(), state.zero_element());
+    for (SizeType i = 0u; i != state.dimension(); ++i)
+        arguments[i] = state[i];
+    for (SizeType i = 0u; i != inputs.size(); ++i)
+        arguments[state.dimension() + i] = inputs[i];
+    return arguments;
+}
+
+PointType with_auxiliary(const DiscreteDynamics& system,
+                         const EffectiveVectorMultivariateFunction& auxiliary,
+                         const Point<FloatDPApproximation>& state,
+                         const ValueVector& inputs) {
     const auto states = system.state_space();
     const auto auxiliaries = system.auxiliary_space();
     const auto output_space = system.state_auxiliary_space();
-    const auto values = evaluate(system.auxiliary_function(), Vector<FloatDPApproximation>(state));
+    const ValueVector values = evaluate(auxiliary, combine_arguments(state, inputs));
     Point<FloatDPApproximation> output(output_space.dimension(), state.zero_element());
     for (SizeType i = 0u; i != output_space.dimension(); ++i) {
         const auto variable = output_space[i];
@@ -65,19 +81,53 @@ PointType with_auxiliary(const DifferenceAlgebraicEquation& system,
     return PointType(output_space, output);
 }
 
+ValueVector sampled_inputs(const DifferenceAlgebraicInclusion* inclusion,
+                           const InputSamplingPolicy* policy,
+                           SizeType trajectory, SizeType step, FloatDP time) {
+    if (inclusion == nullptr)
+        return ValueVector(0u, FloatDPApproximation(0, dp));
+    if (policy == nullptr)
+        throw std::invalid_argument("Approximate discrete inclusion requires an explicit input policy");
+
+    const InputSamplingContext context{
+        trajectory, step,
+        FloatDPApproximation(ExactDouble(time.get_d()), dp),
+        FloatDPApproximation(1, dp)
+    };
+    const ValueVector inputs = policy->sample(inclusion->inputs(), context);
+    if (inputs.size() != inclusion->number_of_inputs())
+        throw std::invalid_argument("Discrete input policy produced the wrong dimension");
+    for (SizeType i = 0u; i != inputs.size(); ++i) {
+        const double value = inputs[i].raw().get_d();
+        if (!std::isfinite(value) ||
+            value < inclusion->inputs()[i].lower_bound().get_d() ||
+            value > inclusion->inputs()[i].upper_bound().get_d())
+            throw std::invalid_argument("Discrete input sample lies outside the declared input box");
+    }
+    return inputs;
+}
+
 } // namespace
 
-DiscreteTimeEvolver<ApproximateTag>::DiscreteTimeEvolver(const SystemType& system)
-    : _system(system.clone()), _configuration(std::make_shared<ConfigurationType>()) {}
+DiscreteTimeEvolver<ApproximateTag>::DiscreteTimeEvolver(
+    const DifferenceAlgebraicEquation& system)
+    : _input_sampling(nullptr), _system(std::make_shared<SystemType>(system)),
+      _configuration(std::make_shared<ConfigurationType>()) {}
+
+DiscreteTimeEvolver<ApproximateTag>::DiscreteTimeEvolver(
+    const DifferenceAlgebraicInclusion& system, const InputSamplingPolicy& policy)
+    : _input_sampling(policy.clone()), _system(std::make_shared<SystemType>(system)),
+      _configuration(std::make_shared<ConfigurationType>()) {}
 
 DiscreteTimeEvolver<ApproximateTag>::DiscreteTimeEvolver(const DiscreteTimeEvolver& other)
-    : _system(other._system->clone()),
+    : _input_sampling(other._input_sampling ? other._input_sampling->clone() : nullptr),
+      _system(other._system->clone()),
       _configuration(std::make_shared<ConfigurationType>(*other._configuration)) {}
 
 auto DiscreteTimeEvolver<ApproximateTag>::orbit(
     const UpperBoxType& initial_box, const TerminationType& stop) const -> OrbitType {
     if (initial_box.dimension() != system().dimension())
-        throw std::invalid_argument("Discrete approximate initial box dimension differs from the map state space");
+        throw std::invalid_argument("Discrete approximate initial box dimension differs from the state space");
     return orbit(EvolutionDetail::sample_vector_field_initial_points(
         initial_box, system().state_space(), _configuration->sampling_counts()), stop);
 }
@@ -92,25 +142,39 @@ auto DiscreteTimeEvolver<ApproximateTag>::orbit(
     if (stop < Integer(0))
         throw std::invalid_argument("Discrete approximate horizon must be nonnegative");
 
-    const auto state_space = system().state_space();
+    const auto& dynamics = system();
+    const auto* equation = dynamics.equation();
+    const auto* inclusion = dynamics.inclusion();
+    const auto& update = equation ? equation->update_function() : inclusion->update_function();
+    const auto& auxiliary = equation ? equation->auxiliary_function() : inclusion->auxiliary_function();
+    const auto state_space = dynamics.state_space();
+
     InitialType canonical;
-    for (const auto& given: initial)
-        canonical.push_back(with_auxiliary(system(), canonical_state(given, state_space)));
+    std::vector<ValueVector> initial_inputs;
+    initial_inputs.reserve(initial.size());
+    for (const auto& given : initial) {
+        const SizeType trajectory = canonical.size();
+        const ValueVector input = sampled_inputs(inclusion, _input_sampling.get(), trajectory, 0u, FloatDP(0, dp));
+        canonical.push_back(with_auxiliary(dynamics, auxiliary, canonical_state(given, state_space), input));
+        initial_inputs.push_back(input);
+    }
 
     OrbitType result(canonical);
     for (SizeType trajectory = 0u; trajectory != canonical.size(); ++trajectory) {
         auto state = canonical_state(canonical[trajectory], state_space);
-        FloatDP tick(0, dp);
+        ValueVector inputs = initial_inputs[trajectory];
+        FloatDP time(0, dp);
+        SizeType tick_index = 0u;
         for (Integer step = 0; step < stop; ++step) {
             state = Point<FloatDPApproximation>(
-                evaluate(system().update_function(), Vector<FloatDPApproximation>(state)));
-            // Compute the tick from the exact integer index: raw FloatDP
-            // addition yields Bounds<FloatDP>, not a FloatDP.
-            const FloatDP next_tick(step + Integer(1), near, dp);
-            if (next_tick == tick)
+                evaluate(update, combine_arguments(state, inputs)));
+            const FloatDP next_time(step + Integer(1), near, dp);
+            if (next_time == time)
                 throw std::overflow_error("Discrete approximate tick exceeds floating-point time precision");
-            tick = next_tick;
-            result.insert(tick, with_auxiliary(system(), state), trajectory);
+            time = next_time;
+            ++tick_index;
+            inputs = sampled_inputs(inclusion, _input_sampling.get(), trajectory, tick_index, time);
+            result.insert(time, with_auxiliary(dynamics, auxiliary, state, inputs), trajectory);
         }
     }
     return result;

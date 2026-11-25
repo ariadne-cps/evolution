@@ -23,7 +23,7 @@
  */
 
 /** @file evolution/discrete_time_approximate_evolver.hpp
- *  @brief Approximate point-trajectory iteration of deterministic difference equations.
+ *  @brief Approximate point trajectories of difference equations and bounded-input inclusions.
  */
 
 #ifndef ARIADNE_DISCRETE_TIME_APPROXIMATE_EVOLVER_HPP
@@ -33,13 +33,14 @@
 #include <utility>
 
 #include "evolution/configuration_interface.hpp"
+#include "evolution/discrete_dynamics.hpp"
 #include "evolution/evolver.decl.hpp"
+#include "evolution/input_sampling.hpp"
 #include "evolution/evolver_interface.hpp"
 #include "evolution/orbit.hpp"
 #include "evolution/sampling_counts.hpp"
 #include "geometry/box.hpp"
 #include "labelled/point.hpp"
-#include "system/difference_algebraic_equation.hpp"
 #include "utility/macros.hpp"
 
 namespace Ariadne {
@@ -75,16 +76,18 @@ class DiscreteTimeEvolverConfiguration<ApproximateTag> : public ConfigurationInt
 
 /** @brief Approximate integer-tick trajectories of a deterministic difference map.
  *  @details Explicit initial points are never resampled. For a box, sampling
- *  uses the same independent midpoint-of-subbox policy as the continuous
- *  approximate evolvers. This class does not expose UPPER or LOWER semantics.
+ *  uses the paving-independent midpoint policy shared with the continuous
+ *  approximate evolvers. Inclusion inputs require a separate explicit policy
+ *  and are sampled anew at each integer index, independently for each path.
+ *  This class has no UPPER or LOWER set semantics.
  */
 template<>
 class DiscreteTimeEvolver<ApproximateTag>
-    : public EvolverInterface<ApproximateTag, DifferenceAlgebraicEquation,
+    : public EvolverInterface<ApproximateTag, DiscreteDynamics,
                               List<LabelledPoint<FloatDPApproximation>>, Integer> {
   public:
     using Paradigm = ApproximateTag;
-    using SystemType = DifferenceAlgebraicEquation;
+    using SystemType = DiscreteDynamics;
     using TerminationType = Integer;
     using TimeType = Integer;
     using ApproximatePointType = LabelledPoint<FloatDPApproximation>;
@@ -94,7 +97,9 @@ class DiscreteTimeEvolver<ApproximateTag>
     using ResultType = OrbitType;
     using ConfigurationType = DiscreteTimeEvolverConfiguration<ApproximateTag>;
 
-    explicit DiscreteTimeEvolver(const SystemType& system);
+    explicit DiscreteTimeEvolver(const DifferenceAlgebraicEquation& system);
+    /** @brief A bounded-input inclusion requires an explicit sampling policy. */
+    DiscreteTimeEvolver(const DifferenceAlgebraicInclusion& system, const InputSamplingPolicy& policy);
     DiscreteTimeEvolver(const DiscreteTimeEvolver& other);
 
     DiscreteTimeEvolver* clone() const override { return new DiscreteTimeEvolver(*this); }
@@ -109,6 +114,8 @@ class DiscreteTimeEvolver<ApproximateTag>
     OrbitType orbit(const ExactBoxType&, const TerminationType&) const;
 
   private:
+    /** @brief One sample per trajectory and source tick, including auxiliaries. */
+    std::shared_ptr<const InputSamplingPolicy> _input_sampling;
     std::shared_ptr<const SystemType> _system;
     std::shared_ptr<ConfigurationType> _configuration;
 };

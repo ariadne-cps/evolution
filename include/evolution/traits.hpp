@@ -37,6 +37,8 @@ namespace Ariadne {
 
 /** @brief DifferenceAlgebraicEquation: compile-time correspondence between systems, evolvers and enclosures. */
 class DifferenceAlgebraicEquation;
+class DifferenceAlgebraicInclusion;
+class DiscreteDynamics;
 /** @brief OrdinaryDifferentialAlgebraicEquation: compile-time correspondence between systems, evolvers and enclosures. */
 class OrdinaryDifferentialAlgebraicEquation;
 /** @brief OrdinaryDifferentialAlgebraicInclusion: compile-time correspondence between systems, evolvers and enclosures. */
@@ -68,6 +70,16 @@ struct EvolutionTraits;
 
 template<>
 struct EvolutionTraits<ApproximateTag, DifferenceAlgebraicEquation> {
+    using EvolverType = DiscreteTimeEvolver<ApproximateTag>;
+};
+
+template<>
+struct EvolutionTraits<ApproximateTag, DifferenceAlgebraicInclusion> {
+    using EvolverType = DiscreteTimeEvolver<ApproximateTag>;
+};
+
+template<>
+struct EvolutionTraits<ApproximateTag, DiscreteDynamics> {
     using EvolverType = DiscreteTimeEvolver<ApproximateTag>;
 };
 

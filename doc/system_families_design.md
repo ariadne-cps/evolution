@@ -5,7 +5,7 @@ This is the implementation roadmap adopted in design v6.20 on 22 November
 
 | Native family | Validated evolution | Numerical simulation | Current status |
 | --- | --- | --- | --- |
-| Discrete time (`DifferenceAlgebraicEquation`) | `DiscreteTimeEvolver<ValidatedTag>` | `DiscreteTimeEvolver<ApproximateTag>` | Validated UPPER/LOWER and approximate point trajectories implemented |
+| Discrete time (`DifferenceAlgebraicEquation` / `DifferenceAlgebraicInclusion`) | `DiscreteTimeEvolver<ValidatedTag>` for equations | `DiscreteTimeEvolver<ApproximateTag>` for equations and sampled inclusions | Validated equation UPPER/LOWER; approximate equation/inclusion with explicit tick-input policy |
 | Continuous time (ODAE / ODAI) | `ContinuousTimeEvolver<ValidatedTag>` | `ContinuousTimeEvolver<ApproximateTag>` | Validated accepts both with explicit time; approximate accepts ODAE and structured ODAI with explicit time, fixed parameters and an explicit input policy |
 | Hybrid discrete time | `HybridDiscreteTimeEvolver<ValidatedTag>` | `HybridDiscreteTimeEvolver<ApproximateTag>` | Validated deterministic UPPER public; bounded-input inclusion progression and state-only transitions to deterministic modes supported; inclusion targets/auxiliaries, LOWER and approximate pending |
 | Hybrid continuous time | `HybridContinuousTimeEvolver<ValidatedTag>` | `HybridContinuousTimeEvolver<ApproximateTag>` | ODAE/ODAI timed UPPER evolution; approximate ODAE/structured ODAI supports external time, fixed parameters and explicit input policies; further contact handling planned |
@@ -1004,3 +1004,42 @@ and their respective numerical capabilities remain unchanged.
 This is a compilation repair, not a relaxation of coverage or
 a change in runtime semantics. CI must validate the exact resulting
 commit on all five functional workflows. Format remains nonblocking.
+
+## v6.80 — Approximate ordinary discrete inclusions using explicit tick-input samples
+
+After the fully green v6.79 checkpoint, `DiscreteTimeEvolver<ApproximateTag>`
+can now consume either `DifferenceAlgebraicEquation` or
+`DifferenceAlgebraicInclusion`, through an owning `DiscreteDynamics`
+metadata wrapper. The concrete difference declarations are preserved;
+the numerical choice is isolated in Evolution and does not alter System.
+The inclusion constructor requires an `InputSamplingPolicy`, and a
+single input vector is chosen independently for each trajectory and
+integer tick. There is no implicit inclusion-to-equation conversion.
+The sample is dimension-checked and must be finite and inside the
+declared input box. The input selected for tick n is used both in
+the next-state update f(x[n],u[n]) and, when present, in the
+auxiliary values g(x[n],u[n]). Auxiliary output at the final
+index uses the independently selected final-index input.
+No unselected input is represented by the numerical trajectory.
+
+Initial boxes use the same paving-independent bisection sampling
+as the approximate continuous evolvers: one midpoint by default;
+explicit `SamplingCounts` allow more samples. Explicit initial
+points remain unresampled. Tick labels are exact integer indices
+converted with nearest rounding to representable `FloatDP`, with
+an overflow/duplicate-timestamp check.
+
+The `EvolutionTraits` specializations now map the native discrete
+inclusion and the common `DiscreteDynamics` view to the single
+approximate discrete evolver. Regression tests retain the existing
+equation assertions and add deterministic time-indexed input
+selection, per-trajectory choices, auxiliary correlation,
+cloning/polymorphism, initial subdivision, midpoint input,
+invalid input dimensions/bounds and empty initial lists.
+No UPPER or LOWER semantics is introduced for the sampled path.
+Hybrid-discrete Approximate and native validated ordinary discrete
+inclusions remain separate pending work.
+
+The checkpoint remains a candidate until Ubuntu, macOS, Windows,
+Coverage and Sanitizers are all green on the exact commit. Format
+stays nonblocking; test-target CMake settings remain uniform.

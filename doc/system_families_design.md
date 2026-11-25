@@ -1097,3 +1097,18 @@ As with every implementation checkpoint, the five
 functional workflows must pass on the exact commit for
 acceptance. Format remains nonblocking. No test-specific
 include directories or Windows timeouts are added.
+
+## v6.82 — Disambiguate approximate hybrid path alias
+
+The v6.81 build failed at compilation in
+`src/hybrid_discrete_time_approximate_evolver.cpp` because the
+anonymous-namespace alias `Path` shadowed the existing
+`Ariadne::Path` class. Its uses in `Frontier`, the initial
+path construction, a blocked leaf and a spawned branch were
+therefore ambiguous; undeclared-variable diagnostics were
+secondary failures. Rename exactly those five references to the
+unambiguous `ApproximateHybridPath`. No algorithm, trajectory
+fanout, reset, input sampling, test, CMake rule or runtime
+expectation is changed. Acceptance requires Ubuntu, macOS,
+Windows, Coverage and Sanitizers to pass on the exact v6.82 SHA.
+Format stays nonblocking.

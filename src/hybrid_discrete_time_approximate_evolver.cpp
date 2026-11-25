@@ -42,7 +42,7 @@ namespace Ariadne {
 namespace {
 
 using Evolver = HybridDiscreteTimeEvolver<ApproximateTag>;
-using Path = HybridDiscreteTimeApproximatePath;
+using ApproximateHybridPath = HybridDiscreteTimeApproximatePath;
 using State = Point<FloatDPApproximation>;
 using Values = Vector<FloatDPApproximation>;
 using Evidence = DiscreteTimePredicateEvidence;
@@ -165,7 +165,7 @@ State apply_reset(const DiscreteTimeHybridAutomatonInterface& system,
 }
 
 struct Frontier {
-    Path path;
+    ApproximateHybridPath path;
     State state;
     Values inputs;
 };
@@ -215,7 +215,7 @@ auto HybridDiscreteTimeEvolver<ApproximateTag>::orbit(
             throw std::invalid_argument("Hybrid approximate initial mode does not exist");
         const State state = canonical_state(initial[i], system().state_space(location));
         const Values inputs = sample_inputs(system(), _input_sampling.get(), location, i, 0u);
-        pending.push_back({Path{i, {labelled_point(system(), location, state, inputs)}, {}, false},
+        pending.push_back({ApproximateHybridPath{i, {labelled_point(system(), location, state, inputs)}, {}, false},
                            state, inputs});
     }
 
@@ -231,7 +231,7 @@ auto HybridDiscreteTimeEvolver<ApproximateTag>::orbit(
             };
             const auto plan = HybridDiscreteTimeStepPlanner::plan(system(), location, index, evaluator);
             if (plan.branches.empty()) {
-                Path stopped = entry.path;
+                ApproximateHybridPath stopped = entry.path;
                 stopped.blocked = true;
                 result._paths.push_back(std::move(stopped));
                 continue;
@@ -246,7 +246,7 @@ auto HybridDiscreteTimeEvolver<ApproximateTag>::orbit(
                 const SizeType new_path_id = successors.size();
                 const Values next_inputs = sample_inputs(system(), _input_sampling.get(),
                     branch.target, new_path_id, tick + 1u);
-                Path branch_path = entry.path;
+                ApproximateHybridPath branch_path = entry.path;
                 branch_path.points.push_back(labelled_point(system(), branch.target, next_state, next_inputs));
                 branch_path.events.push_back(branch.event);
                 successors.push_back({std::move(branch_path), next_state, next_inputs});

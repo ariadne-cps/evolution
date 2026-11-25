@@ -113,31 +113,31 @@ HybridEnclosure HybridDiscreteTimeStepImage::apply(
         throw std::invalid_argument("Discrete hybrid image source state space mismatch");
     if (automaton.has_inclusion(location)) {
         const DifferenceAlgebraicInclusion& inclusion = automaton.inclusion(location);
-        EvolutionDetail::validate_discrete_inclusion_source(automaton, source);
+        const HybridEnclosure prepared =
+            EvolutionDetail::prepare_discrete_inclusion_source(automaton, source);
         if (branch.kind == HybridDiscreteTimeBranchKind::TRANSITION)
-            return apply_tick_reset(automaton, source, branch, inclusion.state_space(),
+            return apply_tick_reset(automaton, prepared, branch, inclusion.state_space(),
                                     inclusion.auxiliary_assignments());
         if (branch.kind != HybridDiscreteTimeBranchKind::PROGRESSION ||
             branch.target != location || branch.event)
             throw std::invalid_argument("Invalid discrete hybrid inclusion progression metadata");
 
-        // Only progression chooses the full independent input box. Guard
-        // restrictions were placed on the pre-state by the executor.
-        Enclosure evolved = source.continuous_set();
-        const SizeType input_offset = evolved.number_of_parameters();
-        evolved.adjoin_parameters(inclusion.inputs(), EnclosureVariableKind::INPUT);
-        const ExactBoxType domain = evolved.parameter_domain();
-        const auto& factory = evolved.configuration().function_factory();
-        auto inputs = factory.create_zeros(inclusion.number_of_inputs(), domain);
-        for (SizeType j = 0u; j != inclusion.number_of_inputs(); ++j)
-            inputs[j] = factory.create_coordinate(domain, input_offset + j);
-
-        // Compose f(x,u) with the current validated state and the freshly
-        // appended input coordinates; preserve the previous tick's inputs.
+        // For auxiliary-bearing models a[n]=g(x[n],u[n]) is already
+        // attached to the full current u[n] box. For models with no
+        // auxiliaries, the input box is introduced on progression as before.
+        Enclosure evolved = prepared.continuous_set();
+        const Bool has_auxiliary = inclusion.auxiliary_space().dimension() != 0u;
+        if (!has_auxiliary)
+            evolved.adjoin_parameters(inclusion.inputs(), EnclosureVariableKind::INPUT);
+        const auto inputs = evolved.input_parameter_function(inclusion.number_of_inputs());
         const auto updated_state = compose(inclusion.update_function(),
                                            join(evolved.state_function(), inputs));
         evolved.apply_parameterised_fixed_evolve_step(updated_state, StepSizeType(1, 0u));
-        HybridEnclosure next = source;
+        // Allocate u[n+1] independently, so the output at the next index
+        // uses the new current input, not the just-consumed u[n].
+        if (has_auxiliary)
+            evolved.adjoin_parameters(inclusion.inputs(), EnclosureVariableKind::INPUT);
+        HybridEnclosure next = prepared;
         next.replace_continuous_set(evolved);
         return next;
     }

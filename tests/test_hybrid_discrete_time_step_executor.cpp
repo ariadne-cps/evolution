@@ -156,6 +156,11 @@ class TestHybridDiscreteTimeStepExecutor : public Ariadne::Testing::ContextFixtu
             List<PrimedRealAssignment>{next(x) = x + u},
             List<RealAssignment>{let(a) = x + u},
             RealVariablesBox({-1 <= u <= 1})));
+        const DiscreteLocation target(2);
+        const DiscreteEvent event("auxiliary_guard");
+        automaton.new_mode(target, DifferenceAlgebraicEquation(
+            List<PrimedRealAssignment>{next(x) = x}));
+        automaton.new_urgent_transition(source, event, target, {next(x) = x}, a >= 0);
         const auto evidence = [](DiscreteLocation, DiscreteEvent, Role,
                                  const ContinuousPredicate&) { return Evidence::TRUE; };
         ARIADNE_TESTING_EXPECT_THROWS(std::invalid_argument,

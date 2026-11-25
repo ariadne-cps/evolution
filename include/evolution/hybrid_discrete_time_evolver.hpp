@@ -68,8 +68,10 @@ class HybridDiscreteTimeEvolverConfiguration<ValidatedTag> : public Configuratio
 //! predicates retain alternatives. No branch priority, time-zero jump,
 //! implicit merging is imposed. Bounded-input inclusion progressions and
 //! state-only transitions to equation or inclusion modes are supported
-//! when inclusion modes have no auxiliary outputs. Only progressions
-//! introduce fresh independent input parameters.
+//! when inclusion modes have no auxiliary outputs. Event-free inclusion
+//! modes also support current-input-dependent algebraic auxiliaries.
+//! Full input boxes are attached at the current index; progression
+//! introduces each successive fresh independent input box.
 //! LOWER is unsupported, even if a branch precondition is certain.
 //! A blocked leaf is not an orbit.final() enclosure: retrieve it via
 //! orbit_with_blocked() or inspect provenance through explore().

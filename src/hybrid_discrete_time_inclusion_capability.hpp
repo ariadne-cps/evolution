@@ -36,14 +36,11 @@
 namespace Ariadne::EvolutionDetail {
 
 //! \brief Check the common capability boundary for a validated inclusion mode.
-//! \details System's event contract forbids free input variables in guards,
-//! invariants and reset expressions. Here there are no auxiliary outputs,
-//! so every predicate depends only on the pre-state. Progression universally
-//! encloses fresh inputs; event resets do not consume a fresh input.
-//! Targets may be deterministic or bounded-input inclusion modes without
-//! auxiliary outputs. Resets consume no new input; a subsequent progression
-//! introduces its own fresh independent input parameters. Call this gate at
-//! zero horizon and from direct numerical entry points.
+//! \details Input-dependent auxiliary outputs are supported in event-free
+//! inclusion source modes only. Guard, invariant and reset evaluation using
+//! input-dependent auxiliary outputs requires a separate certified contract.
+//! Inclusion targets with auxiliary outputs remain excluded. This gate is
+//! applied even at zero horizon.
 inline Void validate_discrete_inclusion_source(
     const DiscreteTimeHybridAutomatonInterface& automaton,
     const HybridEnclosure& source) {
@@ -51,10 +48,13 @@ inline Void validate_discrete_inclusion_source(
     if (!automaton.has_inclusion(location))
         throw std::invalid_argument("Expected a discrete inclusion source mode");
     const DifferenceAlgebraicInclusion& inclusion = automaton.inclusion(location);
-    if (inclusion.auxiliary_space().dimension() != 0u ||
-        source.auxiliary_space().dimension() != 0u)
+    const Bool has_auxiliary = inclusion.auxiliary_space().dimension() != 0u;
+    if (source.auxiliary_space().dimension() != 0u &&
+        source.auxiliary_space() != inclusion.auxiliary_space())
+        throw std::invalid_argument("Validated discrete inclusion source auxiliary-space mismatch");
+    if (has_auxiliary && !automaton.events(location).empty())
         throw std::invalid_argument(
-            "Validated discrete inclusion mode cannot have auxiliary outputs");
+            "Validated discrete inclusion input-dependent auxiliaries with events are not yet supported");
     for (const DiscreteEvent& event: automaton.events(location)) {
         const DiscreteLocation destination = automaton.target(location, event);
         if (!automaton.has_equation(destination) && !automaton.has_inclusion(destination))
@@ -63,6 +63,44 @@ inline Void validate_discrete_inclusion_source(
             automaton.inclusion(destination).auxiliary_space().dimension() != 0u)
             throw std::invalid_argument("Validated discrete inclusion target auxiliaries are not supported");
     }
+}
+
+//! \brief Attach the full current input box to an event-free inclusion
+//! source whose output depends on current input, including at zero horizon.
+//! Earlier INPUT axes remain independent and correlated with the state.
+inline HybridEnclosure prepare_discrete_inclusion_source(
+    const DiscreteTimeHybridAutomatonInterface& automaton,
+    const HybridEnclosure& source) {
+    validate_discrete_inclusion_source(automaton, source);
+    const auto& model = automaton.inclusion(source.location());
+    if (model.auxiliary_space().dimension() == 0u)
+        return source;
+    HybridEnclosure prepared = source;
+    if (source.auxiliary_space().dimension() == 0u) {
+        Enclosure extended = source.continuous_set();
+        extended.adjoin_parameters(model.inputs(), EnclosureVariableKind::INPUT);
+        prepared.replace_continuous_set(extended);
+    } else {
+        const Enclosure& set = source.continuous_set();
+        if (set.auxiliary_arguments() != EnclosureFunctionArguments::STATE_INPUTS ||
+            set.auxiliary_parameter_count() != model.number_of_inputs())
+            throw std::invalid_argument("Hybrid inclusion current-input binding is missing");
+        SizeType remaining = model.number_of_inputs();
+        const auto domain = set.parameter_domain();
+        const auto& kinds = set.variable_kinds();
+        for (SizeType i = kinds.size(); i != 0u && remaining != 0u; --i) {
+            if (kinds[i - 1u] == EnclosureVariableKind::INPUT) {
+                --remaining;
+                if (!definitely(subset(domain[i - 1u], model.inputs()[remaining])))
+                    throw std::invalid_argument("Hybrid inclusion current input is outside declared box");
+            }
+        }
+        if (remaining != 0u)
+            throw std::invalid_argument("Hybrid inclusion current input coordinates are missing");
+    }
+    prepared.set_auxiliary(model.auxiliary_space().variables(), model.auxiliary_function(),
+                           EnclosureFunctionArguments::STATE_INPUTS, model.number_of_inputs());
+    return prepared;
 }
 
 } // namespace Ariadne::EvolutionDetail

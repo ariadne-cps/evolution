@@ -58,16 +58,17 @@ HybridDiscreteTimeUpperExploration HybridDiscreteTimeUpperScheduler::evolve(
         throw std::invalid_argument("Discrete hybrid maximum node budget must be positive");
     if (!automaton.has_mode(initial.location()))
         throw std::invalid_argument("Discrete hybrid initial mode does not exist");
-    if (automaton.has_inclusion(initial.location()))
-        EvolutionDetail::validate_discrete_inclusion_source(automaton, initial);
-    else if (!automaton.has_equation(initial.location()))
-        throw std::invalid_argument("Discrete hybrid initial mode has unsupported dynamics");
     if (initial.state_space() != automaton.state_space(initial.location()))
         throw std::invalid_argument("Discrete hybrid initial state space mismatch");
-    check_time_index(initial, initial_index);
+    HybridEnclosure prepared = initial;
+    if (automaton.has_inclusion(initial.location()))
+        prepared = EvolutionDetail::prepare_discrete_inclusion_source(automaton, initial);
+    else if (!automaton.has_equation(initial.location()))
+        throw std::invalid_argument("Discrete hybrid initial mode has unsupported dynamics");
+    check_time_index(prepared, initial_index);
 
     HybridDiscreteTimeUpperExploration result{initial_index, termination_index, {}, {}};
-    result.nodes.push_back({initial_index, initial, std::nullopt, std::nullopt});
+    result.nodes.push_back({initial_index, prepared, std::nullopt, std::nullopt});
 
     // Parent references are stable indices, not pointers or references
     // that vector growth could invalidate.

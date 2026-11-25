@@ -1317,3 +1317,45 @@ functional workflows on this exact commit, including the installed
 umbrella-only tutorial. At the latest pre-commit observation, v6.90
 Ubuntu and macOS had completed successfully and the other three
 workflows had not yet finished.
+
+## v6.92 — Event-free hybrid discrete validated inclusion auxiliaries
+
+The validated UPPER hybrid discrete evolver now supports algebraic outputs
+`a[n]=g(x[n],u[n])` for inclusion modes **without outgoing events**.
+The initial enclosure attaches the whole independent `u[0]` box even at
+zero horizon; subsequent progression consumes exactly that `u[n]` for
+`x[n+1]=f(x[n],a[n],u[n])` and introduces an independent `u[n+1]`
+for the next output. Input correlations and state constraints are preserved
+by the shared `EnclosureFunctionArguments::STATE_INPUTS` representation
+introduced in v6.91. Every supported index has consistent labelled
+auxiliary values. The input values are never sampled.
+
+The private `prepare_discrete_inclusion_source` normalizes both public
+hybrid-orbit entry and direct numerical step-image entry. It validates
+the source auxiliary labels, active current-input binding and declared
+input domains on resumed enclosures. Without outputs, input introduction
+remains the previous one-new-box-per-progression mechanism. The hybrid
+integer clock, UPPER fan-out, exact event provenance and source
+immutability remain unchanged.
+
+**Capability boundary:** outgoing events from an inclusion source with
+input-dependent outputs are rejected, even at zero horizon. Source guard,
+progression invariant and reset expressions may mention the auxiliary;
+allowing them before a dedicated correlated predicate/reset implementation
+would be mathematically unsound. Transitions into inclusion modes with
+outputs remain rejected too. Ordinary equation modes and the existing
+state-only inclusion transitions are unaffected. Accordingly the hybrid
+discrete inclusion Validated UPPER cell is still **partial**, and LOWER
+remains absent.
+
+Tests exercise `a=x+u`, `x'=x+a`, including two ticks,
+`x[2]=2u[0]+u[1]`, the final identity
+`a[2]=x[2]+u[2]`, current-input coordinate kinds,
+zero-horizon auxiliary outputs, a resumed index, source immutability
+and explicit rejection when an auxiliary-bearing source has an event.
+No unsupported case is added to the user-facing tutorial, which still
+has exactly the sole `#include "ariadne-evolution.hpp"`.
+
+This checkpoint is **published but requires all five workflows** on
+the exact v6.92 commit before it is accepted. At v6.91 observation,
+Ubuntu/macOS succeeded; Windows, Coverage and Sanitizers were pending.

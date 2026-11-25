@@ -1239,3 +1239,29 @@ Python tutorials, without promising not-yet-implemented Python parity.
 No new algorithm, System or Integration code is changed. Acceptance
 requires passing Ubuntu, macOS, Windows, Coverage and Sanitizers on the
 exact checkpoint, including the installed C++ tutorial build/run.
+
+## v6.90 — Restore installed tutorial compilation after precise const-correctness diagnosis
+
+The v6.89 installed C++ tutorial failed in the **compilation** phase on Ubuntu,
+macOS and Windows Release. The Ubuntu Clang 16 log supplied by the user gives
+three explicit diagnostics: `Orbit<List<LabelledPoint<FloatDPApproximation>>>::curves()`
+is not a `const` member, but three local orbit results were declared
+`const auto` before calling `.curves().size()`. They are
+`timed_sample`, `sampled_inclusion_orbit` and `sampled_ticks`.
+This is a C++ const-qualification mismatch in the newly added tutorial
+code, **not** evidence of a failed validated evolver, runtime numerical
+error, or CI infrastructure outage.
+
+Fix exactly the three local declarations to `auto` while preserving the
+existing `curves()` API and all tutorial functionality. The tutorial retains
+its single `#include "ariadne-evolution.hpp"`; no examples, calculations,
+semantic assertions, algorithms, test coverage or platform workflows
+are removed or weakened. In particular, this change does not make
+`Orbit::curves()` const, because that would be an unrelated public API
+change requiring independent design and tests.
+
+The v6.89 Coverage and Sanitizers checks were successful, but Ubuntu and
+macOS Release failed building the installed tutorial; Windows Release
+exhibited the same failed CI step. Acceptance of v6.90 requires the
+five functional workflows to pass on **this exact commit**. The
+pre-existing v6.88 baseline passed all five.

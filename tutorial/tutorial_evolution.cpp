@@ -50,7 +50,7 @@ int main() {
     const OrdinaryDifferentialAlgebraicEquation timed_flow({dot(x) = t - x});
     ContinuousTimeEvolver<ApproximateTag> timed_approximate(timed_flow);
     timed_approximate.configuration().set_step_size(0.03125);
-    const auto timed_sample = timed_approximate.orbit(initial, Real(0.0625_x));
+    auto timed_sample = timed_approximate.orbit(initial, Real(0.0625_x));
     std::cout << "Approximate nonautonomous equation: "
               << timed_sample.curves().size() << " trajectory(s)\n";
 
@@ -81,7 +81,7 @@ int main() {
     ContinuousTimeEvolver<ApproximateTag> sampled_continuous_inclusion(
         disturbed, MidpointInputSampling());
     sampled_continuous_inclusion.configuration().set_step_size(0.03125);
-    const auto sampled_inclusion_orbit = sampled_continuous_inclusion.orbit(initial, Real(0.0625_x));
+    auto sampled_inclusion_orbit = sampled_continuous_inclusion.orbit(initial, Real(0.0625_x));
     std::cout << "Approximate continuous inclusion: "
               << sampled_inclusion_orbit.curves().size() << " trajectory(s)\n";
 
@@ -106,7 +106,7 @@ int main() {
     DiscreteTimeEvolver<ApproximateTag> sampled_discrete_inclusion(
         discrete_inclusion, MidpointInputSampling());
     const ExactBoxType discrete_initial({{0.0_x, 0.0_x}});
-    const auto sampled_ticks = sampled_discrete_inclusion.orbit(discrete_initial, Integer(2));
+    auto sampled_ticks = sampled_discrete_inclusion.orbit(discrete_initial, Integer(2));
     std::cout << "Approximate discrete inclusion: " << sampled_ticks.curves().size()
               << " trajectory(s)\n";
 

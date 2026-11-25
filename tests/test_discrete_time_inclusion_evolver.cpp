@@ -133,6 +133,59 @@ class TestDiscreteTimeInclusionEvolver : public Ariadne::Testing::ContextFixture
         ARIADNE_TESTING_EXPECT_EQUAL(initial.number_of_parameters(), 1u);
     }
 
+    Void test_input_dependent_auxiliary_and_fresh_tick_inputs() {
+        const RealVariable x("x"), u("u"), a("a");
+        const DifferenceAlgebraicInclusion inclusion(
+            List<PrimedRealAssignment>{next(x) = x + a},
+            List<RealAssignment>{let(a) = x + u},
+            RealVariablesBox({-1 <= u <= 1}));
+        DiscreteTimeInclusionEvolver evolver(inclusion);
+        const auto initial = evolver.enclosure(ExactBoxType({{0.0_x, 0.0_x}}));
+
+        // u[0] is a free coordinate already at horizon zero: a[0]=u[0].
+        const auto zero = evolver.orbit(initial, Integer(0), Semantics::UPPER);
+        ARIADNE_TESTING_EXPECT_EQUAL(zero.initial().number_of_parameters(), 2u);
+        ARIADNE_TESTING_EXPECT_EQUAL(zero.initial().auxiliary_space(), RealSpace({a}));
+        ARIADNE_TESTING_EXPECT_EQUAL(zero.initial().auxiliary_arguments(),
+                                     EnclosureFunctionArguments::STATE_INPUTS);
+        ARIADNE_TESTING_EXPECT_EQUAL(zero.initial().variable_kinds()[1u],
+                                     EnclosureVariableKind::INPUT);
+        const auto zero_aux = zero.initial().auxiliary_function()[0u].range();
+        ARIADNE_TESTING_PROVE(zero_aux.lower_bound().raw().get_d() <= -1.0);
+        ARIADNE_TESTING_PROVE(zero_aux.upper_bound().raw().get_d() >= 1.0);
+
+        // x[1]=u[0], x[2]=2*u[0]+u[1] and a[2]=x[2]+u[2].
+        // The three inputs are universally quantified independently.
+        const auto evolved = evolver.orbit(initial, Integer(2), Semantics::UPPER);
+        ARIADNE_TESTING_EXPECT_EQUAL(evolved.final().size(), 1u);
+        ARIADNE_TESTING_EXPECT_EQUAL(evolved.final()[0u].number_of_parameters(), 4u);
+        ARIADNE_TESTING_EXPECT_EQUAL(evolved.final()[0u].auxiliary_space(), RealSpace({a}));
+        for (SizeType i = 1u; i != 4u; ++i)
+            ARIADNE_TESTING_EXPECT_EQUAL(evolved.final()[0u].variable_kinds()[i],
+                                         EnclosureVariableKind::INPUT);
+        const auto bounds = evolved.final()[0u].euclidean_set().bounding_box()[0u];
+        ARIADNE_TESTING_PROVE(bounds.lower_bound().raw().get_d() <= -3.0);
+        ARIADNE_TESTING_PROVE(bounds.upper_bound().raw().get_d() >= 3.0);
+        const auto aux = evolved.final()[0u].auxiliary_function();
+        const auto current_input = evolved.final()[0u].configuration()
+            .function_factory().create_coordinate(evolved.final()[0u].parameter_domain(), 3u);
+        const auto relation = aux[0u] - evolved.final()[0u].state_function()[0u] - current_input;
+        const auto error = relation.range();
+        ARIADNE_TESTING_PROVE(error.lower_bound().raw().get_d() >= -1e-6);
+        ARIADNE_TESTING_PROVE(error.upper_bound().raw().get_d() <= 1e-6);
+        ARIADNE_TESTING_EXPECT_EQUAL(initial.number_of_parameters(), 1u);
+
+        // Reuse the last full current-input box without silently resampling
+        // a[2]; progression consumes u[2] and allocates a new u[3].
+        const auto resumed = evolver.orbit(evolved.final()[0u], Integer(1),
+                                            Semantics::UPPER);
+        ARIADNE_TESTING_EXPECT_EQUAL(resumed.final().size(), 1u);
+        ARIADNE_TESTING_EXPECT_EQUAL(resumed.final()[0u].number_of_parameters(), 5u);
+        ARIADNE_TESTING_EXPECT_EQUAL(resumed.final()[0u].auxiliary_space(), RealSpace({a}));
+        ARIADNE_TESTING_EXPECT_EQUAL(resumed.final()[0u].variable_kinds()[4u],
+                                     EnclosureVariableKind::INPUT);
+    }
+
     Void test_rejection_is_explicit_even_at_zero_horizon() {
         const RealVariable x("x"), y("y"), u("u"), a("a");
         const DifferenceAlgebraicInclusion inclusion(
@@ -155,13 +208,18 @@ class TestDiscreteTimeInclusionEvolver : public Ariadne::Testing::ContextFixture
             evolver.orbit(wrong, Integer(0), Semantics::UPPER));
 
         const DifferenceAlgebraicInclusion auxiliaries(
-            List<PrimedRealAssignment>{next(x) = x + u},
+            List<PrimedRealAssignment>{next(x) = x + a},
             List<RealAssignment>{let(a) = x + u},
             RealVariablesBox({-1 <= u <= 1}));
-        DiscreteTimeInclusionEvolver unsupported(auxiliaries);
+        DiscreteTimeInclusionEvolver supported(auxiliaries);
+        const auto zero = supported.orbit(
+            supported.enclosure(ExactBoxType({{0.0_x, 0.0_x}})),
+            Integer(0), Semantics::UPPER);
+        ARIADNE_TESTING_EXPECT_EQUAL(zero.initial().auxiliary_space(), RealSpace({a}));
+        ARIADNE_TESTING_EXPECT_EQUAL(zero.initial().number_of_parameters(), 2u);
         ARIADNE_TESTING_EXPECT_THROWS(std::invalid_argument,
-            unsupported.orbit(unsupported.enclosure(ExactBoxType({{0.0_x, 1.0_x}})),
-                              Integer(0), Semantics::UPPER));
+            supported.orbit(supported.enclosure(ExactBoxType({{0.0_x, 0.0_x}})),
+                            Integer(0), Semantics::LOWER));
     }
 };
 
@@ -170,6 +228,7 @@ int main(int argc, const char* argv[]) {
     ARIADNE_TESTING_ADD_TEST(TestDiscreteTimeInclusionEvolver, test_full_box_each_tick_and_copy);
     ARIADNE_TESTING_ADD_TEST(TestDiscreteTimeInclusionEvolver, test_constrained_multidimensional_inputs_preserve_history);
     ARIADNE_TESTING_ADD_TEST(TestDiscreteTimeInclusionEvolver, test_upper_subdivision_keeps_all_successors);
+    ARIADNE_TESTING_ADD_TEST(TestDiscreteTimeInclusionEvolver, test_input_dependent_auxiliary_and_fresh_tick_inputs);
     ARIADNE_TESTING_ADD_TEST(TestDiscreteTimeInclusionEvolver, test_rejection_is_explicit_even_at_zero_horizon);
     return Ariadne::Testing::run_logging_suite(ariadne_test_suite, argc, argv);
 }

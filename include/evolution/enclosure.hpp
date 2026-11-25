@@ -99,13 +99,19 @@ class EnclosureConfiguration {
 enum class EnclosureFunctionArguments : std::uint8_t { STATE,
                                                        STATE_TIME,
                                                        STATE_PARAMETERS,
-                                                       STATE_TIME_PARAMETERS };
+                                                       STATE_TIME_PARAMETERS,
+                                                       STATE_INPUTS };
 
 constexpr Bool enclosure_has_time_argument(EnclosureFunctionArguments arguments) {
     return arguments == EnclosureFunctionArguments::STATE_TIME || arguments == EnclosureFunctionArguments::STATE_TIME_PARAMETERS;
 }
 constexpr Bool enclosure_has_parameter_arguments(EnclosureFunctionArguments arguments) {
     return arguments == EnclosureFunctionArguments::STATE_PARAMETERS || arguments == EnclosureFunctionArguments::STATE_TIME_PARAMETERS;
+}
+// STATE_INPUTS binds the current input sample/set, not fixed parameters
+// or all historical INPUT coordinates carried by the enclosure.
+constexpr Bool enclosure_has_input_arguments(EnclosureFunctionArguments arguments) {
+    return arguments == EnclosureFunctionArguments::STATE_INPUTS;
 }
 
 enum class EnclosureVariableKind : std::uint8_t { INITIAL,
@@ -220,6 +226,9 @@ class Enclosure
     //! \brief Select the last count physical parameter values. Unbound generic
     //! enclosures use their PARAMETER coordinates in declared order.
     ValidatedVectorMultivariateFunctionPatch constant_parameter_function(SizeType count) const;
+    //! Select the most recent count INPUT coordinates, in their original order.
+    //! The earlier INPUT axes remain independent history, not current inputs.
+    ValidatedVectorMultivariateFunctionPatch input_parameter_function(SizeType count) const;
     Bool has_constant_parameter_binding() const;
     RealSpace constant_parameter_space() const;
     const ExactBoxType& constant_parameter_domain() const;

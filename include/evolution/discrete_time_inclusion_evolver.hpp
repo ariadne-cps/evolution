@@ -41,8 +41,10 @@ namespace Ariadne {
  *  @details Each progression universally encloses every input from the
  *  declared bounded box, adding a fresh independent INPUT coordinate per
  *  tick. Existing parameter correlations and constraints are retained.
- *  Only UPPER is supported. Inclusion auxiliary outputs are not yet supported:
- *  this limitation is checked even at the zero-tick horizon.
+ *  Only UPPER is supported. Explicit auxiliary outputs a[n]=g(x[n],u[n])
+ *  bind to the current full input box at each tick; an update consumes the
+ *  current u[n] and installs a fresh independent u[n+1] for new outputs.
+ *  No input coordinates are sampled or frozen across different ticks.
  *
  *  This class is separate from the equation-only DiscreteTimeEvolver<ValidatedTag>
  *  to preserve that class's existing strongly typed SystemType contract.

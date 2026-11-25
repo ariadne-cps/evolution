@@ -409,7 +409,9 @@ Void Enclosure::bind_constant_parameters(const RealSpace& space, const ExactBoxT
     if (_constant_parameters)
         throw std::invalid_argument("Enclosure already has a physical parameter binding");
     if (space.dimension() == 0u || space.dimension() != domain.dimension() ||
-        space.dimension() != function.result_size() || _auxiliary_parameter_count > space.dimension())
+        space.dimension() != function.result_size() ||
+        (enclosure_has_parameter_arguments(_auxiliary_arguments) &&
+         _auxiliary_parameter_count > space.dimension()))
         throw std::invalid_argument("Physical parameter names, domain and map dimensions do not agree");
     ARIADNE_PRECONDITION(Ariadne::subset(parameter_domain(), function.domain()));
     Enclosure bound = *this;
@@ -439,6 +441,18 @@ List<Bool> Enclosure::_protected_parameter_axes() const {
     List<Bool> result(number_of_parameters(), false);
     for (SizeType i = 0u; i != number_of_parameters(); ++i)
         result[i] = _variable_kinds[i] == EnclosureVariableKind::PARAMETER;
+    // An auxiliary a(x,u_current) must retain the exact current INPUT
+    // coordinates across Kuhn reconditioning. Historical INPUT axes may
+    // instead be summarized as validated state error.
+    if (enclosure_has_input_arguments(_auxiliary_arguments)) {
+        SizeType remaining = _auxiliary_parameter_count;
+        for (SizeType i = number_of_parameters(); i != 0u && remaining != 0u; --i) {
+            if (_variable_kinds[i - 1u] == EnclosureVariableKind::INPUT) {
+                result[i - 1u] = true;
+                --remaining;
+            }
+        }
+    }
     if (_constant_parameters) {
         const auto* models = dynamic_cast<const ValidatedVectorMultivariateTaylorFunctionModelDP*>(&_constant_parameters->function.reference());
         if (!models)
@@ -484,9 +498,26 @@ ValidatedVectorMultivariateFunctionPatch Enclosure::constant_parameter_function(
     return result;
 }
 
+ValidatedVectorMultivariateFunctionPatch Enclosure::input_parameter_function(SizeType count) const {
+    Array<SizeType> indices(count);
+    SizeType remaining = count;
+    for (SizeType i = number_of_parameters(); i != 0u && remaining != 0u; --i) {
+        if (_variable_kinds[i - 1u] == EnclosureVariableKind::INPUT)
+            indices[--remaining] = i - 1u;
+    }
+    if (remaining != 0u)
+        throw std::invalid_argument("Enclosure has insufficient current input coordinates");
+    const auto& factory = configuration().function_factory();
+    auto values = factory.create_zeros(count, parameter_domain());
+    for (SizeType j = 0u; j != count; ++j)
+        values[j] = factory.create_coordinate(parameter_domain(), indices[j]);
+    return values;
+}
+
 ValidatedVectorMultivariateFunctionPatch Enclosure::argument_function(EnclosureFunctionArguments arguments, SizeType parameter_count) const {
-    const bool parameter_layout = enclosure_has_parameter_arguments(arguments);
-    if (parameter_layout != (parameter_count != 0u))
+    const bool selected_layout = enclosure_has_parameter_arguments(arguments) ||
+                                 enclosure_has_input_arguments(arguments);
+    if (selected_layout != (parameter_count != 0u))
         throw std::invalid_argument("Enclosure function parameter count does not match its explicit argument layout");
     switch (arguments) {
         case EnclosureFunctionArguments::STATE:
@@ -497,6 +528,8 @@ ValidatedVectorMultivariateFunctionPatch Enclosure::argument_function(EnclosureF
             return join(_state_function, constant_parameter_function(parameter_count));
         case EnclosureFunctionArguments::STATE_TIME_PARAMETERS:
             return join(join(_state_function, _time_function), constant_parameter_function(parameter_count));
+        case EnclosureFunctionArguments::STATE_INPUTS:
+            return join(_state_function, input_parameter_function(parameter_count));
         default:
             throw std::invalid_argument("Unknown enclosure function argument layout");
     }

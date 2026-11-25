@@ -1265,3 +1265,55 @@ macOS Release failed building the installed tutorial; Windows Release
 exhibited the same failed CI step. Acceptance of v6.90 requires the
 five functional workflows to pass on **this exact commit**. The
 pre-existing v6.88 baseline passed all five.
+
+## v6.91 — Current-input auxiliary binding in ordinary discrete UPPER inclusions
+
+The ordinary `DifferenceAlgebraicInclusion` contract specifies
+`a[n]=g(x[n],u[n])` and `x[n+1]=f(x[n],a[n],u[n])`, with an independent
+whole-box input choice at each tick. It is not correct to bind `a[n]`
+to the previous input `u[n-1]` or to treat an input-dependent auxiliary
+as a state-only function.
+
+The shared `Enclosure` explicitly represents this relation with the new
+`EnclosureFunctionArguments::STATE_INPUTS` argument layout. Its
+`input_parameter_function(count)` chooses the most recent `count`
+`EnclosureVariableKind::INPUT` parameter axes in declared order while
+leaving all earlier input coordinates and constraints intact. The active
+INPUT coordinates are protected against Kuhn reconditioning, so an
+auxiliary's current-input binding cannot silently disappear while
+historical input coordinates are reduced conservatively. Physical
+constant-parameter layouts remain disjoint from the new input layout.
+
+`DiscreteTimeInclusionEvolver` now supports explicit algebraic auxiliary
+assignments. At the initial index, it appends a full independent `u[0]`
+box and binds `a[0]=g(x[0],u[0])`, including on zero-horizon orbits.
+Progression uses this same `u[n]` to compute `x[n+1]`, increments
+the validated time by one and appends a *fresh* `u[n+1]` for the
+new auxiliary `a[n+1]`. This makes the auxiliary view consistent
+at every reached/final index without input sampling. An auxiliary-bearing
+resume requires an existing STATE_INPUTS binding and current INPUT axes
+whose domains lie inside the model's declared input box; an input-free
+initial enclosure is automatically extended. Existing zero-auxiliary
+models retain their original one-new-input-per-progression behavior.
+
+The new regression traces `a=x+u`, `x'=x+a` for two ticks:
+`x[1]=u[0]`, `x[2]=2u[0]+u[1]`, `a[2]=x[2]+u[2]`,
+including exact current-input correlation, fresh input kinds, full
+range coverage, zero horizon, immutable source and one-tick resume.
+A LOWER request remains explicitly rejected. The hybrid discrete
+inclusion capability gate is unchanged: auxiliary-bearing hybrid
+modes still require separate analysis of guards, event resets and
+the no-new-input-on-reset rule. No tutorial example is added for an
+unimplemented hybrid auxiliary case.
+
+The ordinary discrete inclusion Validated UPPER capability is now
+implemented for declared structured bounded-input systems with explicit
+algebraic outputs; this does **not** claim LOWER, alternate unstructured
+multifunctions or comprehensive solver guarantees. Its existing
+`EvolverInterface<ValidatedTag, DifferenceAlgebraicInclusion,...>`
+contract remains distinct from the equation-only validated
+`DiscreteTimeEvolver<ValidatedTag>`. Acceptance requires all five
+functional workflows on this exact commit, including the installed
+umbrella-only tutorial. At the latest pre-commit observation, v6.90
+Ubuntu and macOS had completed successfully and the other three
+workflows had not yet finished.

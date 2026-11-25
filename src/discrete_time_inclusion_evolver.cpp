@@ -74,16 +74,49 @@ DiscreteTimeInclusionEvolver::orbit(const EnclosureType& initial,
         throw std::invalid_argument("Validated ordinary discrete inclusions support only UPPER");
     if (stop < Integer(0))
         throw std::invalid_argument("Ordinary discrete inclusion horizon must be nonnegative");
-    if (this->system().auxiliary_space().dimension() != 0u)
-        throw std::invalid_argument("Validated ordinary discrete inclusion auxiliaries are not yet supported");
-    if (initial.state_space() != this->system().state_space() ||
-        initial.state_auxiliary_space() != this->system().state_space())
-        throw std::invalid_argument("Ordinary discrete inclusion initial enclosure state space mismatch");
+    const auto& model = this->system();
+    const Bool has_auxiliary = model.auxiliary_space().dimension() != 0u;
+    if (initial.state_space() != model.state_space() ||
+        (initial.auxiliary_space().dimension() != 0u &&
+         initial.auxiliary_space() != model.auxiliary_space()))
+        throw std::invalid_argument("Ordinary discrete inclusion initial enclosure spaces mismatch");
 
-    OrbitType result(initial);
+    EnclosureType seed = initial;
+    if (has_auxiliary) {
+        if (seed.auxiliary_space().dimension() == 0u) {
+            // At the initial tick, a[0] depends on an as-yet unchosen u[0].
+            Enclosure extended = seed.euclidean_set();
+            extended.adjoin_parameters(model.inputs(), EnclosureVariableKind::INPUT);
+            seed = EnclosureType(extended, model.state_space());
+        } else {
+            // A supplied auxiliary-bearing enclosure (e.g. a resumed orbit)
+            // must already bind the input choices for its current index.
+            if (seed.auxiliary_arguments() != EnclosureFunctionArguments::STATE_INPUTS ||
+                seed.auxiliary_parameter_count() != model.number_of_inputs())
+                throw std::invalid_argument("Discrete inclusion resume requires current-input auxiliary binding");
+            SizeType remaining = model.number_of_inputs();
+            const auto domain = seed.parameter_domain();
+            const auto& kinds = seed.variable_kinds();
+            for (SizeType i = kinds.size(); i != 0u && remaining != 0u; --i) {
+                if (kinds[i - 1u] == EnclosureVariableKind::INPUT) {
+                    --remaining;
+                    if (!definitely(subset(domain[i - 1u], model.inputs()[remaining])))
+                        throw std::invalid_argument("Resumed inclusion input is outside its declared box");
+                }
+            }
+            if (remaining != 0u)
+                throw std::invalid_argument("Resumed inclusion is missing current input coordinates");
+        }
+        seed.set_auxiliary(model.auxiliary_space(), model.auxiliary_function(),
+                           EnclosureFunctionArguments::STATE_INPUTS, model.number_of_inputs());
+    } else if (seed.auxiliary_space().dimension() != 0u) {
+        throw std::invalid_argument("Ordinary inclusion without outputs cannot accept auxiliary labels");
+    }
+
+    OrbitType result(seed);
     ListSet<EnclosureType> final_sets, reach_sets, intermediate_sets;
     List<Pair<TimeType, EnclosureType>> working;
-    working.push_back(make_pair(TimeType(0), initial));
+    working.push_back(make_pair(TimeType(0), seed));
 
     while (!working.empty()) {
         const auto current = working.back();
@@ -104,22 +137,23 @@ DiscreteTimeInclusionEvolver::orbit(const EnclosureType& initial,
             continue;
         }
 
-        // Reuse the validated UPPER image construction of the hybrid
-        // discrete inclusion progression: each tick receives independent
-        // full-box input coordinates; no sample or unproved LOWER witness.
+        // For modes without auxiliaries, the current tick's full input box
+        // is introduced now. With auxiliaries, u[n] was already installed
+        // at the source tick, where a[n]=g(x[n],u[n]) refers to it.
         Enclosure evolved = source.euclidean_set();
-        const SizeType input_offset = evolved.number_of_parameters();
-        evolved.adjoin_parameters(this->system().inputs(), EnclosureVariableKind::INPUT);
-        const ExactBoxType domain = evolved.parameter_domain();
-        const auto& factory = evolved.configuration().function_factory();
-        auto inputs = factory.create_zeros(this->system().number_of_inputs(), domain);
-        for (SizeType j = 0u; j != this->system().number_of_inputs(); ++j)
-            inputs[j] = factory.create_coordinate(domain, input_offset + j);
-
-        const auto mapped = compose(this->system().update_function(),
+        if (!has_auxiliary)
+            evolved.adjoin_parameters(model.inputs(), EnclosureVariableKind::INPUT);
+        const auto inputs = evolved.input_parameter_function(model.number_of_inputs());
+        const auto mapped = compose(model.update_function(),
                                     join(evolved.state_function(), inputs));
         evolved.apply_parameterised_fixed_evolve_step(mapped, StepSizeType(1, 0u));
-        const EnclosureType successor(evolved, this->system().state_space());
+        if (has_auxiliary) {
+            // u[n+1] is independent of u[n] and all earlier tick choices.
+            // STATE_INPUTS resolves to these newest coordinates; retaining
+            // the old INPUT axes keeps state/input/history correlations.
+            evolved.adjoin_parameters(model.inputs(), EnclosureVariableKind::INPUT);
+        }
+        const EnclosureType successor(evolved, model.state_space(), model.auxiliary_space());
         reach_sets.adjoin(successor);
         intermediate_sets.adjoin(successor);
         working.push_back(make_pair(tick + TimeType(1), successor));

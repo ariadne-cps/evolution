@@ -1136,3 +1136,37 @@ UPPER cell remains partial until auxiliary-bearing inclusion modes
 are supported or their exact capability boundary is formally
 settled. This checkpoint requires its own five green CI workflows.
 Format remains nonblocking.
+
+## v6.87 candidate — Ordinary discrete validated UPPER for bounded-input inclusions
+
+A dedicated `DiscreteTimeInclusionEvolver` implements
+`EvolverInterface<ValidatedTag, DifferenceAlgebraicInclusion, LabelledEnclosure, Integer>`
+without changing the already public strongly typed
+`DiscreteTimeEvolver<ValidatedTag>` for deterministic equations.
+It is registered in `EvolutionTraits<ValidatedTag, DifferenceAlgebraicInclusion>`
+and exported in the public umbrella header.
+
+The validated kernel reuses the same full-box construction already present in
+hybrid discrete UPPER progression. Each tick appends a fresh independent
+`EnclosureVariableKind::INPUT` coordinate over the entire declared input box,
+composes the symbolic update with the correlated previous state and the new
+inputs, and advances the enclosure by one exact tick. No input samples are
+chosen; earlier input parameters and source constraints remain represented.
+UPPER can subdivide, but it must retain every resulting branch; the
+configuration and clone are independent.
+
+This first slice rejects `Semantics::LOWER` unconditionally, and rejects
+inclusions with auxiliary outputs even for the zero-tick orbit. It also rejects
+negative horizons and incompatible state spaces. These exclusions are
+deliberate, pending a coherent representation of input-dependent auxiliary
+values and unification of the validated ordinary discrete interface.
+Thus ordinary discrete inclusion / validated UPPER changes from absent to
+**partial**; LOWER stays absent. No System or Integration changes are needed.
+
+The new `test_discrete_time_inclusion_evolver` verifies independent input
+dimensions and kinds over two ticks, enclosure coverage of both extreme
+input sequences, the zero-horizon case, source immutability, independent clone
+configuration, and explicit negative cases. Existing ordinary discrete
+LOWER/equation suites and both hybrid families stay in the full CI gate.
+Acceptance requires passing Ubuntu, macOS, Windows, Coverage and Sanitizers
+on the exact v6.87 commit. Format is nonblocking.

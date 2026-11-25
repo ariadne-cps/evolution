@@ -9,6 +9,7 @@ add_library(EVOLUTION_SRC OBJECT
     enclosure_augmented_paving.cpp
     orbit.cpp
     discrete_time_evolver.cpp
+    discrete_time_inclusion_evolver.cpp
     discrete_dynamics.cpp
     discrete_time_approximate_evolver.cpp
     continuous_time_validated_evolver.cpp

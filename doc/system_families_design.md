@@ -1201,3 +1201,41 @@ green at the latest observation, while Windows and Sanitizers were still
 in progress. No CI result can be borrowed from another SHA. Format remains
 outside the functional gate; existing discrete equation LOWER and both
 hybrid-family suites stay active.
+
+## v6.89 candidate — A bounded tutorial cover and an umbrella-only C++ contract
+
+The installed C++ tutorial now has a **single** include:
+`#include "ariadne-evolution.hpp"`. Its supporting function, hybrid,
+integration, numerical, system and standard I/O types are made public
+transitively through the Evolution umbrella; a consumer never needs to
+name their implementation headers. The existing standalone tutorial
+CMake target is compiled and run against installed headers and libraries
+by the Release workflows, so it serves as a real packaging/umbrella test,
+not merely a build-tree test.
+
+Examples use only presently implemented operations and retain their
+behavior as further families become available. The compact selection
+covers autonomous and nonautonomous continuous equations, Approximate
+sampled paths against Validated UPPER and LOWER for ordinary equations,
+structured ordinary continuous/discrete inclusions with explicit
+Approximate input policies against their available validated UPPER,
+discrete hybrid point-path branching and UPPER set branching, and
+continuous hybrid equations and inclusions. Exactly one first-order PDE
+demonstration is retained, without multiplying PDE variants. The
+tutorial does **not** enumerate or describe unimplemented combinations.
+The future capability matrix and remaining design work belong exclusively
+in these design documents, not in the tutorial.
+
+The ordinary discrete inclusion UPPER example uses the v6.87 public
+`DiscreteTimeInclusionEvolver`. Its model has no auxiliary outputs, in
+line with the currently enforced numerical capability boundary.
+Discrete hybrid variants use deterministic two-mode permissive branches
+and distinguish the sampled branching result from UPPER set orbits.
+
+The umbrella's direct public includes make the current tutorial
+self-contained. The README is rewritten around the supported, concise
+worked cases and retains separate instructions for installed C++ and
+Python tutorials, without promising not-yet-implemented Python parity.
+No new algorithm, System or Integration code is changed. Acceptance
+requires passing Ubuntu, macOS, Windows, Coverage and Sanitizers on the
+exact checkpoint, including the installed C++ tutorial build/run.

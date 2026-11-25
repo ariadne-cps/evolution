@@ -29,6 +29,15 @@
 #ifndef ARIADNE_ARIADNE_EVOLUTION_HPP
 #define ARIADNE_ARIADNE_EVOLUTION_HPP
 
+// Public Evolution workflows, including the installed C++ tutorial,
+// require no secondary module or numerical implementation headers.
+#include <iostream>
+#include "function/function.hpp"
+#include "hybrid/hybrid_set.hpp"
+#include "integration/integrator.hpp"
+#include "numeric/float_bounds.hpp"
+#include "system/discrete_time_hybrid_automaton.hpp"
+
 #include "evolution/configuration_interface.hpp"
 #include "evolution/continuous_dynamics.hpp"
 #include "evolution/continuous_time_approximate_evolver.hpp"

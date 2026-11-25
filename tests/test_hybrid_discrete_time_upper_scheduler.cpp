@@ -283,6 +283,55 @@ class TestHybridDiscreteTimeUpperScheduler : public Ariadne::Testing::ContextFix
         ARIADNE_TESTING_EXPECT_EQUAL(projected.blocked.size(), 0u);
     }
 
+    Void test_inclusion_target_reset_then_independent_input_progression() {
+        const RealVariable x("x"), u("u"), v("v");
+        const DiscreteLocation source(1), destination(2);
+        const DiscreteEvent jump("to_inclusion");
+        DiscreteTimeHybridAutomaton system;
+        system.new_mode(source, DifferenceAlgebraicInclusion(
+            // A source progression leaves the guard region before tick 1,
+            // so only the target branch can reach the target at tick 2.
+            List<PrimedRealAssignment>{next(x) = x + u - 10},
+            RealVariablesBox({-1 <= u <= 1})));
+        system.new_mode(destination, DifferenceAlgebraicInclusion(
+            List<PrimedRealAssignment>{next(x) = x + v},
+            RealVariablesBox({-2 <= v <= 2})));
+        system.new_urgent_transition(source, jump, destination,
+                                     {next(x) = x + 10}, x >= 1/2_q);
+
+        // Closed pre-state restriction retains both possible alternatives.
+        // The arrival state uses no fresh input; its subsequent progression
+        // universally ranges over a new independent target input.
+        const auto result = HybridDiscreteTimeUpperScheduler::evolve(
+            system, initial(source), Integer(0), Integer(2), 6u);
+        ARIADNE_TESTING_EXPECT_EQUAL(result.nodes.size(), 5u);
+        ARIADNE_TESTING_PROVE(result.nodes[1u].enclosure.location() == destination);
+        ARIADNE_TESTING_PROVE(result.nodes[2u].enclosure.location() == source);
+        ARIADNE_TESTING_EXPECT_EQUAL(
+            result.nodes[1u].enclosure.continuous_set().number_of_parameters(), 1u);
+        ARIADNE_TESTING_EXPECT_EQUAL(
+            result.nodes[2u].enclosure.continuous_set().number_of_parameters(), 2u);
+        ARIADNE_TESTING_PROVE(result.nodes[1u].incoming_branch.has_value());
+        ARIADNE_TESTING_PROVE(result.nodes[1u].incoming_branch->event.has_value());
+        ARIADNE_TESTING_PROVE(*result.nodes[1u].incoming_branch->event == jump);
+
+        SizeType target_steps = 0u;
+        for (const auto& node : result.nodes) {
+            if (node.index == Integer(2) && node.enclosure.location() == destination) {
+                ++target_steps;
+                ARIADNE_TESTING_EXPECT_EQUAL(
+                    node.enclosure.continuous_set().number_of_parameters(), 2u);
+                ARIADNE_TESTING_EXPECT_EQUAL(
+                    node.enclosure.continuous_set().variable_kinds().back(),
+                    EnclosureVariableKind::INPUT);
+            }
+        }
+        ARIADNE_TESTING_EXPECT_EQUAL(target_steps, 1u);
+        const auto orbit = HybridDiscreteTimeUpperScheduler::project_orbit(result);
+        ARIADNE_TESTING_EXPECT_EQUAL(orbit.orbit.final().size(), 2u);
+        ARIADNE_TESTING_EXPECT_EQUAL(orbit.blocked.size(), 0u);
+    }
+
     Void test_inclusion_rejected_without_sampling() {
         const RealVariable x("x"), u("u"), a("a");
         const DiscreteLocation mode(1);
@@ -311,6 +360,7 @@ int main(int argc, char** argv) {
     ARIADNE_TESTING_ADD_TEST(TestHybridDiscreteTimeUpperScheduler, test_orbit_projection_and_blocked_terminal);
     ARIADNE_TESTING_ADD_TEST(TestHybridDiscreteTimeUpperScheduler, test_validated_event_free_inclusion_orbit);
     ARIADNE_TESTING_ADD_TEST(TestHybridDiscreteTimeUpperScheduler, test_state_guarded_inclusion_fanout_and_orbit);
+    ARIADNE_TESTING_ADD_TEST(TestHybridDiscreteTimeUpperScheduler, test_inclusion_target_reset_then_independent_input_progression);
     ARIADNE_TESTING_ADD_TEST(TestHybridDiscreteTimeUpperScheduler, test_inclusion_rejected_without_sampling);
     return Ariadne::Testing::run_logging_suite(ariadne_test_suite, argc, argv);
 }

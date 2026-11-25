@@ -23,7 +23,7 @@
  */
 
 /** @file src/hybrid_discrete_time_step_image.cpp
- *  @brief Validated deterministic hybrid images without a new numerical engine.
+ *  @brief Validated UPPER images of discrete hybrid equations and bounded-input inclusions.
  */
 
 #include "evolution/hybrid_discrete_time_step_image.hpp"
@@ -71,17 +71,31 @@ HybridEnclosure apply_tick_reset(const DiscreteTimeHybridAutomatonInterface& aut
     if (!automaton.has_transition(location, event) ||
         automaton.target(location, event) != branch.target)
         throw std::invalid_argument("Discrete hybrid transition branch is not in the system");
-    if (!automaton.has_equation(branch.target))
-        throw std::invalid_argument("Validated discrete inclusion target outputs are not implemented");
-
-    const auto& destination = automaton.equation(branch.target);
+    const RealSpace destination_space = automaton.state_space(branch.target);
     const auto reset = ordered_reset(automaton.reset_assignments(location, event),
-                                     destination.state_space());
+                                     destination_space);
     const auto reset_function = make_reset_function(source_space, source_auxiliaries, reset);
     HybridEnclosure next = source;
-    next.apply_reset(event, branch.target, destination.state_space(),
-                     reset_function, destination.auxiliary_space(),
-                     destination.auxiliary_function());
+    if (automaton.has_equation(branch.target)) {
+        const auto& destination = automaton.equation(branch.target);
+        next.apply_reset(event, branch.target, destination_space,
+                         reset_function, destination.auxiliary_space(),
+                         destination.auxiliary_function());
+    } else if (automaton.has_inclusion(branch.target)) {
+        const auto& destination = automaton.inclusion(branch.target);
+        if (destination.auxiliary_space().dimension() != 0u)
+            throw std::invalid_argument("Validated discrete inclusion target auxiliaries are not supported");
+        // Reset is evaluated on the pre-tick source. No input is sampled
+        // at arrival. A target inclusion uses only its state mapping here;
+        // its next progression introduces a fresh independent input box.
+        const EffectiveVectorMultivariateFunction empty_auxiliary =
+            make_auxiliary_function(destination_space, List<RealAssignment>{});
+        next.apply_reset(event, branch.target, destination_space,
+                         reset_function, destination.auxiliary_space(),
+                         empty_auxiliary);
+    } else {
+        throw std::invalid_argument("Discrete hybrid transition has unsupported target dynamics");
+    }
     next.set_time_function(next.time_function() + StepSizeType(1, 0u));
     return next;
 }

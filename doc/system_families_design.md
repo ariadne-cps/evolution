@@ -1112,3 +1112,27 @@ fanout, reset, input sampling, test, CMake rule or runtime
 expectation is changed. Acceptance requires Ubuntu, macOS,
 Windows, Coverage and Sanitizers to pass on the exact v6.82 SHA.
 Format stays nonblocking.
+
+## v6.83 candidate — Validated hybrid discrete inclusion-target reset
+
+The remaining partial UPPER support for hybrid discrete inclusions
+is extended to allow transitions into inclusion targets with no
+auxiliary outputs. For both equation and supported inclusion sources,
+a reset consumes a tick but chooses no new input: the destination's
+bounded inputs are introduced universally only when it next
+progresses. Every recognized guard branch retains an independent
+validated enclosure and its pre-state restriction. The shared
+capability gate still rejects inclusion modes with auxiliary
+outputs, and direct image application also rejects auxiliary-bearing
+inclusion targets. This avoids silently violating correlations
+between input, auxiliary values, guard and reset.
+
+Tests cover equation-to-inclusion and inclusion-to-inclusion
+resets followed by fresh-input progression, event provenance,
+integer clock, no input at arrival, independent input at the
+next tick, and rejection of an auxiliary-bearing target.
+Validated LOWER is not added, and the hybrid discrete inclusion
+UPPER cell remains partial until auxiliary-bearing inclusion modes
+are supported or their exact capability boundary is formally
+settled. This checkpoint requires its own five green CI workflows.
+Format remains nonblocking.

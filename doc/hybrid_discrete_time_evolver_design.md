@@ -195,3 +195,38 @@ continuous and discrete regression suites remain in the CI gate.
 The v6.50 result remains marked *failed*; the correction commit's CI
 must complete on Ubuntu, macOS, Windows, Coverage and Sanitizers before
 promoting this checkpoint to validated. Format remains non-blocking.
+
+## v6.83 candidate — UPPER transitions to bounded-input inclusion targets
+
+A validated discrete hybrid transition may now reset into a
+`DifferenceAlgebraicInclusion` target **without auxiliary outputs**.
+The reset applies only to the pre-tick source state: its target has
+no newly selected or appended input coordinates on arrival. At a
+subsequent tick, progression in that inclusion target introduces
+a fresh independent INPUT parameter box for that tick, preserving
+the UPPER quantification over every permitted input value.
+
+Both deterministic equation sources and supported inclusion sources
+may transition to such inclusion targets. The common inclusion-source
+capability check allows these destinations but still rejects all
+inclusion modes carrying auxiliary outputs. Direct step-image
+application rejects targets with auxiliary outputs as well, including
+when the source is a deterministic equation. The branch scheduler,
+pre-state guard restrictions, independent successor fan-out, reset
+history, exact tick clocks and hard node budget are unchanged.
+
+The previous regression that expected a reset to any inclusion target
+to fail is replaced by a positive image test: one input-free arrival
+followed by an input-parameterized progression. A separate negative
+test retains rejection of target inclusions with input-dependent
+auxiliaries. End-to-end scheduler and public evolver tests cover
+inclusion-to-inclusion and equation-to-inclusion jumps respectively,
+tracking the input parameter dimension, event, target location,
+horizon-only orbit leaves and continuation.
+
+This increment **does not close** the full validated hybrid discrete
+inclusion cell: input-dependent auxiliary functions still require
+a coherent validated representation, especially when referenced by
+source guards or reset expressions. No input sampling, subset
+under-approximation or LOWER semantics is introduced. Acceptance
+requires all five functional workflows on the exact commit.

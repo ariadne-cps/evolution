@@ -40,7 +40,9 @@ namespace Ariadne::EvolutionDetail {
 //! invariants and reset expressions. Here there are no auxiliary outputs,
 //! so every predicate depends only on the pre-state. Progression universally
 //! encloses fresh inputs; event resets do not consume a fresh input.
-//! Only deterministic equation targets are supported. Call this even at
+//! Targets may be deterministic or bounded-input inclusion modes without
+//! auxiliary outputs. Resets consume no new input; a subsequent progression
+//! introduces its own fresh independent input parameters. Call this gate at
 //! zero horizon and from direct numerical entry points.
 inline Void validate_discrete_inclusion_source(
     const DiscreteTimeHybridAutomatonInterface& automaton,
@@ -54,9 +56,12 @@ inline Void validate_discrete_inclusion_source(
         throw std::invalid_argument(
             "Validated discrete inclusion mode cannot have auxiliary outputs");
     for (const DiscreteEvent& event: automaton.events(location)) {
-        if (!automaton.has_equation(automaton.target(location, event)))
-            throw std::invalid_argument(
-                "Validated discrete inclusion event requires a deterministic equation target");
+        const DiscreteLocation destination = automaton.target(location, event);
+        if (!automaton.has_equation(destination) && !automaton.has_inclusion(destination))
+            throw std::invalid_argument("Validated discrete inclusion event target has unsupported dynamics");
+        if (automaton.has_inclusion(destination) &&
+            automaton.inclusion(destination).auxiliary_space().dimension() != 0u)
+            throw std::invalid_argument("Validated discrete inclusion target auxiliaries are not supported");
     }
 }
 

@@ -262,11 +262,62 @@ class TestHybridDiscreteTimeStepImage : public Ariadne::Testing::ContextFixture 
         const auto& set = second.continuous_set();
         ARIADNE_TESTING_EXPECT_EQUAL(set.auxiliary_arguments(),
                                      EnclosureFunctionArguments::STATE_INPUTS);
-        const auto current = set.input_parameter_function(1u)[0u];
-        const auto residual = set.auxiliary_function()[0u] - set.state_function()[0u] - current;
+        // Keep the vector patch owners alive while forming the scalar
+        // residual. Indexing a temporary function patch can leave a
+        // borrowed component invalid after the full expression.
+        const auto input_functions = set.input_parameter_function(1u);
+        const auto auxiliary_functions = set.auxiliary_function();
+        const auto state_functions = set.state_function();
+        const auto current = input_functions[0u];
+        const auto residual = auxiliary_functions[0u] - state_functions[0u] - current;
         const auto range = residual.range();
         ARIADNE_TESTING_PROVE(range.lower_bound().raw().get_d() >= -1e-6);
         ARIADNE_TESTING_PROVE(range.upper_bound().raw().get_d() <= 1e-6);
+        ARIADNE_TESTING_EXPECT_EQUAL(source.continuous_set().number_of_parameters(), 1u);
+        ARIADNE_TESTING_EXPECT_EQUAL(source.auxiliary_space().dimension(), 0u);
+    }
+
+    Void test_state_only_event_from_auxiliary_inclusion() {
+        const RealVariable x("x"), u("u"), a("a");
+        const DiscreteLocation mode(1), target(2);
+        const DiscreteEvent event("state_only");
+        DiscreteTimeHybridAutomaton automaton;
+        automaton.new_mode(mode, DifferenceAlgebraicInclusion(
+            List<PrimedRealAssignment>{next(x) = x + a},
+            List<RealAssignment>{let(a) = x + u},
+            RealVariablesBox({-1 <= u <= 1})));
+        automaton.new_mode(target, DifferenceAlgebraicEquation(
+            List<PrimedRealAssignment>{next(x) = x}));
+        automaton.new_permissive_transition(mode, event, target,
+            {next(x) = x + 3}, x >= 0, x <= 1);
+        const HybridEnclosure source(HybridExactBox(mode, RealSpace({x}),
+            ExactBoxType({{0.0_x, 0.0_x}})), configuration());
+        const HybridDiscreteTimePlannedBranch reset{
+            HybridDiscreteTimeBranchKind::TRANSITION, target, event, true};
+        const HybridDiscreteTimePlannedBranch progress{
+            HybridDiscreteTimeBranchKind::PROGRESSION, mode, std::nullopt, true};
+        const auto jumped = HybridDiscreteTimeStepImage::apply(automaton, source, reset);
+        const auto advanced = HybridDiscreteTimeStepImage::apply(automaton, source, progress);
+        ARIADNE_TESTING_PROVE(jumped.location() == target);
+        ARIADNE_TESTING_PROVE(advanced.location() == mode);
+        ARIADNE_TESTING_EXPECT_EQUAL(jumped.auxiliary_space().dimension(), 0u);
+        ARIADNE_TESTING_EXPECT_EQUAL(advanced.auxiliary_space(), RealSpace({a}));
+        ARIADNE_TESTING_EXPECT_EQUAL(jumped.continuous_set().number_of_parameters(), 2u);
+        ARIADNE_TESTING_EXPECT_EQUAL(advanced.continuous_set().number_of_parameters(), 3u);
+        ARIADNE_TESTING_EXPECT_EQUAL(jumped.continuous_set().variable_kinds()[1u],
+                                     EnclosureVariableKind::INPUT);
+        ARIADNE_TESTING_EXPECT_EQUAL(advanced.continuous_set().variable_kinds()[2u],
+                                     EnclosureVariableKind::INPUT);
+        const auto reset_bounds = jumped.state_bounding_box()[0u];
+        ARIADNE_TESTING_PROVE(reset_bounds.lower_bound().raw().get_d() <= 3.0);
+        ARIADNE_TESTING_PROVE(reset_bounds.upper_bound().raw().get_d() >= 3.0);
+        const auto progress_bounds = advanced.state_bounding_box()[0u];
+        ARIADNE_TESTING_PROVE(progress_bounds.lower_bound().raw().get_d() <= -1.0);
+        ARIADNE_TESTING_PROVE(progress_bounds.upper_bound().raw().get_d() >= 1.0);
+        ARIADNE_TESTING_EXPECT_EQUAL(jumped.previous_events().size(), 1u);
+        ARIADNE_TESTING_PROVE(jumped.previous_events()[0u] == event);
+        ARIADNE_TESTING_EXPECT_EQUAL(jumped.time_range().lower_bound().raw().get_d(), 1.0);
+        ARIADNE_TESTING_EXPECT_EQUAL(advanced.time_range().lower_bound().raw().get_d(), 1.0);
         ARIADNE_TESTING_EXPECT_EQUAL(source.continuous_set().number_of_parameters(), 1u);
         ARIADNE_TESTING_EXPECT_EQUAL(source.auxiliary_space().dimension(), 0u);
     }
@@ -334,6 +385,7 @@ int main(int argc, char** argv) {
     ARIADNE_TESTING_ADD_TEST(TestHybridDiscreteTimeStepImage, test_reject_inclusion_target_with_input_dependent_auxiliaries);
     ARIADNE_TESTING_ADD_TEST(TestHybridDiscreteTimeStepImage, test_fresh_input_at_every_inclusion_tick);
     ARIADNE_TESTING_ADD_TEST(TestHybridDiscreteTimeStepImage, test_event_free_input_dependent_auxiliary);
+    ARIADNE_TESTING_ADD_TEST(TestHybridDiscreteTimeStepImage, test_state_only_event_from_auxiliary_inclusion);
     ARIADNE_TESTING_ADD_TEST(TestHybridDiscreteTimeStepImage, test_input_dependent_event_reset_and_invariant_rejected);
     ARIADNE_TESTING_ADD_TEST(TestHybridDiscreteTimeStepImage, test_input_dependent_auxiliary_event_rejected);
     ARIADNE_TESTING_ADD_TEST(TestHybridDiscreteTimeStepImage, test_inclusion_reset_does_not_choose_new_input);

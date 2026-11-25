@@ -332,16 +332,41 @@ class TestHybridDiscreteTimeUpperScheduler : public Ariadne::Testing::ContextFix
         ARIADNE_TESTING_EXPECT_EQUAL(orbit.blocked.size(), 0u);
     }
 
-    Void test_inclusion_rejected_without_sampling() {
+    Void test_inclusion_auxiliary_current_input_and_rejected_event() {
         const RealVariable x("x"), u("u"), a("a");
-        const DiscreteLocation mode(1);
+        const DiscreteLocation mode(1), target(2);
         DiscreteTimeHybridAutomaton system;
         system.new_mode(mode, DifferenceAlgebraicInclusion(
             List<PrimedRealAssignment>{next(x) = x + u},
             List<RealAssignment>{let(a) = x + u},
             RealVariablesBox({-1 <= u <= 1})));
-        // Reject unsupported auxiliary outputs even at a zero horizon;
-        // otherwise an initial result could hide a missing capability.
+        // The initial output a[0]=x[0]+u[0] exists even at horizon zero.
+        const auto zero = HybridDiscreteTimeUpperScheduler::evolve(
+            system, initial(mode), Integer(0), Integer(0), 10u);
+        ARIADNE_TESTING_EXPECT_EQUAL(zero.nodes.size(), 1u);
+        ARIADNE_TESTING_EXPECT_EQUAL(zero.nodes[0u].enclosure.auxiliary_space(), RealSpace({a}));
+        ARIADNE_TESTING_EXPECT_EQUAL(
+            zero.nodes[0u].enclosure.continuous_set().number_of_parameters(), 2u);
+        ARIADNE_TESTING_EXPECT_EQUAL(zero.terminals.size(), 1u);
+
+        const auto progressed = HybridDiscreteTimeUpperScheduler::evolve(
+            system, initial(mode), Integer(0), Integer(1), 10u);
+        ARIADNE_TESTING_EXPECT_EQUAL(progressed.nodes.size(), 2u);
+        ARIADNE_TESTING_EXPECT_EQUAL(
+            progressed.nodes[1u].enclosure.continuous_set().number_of_parameters(), 3u);
+        ARIADNE_TESTING_EXPECT_EQUAL(
+            progressed.nodes[1u].enclosure.auxiliary_space(), RealSpace({a}));
+        ARIADNE_TESTING_EXPECT_EQUAL(
+            progressed.nodes[1u].enclosure.continuous_set().variable_kinds()[2u],
+            EnclosureVariableKind::INPUT);
+
+        // An event that actually refers to a(x,u) must still be rejected
+        // before constructing any UPPER exploration, including horizon zero.
+        const DiscreteEvent event("auxiliary_guard");
+        system.new_mode(target, DifferenceAlgebraicEquation(
+            List<PrimedRealAssignment>{next(x) = x}));
+        system.new_urgent_transition(mode, event, target,
+                                     {next(x) = x}, a >= 0);
         ARIADNE_TESTING_EXPECT_THROWS(std::invalid_argument,
             HybridDiscreteTimeUpperScheduler::evolve(
                 system, initial(mode), Integer(0), Integer(0), 10u));
@@ -361,6 +386,6 @@ int main(int argc, char** argv) {
     ARIADNE_TESTING_ADD_TEST(TestHybridDiscreteTimeUpperScheduler, test_validated_event_free_inclusion_orbit);
     ARIADNE_TESTING_ADD_TEST(TestHybridDiscreteTimeUpperScheduler, test_state_guarded_inclusion_fanout_and_orbit);
     ARIADNE_TESTING_ADD_TEST(TestHybridDiscreteTimeUpperScheduler, test_inclusion_target_reset_then_independent_input_progression);
-    ARIADNE_TESTING_ADD_TEST(TestHybridDiscreteTimeUpperScheduler, test_inclusion_rejected_without_sampling);
+    ARIADNE_TESTING_ADD_TEST(TestHybridDiscreteTimeUpperScheduler, test_inclusion_auxiliary_current_input_and_rejected_event);
     return Ariadne::Testing::run_logging_suite(ariadne_test_suite, argc, argv);
 }

@@ -291,17 +291,19 @@ class TestHybridDiscreteTimePredicateEvaluator : public Ariadne::Testing::Contex
         ARIADNE_TESTING_PROVE(HybridDiscreteTimePredicateEvaluator::classify(
             inclusion, source, x >= 2) == Evidence::FALSE);
 
-        // Keep an actual unsupported inclusion rejection in the same test:
-        // input-dependent auxiliary outputs do not yet have a numerical
-        // representation for certified hybrid discrete guard evaluation.
+        // An inclusion with input-dependent auxiliary outputs can still
+        // classify a predicate depending only on the source state.
         DiscreteTimeHybridAutomaton with_auxiliary;
         with_auxiliary.new_mode(mode, DifferenceAlgebraicInclusion(
             List<PrimedRealAssignment>{next(x) = x + u},
             List<RealAssignment>{let(a) = x + u},
             RealVariablesBox({-1 <= u <= 1})));
-        ARIADNE_TESTING_EXPECT_THROWS(std::invalid_argument,
-            HybridDiscreteTimePredicateEvaluator::classify(
-                with_auxiliary, source, x >= 0));
+        ARIADNE_TESTING_PROVE(HybridDiscreteTimePredicateEvaluator::classify(
+            with_auxiliary, source, x >= 0) == Evidence::UNKNOWN);
+        ARIADNE_TESTING_PROVE(HybridDiscreteTimePredicateEvaluator::classify(
+            with_auxiliary, source, x >= -1) == Evidence::TRUE);
+        ARIADNE_TESTING_PROVE(HybridDiscreteTimePredicateEvaluator::classify(
+            with_auxiliary, source, x >= 2) == Evidence::FALSE);
 
         // A mismatched state space is still a contract violation.
         DiscreteTimeHybridAutomaton equation;

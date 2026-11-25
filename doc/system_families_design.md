@@ -1421,3 +1421,58 @@ as of the 25 November 2026 inspection, despite being the actual
 `multifunction`. Thus v6.92 is **not** CI-validated, and neither
 will v6.93 be considered accepted without genuine CI evidence on
 its own SHA. Do not borrow the five green v6.91 checks.
+
+## v6.94 — Regression repair after actual v6.93 Debug/ASan failures
+
+The v6.93 functional CI is **red on Ubuntu, macOS, Windows, Coverage and
+Sanitizers**, although several Release matrix jobs succeeded. The reported
+Debug failures must not be mistaken for CI infrastructure problems.
+Classification:
+
+1. **Incorrect legacy test expectation**, predicate evaluator
+   `supported_inclusion_and_rejected_cases`: the old test expected
+   `classify` to throw for an event-free `DifferenceAlgebraicInclusion`
+   with `a=x+u`, even for a state-only predicate `x>=0`. Since
+   the v6.92/v6.93 capability supports state-only predicates in such
+   modes, the correct verified contract is three-valued evidence,
+   not rejection. Test TRUE/FALSE/UNKNOWN on the same constrained
+   state set and retain the mismatched-state-space exception.
+
+2. **Incorrect legacy test expectation**, UPPER scheduler
+   `inclusion_rejected_without_sampling`: auxiliary-bearing
+   event-free inclusions are now supported at horizon zero and
+   during progression, with a full independent input box per index.
+   Test the zero-horizon output, the independent input at the
+   next tick, and explicit rejection at both horizons **when a
+   newly declared outgoing event references the input-dependent
+   auxiliary**. No artificial weakening of coverage.
+
+3. **Crash in a new Debug test**, step-image
+   `event_free_input_dependent_auxiliary`: after the expected
+   STATE_INPUTS check, the test used
+   `set.input_parameter_function(1u)[0u]`, indexing a temporary
+   vector-function patch while composing a scalar residual.
+   This risks borrowing a component whose owner has already been
+   destroyed. Retain the vector patches for inputs, auxiliaries and
+   states as named local values before extracting scalar components.
+   Keep the exact residual check
+   `a[2]-x[2]-u[2]=0` and bounds; do not skip it.
+   This is a suspected lifetime root cause, **not yet proven
+   until CI on this SHA passes**.
+
+The previously described v6.93 direct step-image state-only
+branch regression was also missing from the committed test file,
+despite being referenced in design notes. Register it explicitly:
+an inclusion with `a=x+u` and a permissive, state-only
+guard/invariant/reset must preserve **both** branches, time,
+event provenance, independent INPUT dimensions, reset image,
+and original source immutability.
+
+This checkpoint changes tests and their design notes, not production
+numerics or hybrid capability gates. The installed C++ tutorial
+continues to use **only** `#include "ariadne-evolution.hpp"`,
+and contains exclusively implemented examples. Do not declare the
+v6.94 fix accepted without full Debug/Release and sanitizer checks
+on the exact commit. Continue to investigate any crash or
+constraint failure reported by subsequent CI runs; do not change
+the underlying mathematics or suppress the test for a green metric.

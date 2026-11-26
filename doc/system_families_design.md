@@ -1,5 +1,122 @@
 # System families: simulation and validated evolution
 
+## NON-NEGOTIABLE CONTRACT — Validated UPPER / LOWER semantics
+
+**STATUS: CANONICAL AND BINDING. Read this section BEFORE any historical
+design entry below, before changing code or tests, and before updating the
+capability matrix. It overrides every inconsistent proposal, interpretation,
+or incomplete experiment recorded in this version history. No evolver may
+silently redefine these semantics.**
+
+### Mathematical definitions (both are rigorous OUTER enclosures)
+
+Let `R` be the actual reachable set, `S_U` an admissible superset of
+`R`, `S_L` an admissible **nonempty** subset of `R`, and `E_U,E_L`
+the numerically validated enclosures returned by the evolvers. The
+required relationships are
+
+```text
+UPPER:  R ⊆ S_U ⊆ E_U
+LOWER:  ∅ ≠ S_L ⊆ R  and  S_L ⊆ E_L
+```
+
+The **UPPER** result is a rigorous overapproximation of a superset of
+the reached set; the **LOWER** result is a rigorous overapproximation
+of a subset of the reached set. Numerical enclosures are **outer in
+both cases**. In particular, `E_L ⊆ R` is **NOT** required and would
+be an INNER approximation, a different contract. The existence of a
+reachable witness inside `E_L` is the weakest nonempty-`S_L`
+instance of LOWER, not permission to invent witness selection policies.
+The same definitions apply in every ordinary/hybrid, discrete/continuous,
+equation/inclusion family. UPPER completeness must cover the intended
+reachable set and all admissible branches; a single per-branch outer
+enclosure must not be mislabeled a global UPPER result.
+
+### Dynamics and time advance — never invent a second LOWER dynamics
+
+- **Same physical dynamics for both semantics.** Discrete time advances
+  by application/composition of the original map. Continuous time
+  advances the original flow using its configured validated integrator;
+  UPPER and LOWER may legitimately use different integrators or
+  numerical policies, but never different right-hand sides or event
+  rules fabricated to make LOWER easier.
+- For a discrete bounded-input inclusion `x[n+1]=f(x[n],u[n])`,
+  apply the same set-parameterised map to the full current
+  `X[n] × U[n]`. Each time index uses its own fresh, independent,
+  **full admissible input box** when required by the model.
+  Preserve input/state/history correlations and auxiliary bindings.
+  **Never** substitute `u[n]=mid(U)`, a sampled input, a convenient
+  input subbox, or input-equality constraints under LOWER. Sampling
+  belongs only to a separately and explicitly specified policy/API.
+- An **event-free** step has no need for event/guard certification:
+  apply the map (discrete) or integrate the flow (continuous). Event
+  analysis is **separate** from numerical time propagation.
+
+### Set subdivision, aggregation, and provenance
+
+- UPPER may subdivide if the union of propagated pieces still
+  rigorously covers the intended source/reachable superset.
+- LOWER must preserve the actual reachable subset `S_L` represented
+  by the enclosure. Splitting an outer LOWER enclosure into children
+  does **not** prove that each child contains any reachable point:
+  `S_L ⊆ E_1 ∪ E_2` does not imply `S_L ∩ E_i ≠ ∅` for either
+  arbitrarily chosen `i`.
+- **Never publish an independently selected child merely because its
+  guard is decidable.** Any subdivision/partition used by LOWER must
+  retain the necessary aggregation or explicit, rigorous correspondence
+  to the reachable subset and its provenance. Without that proof and
+  bookkeeping, do not split. A numerical refinement or a proof that
+  an arbitrary child of an *outer* enclosure satisfies a predicate is
+  not by itself a reachable-witness certificate.
+- Preexisting parameter constraints and source correlations must survive;
+  no artificial restrictions or dropped branches may be justified
+  solely by the desire to force a test or complete a matrix cell.
+
+### Hybrid events and transition semantics
+
+- Keep time propagation and event decisions distinct. The UPPER
+  treatment must cover all possibly admissible alternatives as required
+  by the model. LOWER may publish only continuations known to contain
+  a nonempty genuinely reachable subset, consistent with guards,
+  invariants, urgency/permissiveness, resets, time and provenance.
+- Do **not** invent priorities between alternatives, assume an UNKNOWN
+  guard is TRUE/FALSE, or transform an uncertain UPPER candidate into
+  a LOWER claim. Conversely, **a unique globally certain branch is a
+  conservative sufficient implementation condition, not the definition
+  of LOWER**; richer branching is possible only with a rigorous
+  subset/provenance argument.
+- Compare every proposed hybrid-discrete LOWER mechanism with the
+  already implemented hybrid-continuous LOWER behavior and the
+  canonical mathematical definition here. Do not introduce separate
+  witness-selection or parameter-splitting algorithms merely because
+  discrete time makes guard inspection simpler.
+
+### Mandatory change-control and verification
+
+1. Before changing any evolver, write down the original dynamics,
+   represented `S_U` or `S_L`, the mathematical inclusion invariant,
+   and **why** the smallest proposed implementation change preserves it.
+   If a proof is missing, do not claim support.
+2. Do not weaken, remove, or rewrite an architectural test just to
+   make CI green. Classify failures as compilation/test errors,
+   defective expectations, production bugs, or semantic uncertainty;
+   update existing tests when capabilities change, while retaining
+   their intended coverage.
+3. Update this canonical section **only when the user explicitly
+   changes the agreed semantics**; historical entries must never
+   override it. Keep the cumulative working design and repository
+   journal updated after each intervention.
+4. Declare a matrix capability implemented only for its precisely
+   stated contract and after all five functional CI workflows
+   (Ubuntu, macOS, Windows, Coverage, Sanitizers) succeed on the
+   **exact** commit. Do not confuse published code with validated code.
+5. No speculative LOWER restrictions, sampled input witnesses,
+   independently published subboxes, new guard priorities, or
+   extra feasibility gates may be introduced as substitutes for
+   the already established semantics.
+
+---
+
 This is the implementation roadmap adopted in design v6.20 on 22 November
 2026. Planned names in this document do not declare implemented APIs.
 
@@ -2635,3 +2752,29 @@ Sanitizers) must pass on this v7.17 SHA before the new refinement is
 validated. Matrix remains 8/8 approximate, UPPER 6+2 partial,
 LOWER 2+4 partial+2 absent candidates; no cell is upgraded merely
 because bounded refinement works.
+
+## v7.18 — Canonical semantic contract pinned at the beginning of the design
+
+This is a **documentation-only** change. The opening section of
+`doc/system_families_design.md` is now the binding, non-negotiable
+semantics contract for all validated evolvers and overrides historical
+experimental descriptions in the journal. It explicitly distinguishes
+rigorous outer enclosures of supersets (UPPER) from rigorous outer
+enclosures of nonempty reachable subsets (LOWER), without mislabeling
+LOWER as INNER. It fixes parity of the physical dynamics, full-input
+set propagation at each discrete tick, proper use of continuous
+integrators, LOWER subdivision/aggregation/provenance obligations and
+hybrid event admissibility. It also makes exact-SHA five-workflow CI,
+non-weakening semantic regression tests and explicit user authorization
+for semantic changes mandatory.
+
+**Important status warning:** the v7.17 code is unchanged by this
+commit. Its test failure in `public_guarded_inclusion_upper_orbit`
+and the older hybrid LOWER independent-subbox strategy remain open
+issues requiring a separate, reviewed code correction. This version
+does not pretend to repair that failure or advance the capability
+matrix. Historical v7.05–v7.17 text that conflicts with the canonical
+section is superseded as a design recommendation, but retained for
+traceability. The earlier v6.53 witness audit remains consistent with
+the lower-vs-inner distinction but must not be taken to authorize
+arbitrary slicing of a later outer LOWER enclosure.

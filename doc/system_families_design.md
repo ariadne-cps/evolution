@@ -2228,3 +2228,28 @@ tutorial are left intact. In particular the runtime SegFault
 is **not considered fixed** by passing compilation: v7.08
 requires all five CI workflows on its exact commit, including
 the `lower_refines_undecided_urgent_guard` case and sanitizers.
+
+## v7.09 — Diagnostic separation of a crashing LOWER refined event-history check
+
+The v7.08 `0d08d566` Clang Debug run reaches
+`lower_refines_undecided_urgent_guard` but reports a SegFault with the
+last started check
+`lower.final().front().previous_events()[0u] == event`.
+In `ariadne-cps/testing`, the check-start notification precedes the
+predicate invocation. This breadcrumb does **not** establish that the
+comparison completed or that the subsequent `state_bounding_box()`
+caused the crash. It also does not identify which object is invalid.
+
+The test now names the final enclosure and its event history explicitly,
+requires a one-element history, and separately compares the stored event
+name with the expected event name **before retaining the original direct
+event comparison**. These checks are diagnostic additions, not substitutions;
+all witness, constraint, time, provenance, bounding-box and rejection
+assertions remain. No production kernel, API, UPPER semantics, tutorial,
+System or Integration code changes. The next crash breadcrumb or a sanitizer
+stack trace must distinguish event storage access from later failures.
+
+This is a **diagnostic candidate**, not a claimed SegFault repair. Acceptance
+requires the five functional CI workflows (Ubuntu, macOS, Windows, Coverage,
+Sanitizers) green on the exact new SHA; any failure is to be diagnosed rather
+than bypassed or compensated for by removing the expectation.

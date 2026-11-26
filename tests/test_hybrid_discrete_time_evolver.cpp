@@ -549,8 +549,14 @@ class TestHybridDiscreteTimeEvolver : public Ariadne::Testing::ContextFixture {
         ARIADNE_TESTING_EXPECT_EQUAL(lower.final().size(), 1u);
         ARIADNE_TESTING_PROVE(lower.final().front().location() == target_mode);
         ARIADNE_TESTING_EXPECT_EQUAL(lower.final().front().previous_events().size(), 1u);
-        ARIADNE_TESTING_PROVE(lower.final().front().previous_events()[0u] == event);
+        // The crash reporter records the start of a check before evaluating
+        // it. Keep the original event comparison, but separately identify
+        // whether its event-name storage can be read after refinement/reset.
         const auto& reset_final = lower.final().front();
+        const auto& recorded_events = reset_final.previous_events();
+        ARIADNE_TESTING_REQUIRE(recorded_events.size() == 1u);
+        ARIADNE_TESTING_REQUIRE(recorded_events[0u].name() == event.name());
+        ARIADNE_TESTING_PROVE(lower.final().front().previous_events()[0u] == event);
         // An existentially refined LOWER branch must still own a
         // one-dimensional validated reset map and a nonempty parameter
         // domain. Do not bypass its public bounding_box() operation.

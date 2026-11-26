@@ -38,16 +38,18 @@
 namespace Ariadne {
 
 /** @brief A validated ordinary discrete inclusion evolver.
- *  @details UPPER encloses every input from the declared bounded box,
- *  adding fresh independent INPUT coordinates per tick. Explicit auxiliary
- *  outputs a[n]=g(x[n],u[n]) bind to the current input; progression installs
- *  a fresh independent u[n+1] for the next output.
- *  LOWER is an existential witness path (not an inner image): with a
- *  certified feasible initial source, each fresh input coordinate is
- *  constrained to a validated exact midpoint of its declared bounded box.
- *  All input-history coordinates and constraints are retained. Initial
- *  auxiliary-bearing resume sources are not yet supported for LOWER;
- *  no unsound inference is made from an undecided feasibility check.
+ *  @details Each progression universally encloses every input from the
+ *  declared bounded box, adding a fresh independent INPUT coordinate per
+ *  tick. Existing parameter correlations and constraints are retained.
+ *  Both UPPER and LOWER advance by the same validated set image
+ *  f(X[n],U[n]), keeping the whole input box at each tick; neither
+ *  semantics selects or samples particular input values. Explicit
+ *  auxiliary outputs a[n]=g(x[n],u[n]) use the current full input box,
+ *  and progression installs a fresh independent full box u[n+1].
+ *  UPPER may subdivide the enclosure while LOWER applies the discrete
+ *  map directly, as with ordinary difference equations. The numerical
+ *  enclosure representation and preserved parameter constraints are
+ *  the same; no continuous-time integration is involved.
  *
  *  This class is separate from the equation-only DiscreteTimeEvolver<ValidatedTag>
  *  to preserve that class's existing strongly typed SystemType contract.

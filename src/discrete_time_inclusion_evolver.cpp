@@ -37,55 +37,6 @@
 #include "utility/tuple.hpp"
 
 namespace Ariadne {
-namespace {
-
-// A LOWER orbit is an existential, validated witness path, not a
-// purported inner image of every state in the returned enclosure.
-// In particular !is_empty() is not a positive feasibility proof.
-Bool has_certified_initial_witness(const Enclosure& initial) {
-    const ExactBoxType box = initial.reduced_domain();
-    if (!definitely(!box.is_empty()) ||
-        !definitely(Ariadne::subset(box, initial.domain())))
-        return false;
-    if (initial.number_of_constraints() == 0u)
-        return true;
-    const auto constraints = initial.constraint_function();
-    const auto bounds = initial.constraint_bounds();
-    if (definitely(Ariadne::subset(Ariadne::apply(constraints, box), bounds)))
-        return true;
-    if (!definitely(box.is_bounded()))
-        return false;
-    const auto midpoint = box.midpoint();
-    const ExactBoxType point(box.dimension(), [&](SizeType i) {
-        return ExactIntervalType(midpoint[i]);
-    });
-    return definitely(Ariadne::subset(Ariadne::apply(constraints, point), bounds));
-}
-
-// Every tick uses a *new*, independent input variable, but LOWER binds
-// it to an exact dyadic point inside the declared input box. Retaining
-// the input axis and its equality constraint preserves history and
-// auxiliary correlations through subsequent function composition.
-Void bind_lower_input_witness(Enclosure& set, const ExactBoxType& inputs) {
-    if (!definitely(!inputs.is_empty()) || !definitely(inputs.is_bounded()))
-        throw std::invalid_argument(
-            "Discrete inclusion LOWER requires a nonempty bounded input box");
-    const SizeType number_of_inputs = inputs.dimension();
-    const SizeType number_of_parameters = set.number_of_parameters();
-    if (number_of_inputs > number_of_parameters)
-        throw std::invalid_argument("Discrete inclusion LOWER input binding mismatch");
-    const auto midpoint = inputs.midpoint();
-    for (SizeType i = 0u; i < number_of_inputs; ++i) {
-        if (!definitely(Ariadne::subset(ExactIntervalType(midpoint[i]), inputs[i])))
-            throw std::invalid_argument("Discrete inclusion LOWER input witness is outside its box");
-        const auto coordinate = EffectiveScalarMultivariateFunction::coordinate(
-            number_of_parameters, number_of_parameters - number_of_inputs + i);
-        const ValidatedNumber value(ExactNumber(Dyadic(midpoint[i])));
-        set.new_parameter_constraint(ValidatedConstraint(value, coordinate, value));
-    }
-}
-
-} // namespace
 
 DiscreteTimeInclusionEvolver::DiscreteTimeInclusionEvolver(const SystemType& system)
     : _system(system.clone()), _configuration(std::make_shared<ConfigurationType>()) {}
@@ -129,17 +80,6 @@ DiscreteTimeInclusionEvolver::orbit(const EnclosureType& initial,
         (initial.auxiliary_space().dimension() != 0u &&
          initial.auxiliary_space() != model.auxiliary_space()))
         throw std::invalid_argument("Ordinary discrete inclusion initial enclosure spaces mismatch");
-    // A resumed auxiliary already binds its own current input. A general
-    // existence certificate for that potentially constrained input is
-    // not yet implemented; reject rather than invent a LOWER witness.
-    if (semantics == Semantics::LOWER) {
-        if (initial.auxiliary_space().dimension() != 0u)
-            throw std::invalid_argument(
-                "Discrete inclusion LOWER does not yet support auxiliary-bearing resume sources");
-        if (!has_certified_initial_witness(initial.euclidean_set()))
-            throw std::invalid_argument(
-                "Discrete inclusion LOWER requires a certified feasible initial state");
-    }
 
     EnclosureType seed = initial;
     if (has_auxiliary) {
@@ -147,8 +87,6 @@ DiscreteTimeInclusionEvolver::orbit(const EnclosureType& initial,
             // At the initial tick, a[0] depends on an as-yet unchosen u[0].
             Enclosure extended = seed.euclidean_set();
             extended.adjoin_parameters(model.inputs(), EnclosureVariableKind::INPUT);
-            if (semantics == Semantics::LOWER)
-                bind_lower_input_witness(extended, model.inputs());
             seed = EnclosureType(extended, model.state_space());
         } else {
             // A supplied auxiliary-bearing enclosure (e.g. a resumed orbit)
@@ -204,11 +142,8 @@ DiscreteTimeInclusionEvolver::orbit(const EnclosureType& initial,
         // is introduced now. With auxiliaries, u[n] was already installed
         // at the source tick, where a[n]=g(x[n],u[n]) refers to it.
         Enclosure evolved = source.euclidean_set();
-        if (!has_auxiliary) {
+        if (!has_auxiliary)
             evolved.adjoin_parameters(model.inputs(), EnclosureVariableKind::INPUT);
-            if (semantics == Semantics::LOWER)
-                bind_lower_input_witness(evolved, model.inputs());
-        }
         const auto inputs = evolved.input_parameter_function(model.number_of_inputs());
         const auto mapped = compose(model.update_function(),
                                     join(evolved.state_function(), inputs));
@@ -218,8 +153,6 @@ DiscreteTimeInclusionEvolver::orbit(const EnclosureType& initial,
             // STATE_INPUTS resolves to these newest coordinates; retaining
             // the old INPUT axes keeps state/input/history correlations.
             evolved.adjoin_parameters(model.inputs(), EnclosureVariableKind::INPUT);
-            if (semantics == Semantics::LOWER)
-                bind_lower_input_witness(evolved, model.inputs());
         }
         const EnclosureType successor(evolved, model.state_space(), model.auxiliary_space());
         reach_sets.adjoin(successor);

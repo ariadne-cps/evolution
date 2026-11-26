@@ -2386,3 +2386,95 @@ All other matrix cells are unchanged. No changes to System, Integration,
 hybrid dynamics, tutorial, or approximate simulation. The new SHA must pass
 all five standard workflows (Ubuntu, macOS, Windows, Coverage, Sanitizers),
 including Debug and installed tutorial; no prior run counts for acceptance.
+
+## v7.13 — Audit and correction of validated LOWER map semantics
+
+**Binding design rule (all evolver families).** The time-propagation
+operation is driven by the same original dynamics under UPPER and LOWER.
+For discrete time, the propagation step is the application of the map
+itself; there is no continuous integrator or LOWER-specific input-choice
+policy. For a discrete inclusion `x[n+1]=f(x[n],u[n])`, both semantic
+modes compose the set-parameterised update with **all** `u[n] in U[n]`,
+keeping the complete input box as a fresh independent parameter domain
+at each tick. An auxiliary `a[n]=g(x[n],u[n])` uses the current complete
+box; a later `u[n+1]` has a new coordinate. Preserve source constraints,
+parameter correlations, the validated enclosure representation and the
+original dynamics. Semantics may affect subdivision, stopping rules,
+branch admissibility, time-horizon policies and the choice/contract of
+a continuous integrator; it must **never silently fix, sample or optimise**
+an inclusion input unless the model or an explicit separate API declares
+that restriction. For a discrete map, UPPER/LOWER are not different
+numerical right-hand sides. Do not infer an arbitrary INNER set claim
+from the representation: the numerical guarantee and semantic
+continuation contract must be documented separately and verified.
+
+**Violation and correction.** v7.12 `15b898c` introduced
+`bind_lower_input_witness()`, adding artificial midpoint equality
+constraints to every LOWER input coordinate; it also introduced an
+initial midpoint-feasibility gate and an unjustified ban on resuming
+auxiliary-bearing sources. All these v7.12-only behaviors and their
+midpoint-witness regression expectations are **removed**. The three
+modified implementation/header/test files are rebuilt directly from
+the full-input v7.11 base, changing only the semantics acceptance gate,
+the UPPER-only subdivision policy, documentation and precise semantic
+regressions. The original UPPER path and its C++ tests are retained.
+The old v7.12 journal entry stays visible only as historical record;
+its claimed LOWER input-selection contract is explicitly superseded.
+
+**Cross-family audit against the current source (26 November 2026).**
+- Ordinary validated discrete equations: `src/discrete_time_evolver.cpp`
+  calls `apply_discrete_time_map_step(_system->function())` for both
+  semantics; UPPER subdivides optionally, LOWER has its own optional
+  termination policy. No input selection was found.
+- Ordinary validated discrete inclusions: **v7.12 was a confirmed
+  violation**; corrected here to use the unchanged whole-input map
+  composition `compose(update_function(), join(state_function(), inputs))`
+  for both semantics. Earlier v7.11 supports only UPPER.
+- Validated hybrid discrete equations: `HybridDiscreteTimeStepImage::apply`
+  applies the **same** equation map or transition-reset map after the
+  branch is selected. The LOWER-only bounded parameter-subbox refinement
+  in `hybrid_discrete_time_evolver.cpp` addresses uncertain **event
+  guards and feasible branches**, not a free inclusion input: it retains
+  the source numerical map and original constraints. Its optional
+  midpoint is used only to *check* a feasible parameter source, not
+  to bind a numerical input. Nevertheless hybrid LOWER remains partial
+  and currently rejects inclusion dynamics explicitly.
+- Validated hybrid discrete inclusions: full-box UPPER input-history
+  propagation exists in `hybrid_discrete_time_step_image.cpp`, but
+  public hybrid LOWER continues to reject inclusion source/target modes;
+  no LOWER-specific input sampling was found there.
+- Ordinary validated continuous equations: propagation uses configured
+  numerical integration steps for both semantic paths, with distinct
+  horizon/subdivision/termination rules. Ordinary continuous inclusions
+  reject LOWER rather than selecting one free input.
+- Hybrid validated continuous equations: existing LOWER has extra
+  guard/event-admissibility checks and some paths call
+  `apply_integration_step(..., Semantics::UPPER)` to construct a
+  conservative structured tube. **Follow-up technical review needed**
+  before treating those guards/tubes as a general LOWER contract; no
+  explicit midpoint-input binding analogous to v7.12 was found. Hybrid
+  continuous inclusions explicitly reject LOWER. This audit does not
+  certify the full mathematical semantics of every continuous event.
+- Approximate families: simulations may use caller-declared input
+  policies, but that does not define the validated LOWER contract.
+
+**Regression contract.** Tests now demonstrate the entire input box
+survives LOWER at each tick: for x[n+1]=x[n]+u[n] with U=[-1,1] and
+x[0]=0 the two-tick image must still cover [-2,2], with two free
+independent INPUT axes and **zero artificial constraints**. The
+multidimensional-input test retains its two original initial state
+constraints and the bounds of the complete image; lower subdivision
+cannot discard branches. Auxiliary-bearing LOWER retains the full
+current and arrival input boxes, the a[n]=x[n]+u[n] correlation and
+resumability, with no midpoint-equality constraints. Existing UPPER
+expectations and legitimate rejection scenarios stay intact.
+
+**Matrix:** ordinary/discrete/inclusion/Validated LOWER is a **new
+set-propagation candidate** (partial pending the precise v7.13 CI).
+This supersedes the v7.12 description of an existential selected-input
+LOWER. Approximate 8/8; UPPER 6 full + 2 partial; LOWER 2 full +
+3 partial candidates + 3 absent. This is a capability classification,
+not a proof that numerical enclosures constitute an INNER image.
+Only the three scoped inclusion files and the journal changed. All
+five workflows (Ubuntu, macOS, Windows, Coverage, Sanitizers) must
+pass on the exact corrective SHA before acceptance.

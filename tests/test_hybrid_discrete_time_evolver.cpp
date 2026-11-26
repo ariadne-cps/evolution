@@ -471,6 +471,82 @@ class TestHybridDiscreteTimeEvolver : public Ariadne::Testing::ContextFixture {
                           Termination(Integer(0), Integer(1)), Semantics::LOWER));
     }
 
+    Void test_lower_forced_urgent_jump_and_disabled_progression() {
+        const RealVariable x("x");
+        const DiscreteLocation source_mode(1), target_mode(2);
+        const DiscreteEvent event("forced_urgent");
+        DiscreteTimeHybridAutomaton system;
+        system.new_mode(source_mode, DifferenceAlgebraicEquation(
+            List<PrimedRealAssignment>{next(x) = x + 1}));
+        system.new_mode(target_mode, DifferenceAlgebraicEquation(
+            List<PrimedRealAssignment>{next(x) = x + 1}));
+        // A strictly positive guard is uniformly true on x[0] in [0,1].
+        // This urgent reset is forced, so every initial witness follows it.
+        system.new_urgent_transition(source_mode, event, target_mode,
+                                     {next(x) = x + 3}, x >= -1);
+        Evolver evolver(system);
+        const auto source = initial(source_mode);
+        const auto lower = evolver.orbit(source,
+            Termination(Integer(0), Integer(2)), Semantics::LOWER);
+        ARIADNE_TESTING_EXPECT_EQUAL(lower.reach().size(), 2u);
+        ARIADNE_TESTING_EXPECT_EQUAL(lower.intermediate().size(), 1u);
+        ARIADNE_TESTING_EXPECT_EQUAL(lower.final().size(), 1u);
+        const auto& jumped = lower.reach().front();
+        ARIADNE_TESTING_PROVE(jumped.location() == target_mode);
+        ARIADNE_TESTING_EXPECT_EQUAL(jumped.previous_events().size(), 1u);
+        ARIADNE_TESTING_PROVE(jumped.previous_events()[0u] == event);
+        const auto& final = lower.final().front();
+        ARIADNE_TESTING_PROVE(final.location() == target_mode);
+        ARIADNE_TESTING_EXPECT_EQUAL(final.previous_events().size(), 1u);
+        ARIADNE_TESTING_EXPECT_EQUAL(final.time_range().lower_bound().raw().get_d(), 2.0);
+        const auto bounds = final.state_bounding_box()[0u];
+        ARIADNE_TESTING_PROVE(bounds.lower_bound().raw().get_d() <= 4.5);
+        ARIADNE_TESTING_PROVE(bounds.upper_bound().raw().get_d() >= 4.5);
+        ARIADNE_TESTING_PROVE(source.location() == source_mode);
+        ARIADNE_TESTING_EXPECT_EQUAL(source.previous_events().size(), 0u);
+
+        // When the same urgent guard is uniformly false, only the
+        // original mode's deterministic progression is possible.
+        DiscreteTimeHybridAutomaton disabled;
+        disabled.new_mode(source_mode, DifferenceAlgebraicEquation(
+            List<PrimedRealAssignment>{next(x) = x + 1}));
+        disabled.new_mode(target_mode, DifferenceAlgebraicEquation(
+            List<PrimedRealAssignment>{next(x) = x}));
+        disabled.new_urgent_transition(source_mode, event, target_mode,
+                                       {next(x) = x + 3}, x >= 2);
+        Evolver no_jump(disabled);
+        const auto progressed = no_jump.orbit(source,
+            Termination(Integer(0), Integer(1)), Semantics::LOWER);
+        ARIADNE_TESTING_EXPECT_EQUAL(progressed.final().size(), 1u);
+        const auto& survivor = progressed.final().front();
+        ARIADNE_TESTING_PROVE(survivor.location() == source_mode);
+        ARIADNE_TESTING_EXPECT_EQUAL(survivor.previous_events().size(), 0u);
+        const auto step_bounds = survivor.state_bounding_box()[0u];
+        ARIADNE_TESTING_PROVE(step_bounds.lower_bound().raw().get_d() <= 1.5);
+        ARIADNE_TESTING_PROVE(step_bounds.upper_bound().raw().get_d() >= 1.5);
+    }
+
+    Void test_lower_rejects_undecided_urgent_guard() {
+        const RealVariable x("x");
+        const DiscreteLocation source_mode(1), target_mode(2);
+        const DiscreteEvent event("undecided");
+        DiscreteTimeHybridAutomaton system;
+        system.new_mode(source_mode, DifferenceAlgebraicEquation(
+            List<PrimedRealAssignment>{next(x) = x + 1}));
+        system.new_mode(target_mode, DifferenceAlgebraicEquation(
+            List<PrimedRealAssignment>{next(x) = x}));
+        system.new_urgent_transition(source_mode, event, target_mode,
+                                     {next(x) = x + 3}, x >= 1 / 2_q);
+        Evolver evolver(system);
+        const auto source = initial(source_mode);
+        // Both outcomes may exist; no arbitrarily chosen UPPER branch
+        // constitutes a certified LOWER witness.
+        ARIADNE_TESTING_EXPECT_THROWS(std::invalid_argument,
+            evolver.orbit(source, Termination(Integer(0), Integer(1)),
+                          Semantics::LOWER));
+        ARIADNE_TESTING_EXPECT_EQUAL(source.previous_events().size(), 0u);
+    }
+
     Void test_lower_excludes_unproved_branches() {
         const RealVariable x("x"), u("u");
         const DiscreteLocation mode(1), target(2);
@@ -572,6 +648,8 @@ int main(int argc, char** argv) {
     ARIADNE_TESTING_ADD_TEST(TestHybridDiscreteTimeEvolver, test_public_reset_into_inclusion_with_auxiliary_and_continue);
     ARIADNE_TESTING_ADD_TEST(TestHybridDiscreteTimeEvolver, test_lower_event_free_equation_witness);
     ARIADNE_TESTING_ADD_TEST(TestHybridDiscreteTimeEvolver, test_lower_constrained_point_witness);
+    ARIADNE_TESTING_ADD_TEST(TestHybridDiscreteTimeEvolver, test_lower_forced_urgent_jump_and_disabled_progression);
+    ARIADNE_TESTING_ADD_TEST(TestHybridDiscreteTimeEvolver, test_lower_rejects_undecided_urgent_guard);
     ARIADNE_TESTING_ADD_TEST(TestHybridDiscreteTimeEvolver, test_lower_excludes_unproved_branches);
     ARIADNE_TESTING_ADD_TEST(TestHybridDiscreteTimeEvolver, test_rejections);
     return Ariadne::Testing::run_logging_suite(ariadne_test_suite, argc, argv);

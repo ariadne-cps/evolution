@@ -75,11 +75,15 @@ class HybridDiscreteTimeEvolverConfiguration<ValidatedTag> : public Configuratio
 //! fresh independent arrival input only after applying the source reset. Full input
 //! boxes are attached at the current index; each progression introduces
 //! a new independent input box.
-//! LOWER is available only through orbit() for a mode with a
-//! deterministic difference equation, no outgoing events and a
-//! provably nonempty initial enclosure. It propagates a witness-preserving
-//! validated map without subdivision. LOWER does not infer existence of
-//! event branches or input selections; orbit_with_blocked() and explore()
+//! LOWER is available only through orbit() for deterministic equation
+//! modes and a certified feasible initial parameter witness. Each mode
+//! may have no events or exactly one URGENT event whose guard is proved
+//! uniformly TRUE (forcing a reset) or FALSE (forcing progression).
+//! The selected reset must target another equation mode, with the same
+//! restrictions checked again at each tick. UNKNOWN guards, permissive
+//! events, multiple competing events and input-bounded inclusions remain
+//! unsupported for LOWER. The validated image propagates a witness
+//! without subdivision or sampling. orbit_with_blocked() and explore()
 //! remain UPPER-only. A blocked UPPER leaf is not an orbit.final()
 //! enclosure: retrieve it through orbit_with_blocked() or explore().
 template<>

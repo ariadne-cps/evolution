@@ -28,6 +28,7 @@
 
 #include "evolution/hybrid_discrete_time_evolver.hpp"
 #include "evolution/hybrid_discrete_time_step_image.hpp"
+#include "evolution/hybrid_discrete_time_predicate_evaluator.hpp"
 
 #include <stdexcept>
 #include <utility>
@@ -132,17 +133,21 @@ Orbit<HybridEnclosure> HybridDiscreteTimeEvolver<ValidatedTag>::orbit(
     if (semantics != Semantics::LOWER)
         throw std::invalid_argument("Unknown discrete hybrid evolution semantics");
 
-    // A single deterministic mode with no events has exactly one feasible
-    // execution from each nonempty initial state. Its validated image map
-    // is witness-preserving, as in ordinary discrete validated LOWER.
-    // Do not infer a LOWER witness from an UPPER guard candidate: the
-    // event-bearing and bounded-input cases have separate proof obligations.
+    // A deterministic equation remains witness-preserving under a
+    // proven forced urgent event. Unlike UPPER, LOWER cannot choose an
+    // UNKNOWN guard or infer existence from a possible branch.
     const DiscreteLocation location = initial.location();
     if (!this->system().has_mode(location) ||
-        !this->system().has_equation(location) ||
-        !this->system().events(location).empty())
+        !this->system().has_equation(location))
         throw std::invalid_argument(
-            "Discrete hybrid LOWER currently requires an event-free difference equation mode");
+            "Discrete hybrid LOWER requires a difference equation source mode");
+    const auto initial_events = this->system().events(location);
+    if (initial_events.size() > 1u ||
+        (!initial_events.empty() &&
+         this->system().transition_kind(location, *initial_events.begin()) !=
+             DiscreteTimeTransitionKind::URGENT))
+        throw std::invalid_argument(
+            "Discrete hybrid LOWER supports at most one urgent event per mode");
     if (initial.state_space() != this->system().state_space(location))
         throw std::invalid_argument("Discrete hybrid LOWER initial state space mismatch");
     const auto& equation = this->system().equation(location);
@@ -180,8 +185,44 @@ Orbit<HybridEnclosure> HybridDiscreteTimeEvolver<ValidatedTag>::orbit(
     while (index < termination.termination_index()) {
         if (nodes >= this->configuration().maximum_nodes())
             throw std::length_error("Discrete hybrid LOWER evolution exceeds node budget");
-        const HybridDiscreteTimePlannedBranch step{
-            HybridDiscreteTimeBranchKind::PROGRESSION, location, std::nullopt, true};
+        const DiscreteLocation current_location = current.location();
+        if (!this->system().has_mode(current_location) ||
+            !this->system().has_equation(current_location))
+            throw std::invalid_argument(
+                "Discrete hybrid LOWER cannot enter a non-equation mode");
+        const auto events = this->system().events(current_location);
+        if (events.size() > 1u)
+            throw std::invalid_argument(
+                "Discrete hybrid LOWER does not certify competing events");
+
+        HybridDiscreteTimePlannedBranch step{
+            HybridDiscreteTimeBranchKind::PROGRESSION, current_location,
+            std::nullopt, true};
+        if (!events.empty()) {
+            const DiscreteEvent event = *events.begin();
+            if (this->system().transition_kind(current_location, event) !=
+                DiscreteTimeTransitionKind::URGENT)
+                throw std::invalid_argument(
+                    "Discrete hybrid LOWER does not certify permissive events");
+            const auto evidence = HybridDiscreteTimePredicateEvaluator::classify(
+                this->system(), current,
+                this->system().guard_predicate(current_location, event));
+            if (evidence == DiscreteTimePredicateEvidence::UNKNOWN)
+                throw std::invalid_argument(
+                    "Discrete hybrid LOWER requires a uniformly decided urgent guard");
+            if (evidence == DiscreteTimePredicateEvidence::TRUE) {
+                const DiscreteLocation target = this->system().target(current_location, event);
+                if (!this->system().has_equation(target))
+                    throw std::invalid_argument(
+                        "Discrete hybrid LOWER reset must target an equation mode");
+                step = {HybridDiscreteTimeBranchKind::TRANSITION, target, event, true};
+            } else if (evidence != DiscreteTimePredicateEvidence::FALSE) {
+                throw std::invalid_argument("Invalid discrete hybrid guard evidence");
+            }
+        }
+        // Every selected branch is forced by certified pre-state evidence.
+        // The validated image reuses exactly the same deterministic map
+        // or reset as UPPER, but no unresolved branch is promoted to LOWER.
         current = HybridDiscreteTimeStepImage::apply(this->system(), current, step);
         index = index + Integer(1);
         ++nodes;

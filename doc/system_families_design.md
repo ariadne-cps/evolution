@@ -1875,3 +1875,69 @@ The user-facing C++ tutorial is unchanged, with exactly the
 single `#include "ariadne-evolution.hpp"`, and only
 implemented examples. v7.02 acceptance requires all five
 functional workflow results on this exact commit.
+
+## v7.03 — Witness-preserving LOWER for a uniquely forced urgent discrete hybrid branch
+
+The predecessor v7.02 SHA `b366c12aac4ba536dfffe0ffd7386a0535b02973`
+had Ubuntu, macOS and Coverage green when the v7.03 change
+was prepared. Windows Debug and Sanitizers were still in progress,
+so no full five-workflow pass is claimed for v7.02 at this stage.
+
+The public `HybridDiscreteTimeEvolver<ValidatedTag>::orbit` LOWER
+path is extended beyond an event-free deterministic equation mode
+to a limited, rigorously certified discrete hybrid event sequence.
+
+An initial parameter feasibility witness must first be certified
+using the v7.02 admission helper. At each tick:
+
+- The source mode must have a `DifferenceAlgebraicEquation`
+  and **no events or exactly one URGENT event**. An inclusion,
+  a permissive event, or multiple outgoing events causes a
+  direct invalid_argument error; there is no hidden priority.
+- No outgoing event forces the deterministic progression.
+- For a unique URGENT event, the existing common validated
+  `HybridDiscreteTimePredicateEvaluator` classifies its guard
+  on the entire current correlated enclosure.
+  Uniform `TRUE` forces the reset to a deterministic equation
+  target; uniform `FALSE` forces the progression in the current
+  mode. Both outcomes preserve at least one actual trajectory.
+- `UNKNOWN` never allows selecting either alternative for
+  LOWER. A single possible or closure-restricted UPPER branch
+  is not an existence certificate. The LOWER call raises
+  invalid_argument rather than sampling or treating a
+  three-valued result as Boolean truth.
+- The selected step is applied using the existing validated
+  `HybridDiscreteTimeStepImage::apply`, preserving the original
+  parameter constraints, existing state/auxiliary correlations,
+  actual reset event provenance, and absolute one-tick time.
+  Recompute evidence on the new location at the next tick.
+- The node budget remains a hard failure, with no incomplete
+  result returned; `explore` and `orbit_with_blocked` stay
+  explicitly UPPER-only.
+
+This is a **sufficient** LOWER certificate, not a general
+event-existence solver. A uniformly true guard alone is not a
+LOWER certificate for an empty source: the pre-existing initial
+witness is required first. The only supported reset target
+is another deterministic equation mode.
+
+Public regression tests construct one urgent guard `x>=-1`
+which is certainly true for `x[0] in [0,1]`: the forced reset
+`x[1]=x[0]+3` followed by a target-mode progression
+`x[2]=x[1]+1` must retain the witness `x[0]=1/2`,
+`x[2]=4.5`. Location, one historical event, clock,
+reach/intermediate/final counts, and source immutability are
+checked. A separate urgent guard `x>=2` is certainly false
+on the initial box: it forces progression rather than a jump.
+A guard `x>=1/2` is uncertain on that box and must throw,
+not return an artificial LOWER successor. Existing negative
+tests for permissive events and bounded-input inclusions remain.
+
+The module's public capability matrix now records **validated
+hybrid discrete equation LOWER = partial (event-free or uniquely
+forced URGENT branch sequences)**. The numerical UPPER path,
+integration/system modules and C++ tutorial remain unchanged.
+The tutorial still contains only
+`#include "ariadne-evolution.hpp"`, with no unsupported
+examples added. v7.03 is accepted only after full CI on the
+exact SHA, not based on prior builds.

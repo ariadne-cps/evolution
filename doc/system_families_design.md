@@ -3273,3 +3273,64 @@ the v7.25 candidate is not presumed valid. v7.26 needs
 its own green Ubuntu, macOS, Windows, Coverage and
 Sanitizers workflows on its EXACT SHA, including Debug
 and tutorial. No capability is promoted on publication.
+
+## v7.27 — Inactive hybrid flow blockers preserve LOWER reachability
+
+**Binding semantics:** the canonical contract at the start of this document
+continues to govern. UPPER encloses a reachable superset; LOWER encloses a
+nonempty genuinely reachable subset, with an OUTER numerical enclosure in
+both cases. A numerical child of LOWER or a chosen input is never treated
+as a free-standing witness. The original differential inclusion and
+structured validated integration are IDENTICAL to the existing v7.25/v7.26
+numerical path; no new integrator, input policy or event priority is used.
+
+**Mathematical sufficiency:** for an uninterrupted flow, the mode's
+INVARIANT `g<=0` must be validated on the ENTIRE source and ENTIRE
+validated reach tube (already supported by v7.26). Equally, each blocking
+URGENT, PROGRESS, or IMPACT guard must remain STRICTLY INACTIVE
+(`upper_bound(guard)<0`) on the entire source and every reach tube.
+The numerical outer tube covers all actual trajectories represented by
+the original unsplit source, so a strictly negative guard can never be
+reached during that step. No event can interrupt those trajectories.
+PERMISSIVE jumps do not block and are freely ignored when LOWER chooses
+uninterrupted progression. Conversely, a merely possible activation
+must conservatively reject the progression: a guard-intersection of
+an outer enclosure is not a LOWER crossing witness.
+
+**Production implementation:** a single shared helper in
+`src/hybrid_continuous_time_validated_evolver.cpp` evaluates these
+sufficient predicate conditions. For PERMISSIVE, uninterrupted flow
+is automatically allowed. For INVARIANT it requires upper<=0; for
+blocking URGENT/PROGRESS/IMPACT it requires strictly upper<0. The
+helper is applied BEFORE any initial source restriction, including
+at zero time in `_process_jumped_set`, and to EVERY complete reach
+tube in `_evolve_inclusion`. Missing/UNKNOWN guard evidence produces
+`std::invalid_argument`, not an independently selected subbox.
+The prior event-kind blanket rejection has been removed for these
+provably safe cases only; UPPER's event planning is untouched.
+The existing `publish_outer_step(..., {}, ...)` still publishes
+only uninterrupted LOWER flow; this new extension does NOT claim
+to implement LOWER first-crossing resets of an active blocker.
+
+**New regression (16 registered hybrid inclusion tests):** for each of
+URGENT, PROGRESS and IMPACT guarding x>=0, the differential inclusion
+`x'=u, u in [-1,1]`, with initial x=-1, can legally flow for H=1/8;
+LOWER must preserve the complete [-1,1] input boxes, event-free
+provenance, correct final time, and the entire validated endpoint
+range enclosing [-9/8,-7/8]. From x=-1/16, the initial guard is false
+but the full trajectory tube can cross zero; LOWER must therefore
+reject rather than claim the arbitrary uninterrupted behavior.
+At x=0 the blocking event is active or undecidable already at time
+zero; the presently conservative LOWER flow path rejects this case.
+These are separate semantic cases, not modifications to earlier
+v7.26 invariant tests. Static source inspection checked all 16
+registered test methods and no duplicate function-wide `const auto`
+names. The prior five workflows on v7.26 were 4/5 green with Windows
+still running at preparation time; they do NOT validate this commit.
+
+**Acceptance/matrix:** this is a new candidate partial-hybrid LOWER
+capability, with no matrix upgrade. Require Ubuntu, macOS, Windows,
+Coverage and Sanitizers green on the EXACT v7.27 SHA, and review the
+existing continuous-hybrid event semantics before extending to active
+URGENT/PROGRESS/IMPACT crossings. The binding contract and older
+journal entries remain unchanged.

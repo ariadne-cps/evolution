@@ -643,6 +643,79 @@ class TestHybridInclusions : public Testing::ContextFixture {
             evolver.orbit(invalid, HybridTime(0u, 1), Semantics::LOWER));
     }
 
+    Void test_lower_inclusion_certainly_inactive_blockers() {
+        const DiscreteLocation q(1), target(2);
+        const RealVariable x("x"), u("u");
+        const auto safe = HybridExactBox(
+            q, RealSpace({x}), ExactBoxType({{-1.0_x, -1.0_x}}));
+        const auto near_crossing = HybridExactBox(
+            q, RealSpace({x}), ExactBoxType({{-0.0625_x, -0.0625_x}}));
+        const auto active = HybridExactBox(
+            q, RealSpace({x}), ExactBoxType({{0, 0}}));
+
+        // These guards have identical flow-blocking semantics when
+        // certainly inactive, despite differing transition/reset rules.
+        for (EventKind kind: {
+                EventKind::URGENT, EventKind::PROGRESS, EventKind::IMPACT}) {
+            ContinuousTimeHybridAutomaton system;
+            system.new_mode(q, OrdinaryDifferentialAlgebraicInclusion(
+                {dot(x) = u}, RealVariablesBox({-1 <= u <= 1})));
+            const DiscreteEvent event("blocker");
+            if (kind == EventKind::PROGRESS) {
+                system.new_guard(q, event, x >= 0, kind);
+            } else {
+                system.new_mode(target, OrdinaryDifferentialAlgebraicEquation({dot(x) = 0}));
+                system.new_transition(q, event, target, {next(x) = x},
+                                      x >= 0, kind);
+            }
+            HybridContinuousTimeEvolver<ValidatedTag> evolver(system);
+            TaylorPicardIntegrator integrator(step_maximum_error = 1e-6);
+            evolver.set_integrator(
+                integrator, ZeroApproximation(), ConstantApproximation());
+            evolver.configuration().set_maximum_step_size(0.03125);
+            evolver.configuration().set_enable_reconditioning(false);
+
+            // All x(t) lie inside [-9/8,-7/8] while all independent
+            // numerical inputs range over their COMPLETE [-1,1] box.
+            // No blocker can activate, so ordinary flow is legal.
+            const auto lower = evolver.orbit(
+                safe, HybridTime(0.125_x, 1), Semantics::LOWER);
+            ARIADNE_TESTING_REQUIRE(lower.final().size() == 1u);
+            ARIADNE_TESTING_PROVE(lower.reach().size() >= 4u);
+            const auto& final = lower.final()[0u];
+            ARIADNE_TESTING_PROVE(final.location() == q);
+            ARIADNE_TESTING_PROVE(final.previous_events().empty());
+            ARIADNE_TESTING_EXPECT_EQUAL(
+                final.time_range().lower_bound().raw().get_d(), 0.125);
+            ARIADNE_TESTING_PROVE(subset(
+                ExactBoxType({{-1.125_x, -0.875_x}}),
+                cast_exact_box(final.state_bounding_box())));
+            const auto& kinds = final.continuous_set().variable_kinds();
+            const auto& parameters = final.continuous_set().parameter_domain();
+            SizeType full_inputs = 0u;
+            for (SizeType i = 0u; i < kinds.size(); ++i) {
+                if (kinds[i] != EnclosureVariableKind::INPUT)
+                    continue;
+                ++full_inputs;
+                ARIADNE_TESTING_PROVE(
+                    parameters[i].lower_bound().raw().get_d() <= -1.0);
+                ARIADNE_TESTING_PROVE(
+                    parameters[i].upper_bound().raw().get_d() >= 1.0);
+            }
+            ARIADNE_TESTING_PROVE(full_inputs >= 4u);
+
+            // A source strictly below the guard does NOT prove that
+            // the complete following tube stays below it.
+            ARIADNE_TESTING_EXPECT_THROWS(std::invalid_argument,
+                evolver.orbit(near_crossing,
+                    HybridTime(0.125_x, 1), Semantics::LOWER));
+            // At an active or undecidable blocker, an unverified flow
+            // must not be published, even at zero horizon.
+            ARIADNE_TESTING_EXPECT_THROWS(std::invalid_argument,
+                evolver.orbit(active, HybridTime(0u, 1), Semantics::LOWER));
+        }
+    }
+
     Void test_unsupported_capabilities_fail_explicitly() {
         const DiscreteLocation q(1);
         const RealVariable x("x"), u("u"), t("t"), p("p");
@@ -711,6 +784,7 @@ int main(int argc, char** argv) {
     ARIADNE_TESTING_ADD_TEST(TestHybridInclusions, test_structured_lower_inclusion_preserves_complete_input_flow);
     ARIADNE_TESTING_ADD_TEST(TestHybridInclusions, test_lower_inclusion_ignores_optional_jump_but_rejects_blockers);
     ARIADNE_TESTING_ADD_TEST(TestHybridInclusions, test_lower_inclusion_certified_whole_tube_invariants);
+    ARIADNE_TESTING_ADD_TEST(TestHybridInclusions, test_lower_inclusion_certainly_inactive_blockers);
     ARIADNE_TESTING_ADD_TEST(TestHybridInclusions, test_unsupported_capabilities_fail_explicitly);
     return Testing::run_logging_suite(ariadne_test_suite, argc, argv);
 }

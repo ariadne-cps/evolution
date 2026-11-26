@@ -176,6 +176,23 @@ Bool is_blocking(EventKind evk) { return EvolutionDetail::transition_policy(evk)
 
 Bool is_activating(EventKind evk) { return EvolutionDetail::transition_policy(evk).activates_reset; }
 
+// This is the SAME hybrid event policy used by the UPPER flow, applied
+// as a sufficient whole-enclosure condition for LOWER uninterrupted
+// progression. Guard intersections of outer LOWER enclosures cannot
+// be used to pick a favourable source subset or to invent a reset.
+bool lower_inclusion_flow_predicate_certified(
+    const HybridEnclosure& enclosure, const TransitionData& transition) {
+    if (transition.event_kind == EventKind::PERMISSIVE)
+        return true; // An optional jump never blocks uninterrupted flow.
+    const auto bounds = enclosure.range_of(
+        transition.guard_function, transition.source_arguments);
+    if (transition.event_kind == EventKind::INVARIANT)
+        return definitely(bounds.upper_bound() <= 0);
+    if (EvolutionDetail::transition_policy(transition.event_kind).blocks_flow)
+        return definitely(bounds.upper_bound() < 0);
+    return false;
+}
+
 // Extract the blocking events.
 Set<DiscreteEvent> blocking_events(const Map<DiscreteEvent, TransitionData>& transitions) {
     Set<DiscreteEvent> events;
@@ -361,17 +378,13 @@ Void HybridContinuousTimeEvolverBase<ValidatedTag>::_validate_mode(DiscreteLocat
             if (parameterized)
                 throw std::invalid_argument(
                     "Hybrid inclusion LOWER does not yet support trajectory-constant physical parameters");
-            // Uninterrupted flow may ignore any PERMISSIVE jump.
-            // State INVARIANT predicates are supported only where
-            // certified on the WHOLE initial enclosure and every
-            // continuous reach tube. No slicing/restricting a LOWER
-            // witness into a favourable subbox is allowed.
-            for (const auto& event: this->system().events(location)) {
-                const EventKind kind = this->system().event_kind(location, event);
-                if (kind != EventKind::PERMISSIVE && kind != EventKind::INVARIANT)
-                    throw std::invalid_argument(
-                        "Hybrid inclusion LOWER supports only PERMISSIVE jumps and full-tube INVARIANTs");
-            }
+            // In addition to optional jumps and whole-tube invariants,
+            // an URGENT/PROGRESS/IMPACT blocker can be safely ignored
+            // only where its guard is CERTAINLY inactive on the whole
+            // source and every validated reach tube. This condition
+            // is checked at entry and at every actual flow step.
+            // A possible crossing is never promoted into a LOWER reset,
+            // and no numerical lower enclosure is split.
         }
     }
 }
@@ -697,18 +710,17 @@ Void HybridContinuousTimeEvolverBase<ValidatedTag>::
     LOGGING_RUN_AT(1, auto transitions = this->_extract_transitions(location));
     Set<DiscreteEvent> events = transitions.keys();
 
-    // Before any initial invariant restriction (including at zero
-    // horizon), verify that the whole existing LOWER witness-bearing
-    // enclosure already satisfies it. Filtering a numerical LOWER
-    // enclosure could silently discard the actually reached subset.
+    // Before ANY initial restriction, including at zero horizon,
+    // certify that the full witness-bearing enclosure satisfies every
+    // invariant and that every blocking guard is strictly inactive.
+    // Independently filtering an outer LOWER set cannot establish
+    // that the reachable subset survives the filter.
     if (semantics == Semantics::LOWER && this->system().inclusion(location)) {
         for (const auto& entry: transitions) {
-            const auto& predicate = entry.second;
-            if (predicate.event_kind == EventKind::INVARIANT &&
-                !definitely(initial_set.range_of(predicate.guard_function,
-                                                  predicate.source_arguments).upper_bound() <= 0))
+            if (!lower_inclusion_flow_predicate_certified(
+                    initial_set, entry.second))
                 throw std::invalid_argument(
-                    "Hybrid inclusion LOWER initial invariant is not certified on the whole source");
+                    "Hybrid inclusion LOWER initial invariant/blocker is not certified for uninterrupted flow");
         }
     }
 
@@ -973,20 +985,20 @@ Void HybridContinuousTimeEvolverBase<ValidatedTag>::_evolve_inclusion(
                                                                                            : EvolutionDetail::IntegrationStepRepresentation::REQUIRE_STRUCTURED);
     const double processed_time = std::min(step.time_step().get_d(), remaining.get_d());
     if (semantics == Semantics::LOWER) {
-        // To preserve the actual reachable LOWER subset, each complete
-        // certified reach tube must lie in every mode invariant.
-        // No numerical guard intersection or subbox selection can
-        // replace this full-tube proof, even for optional jumps.
+        // The existing validated reach patches cover ALL admissible
+        // inputs and the whole source. Invariants must hold over the
+        // complete tube; URGENT/PROGRESS/IMPACT guards must remain
+        // strictly inactive over the complete tube. Neither UPPER
+        // guard intersections nor a selected input subbox can prove
+        // that a LOWER witness has a legal uninterrupted continuation.
         for (const auto& tube: applied.reach) {
             HybridEnclosure whole_tube = initial;
             whole_tube.replace_continuous_set(tube);
             for (const auto& entry: transitions) {
-                const auto& predicate = entry.second;
-                if (predicate.event_kind == EventKind::INVARIANT &&
-                    !definitely(whole_tube.range_of(predicate.guard_function,
-                                                    predicate.source_arguments).upper_bound() <= 0))
+                if (!lower_inclusion_flow_predicate_certified(
+                        whole_tube, entry.second))
                     throw std::invalid_argument(
-                        "Hybrid inclusion LOWER invariant is not certified throughout the reach tube");
+                        "Hybrid inclusion LOWER invariant/blocker is not certified throughout the reach tube");
             }
         }
         // PERMISSIVE jumps may be ignored during uninterrupted flow;

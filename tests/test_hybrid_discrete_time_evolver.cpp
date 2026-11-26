@@ -598,6 +598,40 @@ class TestHybridDiscreteTimeEvolver : public Ariadne::Testing::ContextFixture {
         const auto optional_bounds = optional_final.state_bounding_box()[0u];
         ARIADNE_TESTING_PROVE(optional_bounds.lower_bound().raw().get_d() <= -1.0);
         ARIADNE_TESTING_PROVE(optional_bounds.upper_bound().raw().get_d() >= 3.0);
+
+        // With a guard true for ALL x and u, the optional reset is
+        // valid even when progression has an uncertain invariant.
+        // No state/input value is selected to make the guard pass.
+        DiscreteTimeHybridAutomaton optional_reset_model;
+        optional_reset_model.new_mode(source_mode, DifferenceAlgebraicInclusion(
+            List<PrimedRealAssignment>{next(x) = x + a},
+            List<RealAssignment>{let(a) = x + u},
+            RealVariablesBox({-1 <= u <= 1})));
+        optional_reset_model.new_mode(target_mode, DifferenceAlgebraicEquation(
+            List<PrimedRealAssignment>{next(x) = x}));
+        optional_reset_model.new_permissive_transition(source_mode, event, target_mode,
+            {next(x) = x + a + 3}, a >= -2, a <= 0);
+        Evolver optional_reset_evolver(optional_reset_model);
+        const auto optional_reset = optional_reset_evolver.orbit(
+            source, Termination(Integer(0), Integer(1)), Semantics::LOWER);
+        ARIADNE_TESTING_REQUIRE(optional_reset.final().size() == 1u);
+        const auto& optional_reset_final = optional_reset.final().front();
+        ARIADNE_TESTING_PROVE(optional_reset_final.location() == target_mode);
+        ARIADNE_TESTING_REQUIRE(optional_reset_final.previous_events().size() == 1u);
+        ARIADNE_TESTING_PROVE(optional_reset_final.previous_events()[0u] == event);
+        ARIADNE_TESTING_EXPECT_EQUAL(
+            optional_reset_final.continuous_set().number_of_parameters(), 2u);
+        ARIADNE_TESTING_EXPECT_EQUAL(optional_reset_final.number_of_constraints(), 0u);
+        const auto full_input =
+            optional_reset_final.continuous_set().parameter_domain()[1u];
+        ARIADNE_TESTING_PROVE(full_input.lower_bound().raw().get_d() <= -1.0);
+        ARIADNE_TESTING_PROVE(full_input.upper_bound().raw().get_d() >= 1.0);
+        const auto optional_reset_bounds =
+            optional_reset_final.state_bounding_box()[0u];
+        ARIADNE_TESTING_PROVE(
+            optional_reset_bounds.lower_bound().raw().get_d() <= 2.0);
+        ARIADNE_TESTING_PROVE(
+            optional_reset_bounds.upper_bound().raw().get_d() >= 6.0);
     }
 
     Void test_lower_event_free_equation_witness() {
@@ -1031,6 +1065,29 @@ class TestHybridDiscreteTimeEvolver : public Ariadne::Testing::ContextFixture {
             optional_unknown.final().front().state_bounding_box()[0u];
         ARIADNE_TESTING_PROVE(varying_bounds.lower_bound().raw().get_d() <= 1.0);
         ARIADNE_TESTING_PROVE(varying_bounds.upper_bound().raw().get_d() >= 2.0);
+
+        // A PERMISSIVE guard TRUE on all x in [0,1] permits a
+        // reset even when the separate progression invariant is UNKNOWN.
+        // The original whole source is reset without selecting a child.
+        DiscreteTimeHybridAutomaton certain_reset;
+        certain_reset.new_mode(source_mode, DifferenceAlgebraicEquation(
+            List<PrimedRealAssignment>{next(x) = x + 1}));
+        certain_reset.new_mode(target_mode, DifferenceAlgebraicEquation(
+            List<PrimedRealAssignment>{next(x) = x}));
+        certain_reset.new_permissive_transition(source_mode, event, target_mode,
+            {next(x) = x + 3}, x >= -1, x <= 1 / 2_q);
+        Evolver optional_jump(certain_reset);
+        const auto taken = optional_jump.orbit(initial(source_mode),
+            Termination(Integer(0), Integer(1)), Semantics::LOWER);
+        ARIADNE_TESTING_REQUIRE(taken.final().size() == 1u);
+        const auto& taken_final = taken.final().front();
+        ARIADNE_TESTING_PROVE(taken_final.location() == target_mode);
+        ARIADNE_TESTING_REQUIRE(taken_final.previous_events().size() == 1u);
+        ARIADNE_TESTING_PROVE(taken_final.previous_events()[0u] == event);
+        ARIADNE_TESTING_EXPECT_EQUAL(taken_final.number_of_constraints(), 0u);
+        const auto taken_bounds = taken_final.state_bounding_box()[0u];
+        ARIADNE_TESTING_PROVE(taken_bounds.lower_bound().raw().get_d() <= 3.0);
+        ARIADNE_TESTING_PROVE(taken_bounds.upper_bound().raw().get_d() >= 4.0);
 
         // When both the guard and the progression invariant are
         // unresolved, neither branch is uniformly known to be valid.

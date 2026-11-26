@@ -86,8 +86,12 @@ class HybridDiscreteTimeEvolverConfiguration<ValidatedTag> : public Configuratio
 //! LOWER, an optional PERMISSIVE jump may be ignored when progression
 //! is certain on the WHOLE source: the uninterrupted map is then a
 //! legitimate reachable subset, even if the optional jump is possible.
-//! UNKNOWN progression invariants and URGENT blockers are never ignored.
-//! These are sufficient supported conditions, not the definition of LOWER.
+//! A uniformly certain PERMISSIVE reset may likewise be taken when
+//! progression is undecidable, provided no other jump competes: its
+//! guard alone certifies the reset's admissibility on the entire set.
+//! UNKNOWN guard evidence and URGENT blockers are never promoted to
+//! certain transitions. These are sufficient supported conditions,
+//! not the definition of LOWER.
 //! All equation and inclusion modes apply the same set-valued map as UPPER,
 //! keeping full input boxes and auxiliary correlations. A reset may
 //! target equation or inclusion modes, with full fresh arrival inputs.

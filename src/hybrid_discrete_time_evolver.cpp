@@ -124,8 +124,34 @@ std::optional<HybridDiscreteTimePlannedBranch> unique_certified_lower_branch(
             return candidate;
     }
 
+    // A PERMISSIVE reset whose guard is TRUE over the whole source is
+    // equally admissible even if its progression invariant is UNKNOWN:
+    // resetting the reachable LOWER subset does not require proving
+    // that uninterrupted progression is safe. Reject competing jumps
+    // rather than invent an ordering among different events.
+    for (const auto& candidate: plan.branches) {
+        if (candidate.kind != HybridDiscreteTimeBranchKind::TRANSITION ||
+            !candidate.certain || !candidate.event.has_value() ||
+            automaton.transition_kind(source.location(), *candidate.event) !=
+                DiscreteTimeTransitionKind::PERMISSIVE ||
+            (!automaton.has_equation(candidate.target) &&
+             !automaton.has_inclusion(candidate.target)))
+            continue;
+        Bool only_progression_competes = true;
+        for (const auto& other: plan.branches) {
+            if (&other != &candidate &&
+                other.kind != HybridDiscreteTimeBranchKind::PROGRESSION) {
+                only_progression_competes = false;
+                break;
+            }
+        }
+        if (only_progression_competes)
+            return candidate;
+    }
+
     // Otherwise, only one universally certain alternative is currently
-    // supported. An UNKNOWN invariant or urgent blocker is not ignored.
+    // supported. An UNKNOWN guard, urgent blocker, or competing event
+    // cannot be converted into a lower continuation by branch choice.
     if (plan.branches.size() != 1u || !plan.branches.front().certain)
         return std::nullopt;
     const auto branch = plan.branches.front();

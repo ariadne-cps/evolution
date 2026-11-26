@@ -2900,3 +2900,60 @@ a narrow supported case of LOWER hybrid transitions, not a
 new semantics nor a capability-cell promotion. Full
 Ubuntu, macOS, Windows, Coverage, Sanitizers CI must be
 green on the exact v7.20 SHA before acceptance.
+
+## v7.21 — Certain PERMISSIVE reset with undecidable progression invariant
+
+**Base and acceptance state.** The v7.19 `4f261d55` had all five
+Ubuntu, macOS, Windows, Coverage and Sanitizers workflows green.
+v7.20 `4e460edc` was still in progress when v7.21 was prepared;
+v7.20 CI results are not inherited and this version needs its own
+five-workflow validation.
+
+**Canonical proof obligation (unchanged).** Both UPPER and LOWER produce
+rigorously outer numerical enclosures; LOWER encloses a nonempty
+reachable subset. Neither changes the original discrete dynamical
+map. A LOWER enclosure is never independently split, narrowed to a
+favourable source child, or given a sampled input. Transition
+admissibility is distinct from applying the map on the unsplit set.
+
+**New narrowly supported hybrid case.** In the common planner a
+PERMISSIVE transition with guard TRUE on the *entire* current source
+is an admissible jump for the actual reachable subset, regardless
+of whether the *separate progression invariant* is TRUE, FALSE or
+UNKNOWN. When the progression invariant is UNKNOWN, v7.20 was
+needlessly rejecting the valid reset because the planner included
+a possible progression alongside the certain transition.
+v7.21 accepts a certain PERMISSIVE transition if and only if
+every other planned branch is merely PROGRESSION, and the target
+mode has a supported equation/inclusion. It does not select
+between multiple events or ignore any competing URGENT transition.
+A certain progression with optional competing resets remains
+supported by the v7.20 case. UNKNOWN guards remain UNKNOWN.
+No priority is added to model semantics: choosing a proven
+legal behavior yields a valid LOWER reachable subset, while
+UPPER still considers all possible alternatives.
+
+**Public regression.** Extended existing
+`test_lower_unique_permissive_branch`: for x in [0,1],
+`guard x>=-1` is uniformly true while independent progression
+invariant `x<=1/2` is undecided; the reset x'=x+3 must keep the
+complete x source, yield target mode and event provenance, and
+cover [3,4] without synthetic constraints. Retained the
+explicit negative case where BOTH the guard and the invariant
+are undecidable. Extended the inclusion/auxiliary regression:
+`a=x+u`, x in [0,1], full u in [-1,1],
+`guard a>=-2` TRUE, invariant `a<=0` UNKNOWN.
+The correlated reset `x'=x+a+3` must cover [2,6],
+retain the entire u input and event history, and create no
+artificial constraints. Existing v7.20 permissive progression,
+urgent rejection, input-history and other regression checks
+remain intact. Static source-level preflight found 20 registered
+test methods and no duplicate method-local const-auto names.
+
+**Scope.** Only one full-source branch admission case, public
+header docs, two existing test methods and this journal entry
+changed. No numerical kernel, integrator, model, UPPER
+planner, test removals, source splitting or canonical
+semantics change. All five CI workflows must be green on the
+exact v7.21 commit before its behavior is accepted; no matrix
+cell is promoted on an unvalidated candidate.

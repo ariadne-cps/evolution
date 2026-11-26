@@ -3132,3 +3132,74 @@ on its own exact SHA before claiming validated support for
 continuous inclusion LOWER. The capability matrix is still
 2 LOWER complete + 5 partial candidates + 1 absent, and
 must not be promoted solely by publishing this change.
+
+## v7.25 — Structured hybrid continuous LOWER for unblocked inclusion flow
+
+**Canonical semantics:** every numerical UPPER enclosure rigorously
+contains a superset of the reached set; every numerical LOWER enclosure
+rigorously contains a nonempty reached subset. Both numerical
+enclosures are OUTER, not geometric INNER approximations. The source
+is never split into independently claimed LOWER children, and the
+physical differential inclusion and all admissible input boxes remain
+unchanged.
+
+**First supported hybrid-continuous inclusion LOWER case:** the
+existing `SelectedParametricMultifunctionIntegrator` already
+constructs a validated reach-tube patch and endpoint patch with the
+independent admissible numerical inputs. `_evolve_inclusion`
+now uses that SAME step for UPPER/LOWER. It is called with the actual
+`Semantics`, checks that the structured reach and endpoint models
+exist for LOWER, and applies the common
+`EvolutionDetail::apply_integration_step` to the whole source
+enclosure without sampling inputs or changing the dynamics.
+The lower step takes the downward validated bound of the requested
+time horizon; the UPPER step retains its former upward bound.
+
+**Admissible hybrid behavior:** LOWER supports event-free modes and
+modes whose transitions are exclusively PERMISSIVE. Choosing never
+to take an optional jump yields a legal nonempty reachable subset,
+including when that optional guard is UNKNOWN during continuous
+progression. The ordinary shared `publish_outer_step` helper is
+called with an EMPTY event map on this LOWER path: it propagates the
+same unsplit time-flow enclosure, but cannot invent potential
+UPPER guard-intersection jump candidates as LOWER witnesses.
+UPPER continues passing all real transitions, unchanged.
+Full-source initially certain optional jumps (if any) remain
+separately governed by the established common hybrid starting-event
+processing; no priority or source splitting is introduced.
+URGENT/IMPACT/PROGRESS blockers and state INVARIANT constraints
+remain explicitly unsupported by this new LOWER inclusion path
+until witness-preserving event analysis is developed. Physical
+trajectory-constant parameters are rejected consistently with
+ordinary continuous inclusion LOWER. First-order box-only
+integration is still UPPER-only, including zero horizon.
+This is a conservative supported subset, NOT a new definition
+of LOWER semantics.
+
+**Public regressions:** two test methods added to
+`tests/test_hybrid_inclusions.cpp`. The first runs
+`x'=u, u in [-1,1]` from x in [-1/8,1/8] to time 1/8
+with two semantic modes, checking same full [-1/4,1/4]
+analytical bounds, correct time, original mode/event provenance
+and at least four independent full INPUT domains under LOWER.
+It checks that the old source remains unmodified and that
+box-only LOWER rejects at both zero and positive horizons.
+The second checks `x'=u` with a PERMISSIVE threshold
+x>=1/32; LOWER advances without spuriously taking a jump and
+still encloses [-1/8,1/8]. A corresponding URGENT guard
+and a state INVARIANT are explicitly rejected, at zero and
+positive horizons as applicable. No existing UPPER assertion
+was deleted or weakened. Static preflight confirms 14
+registered test methods and no duplicate method-local
+`const auto` declarations.
+
+**Matrix (candidate only):** Approximate 8/8, Validated UPPER 6
+complete+2 partial, Validated LOWER 2 complete+6 partial+0 absent.
+The hybrid continuous inclusion LOWER cell becomes PARTIAL
+(candidate) for validated unblocked structured flows only,
+subject to a full semantic and CI review. The five workflows
+Ubuntu, macOS, Windows, Coverage and Sanitizers must all be
+green on the exact v7.25 SHA before promotion. The canonical
+contract at the beginning of this document is unchanged.
+No changes to the numerical integrator implementation, UPPER
+event processing, other evolvers, System, or tutorials.

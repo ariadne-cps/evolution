@@ -344,16 +344,32 @@ Void HybridContinuousTimeEvolverBase<ValidatedTag>::_validate_mode(DiscreteLocat
         EvolutionDetail::validate_outer_event_kinds(this->system(), location);
     }
     if (const auto* inclusion = this->system().inclusion(location)) {
-        if (semantics != Semantics::UPPER)
-            throw std::invalid_argument("Hybrid inclusion modes require UPPER semantics");
-        // UPPER may restrict reach by PROGRESS boundaries and construct
-        // conservative URGENT/PERMISSIVE/IMPACT candidates. Boundary-only
-        // impact filtering retains tangencies; LOWER remains unsupported.
+        if (semantics != Semantics::UPPER && semantics != Semantics::LOWER)
+            throw std::invalid_argument("Unknown hybrid inclusion evolution semantics");
         EvolutionDetail::validate_outer_event_kinds(this->system(), location);
         if (!this->_inclusion_integrator_ptr && !this->_box_integrator_ptr)
             throw std::invalid_argument("Select an explicit integration method for hybrid inclusion modes");
         if (this->_inclusion_integrator_ptr && inclusion->has_input_function() && inclusion->number_of_inputs() == 0u)
             throw std::invalid_argument("The selected hybrid inclusion method requires free numerical inputs");
+        if (semantics == Semantics::LOWER) {
+            // A structured map carries the same reachable subset through
+            // each interval of actual input functions. Box-only outer
+            // certificates cannot preserve that correlation across steps.
+            if (!this->_inclusion_integrator_ptr)
+                throw std::invalid_argument(
+                    "Hybrid inclusion LOWER requires the structured selected-input integrator");
+            if (parameterized)
+                throw std::invalid_argument(
+                    "Hybrid inclusion LOWER does not yet support trajectory-constant physical parameters");
+            // An uninterrupted flow may ignore any PERMISSIVE jump.
+            // URGENT/IMPACT/PROGRESS blockers and invariants need a
+            // separate witness-preserving event analysis.
+            for (const auto& event: this->system().events(location)) {
+                if (this->system().event_kind(location, event) != EventKind::PERMISSIVE)
+                    throw std::invalid_argument(
+                        "Hybrid inclusion LOWER currently supports only event-free or PERMISSIVE-only modes");
+            }
+        }
     }
 }
 
@@ -827,7 +843,7 @@ Void HybridContinuousTimeEvolverBase<ValidatedTag>::
     }
 
     if (inclusion != nullptr) {
-        this->_evolve_inclusion(starting_set, final_time, result);
+        this->_evolve_inclusion(starting_set, final_time, semantics, result);
         return;
     }
     if (this->system().time_variable(location) || EvolutionDetail::hybrid_parameter_space(this->system(), location).dimension() != 0u) {
@@ -900,14 +916,18 @@ Void HybridContinuousTimeEvolverBase<ValidatedTag>::
 }
 
 Void HybridContinuousTimeEvolverBase<ValidatedTag>::_evolve_inclusion(
-    const HybridEnclosure& initial, const Real& final_time, HybridEvolutionStepResult& result) const {
+    const HybridEnclosure& initial, const Real& final_time,
+    Semantics semantics, HybridEvolutionStepResult& result) const {
     const auto& inclusion = *this->system().inclusion(initial.location());
-    // Inclusion candidates use only validated outer reach and state guards.
-    // No root-time map, Lie derivative or full-source coverage is inferred.
-    const auto invariants = this->_extract_transitions(initial.location());
+    // Both semantics use the same inclusion field and structured
+    // numerical map. UPPER may additionally construct outer jump
+    // candidates; LOWER transports the uninterrupted actual behavior
+    // without fabricating jumps from outer guard intersections.
+    const auto transitions = this->_extract_transitions(initial.location());
     const auto horizon = FloatDPBounds(final_time, dp);
-    const StepSizeType remaining = StepSizeType(horizon.upper_raw()) -
-                                   StepSizeType(initial.time_range().lower_bound().raw());
+    const StepSizeType remaining = StepSizeType(
+        semantics == Semantics::LOWER ? horizon.lower_raw() : horizon.upper_raw()) -
+        StepSizeType(initial.time_range().lower_bound().raw());
     const auto maximum_step = EvolutionDetail::limit_step_to_remaining_time(
         this->configuration().maximum_step_size(), remaining);
     const auto& source = initial.continuous_set();
@@ -926,11 +946,25 @@ Void HybridContinuousTimeEvolverBase<ValidatedTag>::_evolve_inclusion(
         return {step, join(source.state_function(), parameters)};
     }();
     const auto& step = numerical.step;
-    const auto applied = EvolutionDetail::apply_integration_step(source, step, numerical.arguments, Semantics::UPPER,
+    if (semantics == Semantics::LOWER &&
+        (!step.has_reach_models() || !step.has_evolve_model()))
+        throw std::invalid_argument(
+            "Hybrid inclusion LOWER requires structured reach and endpoint models");
+    const auto applied = EvolutionDetail::apply_integration_step(source, step, numerical.arguments, semantics,
                                                                  this->_box_integrator_ptr ? EvolutionDetail::IntegrationStepRepresentation::ALLOW_BOX_ENCLOSURES
                                                                                            : EvolutionDetail::IntegrationStepRepresentation::REQUIRE_STRUCTURED);
-    result = EvolutionDetail::publish_outer_step(initial, applied, invariants, final_time,
-                                                 std::min(step.time_step().get_d(), remaining.get_d()));
+    const double processed_time = std::min(step.time_step().get_d(), remaining.get_d());
+    if (semantics == Semantics::LOWER) {
+        // PERMISSIVE jumps are optional: continuously following the
+        // same validated flow is a legitimate reachable LOWER subset.
+        // Do not publish possible outer guard intersections as LOWER
+        // transitions or independently restrict/split the source.
+        result = EvolutionDetail::publish_outer_step(
+            initial, applied, {}, final_time, processed_time);
+    } else {
+        result = EvolutionDetail::publish_outer_step(
+            initial, applied, transitions, final_time, processed_time);
+    }
 }
 
 Void HybridContinuousTimeEvolverBase<ValidatedTag>::_evolve_outer_equation(

@@ -411,7 +411,11 @@ class HybridContinuousTimeEvolverBase<ValidatedTag>
     /** @brief Perform the specified evolution operation. */
     Void _create(const SystemType& system, const FunctionFactoryType& factory);
     Void _validate_mode(DiscreteLocation, Semantics) const;
-    Void _evolve_inclusion(const HybridEnclosure&, const Real& final_time, HybridEvolutionStepResult&) const;
+    //! Evolve an inclusion with the shared validated map. LOWER supports
+    //! structured whole-source flow in event-free/PERMISSIVE-only modes;
+    //! no outer-only jump candidates are published as LOWER witnesses.
+    Void _evolve_inclusion(const HybridEnclosure&, const Real& final_time,
+                           Semantics semantics, HybridEvolutionStepResult&) const;
     Void _evolve_outer_equation(const HybridEnclosure&, const Real& final_time,
                                Semantics semantics, HybridEvolutionStepResult&) const;
     std::shared_ptr<IntegratorInterface> _integrator_ptr;

@@ -475,6 +475,111 @@ class TestHybridInclusions : public Testing::ContextFixture {
         }
     }
 
+    Void test_structured_lower_inclusion_preserves_complete_input_flow() {
+        const DiscreteLocation q(1);
+        const RealVariable x("x"), u("u");
+        ContinuousTimeHybridAutomaton system;
+        system.new_mode(q, OrdinaryDifferentialAlgebraicInclusion(
+            {dot(x) = u}, RealVariablesBox({-1 <= u <= 1})));
+        HybridContinuousTimeEvolver<ValidatedTag> evolver(system);
+        TaylorPicardIntegrator base(step_maximum_error = 1e-6);
+        evolver.set_integrator(base, ZeroApproximation(), ConstantApproximation());
+        evolver.configuration().set_maximum_step_size(0.03125);
+        evolver.configuration().set_enable_reconditioning(false);
+        const auto initial = evolver.enclosure(HybridExactBox(
+            q, RealSpace({x}), ExactBoxType({{-0.125_x, 0.125_x}})));
+        const auto lower = evolver.orbit(initial, HybridTime(0.125_x, 1), Semantics::LOWER);
+        const auto upper = evolver.orbit(initial, HybridTime(0.125_x, 1), Semantics::UPPER);
+        ARIADNE_TESTING_REQUIRE(lower.final().size() == 1u);
+        ARIADNE_TESTING_REQUIRE(upper.final().size() == 1u);
+        ARIADNE_TESTING_PROVE(lower.reach().size() >= 4u);
+        const auto& lower_final = lower.final()[0u];
+        ARIADNE_TESTING_PROVE(lower_final.location() == q);
+        ARIADNE_TESTING_PROVE(lower_final.previous_events().empty());
+        ARIADNE_TESTING_EXPECT_EQUAL(lower_final.state_dimension(), 1u);
+        const auto lower_box = cast_exact_box(lower_final.state_bounding_box());
+        const auto upper_box = cast_exact_box(upper.final()[0u].state_bounding_box());
+        ARIADNE_TESTING_PROVE(subset(ExactBoxType({{-0.25_x, 0.25_x}}), lower_box));
+        ARIADNE_TESTING_PROVE(subset(ExactBoxType({{-0.25_x, 0.25_x}}), upper_box));
+        ARIADNE_TESTING_PROVE(subset(cast_exact_interval(lower_final.time_range()),
+                                     ExactIntervalType(0.125_x, 0.125_x)));
+        const auto& parameter_kinds = lower_final.continuous_set().variable_kinds();
+        const auto& parameters = lower_final.continuous_set().parameter_domain();
+        SizeType full_inputs = 0u;
+        for (SizeType i = 0u; i != parameter_kinds.size(); ++i) {
+            if (parameter_kinds[i] != EnclosureVariableKind::INPUT)
+                continue;
+            ++full_inputs;
+            ARIADNE_TESTING_PROVE(parameters[i].lower_bound().raw().get_d() <= -1.0);
+            ARIADNE_TESTING_PROVE(parameters[i].upper_bound().raw().get_d() >= 1.0);
+        }
+        ARIADNE_TESTING_PROVE(full_inputs >= 4u);
+        ARIADNE_TESTING_EXPECT_EQUAL(initial.continuous_set().number_of_parameters(), 1u);
+
+        // A box-only method is an UPPER numerical outer certificate,
+        // not a structured continuation of the same reachable subset.
+        HybridContinuousTimeEvolver<ValidatedTag> box_evolver(system);
+        box_evolver.set_integrator(FirstOrderMultifunctionIntegrator());
+        const auto zero = HybridTime(0u, 1);
+        ARIADNE_TESTING_EXPECT_THROWS(std::invalid_argument,
+            box_evolver.orbit(initial, zero, Semantics::LOWER));
+        ARIADNE_TESTING_EXPECT_THROWS(std::invalid_argument,
+            box_evolver.orbit(initial, HybridTime(0.125_x, 1), Semantics::LOWER));
+    }
+
+    Void test_lower_inclusion_ignores_optional_jump_but_rejects_blockers() {
+        const DiscreteLocation source(1), target(2);
+        const RealVariable x("x"), u("u");
+        const DiscreteEvent optional("optional");
+        ContinuousTimeHybridAutomaton system;
+        system.new_mode(source, OrdinaryDifferentialAlgebraicInclusion(
+            {dot(x) = u}, RealVariablesBox({-1 <= u <= 1})));
+        system.new_mode(target, OrdinaryDifferentialAlgebraicEquation({dot(x) = 0}));
+        system.new_transition(source, optional, target, {next(x) = 0},
+                              x >= 0.03125_x, EventKind::PERMISSIVE);
+        HybridContinuousTimeEvolver<ValidatedTag> evolver(system);
+        TaylorPicardIntegrator base(step_maximum_error = 1e-6);
+        evolver.set_integrator(base, ZeroApproximation(), ConstantApproximation());
+        evolver.configuration().set_maximum_step_size(0.03125);
+        const auto initial = HybridExactBox(
+            source, RealSpace({x}), ExactBoxType({{0, 0}}));
+
+        // Never taking an optional jump is a legal behavior. Even if
+        // its guard becomes possible during a step, LOWER can retain
+        // uninterrupted flow with the whole input box.
+        const auto lower = evolver.orbit(initial, HybridTime(0.125_x, 1), Semantics::LOWER);
+        ARIADNE_TESTING_REQUIRE(lower.final().size() == 1u);
+        const auto& final = lower.final()[0u];
+        ARIADNE_TESTING_PROVE(final.location() == source);
+        ARIADNE_TESTING_PROVE(final.previous_events().empty());
+        const auto box = cast_exact_box(final.state_bounding_box());
+        ARIADNE_TESTING_PROVE(subset(ExactBoxType({{-0.125_x, 0.125_x}}), box));
+
+        // A blocking URGENT transition may invalidate uninterrupted
+        // flow and cannot be ignored without an independent event proof.
+        ContinuousTimeHybridAutomaton urgent;
+        urgent.new_mode(source, OrdinaryDifferentialAlgebraicInclusion(
+            {dot(x) = u}, RealVariablesBox({-1 <= u <= 1})));
+        urgent.new_mode(target, OrdinaryDifferentialAlgebraicEquation({dot(x) = 0}));
+        urgent.new_transition(source, optional, target, {next(x) = 0},
+                              x >= 0, EventKind::URGENT);
+        HybridContinuousTimeEvolver<ValidatedTag> blocked(urgent);
+        blocked.set_integrator(base, ZeroApproximation(), ConstantApproximation());
+        ARIADNE_TESTING_EXPECT_THROWS(std::invalid_argument,
+            blocked.orbit(initial, HybridTime(0.125_x, 1), Semantics::LOWER));
+        ARIADNE_TESTING_EXPECT_THROWS(std::invalid_argument,
+            blocked.orbit(initial, HybridTime(0u, 1), Semantics::LOWER));
+
+        ContinuousTimeHybridAutomaton constrained;
+        constrained.new_mode(source, OrdinaryDifferentialAlgebraicInclusion(
+            {dot(x) = u}, RealVariablesBox({-1 <= u <= 1})));
+        constrained.new_invariant(source, x <= 0, DiscreteEvent("bound"));
+        HybridContinuousTimeEvolver<ValidatedTag> invariant(constrained);
+        invariant.set_integrator(base, ZeroApproximation(), ConstantApproximation());
+        ARIADNE_TESTING_EXPECT_THROWS(std::invalid_argument,
+            invariant.orbit(initial, HybridTime(0.125_x, 1), Semantics::LOWER));
+    }
+
     Void test_unsupported_capabilities_fail_explicitly() {
         const DiscreteLocation q(1);
         const RealVariable x("x"), u("u"), t("t"), p("p");
@@ -540,6 +645,8 @@ int main(int argc, char** argv) {
     ARIADNE_TESTING_ADD_TEST(TestHybridInclusions, test_upper_inclusion_progress_blocks_flow_without_reset);
     ARIADNE_TESTING_ADD_TEST(TestHybridInclusions, test_upper_inclusion_competing_urgent_guards_keep_both_boundary_jumps);
     ARIADNE_TESTING_ADD_TEST(TestHybridInclusions, test_upper_inclusion_permissive_guard_does_not_block_flow);
+    ARIADNE_TESTING_ADD_TEST(TestHybridInclusions, test_structured_lower_inclusion_preserves_complete_input_flow);
+    ARIADNE_TESTING_ADD_TEST(TestHybridInclusions, test_lower_inclusion_ignores_optional_jump_but_rejects_blockers);
     ARIADNE_TESTING_ADD_TEST(TestHybridInclusions, test_unsupported_capabilities_fail_explicitly);
     return Testing::run_logging_suite(ariadne_test_suite, argc, argv);
 }

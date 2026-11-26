@@ -526,7 +526,7 @@ class TestHybridDiscreteTimeEvolver : public Ariadne::Testing::ContextFixture {
         ARIADNE_TESTING_PROVE(step_bounds.upper_bound().raw().get_d() >= 1.5);
     }
 
-    Void test_lower_rejects_undecided_urgent_guard() {
+    Void test_lower_refines_undecided_urgent_guard() {
         const RealVariable x("x");
         const DiscreteLocation source_mode(1), target_mode(2);
         const DiscreteEvent event("undecided");
@@ -539,15 +539,51 @@ class TestHybridDiscreteTimeEvolver : public Ariadne::Testing::ContextFixture {
                                      {next(x) = x + 3}, x >= 1 / 2_q);
         Evolver evolver(system);
         const auto source = initial(source_mode);
-        // Both outcomes may exist; no arbitrarily chosen UPPER branch
-        // constitutes a certified LOWER witness.
-        ARIADNE_TESTING_EXPECT_THROWS(std::invalid_argument,
-            evolver.orbit(source, Termination(Integer(0), Integer(1)),
-                          Semantics::LOWER));
+
+        // The whole source has UNKNOWN guard evidence, but a strict
+        // interior subbox such as x[0] in [3/4,1] has a certified
+        // feasible witness and guard TRUE. Its reset is real LOWER,
+        // not a sampled or merely possible UPPER branch.
+        const auto lower = evolver.orbit(
+            source, Termination(Integer(0), Integer(1)), Semantics::LOWER);
+        ARIADNE_TESTING_EXPECT_EQUAL(lower.final().size(), 1u);
+        ARIADNE_TESTING_PROVE(lower.final().front().location() == target_mode);
+        ARIADNE_TESTING_EXPECT_EQUAL(lower.final().front().previous_events().size(), 1u);
+        ARIADNE_TESTING_PROVE(lower.final().front().previous_events()[0u] == event);
+        const auto bounds = lower.final().front().state_bounding_box()[0u];
+        ARIADNE_TESTING_PROVE(bounds.lower_bound().raw().get_d() <= 3.875);
+        ARIADNE_TESTING_PROVE(bounds.upper_bound().raw().get_d() >= 3.875);
         ARIADNE_TESTING_EXPECT_EQUAL(source.previous_events().size(), 0u);
+        ARIADNE_TESTING_EXPECT_EQUAL(source.continuous_set().number_of_parameters(), 1u);
         ARIADNE_TESTING_EXPECT_EQUAL(
             evolver.orbit(source, Termination(Integer(0), Integer(0)),
                           Semantics::LOWER).final().size(), 1u);
+
+        // Constrained initial sources may have no certified midpoint
+        // on the full domain; refinement must not confuse that with
+        // a proof of infeasibility.
+        auto constrained = source;
+        Enclosure restricted = constrained.continuous_set();
+        const auto coordinate = EffectiveScalarMultivariateFunction::coordinate(1u, 0u);
+        restricted.new_positive_state_constraint(coordinate - Real(3 / 4_q));
+        constrained.replace_continuous_set(restricted);
+        const auto feasible = evolver.orbit(
+            constrained, Termination(Integer(0), Integer(1)), Semantics::LOWER);
+        ARIADNE_TESTING_EXPECT_EQUAL(feasible.final().size(), 1u);
+        ARIADNE_TESTING_PROVE(feasible.final().front().location() == target_mode);
+        ARIADNE_TESTING_EXPECT_EQUAL(
+            feasible.final().front().number_of_constraints(), 1u);
+        ARIADNE_TESTING_EXPECT_EQUAL(constrained.number_of_constraints(), 1u);
+
+        // A boundary-only initial source has no strictly true or false
+        // guard on any nonempty subdivision. The bounded proof search
+        // must reject this case rather than fabricate a witness branch.
+        const HybridEnclosure boundary(HybridExactBox(
+            source_mode, RealSpace({x}),
+            ExactBoxType({{0.5_x, 0.5_x}})), configuration());
+        ARIADNE_TESTING_EXPECT_THROWS(std::invalid_argument,
+            evolver.orbit(boundary, Termination(Integer(0), Integer(1)),
+                          Semantics::LOWER));
     }
 
     Void test_lower_unique_permissive_branch() {
@@ -749,7 +785,7 @@ int main(int argc, char** argv) {
     ARIADNE_TESTING_ADD_TEST(TestHybridDiscreteTimeEvolver, test_lower_event_free_equation_witness);
     ARIADNE_TESTING_ADD_TEST(TestHybridDiscreteTimeEvolver, test_lower_constrained_point_witness);
     ARIADNE_TESTING_ADD_TEST(TestHybridDiscreteTimeEvolver, test_lower_forced_urgent_jump_and_disabled_progression);
-    ARIADNE_TESTING_ADD_TEST(TestHybridDiscreteTimeEvolver, test_lower_rejects_undecided_urgent_guard);
+    ARIADNE_TESTING_ADD_TEST(TestHybridDiscreteTimeEvolver, test_lower_refines_undecided_urgent_guard);
     ARIADNE_TESTING_ADD_TEST(TestHybridDiscreteTimeEvolver, test_lower_unique_permissive_branch);
     ARIADNE_TESTING_ADD_TEST(TestHybridDiscreteTimeEvolver, test_lower_unique_branch_across_competing_events);
     ARIADNE_TESTING_ADD_TEST(TestHybridDiscreteTimeEvolver, test_lower_excludes_unproved_branches);

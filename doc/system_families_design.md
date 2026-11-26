@@ -2014,3 +2014,73 @@ hybrid discrete LOWER, now described as `deterministic
 equation modes with a uniquely certified planner branch at
 each tick`. Full v7.04 validation requires the five
 workflow results on the exact new commit, not the v7.03 ones.
+
+## v7.05 — Constructively certify LOWER inside an undecided guard source
+
+Predecessor v7.04 `e97155f849cf7f200edb37000e1e61e7b4ca4a2a`
+had Ubuntu and macOS fully green, while Windows, Coverage and
+Sanitizers were still running during preparation of this change.
+The five-workflow acceptance gate remains unchanged.
+
+A uniformly decided guard over the *entire* enclosure was an
+unnecessarily strong existential requirement for LOWER: for
+x[0] in [0,1], the URGENT predicate x>=1/2 is UNKNOWN over the
+full source even though x[0] in [3/4,1] provides a genuine
+strictly enabled transition and a feasible initial witness.
+Unlike UPPER, LOWER needs one actual trajectory, not a complete
+fan-out or an inner approximation of all sources.
+
+The v7.05 helper `certified_lower_step` searches a bounded
+binary refinement of the current enclosure (maximum depth four),
+using the existing `HybridEnclosure::split` operation.
+Candidates retain all existing parameter constraints,
+history, time and state/auxiliary map correlations.
+An accepted candidate must satisfy *both*:
+1. `has_certified_lower_source` proves that candidate has
+   at least one feasible parameter witness, by a nonempty
+   unconstrained domain, whole-domain constraint certificate
+   or validated singleton-point certificate;
+2. the common `HybridDiscreteTimeStepPlanner` returns exactly
+   one possible branch, marked certain from validated guard
+   and invariant evidence. An equation target is required for
+   a transition.
+
+The same **refined source enclosure** is used for the chosen
+validated image; otherwise a branch shown certain on a subbox
+could incorrectly be applied to the larger original source.
+If feasibility is undecidable on a broad box, descendants
+are still searched: lack of a positive certificate does not
+prove infeasibility. Certifiably empty reduced domains are
+pruned. The algorithm never samples to decide branch truth,
+never converts UNKNOWN into TRUE, and imposes no event priority.
+A bounded search failure throws rather than fabricating LOWER.
+
+The existence proof remains explicitly **existential** and
+witness-preserving. Earlier reach/intermediate orbit enclosures
+may be broader than their later successful witness subbox,
+without pretending they are inner approximations. Future
+subboxes are derived from the actual current enclosure, so
+one feasible continuous parameter history is preserved
+across the selected steps and resets. Inputs/inclusions
+remain excluded.
+
+Regression updates replace the former demand that an UNKNOWN
+whole-source urgent guard always throw with a positive
+one-tick result on its strict enabled interior; check event
+provenance, target location, time and a feasible reset
+witness x[0]=7/8 mapping to x[1]=31/8.
+A constrained source x[0]>=3/4 similarly remains a valid
+LOWER input with constraints preserved. A singleton boundary
+source x[0]=1/2 cannot certify either strict uniform
+alternative and must still be rejected by the bounded search.
+Earlier competing-branch, forced-transition, zero-horizon,
+node-budget and source-immutability tests stay enabled.
+
+The public capability remains *partial* Validated LOWER for
+deterministic hybrid discrete equation modes, now including
+bounded certified existential refinement of ambiguous
+whole-enclosure event predicates. No tutorial example is
+added; the installed C++ tutorial retains exclusively
+`#include "ariadne-evolution.hpp"` and implemented patterns.
+All five workflows must pass on the v7.05 SHA before
+claiming this capability is validated.

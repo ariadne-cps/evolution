@@ -31,6 +31,8 @@
 #include "evolution/hybrid_discrete_time_predicate_evaluator.hpp"
 #include "evolution/hybrid_discrete_time_step_planner.hpp"
 
+#include <deque>
+#include <optional>
 #include <stdexcept>
 #include <utility>
 
@@ -78,7 +80,7 @@ Bool has_certified_lower_source(const Enclosure& source) {
 // single branch whose precondition is certified for the entire source.
 // Unlike UPPER, UNKNOWN evidence never yields a LOWER witness. In particular
 // we do not impose an arbitrary priority on competing transitions.
-HybridDiscreteTimePlannedBranch unique_certified_lower_branch(
+std::optional<HybridDiscreteTimePlannedBranch> unique_certified_lower_branch(
     const DiscreteTimeHybridAutomatonInterface& automaton,
     const HybridEnclosure& source, const Integer& index) {
     if (!automaton.has_mode(source.location()) ||
@@ -94,14 +96,56 @@ HybridDiscreteTimePlannedBranch unique_certified_lower_branch(
     const auto plan = HybridDiscreteTimeStepPlanner::plan(
         automaton, source.location(), index, evaluate);
     if (plan.branches.size() != 1u || !plan.branches.front().certain)
-        throw std::invalid_argument(
-            "Discrete hybrid LOWER requires exactly one uniformly certified branch");
+        return std::nullopt;
     const auto branch = plan.branches.front();
     if (branch.kind == HybridDiscreteTimeBranchKind::TRANSITION &&
         !automaton.has_equation(branch.target))
-        throw std::invalid_argument(
-            "Discrete hybrid LOWER reset must target an equation mode");
+        return std::nullopt;
     return branch;
+}
+
+// A whole-enclosure guard may be UNKNOWN even though a provably
+// feasible subbox has one uniformly decided branch. Searching such
+// subboxes is a validated existential refinement, not input sampling.
+// Never return a branch unless BOTH the source witness and the unique
+// branch preconditions have been certified on the same subbox.
+struct CertifiedLowerStep {
+    HybridEnclosure source;
+    HybridDiscreteTimePlannedBranch branch;
+};
+
+CertifiedLowerStep certified_lower_step(
+    const DiscreteTimeHybridAutomatonInterface& automaton,
+    const HybridEnclosure& source, const Integer& index) {
+    constexpr SizeType maximum_refinement_depth = 4u;
+    std::deque<std::pair<HybridEnclosure, SizeType>> pending;
+    pending.emplace_back(source, 0u);
+
+    while (!pending.empty()) {
+        auto candidate = std::move(pending.front());
+        pending.pop_front();
+        if (has_certified_lower_source(candidate.first.continuous_set())) {
+            const auto branch = unique_certified_lower_branch(
+                automaton, candidate.first, index);
+            if (branch)
+                return {std::move(candidate.first), *branch};
+        }
+        // Failure to prove feasibility on a broad source is NOT a
+        // proof of infeasibility: a descendant can carry a verified
+        // interior witness even if the parent's midpoint is excluded.
+        if (candidate.second >= maximum_refinement_depth ||
+            definitely(candidate.first.continuous_set().reduced_domain().is_empty()))
+            continue;
+
+        const auto children = candidate.first.split();
+        for (const HybridEnclosure& child : children) {
+            if (!same(child.parameter_domain(), candidate.first.parameter_domain()) &&
+                definitely(!child.parameter_domain().is_empty()))
+                pending.emplace_back(child, candidate.second + 1u);
+        }
+    }
+    throw std::invalid_argument(
+        "Discrete hybrid LOWER could not certify a feasible subbox with one branch");
 }
 
 } // namespace
@@ -209,12 +253,13 @@ Orbit<HybridEnclosure> HybridDiscreteTimeEvolver<ValidatedTag>::orbit(
     while (index < termination.termination_index()) {
         if (nodes >= this->configuration().maximum_nodes())
             throw std::length_error("Discrete hybrid LOWER evolution exceeds node budget");
-        const auto step = unique_certified_lower_branch(
-            this->system(), current, index);
-        // The planner proves this is the only admissible branch and that
-        // its predicate preconditions hold on the whole current enclosure.
-        // A validated deterministic map or reset preserves the witness.
-        current = HybridDiscreteTimeStepImage::apply(this->system(), current, step);
+        const auto certified = certified_lower_step(this->system(), current, index);
+        // The planner proves one uniformly certified branch on a feasible
+        // source subbox; the same subbox is used for the numerical image.
+        // Earlier Orbit enclosures can remain broader: this path certifies
+        // the existence of a consistent trajectory, not an INNER image.
+        current = HybridDiscreteTimeStepImage::apply(
+            this->system(), certified.source, certified.branch);
         index = index + Integer(1);
         ++nodes;
         check_index(current, index);

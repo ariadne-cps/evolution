@@ -2294,3 +2294,44 @@ UNKNOWN never becomes TRUE or FALSE without a validated subbox proof.
 The v7.10 candidate is published but must pass Ubuntu, macOS, Windows,
 Coverage and Sanitizers on its **own exact SHA**, including Debug and
 the installed tutorial; no CI result is inherited from v7.09.
+
+## v7.11 — Fair multidimensional parameter refinement for validated hybrid LOWER
+
+The v7.10 commit `aa32618e` has passed Ubuntu and macOS at the latest
+observation; Windows, Coverage, and Sanitizers were still in progress.
+No CI result from v7.10 certifies this new candidate.
+
+In `enqueue_parameter_halves()`, the bounded exact-subbox search always
+bisected the first nondegenerate parameter. For multidimensional sources,
+a guard depending on another parameter could remain UNKNOWN throughout
+four refinement levels, even when one certifiable branch existed. This is
+incompleteness of the sufficient LOWER witness search, not proof of an
+unsound lower image. The splitter now starts at `depth % dimension`
+and wraps around nondegenerate axes. The budget of four bisection levels,
+validated source existence test, strict predicate evidence, shared tick
+planner, and exact subbox passed to the parameter constraints all remain
+unchanged. There is no priority between reset and progression and no
+sampling of uncertain inputs.
+
+The public regression `test_lower_refines_nonleading_guard_parameter`
+uses state (x,y), with x declared first and guard URGENT y >= 1/2.
+The initial y intervals [1/2,1] and [0,1/2] touch an undecided
+boundary, so their interiors require a split of the **second** parameter.
+The test independently proves a one-tick reset with event and
+witness (1/2,7/8) -> (7/2,7/8), and a one-tick progression without
+event with witness (1/2,1/8) -> (3/2,1/8). It retains exact
+parameter constraints, source immutability and validated public
+bounding-box checks. The boundary singleton y=1/2 remains rejected.
+The previous single-parameter tests continue unchanged.
+
+Only the LOWER axis-selection logic, one registered public regression,
+and this design journal are changed. Upper semantics, System, Integration,
+tutorials, and numerical enclosure representations are unchanged. The
+capability matrix is unchanged: hybrid discrete deterministic Validated
+LOWER remains **partial**, not a general satisfiability or reachability
+algorithm.
+
+**Acceptance:** Ubuntu, macOS, Windows, Coverage, and Sanitizers must
+all pass on the precise v7.11 SHA, including Debug and the installed
+C++ tutorial. This is a candidate implementation, not a CI-validated
+claim.

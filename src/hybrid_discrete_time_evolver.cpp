@@ -84,8 +84,12 @@ struct ParameterBoxSearch {
 
 Void enqueue_parameter_halves(
     const ExactBoxType& box, SizeType depth, std::deque<ParameterBoxSearch>& pending) {
-    // Split an exact parameter axis without modifying a Taylor function patch.
-    for (SizeType axis = 0u; axis < box.dimension(); ++axis) {
+    // Rotate the starting axis with depth: always splitting the first
+    // nondegenerate parameter can miss a decidable guard on later axes.
+    // This changes only search completeness, not branch certification.
+    const SizeType dimension = box.dimension();
+    for (SizeType offset = 0u; offset < dimension; ++offset) {
+        const SizeType axis = (depth + offset) % dimension;
         if (!(box[axis].lower_bound().raw() < box[axis].upper_bound().raw()))
             continue;
         const auto children = box.split(axis);

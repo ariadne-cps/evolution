@@ -650,6 +650,78 @@ class TestHybridDiscreteTimeEvolver : public Ariadne::Testing::ContextFixture {
                           Semantics::LOWER));
     }
 
+    Void test_lower_refines_nonleading_guard_parameter() {
+        const RealVariable x("x"), y("y");
+        const DiscreteLocation source_mode(1), target_mode(2);
+        const DiscreteEvent event("guard_on_y");
+        DiscreteTimeHybridAutomaton system;
+        system.new_mode(source_mode, DifferenceAlgebraicEquation(
+            List<PrimedRealAssignment>{next(x) = x + 1, next(y) = y}));
+        system.new_mode(target_mode, DifferenceAlgebraicEquation(
+            List<PrimedRealAssignment>{next(x) = x, next(y) = y}));
+        system.new_urgent_transition(source_mode, event, target_mode,
+            {next(x) = x + 3, next(y) = y}, y >= 1 / 2_q);
+        Evolver evolver(system);
+
+        // x is the first nondegenerate parameter, but only y decides
+        // the guard. The full y interval touches the uncertain boundary.
+        // Rotating the split axis must find the interior reset witness
+        // (x,y)=(1/2,7/8) -> (7/2,7/8), without prioritising the event.
+        const HybridEnclosure reset_source(HybridExactBox(
+            source_mode, RealSpace({x, y}),
+            ExactBoxType({{0.0_x, 1.0_x}, {0.5_x, 1.0_x}})), configuration());
+        const auto reset_orbit = evolver.orbit(
+            reset_source, Termination(Integer(0), Integer(1)), Semantics::LOWER);
+        ARIADNE_TESTING_REQUIRE(reset_orbit.final().size() == 1u);
+        const auto& reset_final = reset_orbit.final().front();
+        ARIADNE_TESTING_PROVE(reset_final.location() == target_mode);
+        ARIADNE_TESTING_REQUIRE(reset_final.previous_events().size() == 1u);
+        ARIADNE_TESTING_PROVE(reset_final.previous_events()[0u] == event);
+        ARIADNE_TESTING_REQUIRE(reset_final.number_of_constraints() >= 1u);
+        ARIADNE_TESTING_EXPECT_EQUAL(reset_final.state_dimension(), 2u);
+        ARIADNE_TESTING_EXPECT_EQUAL(
+            reset_final.time_range().lower_bound().raw().get_d(), 1.0);
+        const auto reset_bounds = reset_final.state_bounding_box();
+        ARIADNE_TESTING_REQUIRE(reset_bounds.dimension() == 2u);
+        ARIADNE_TESTING_PROVE(reset_bounds[0u].lower_bound().raw().get_d() <= 3.5);
+        ARIADNE_TESTING_PROVE(reset_bounds[0u].upper_bound().raw().get_d() >= 3.5);
+        ARIADNE_TESTING_PROVE(reset_bounds[1u].lower_bound().raw().get_d() <= 0.875);
+        ARIADNE_TESTING_PROVE(reset_bounds[1u].upper_bound().raw().get_d() >= 0.875);
+        ARIADNE_TESTING_EXPECT_EQUAL(reset_source.number_of_constraints(), 0u);
+        ARIADNE_TESTING_EXPECT_EQUAL(reset_source.previous_events().size(), 0u);
+
+        // On the other side, the only certifiable branch is progression:
+        // (x,y)=(1/2,1/8) -> (3/2,1/8), with no recorded event.
+        const HybridEnclosure progression_source(HybridExactBox(
+            source_mode, RealSpace({x, y}),
+            ExactBoxType({{0.0_x, 1.0_x}, {0.0_x, 0.5_x}})), configuration());
+        const auto progression_orbit = evolver.orbit(
+            progression_source, Termination(Integer(0), Integer(1)), Semantics::LOWER);
+        ARIADNE_TESTING_REQUIRE(progression_orbit.final().size() == 1u);
+        const auto& progression_final = progression_orbit.final().front();
+        ARIADNE_TESTING_PROVE(progression_final.location() == source_mode);
+        ARIADNE_TESTING_EXPECT_EQUAL(progression_final.previous_events().size(), 0u);
+        ARIADNE_TESTING_REQUIRE(progression_final.number_of_constraints() >= 1u);
+        ARIADNE_TESTING_EXPECT_EQUAL(
+            progression_final.time_range().lower_bound().raw().get_d(), 1.0);
+        const auto progression_bounds = progression_final.state_bounding_box();
+        ARIADNE_TESTING_REQUIRE(progression_bounds.dimension() == 2u);
+        ARIADNE_TESTING_PROVE(progression_bounds[0u].lower_bound().raw().get_d() <= 1.5);
+        ARIADNE_TESTING_PROVE(progression_bounds[0u].upper_bound().raw().get_d() >= 1.5);
+        ARIADNE_TESTING_PROVE(progression_bounds[1u].lower_bound().raw().get_d() <= 0.125);
+        ARIADNE_TESTING_PROVE(progression_bounds[1u].upper_bound().raw().get_d() >= 0.125);
+        ARIADNE_TESTING_EXPECT_EQUAL(progression_source.number_of_constraints(), 0u);
+
+        // The boundary singleton is feasible but cannot force either
+        // branch under strict three-valued predicate certification.
+        const HybridEnclosure boundary(HybridExactBox(
+            source_mode, RealSpace({x, y}),
+            ExactBoxType({{0.0_x, 1.0_x}, {0.5_x, 0.5_x}})), configuration());
+        ARIADNE_TESTING_EXPECT_THROWS(std::invalid_argument,
+            evolver.orbit(boundary, Termination(Integer(0), Integer(1)),
+                          Semantics::LOWER));
+    }
+
     Void test_lower_unique_permissive_branch() {
         const RealVariable x("x");
         const DiscreteLocation source_mode(1), target_mode(2);
@@ -850,6 +922,7 @@ int main(int argc, char** argv) {
     ARIADNE_TESTING_ADD_TEST(TestHybridDiscreteTimeEvolver, test_lower_constrained_point_witness);
     ARIADNE_TESTING_ADD_TEST(TestHybridDiscreteTimeEvolver, test_lower_forced_urgent_jump_and_disabled_progression);
     ARIADNE_TESTING_ADD_TEST(TestHybridDiscreteTimeEvolver, test_lower_refines_undecided_urgent_guard);
+    ARIADNE_TESTING_ADD_TEST(TestHybridDiscreteTimeEvolver, test_lower_refines_nonleading_guard_parameter);
     ARIADNE_TESTING_ADD_TEST(TestHybridDiscreteTimeEvolver, test_lower_unique_permissive_branch);
     ARIADNE_TESTING_ADD_TEST(TestHybridDiscreteTimeEvolver, test_lower_unique_branch_across_competing_events);
     ARIADNE_TESTING_ADD_TEST(TestHybridDiscreteTimeEvolver, test_lower_excludes_unproved_branches);

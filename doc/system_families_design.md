@@ -2550,3 +2550,34 @@ was authored; the remaining v7.14 workflows were still in progress.
 The entire v7.15 commit must independently pass Ubuntu, macOS,
 Windows, Coverage and Sanitizers, including Debug and installed
 tutorial, before acceptance.
+
+## v7.16 — Repair duplicate local name in hybrid inclusion LOWER regression
+
+The v7.15 `466c8ede` Ubuntu Clang 16 Debug build failed compiling
+`tests/test_hybrid_discrete_time_evolver.cpp`:
+`redefinition of 'bounds'` at line 435 (previous declaration line 414),
+inside `test_public_reset_into_inclusion_with_auxiliary_and_continue`.
+Both variables were in the same C++ function scope. This is a test source
+**compilation** failure; no conclusion about the runtime or mathematics
+of the newly introduced LOWER hybrid inclusion path follows from it.
+
+Only the second `bounds` is renamed to `lower_bounds` and its two
+existing assertions are updated to use the renamed variable. The
+original UPPER bounds and all tests remain unchanged and enabled.
+An additional source inspection counted `const auto` declarations
+within all 19 hybrid evolver test methods and identified no other
+duplicate method-local names.
+
+No production kernel, numerical method, input domain, event planner,
+guard classification, source/target System model, or contract changes.
+In particular `Semantics::LOWER` continues to apply the same full
+set-valued discrete inclusion map as `Semantics::UPPER`, without sampled
+or fixed input choices. The v7.15 coverage of forced resets, guarded
+auxiliaries, independent full input boxes and conservative rejection of
+uncertain branches is preserved.
+
+**Verification**: this is a corrective candidate; Ubuntu, macOS,
+Windows, Coverage, and Sanitizers must all pass on the **exact v7.16
+commit SHA**, including tests and installed tutorial, before acceptance.
+Do not attribute the v7.15 failures solely to this issue until the
+v7.16 test suite has run. Matrix entries are unchanged.

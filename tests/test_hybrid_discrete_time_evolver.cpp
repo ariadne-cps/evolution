@@ -432,9 +432,9 @@ class TestHybridDiscreteTimeEvolver : public Ariadne::Testing::ContextFixture {
         ARIADNE_TESTING_EXPECT_EQUAL(lf.number_of_constraints(), 0u);
         ARIADNE_TESTING_REQUIRE(lf.previous_events().size() == 1u);
         ARIADNE_TESTING_PROVE(lf.previous_events()[0u] == jump);
-        const auto bounds = lf.state_bounding_box()[0u];
-        ARIADNE_TESTING_PROVE(bounds.lower_bound().raw().get_d() <= 5.0);
-        ARIADNE_TESTING_PROVE(bounds.upper_bound().raw().get_d() >= 9.0);
+        const auto lower_bounds = lf.state_bounding_box()[0u];
+        ARIADNE_TESTING_PROVE(lower_bounds.lower_bound().raw().get_d() <= 5.0);
+        ARIADNE_TESTING_PROVE(lower_bounds.upper_bound().raw().get_d() >= 9.0);
     }
 
     Void test_lower_uniform_auxiliary_guard_over_full_input_box() {

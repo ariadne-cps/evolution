@@ -175,6 +175,47 @@ class TestHybridDiscreteTimeStepExecutor : public Ariadne::Testing::ContextFixtu
             jump.enclosure.continuous_set().number_of_parameters(), 2u);
         ARIADNE_TESTING_EXPECT_EQUAL(
             progress.enclosure.continuous_set().number_of_parameters(), 3u);
+
+        // Both branches must use the SAME pre-tick input u[0], not an
+        // independent value for the auxiliary guard and reset.
+        // Jump: x[1] = a[0] + 3 = x[0] + u[0] + 3.
+        // Progression: x[1] = x[0] + u[0]; u[1] is added afterwards.
+        const auto& reset_set = jump.enclosure.continuous_set();
+        const auto& progress_set = progress.enclosure.continuous_set();
+        const auto& factory = reset_set.configuration().function_factory();
+        const auto reset_domain = reset_set.parameter_domain();
+        const auto progress_domain = progress_set.parameter_domain();
+        const auto reset_x0 = factory.create_coordinate(reset_domain, 0u);
+        const auto reset_u0 = factory.create_coordinate(reset_domain, 1u);
+        const auto progress_x0 = factory.create_coordinate(progress_domain, 0u);
+        const auto progress_u0 = factory.create_coordinate(progress_domain, 1u);
+        const auto reset_state = reset_set.state_function();
+        const auto progress_state = progress_set.state_function();
+        const auto reset_residual =
+            (reset_state[0u] - reset_x0 - reset_u0 - Real(3)).range();
+        const auto progress_residual =
+            (progress_state[0u] - progress_x0 - progress_u0).range();
+        ARIADNE_TESTING_PROVE(reset_residual.lower_bound().raw().get_d() >= -1e-6);
+        ARIADNE_TESTING_PROVE(reset_residual.upper_bound().raw().get_d() <= 1e-6);
+        ARIADNE_TESTING_PROVE(progress_residual.lower_bound().raw().get_d() >= -1e-6);
+        ARIADNE_TESTING_PROVE(progress_residual.upper_bound().raw().get_d() <= 1e-6);
+        ARIADNE_TESTING_EXPECT_EQUAL(reset_set.variable_kinds()[1u],
+                                     EnclosureVariableKind::INPUT);
+        ARIADNE_TESTING_EXPECT_EQUAL(progress_set.variable_kinds()[1u],
+                                     EnclosureVariableKind::INPUT);
+        ARIADNE_TESTING_EXPECT_EQUAL(progress_set.variable_kinds()[2u],
+                                     EnclosureVariableKind::INPUT);
+
+        // Under the necessary closed guard a>=0, the reset must cover
+        // the attainable extremes 3 and 5. The permissive invariant
+        // a<=0 must retain the progression extremes -1 and 0.
+        const auto reset_bounds = jump.enclosure.state_bounding_box()[0u];
+        const auto progress_bounds = progress.enclosure.state_bounding_box()[0u];
+        ARIADNE_TESTING_PROVE(reset_bounds.lower_bound().raw().get_d() <= 3.0);
+        ARIADNE_TESTING_PROVE(reset_bounds.upper_bound().raw().get_d() >= 5.0);
+        ARIADNE_TESTING_PROVE(progress_bounds.lower_bound().raw().get_d() <= -1.0);
+        ARIADNE_TESTING_PROVE(progress_bounds.upper_bound().raw().get_d() >= 0.0);
+
         ARIADNE_TESTING_EXPECT_EQUAL(jump.enclosure.previous_events().size(), 1u);
         ARIADNE_TESTING_PROVE(jump.enclosure.previous_events()[0u] == event);
         ARIADNE_TESTING_EXPECT_EQUAL(

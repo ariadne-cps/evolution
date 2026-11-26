@@ -1669,3 +1669,51 @@ guard/reset implementation and the installed umbrella-only tutorial
 are unchanged. The 5-job functional CI gate must pass on this v6.98
 SHA; prior red v6.97 results do not indicate a numerical defect until
 the test builds and executes.
+
+## v6.99 — Correlated UPPER guard/reset witness and a compact installed tutorial example
+
+The v6.98 commit `4d0e353b91f211742cfe481ff44597d11ce92cbb`
+passed all five functional workflows on 26 November 2026:
+Ubuntu, macOS, Windows, Coverage and Sanitizers. This validates
+the v6.97 shared `STATE_AUXILIARY` path after fixing the obsolete
+test call sites in v6.98, including the installed C++ umbrella-only
+tutorial.
+
+The v6.99 regression strengthens
+`test_correlated_auxiliary_permissive_guard_and_invariant` without
+modifying production code. For source `x[0] in [0,1]`,
+`u[0] in [-1,1]`, `a[0]=x[0]+u[0]`, a permissive event
+has guard `a>=0`, progression invariant `a<=0`,
+reset `x[1]=a[0]+3`, and progression `x[1]=x[0]+u[0]`.
+The two restricted UPPER successor sets must preserve precisely
+the *same* source input coordinate in state and auxiliary functions:
+the parameterized reset residual `x_reset[1]-x[0]-u[0]-3`
+and progression residual `x_progress[1]-x[0]-u[0]`
+must each enclose zero within a narrow numerical tolerance.
+This explicitly rejects treating the guard's auxiliary value
+and the reset's auxiliary value as independent samples.
+
+Necessary closed constraints on each branch are retained; the
+jump state enclosure must cover both attainable extrema `3`
+and `5`, while the progression must cover `-1` and `0`.
+The test also checks the historical `INPUT` coordinate in both
+branches and the fresh next-tick `INPUT` coordinate introduced
+only on the progression, together with provenance and clock checks.
+All previous semantic tests remain enabled.
+
+The installed C++ tutorial adds **one** example of this now
+implemented and validated feature, reusing the existing
+hybrid discrete evolver syntax rather than multiplying
+paradigms and system families. It shows a bounded-input
+`DifferenceAlgebraicInclusion` with `a=x+u` and one permissive
+event whose guard, invariant and reset refer to `a`.
+The tutorial still has exactly one include,
+`#include "ariadne-evolution.hpp"`, and includes no examples
+of unsupported future capabilities. The tutorial README lists
+the new case as a single representative C++ syntax pattern.
+
+The public capability matrix is unchanged. This checkpoint
+adds a stronger regression and a tutorial example, not a
+new numerical backend. Acceptance still requires a new
+five-workflow pass on the exact v6.99 SHA, including
+the installed Release tutorial on each platform.

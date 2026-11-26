@@ -20,6 +20,7 @@ paradigms and set semantics.
 | Ordinary difference equation, validated | `DiscreteTimeEvolver<ValidatedTag>` with both UPPER and LOWER |
 | Ordinary difference inclusion, sampled and validated | `DiscreteTimeEvolver<ApproximateTag>` with explicit input policy vs `DiscreteTimeInclusionEvolver` with UPPER |
 | Hybrid discrete map and reset alternatives | `HybridDiscreteTimeEvolver<ApproximateTag>` branch-complete sampled paths vs `HybridDiscreteTimeEvolver<ValidatedTag>` with an integer termination criterion and UPPER |
+| Hybrid discrete inclusion with auxiliary event | One `ValidatedTag` permissive transition where the same `a=x+u` determines guard, progression invariant and reset; whole-box input correlations are retained |
 | Continuous hybrid modes and flow | `ContinuousTimeHybridAutomaton`, approximate topology, validated short equation and inclusion evolutions |
 | First-order PDE | One bounded two-dimensional hyperbolic problem using `FirstOrderPDE` and `first_order_pde` |
 

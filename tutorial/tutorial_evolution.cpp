@@ -158,6 +158,29 @@ int main() {
     std::cout << "Validated hybrid discrete UPPER branches: "
               << validated_branches.final().size() << " final enclosure(s)\n";
 
+    // A single additional hybrid inclusion example shows why auxiliary
+    // variables are not independent inputs: a[0]=x[0]+u[0] determines
+    // both the permissive guard and the reset, with the full input box.
+    const RealVariable a("a");
+    DiscreteTimeHybridAutomaton auxiliary_tick_automaton;
+    auxiliary_tick_automaton.new_mode(idle, DifferenceAlgebraicInclusion(
+        List<PrimedRealAssignment>{next(x) = x + u},
+        List<RealAssignment>{let(a) = x + u},
+        RealVariablesBox({-1 <= u <= 1})));
+    auxiliary_tick_automaton.new_mode(active, DifferenceAlgebraicEquation(
+        List<PrimedRealAssignment>{next(x) = x}));
+    auxiliary_tick_automaton.new_permissive_transition(
+        idle, activate, active, {next(x) = a + 3}, a >= 0, a <= 0);
+    HybridDiscreteTimeEvolver<ValidatedTag> auxiliary_tick_evolver(auxiliary_tick_automaton);
+    const HybridEnclosure auxiliary_tick_initial(
+        HybridExactBox(idle, RealSpace({x}), ExactBoxType({{0.0_x, 1.0_x}})),
+        EnclosureConfiguration(validated_discrete_evolver.function_factory()));
+    const auto auxiliary_tick_orbit = auxiliary_tick_evolver.orbit(
+        auxiliary_tick_initial,
+        HybridDiscreteTimeTerminationCriterion(Integer(0), Integer(1)), Semantics::UPPER);
+    std::cout << "Validated hybrid inclusion with auxiliary guard/reset: "
+              << auxiliary_tick_orbit.final().size() << " final enclosure(s)\n";
+
     // Hybrid validated evolution with continuous dynamics in a single mode.
     // No events are enabled: this isolates the continuous flow in a hybrid
     // enclosure, with a short maximum time and at most one discrete jump.

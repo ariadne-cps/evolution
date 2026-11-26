@@ -2478,3 +2478,28 @@ not a proof that numerical enclosures constitute an INNER image.
 Only the three scoped inclusion files and the journal changed. All
 five workflows (Ubuntu, macOS, Windows, Coverage, Sanitizers) must
 pass on the exact corrective SHA before acceptance.
+
+## v7.14 — Fix duplicate local variable in the v7.13 inclusion test
+
+The macOS AppleClang 21 arm64 Debug job for v7.13
+`9f23103e03fa37707e3dc76774b74d36d1faf42f` failed while compiling
+`tests/test_discrete_time_inclusion_evolver.cpp` with `-Werror`:
+`redefinition of 'lower_zero'` at line 287, first declared at line 261
+within `test_rejection_is_explicit_even_at_zero_horizon`. This is a
+**test-scoping/compilation error**, not an observed semantic failure of
+the set-oriented LOWER propagation.
+
+The second local, which holds the zero-horizon LOWER orbit for the
+auxiliary-bearing inclusion, is renamed to `lower_auxiliary_zero`,
+including its four expectations. The first `lower_zero` is unchanged.
+Both tests remain enabled; no test assertions, production kernels,
+semantics, input boxes, constraints, System, Integration or tutorials are
+altered. In particular, the binding design rule from v7.13 holds:
+`x[n+1]=f(x[n],u[n])` is applied to the full parametrized set with a
+fresh full input box at every discrete tick under both UPPER and LOWER;
+no lower-specific point or midpoint is selected.
+
+**Verification:** require all five CI workflows (Ubuntu, macOS, Windows,
+Coverage and Sanitizers) green on the precise v7.14 SHA, including
+compilation with warnings as errors. No prior passing workflow can
+stand in for this check. Matrix classification unchanged from v7.13.

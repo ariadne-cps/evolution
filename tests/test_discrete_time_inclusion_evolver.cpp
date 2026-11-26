@@ -284,14 +284,14 @@ class TestDiscreteTimeInclusionEvolver : public Ariadne::Testing::ContextFixture
             Integer(0), Semantics::UPPER);
         ARIADNE_TESTING_EXPECT_EQUAL(zero.initial().auxiliary_space(), RealSpace({a}));
         ARIADNE_TESTING_EXPECT_EQUAL(zero.initial().number_of_parameters(), 2u);
-        const auto lower_zero = supported.orbit(
+        const auto lower_auxiliary_zero = supported.orbit(
             supported.enclosure(ExactBoxType({{0.0_x, 0.0_x}})),
             Integer(0), Semantics::LOWER);
-        ARIADNE_TESTING_EXPECT_EQUAL(lower_zero.final().size(), 1u);
-        ARIADNE_TESTING_EXPECT_EQUAL(lower_zero.initial().auxiliary_space(), RealSpace({a}));
-        ARIADNE_TESTING_EXPECT_EQUAL(lower_zero.initial().number_of_parameters(), 2u);
+        ARIADNE_TESTING_EXPECT_EQUAL(lower_auxiliary_zero.final().size(), 1u);
+        ARIADNE_TESTING_EXPECT_EQUAL(lower_auxiliary_zero.initial().auxiliary_space(), RealSpace({a}));
+        ARIADNE_TESTING_EXPECT_EQUAL(lower_auxiliary_zero.initial().number_of_parameters(), 2u);
         ARIADNE_TESTING_EXPECT_EQUAL(
-            lower_zero.initial().euclidean_set().number_of_constraints(), 0u);
+            lower_auxiliary_zero.initial().euclidean_set().number_of_constraints(), 0u);
         // Reuse the current-input binding on a resumed LOWER enclosure,
         // rather than imposing an unrelated no-resume limitation.
         const auto resumed = supported.orbit(

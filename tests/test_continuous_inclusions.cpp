@@ -237,6 +237,75 @@ class TestContinuousInclusions : public Ariadne::Testing::ContextFixture {
                                       evolver.orbit(RealVariablesBox({x == 0}), Real(0u), Semantics::LOWER));
     }
 
+
+    Void test_structured_lower_inclusion_preserves_switching_inputs() {
+        const RealVariable x("x"), y("y"), u("u");
+        const OrdinaryDifferentialAlgebraicInclusion system(
+            {dot(x) = u, dot(y) = x}, RealVariablesBox({-1 <= u <= 1}));
+        TaylorPicardIntegrator integrator(step_maximum_error = 1e-6);
+        ContinuousTimeEvolver<ValidatedTag> evolver(
+            system, integrator, ConstantApproximation(), ConstantApproximation());
+        evolver.configuration().set_maximum_step_size(0.0625);
+        evolver.configuration().set_enable_reconditioning(false);
+
+        const auto initial = RealVariablesBox({x == 0, y == 0});
+        const auto lower = evolver.orbit(initial, Real(0.125_x), Semantics::LOWER);
+        const auto upper = evolver.orbit(initial, Real(0.125_x), Semantics::UPPER);
+        ARIADNE_TESTING_REQUIRE(lower.final().size() == 1u);
+        ARIADNE_TESTING_REQUIRE(upper.final().size() == 1u);
+        ARIADNE_TESTING_PROVE(lower.reach().size() > 0u);
+        const auto& lower_final = lower.final()[0u];
+        const auto& upper_final = upper.final()[0u];
+        ARIADNE_TESTING_EXPECT_EQUAL(lower_final.state_dimension(), 2u);
+        ARIADNE_TESTING_EXPECT_EQUAL(lower_final.number_of_parameters(), 4u);
+        ARIADNE_TESTING_EXPECT_EQUAL(
+            lower_final.number_of_parameters(), upper_final.number_of_parameters());
+        ARIADNE_TESTING_EXPECT_EQUAL(lower_final.number_of_constraints(), 0u);
+
+        // Two independent full input choices, without freezing u:
+        // u[0]=+1, u[1]=-1 gives x[2]=0 and y[2]=1/256.
+        // The enclosure must contain the same actual trajectory for
+        // LOWER, not merely a numerical input-midpoint witness.
+        const Vector<FloatDPBounds> switching({
+            FloatDPBounds(0, dp), FloatDPBounds(0, dp),
+            FloatDPBounds(1, dp), FloatDPBounds(-1, dp)});
+        const auto lower_values = lower_final.state_function()(switching);
+        const auto upper_values = upper_final.state_function()(switching);
+        ARIADNE_TESTING_PROVE(refines(FloatDPBounds(0, dp), lower_values[0u]));
+        ARIADNE_TESTING_PROVE(refines(FloatDPBounds(0.00390625_x, dp), lower_values[1u]));
+        ARIADNE_TESTING_PROVE(refines(FloatDPBounds(0, dp), upper_values[0u]));
+        ARIADNE_TESTING_PROVE(refines(FloatDPBounds(0.00390625_x, dp), upper_values[1u]));
+    }
+
+    Void test_lower_preserves_unsplit_initial_enclosure() {
+        const RealVariable x("x"), u("u");
+        const OrdinaryDifferentialAlgebraicInclusion system(
+            {dot(x) = u}, RealVariablesBox({-1 <= u <= 1}));
+        TaylorPicardIntegrator integrator(step_maximum_error = 1e-6);
+        ContinuousTimeEvolver<ValidatedTag> evolver(
+            system, integrator, ZeroApproximation(), ConstantApproximation());
+        evolver.configuration().set_maximum_enclosure_radius(0.01);
+        evolver.configuration().set_enable_subdivisions(true);
+        const auto source = RealVariablesBox({-0.25_dec <= x <= 0.25_dec});
+
+        // At zero horizon there is no numerical step. A large
+        // numerical LOWER source must remain a single enclosure,
+        // not be partitioned into purported independent witnesses.
+        const auto lower = evolver.orbit(source, Real(0), Semantics::LOWER);
+        ARIADNE_TESTING_REQUIRE(lower.final().size() == 1u);
+        const auto original = cast_exact_box(
+            lower.final()[0u].bounding_box().euclidean_set());
+        ARIADNE_TESTING_PROVE(subset(ExactBoxType({{-0.25_x, 0.25_x}}), original));
+        ARIADNE_TESTING_EXPECT_EQUAL(lower.final()[0u].number_of_parameters(), 1u);
+
+        const FirstOrderMultifunctionIntegrator box_integrator;
+        ContinuousTimeEvolver<ValidatedTag> boxes(system, box_integrator);
+        ARIADNE_TESTING_EXPECT_THROWS(std::invalid_argument,
+            boxes.orbit(RealVariablesBox({x == 0}), Real(0.125_x), Semantics::LOWER));
+        ARIADNE_TESTING_EXPECT_THROWS(std::invalid_argument,
+            boxes.orbit(RealVariablesBox({x == 0}), Real(0), Semantics::LOWER));
+    }
+
     Void test_pointwise_interval_field_and_domain_rejection() {
         RealVariable x("x");
         const ExactBoxType domain({
@@ -345,6 +414,8 @@ int main(int argc, char** argv) {
     ARIADNE_TESTING_ADD_TEST(TestContinuousInclusions, test_timed_constant_parameters_survive_input_choices);
     ARIADNE_TESTING_ADD_TEST(TestContinuousInclusions, test_autonomous_parameters_keep_the_declared_state);
     ARIADNE_TESTING_ADD_TEST(TestContinuousInclusions, test_first_order_box_paths_and_zero_free_inputs);
+    ARIADNE_TESTING_ADD_TEST(TestContinuousInclusions, test_structured_lower_inclusion_preserves_switching_inputs);
+    ARIADNE_TESTING_ADD_TEST(TestContinuousInclusions, test_lower_preserves_unsplit_initial_enclosure);
     ARIADNE_TESTING_ADD_TEST(TestContinuousInclusions, test_pointwise_interval_field_and_domain_rejection);
     ARIADNE_TESTING_ADD_TEST(TestContinuousInclusions, test_owned_components_and_configuration);
     ARIADNE_TESTING_ADD_TEST(TestContinuousInclusions, test_interval_bound_covers_the_selected_numerical_field);

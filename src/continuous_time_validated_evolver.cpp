@@ -214,8 +214,15 @@ auto ContinuousTimeEvolver<ValidatedTag>::orbit(const EnclosureType& initial_set
     ARIADNE_PRECONDITION(initial_set.auxiliary_space().size() == 0u ||
                          this->system().auxiliary_space() == initial_set.auxiliary_space())
 
-    if (this->system().inclusion() != nullptr && semantics != Semantics::UPPER) {
-        throw std::invalid_argument("Continuous inclusion evolution requires UPPER semantics");
+    if (this->system().inclusion() != nullptr) {
+        if (semantics != Semantics::UPPER && semantics != Semantics::LOWER)
+            throw std::invalid_argument("Unknown continuous inclusion semantics");
+        // LOWER needs a correlation-preserving validated endpoint map.
+        // The first-order integrator returns independent outer boxes,
+        // which cannot be used as LOWER continuation certificates.
+        if (semantics == Semantics::LOWER && !this->_inclusion_integrator)
+            throw std::invalid_argument(
+                "Continuous inclusion LOWER requires the structured selected-input integrator");
     }
     EnclosureType initial = initial_set;
     if (initial.has_constant_parameter_binding()) {
@@ -245,7 +252,14 @@ auto ContinuousTimeEvolver<ValidatedTag>::orbit(const EnclosureType& initial_set
         indicator->update_final(time.get_d());
     },
                           std::bind_front(&ContinuousTimeEvolver<ValidatedTag>::_process_timed_enclosure, this), time, semantics, result);
-    _append_initial_set(workload, TimeStepType(0u), initial);
+    // LOWER enclosures cannot be independently split: an outer child
+    // might not contain the nonempty reachable subset of the parent.
+    // This applies equally to ordinary equations and inclusions;
+    // UPPER continues to use its existing initial subdivision path.
+    if (semantics == Semantics::LOWER)
+        workload.append({TimeStepType(0u), initial});
+    else
+        _append_initial_set(workload, TimeStepType(0u), initial);
     workload.process();
 
     return std::move(*result);
@@ -388,6 +402,13 @@ Void ContinuousTimeEvolver<ValidatedTag>::
             return {this->_inclusion_step(current_set, current_time, maximum_step_size), join(current_set.state_function(), parameters)};
         }();
         step_size = numerical.step.time_step();
+        // Each continuous LOWER tick must carry an actual structured
+        // trajectory-to-parameter map; an independent box cannot
+        // certify continuation of the same reachable subset.
+        if (semantics == Semantics::LOWER &&
+            (!numerical.step.has_reach_models() || !numerical.step.has_evolve_model()))
+            throw std::invalid_argument(
+                "Continuous inclusion LOWER requires structured reach and endpoint models");
         applied = EvolutionDetail::apply_integration_step(current_set, numerical.step, numerical.arguments, semantics,
                                                           this->_box_integrator != nullptr ? EvolutionDetail::IntegrationStepRepresentation::ALLOW_BOX_ENCLOSURES
                                                                                            : EvolutionDetail::IntegrationStepRepresentation::REQUIRE_STRUCTURED);

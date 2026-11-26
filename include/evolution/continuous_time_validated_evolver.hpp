@@ -142,12 +142,21 @@ class ContinuousTimeEvolver<ValidatedTag>
     ContinuousTimeEvolver(const OrdinaryDifferentialAlgebraicEquation&, const IntegratorInterface&);
 
     //! \brief Construct an ODAI evolver with one explicitly selected reach and evolve method.
-    //! All inclusion paths require UPPER semantics; no competing scheduler is used.
+    //! Supports UPPER and LOWER with the SAME original inclusion field.
+    //! LOWER requires the structured reach and endpoint models from the
+    //! explicitly selected input-approximation integrator; it never
+    //! independently subdivides an initial LOWER enclosure. The
+    //! selected input approximations bound a reachable trajectory
+    //! family, whose rigorous outer numerical images are returned.
+    //! This is NOT an INNER approximation and not an input sampling policy.
+    //! First-order box-only inclusion steps remain UPPER-only.
     //! The high-order method requires free numerical inputs and rejects
     //! unsupported preconditioning or a reach approximation without tube rigor.
     ContinuousTimeEvolver(const OrdinaryDifferentialAlgebraicInclusion&, const IntegratorBase&,
                           const InputApproximation& reach, const InputApproximation& evolve);
     //! \brief Select the first-order box integrator explicitly for an ODAI.
+    //! Its correlation-free box certificate is supported for UPPER only;
+    //! do not promote it into a LOWER reachable-subset continuation.
     ContinuousTimeEvolver(const OrdinaryDifferentialAlgebraicInclusion&, const FirstOrderMultifunctionIntegrator&);
 
     //! \brief Make a dynamically-allocated copy.

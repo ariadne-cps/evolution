@@ -3010,3 +3010,75 @@ until all Ubuntu, macOS, Windows, Coverage, Sanitizers workflows
 succeed on the exact v7.22 SHA. Do not promote any capability matrix
 cell merely due to a new candidate. No changes to System, Integration,
 the continuous evolvers, UPPER scheduler or canonical semantic rules.
+
+## v7.23 — Structured validated LOWER for ordinary continuous inclusions, without changing dynamics
+
+**Canonical mathematical contract:** UPPER encloses a superset of the
+reachable set; LOWER rigorously encloses a NONEMPTY reachable subset,
+not a geometric INNER subset. Both numerical enclosures are outer.
+No model-specific LOWER right-hand side, input midpoint, or invented
+physical input policy is allowed. The distinction for continuous time
+is the supported validated integrator and the safe handling of
+enclosures, not a different dynamics.
+
+**Narrow implementation:** the existing selected-parametric
+multifunction integration path already computes a rigorous
+structured reach patch and structured endpoint patch, keeping
+the independent free input coordinates per step. The ordinary
+continuous evolver may now admit `Semantics::LOWER` only on that
+selected structured integration path, using exactly the SAME
+`compute_inclusion_step`/`compute_clocked_inclusion_step` and
+`apply_integration_step` functions as UPPER. Explicit runtime
+checks require both `has_reach_models()` and
+`has_evolve_model()` before a LOWER step. The existing box-only
+`FirstOrderMultifunctionIntegrator` remains UPPER-only: its
+Cartesian box has no carried numerical trajectory-to-parameter
+map and is explicitly prohibited by the shared integration layer
+for LOWER. Constant physical-parameter LOWER remains unsupported
+by the preexisting general parameter restriction; the new support
+is currently for the selected structured solver with no such
+physical parameters. The user chooses input-approximation
+methods when constructing the integrator; these are its original
+numerical approximation configuration, not a new unilateral
+LOWER sampling policy.
+
+**Existing unsound edge case corrected:** `_append_initial_set`
+used to split the initial outer enclosure on radius without
+checking semantics, even when LOWER held an existing witness
+possibly absent from each arbitrary child. For LOWER it now
+appends the complete original source directly; UPPER retains
+the existing initial subdivision behavior unchanged. Subsequent
+LOWER steps already avoid subdivision when radius is large.
+This correction applies to both ordinary continuous equations
+and inclusions, without touching their numerical kernels.
+
+**Regression tests:** `test_structured_lower_inclusion_preserves_switching_inputs`
+compares validated UPPER and LOWER on the SAME
+`x'=u, y'=x` inclusion for two 1/16-length steps. It asserts
+one final enclosure, four independent parameters (2 initial
+state coordinates plus full u[0],u[1]), no synthetic constraints
+and enclosure of the analytically reachable switching trajectory
+`u[0]=+1,u[1]=-1`, `x(1/8)=0`,
+`y(1/8)=1/256` under BOTH semantics.
+`test_lower_preserves_unsplit_initial_enclosure` forces a
+small max radius and enable_subdivisions, then checks that a
+zero-horizon LOWER enclosure for x in [-1/4,1/4] retains
+the WHOLE source as a single final enclosure. It also checks
+that box-only integrator LOWER rejects at zero and positive
+horizon rather than silently treating outer boxes as
+trajectory certificates. All existing UPPER inclusion
+tests and numerical bounds remain unchanged. Static preflight
+confirmed all 13 test methods registered and no duplicate
+method-local `const auto` declarations.
+
+**Capability classification:** continuous/ordinary/inclusion/
+Validated LOWER becomes a PARTIAL CANDIDATE (structured
+selected-input method only), subject to CI and deeper
+numerical-contract verification. The box integrator is not
+promoted. This changes the candidate matrix LOWER to
+2 complete + 5 partial + 1 absent (hybrid continuous
+inclusion), with no changes in Approximate or UPPER.
+The immutable rule at document start is unchanged. All
+five CI workflows must pass on THIS exact SHA before
+acceptance: Ubuntu, macOS, Windows, Coverage, Sanitizers.
+The v7.22 CI has not been inherited.

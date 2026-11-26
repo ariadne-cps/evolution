@@ -37,6 +37,7 @@
 #include "logging/test_runner.hpp"
 #include "numeric/rational.hpp"
 #include "system/discrete_time_hybrid_automaton.hpp"
+
 #include "ariadne-testing.hpp"
 
 using namespace Ariadne;
@@ -45,7 +46,8 @@ using Termination = HybridDiscreteTimeTerminationCriterion;
 static_assert(std::is_base_of_v<Evolver::Interface, Evolver>);
 static_assert(std::is_same_v<Evolver::ResultType, Orbit<HybridEnclosure>>);
 static_assert(std::is_same_v<EvolutionTraits<ValidatedTag, DiscreteTimeHybridAutomatonInterface>::EvolverType, Evolver>);
-template<class T> concept CompleteType = requires { sizeof(T); };
+template<class T>
+concept CompleteType = requires { sizeof(T); };
 static_assert(!CompleteType<HybridDiscreteTimeEvolver<ApproximateTag>>);
 
 class TestHybridDiscreteTimeEvolver : public Ariadne::Testing::ContextFixture {
@@ -56,8 +58,11 @@ class TestHybridDiscreteTimeEvolver : public Ariadne::Testing::ContextFixture {
     }
     static HybridEnclosure initial(DiscreteLocation location) {
         const RealVariable x("x");
-        return HybridEnclosure(HybridExactBox(location, RealSpace({x}),
-            ExactBoxType({{0.0_x, 1.0_x}})), configuration());
+        return HybridEnclosure(HybridExactBox(location, RealSpace({
+                                                            x
+        }),
+                                              ExactBoxType({{0.0_x, 1.0_x}})),
+                               configuration());
     }
 
     Void test_orbit_and_branches() {
@@ -66,9 +71,9 @@ class TestHybridDiscreteTimeEvolver : public Ariadne::Testing::ContextFixture {
         const DiscreteEvent event("choice");
         DiscreteTimeHybridAutomaton system;
         system.new_mode(mode, DifferenceAlgebraicEquation(
-            List<PrimedRealAssignment>{next(x) = x + 1}));
+                                  List<PrimedRealAssignment>{next(x) = x + 1}));
         system.new_mode(target, DifferenceAlgebraicEquation(
-            List<PrimedRealAssignment>{next(x) = x}));
+                                    List<PrimedRealAssignment>{next(x) = x}));
         system.new_permissive_transition(mode, event, target, {next(x) = x + 3},
                                          x >= 0, x <= 2);
         Evolver evolver(system);
@@ -84,7 +89,9 @@ class TestHybridDiscreteTimeEvolver : public Ariadne::Testing::ContextFixture {
         ARIADNE_TESTING_PROVE(*tree.nodes[1u].incoming_branch->event == event);
         ARIADNE_TESTING_EXPECT_EQUAL(
             evolver.orbit_with_blocked(source, Termination(Integer(0), Integer(1)),
-                                      Semantics::UPPER).blocked.size(), 0u);
+                                       Semantics::UPPER)
+                .blocked.size(),
+            0u);
         ARIADNE_TESTING_EXPECT_EQUAL(source.time_range().lower_bound().raw().get_d(), 0.0);
     }
 
@@ -94,7 +101,7 @@ class TestHybridDiscreteTimeEvolver : public Ariadne::Testing::ContextFixture {
         const DiscreteEvent event("blocked");
         DiscreteTimeHybridAutomaton linear;
         linear.new_mode(mode, DifferenceAlgebraicEquation(
-            List<PrimedRealAssignment>{next(x) = x + 1}));
+                                  List<PrimedRealAssignment>{next(x) = x + 1}));
         Evolver evolver(linear);
         const auto zero = evolver.orbit(initial(mode), Termination(Integer(0), Integer(0)), Semantics::UPPER);
         ARIADNE_TESTING_EXPECT_EQUAL(zero.reach().size(), 0u);
@@ -107,9 +114,9 @@ class TestHybridDiscreteTimeEvolver : public Ariadne::Testing::ContextFixture {
 
         DiscreteTimeHybridAutomaton blocked;
         blocked.new_mode(mode, DifferenceAlgebraicEquation(
-            List<PrimedRealAssignment>{next(x) = x}));
+                                   List<PrimedRealAssignment>{next(x) = x}));
         blocked.new_mode(target, DifferenceAlgebraicEquation(
-            List<PrimedRealAssignment>{next(x) = x}));
+                                     List<PrimedRealAssignment>{next(x) = x}));
         blocked.new_permissive_transition(mode, event, target, {next(x) = x}, x >= 2, x <= -1);
         Evolver stopped(blocked);
         const auto projected = stopped.orbit_with_blocked(
@@ -125,7 +132,7 @@ class TestHybridDiscreteTimeEvolver : public Ariadne::Testing::ContextFixture {
         const DiscreteLocation mode(1);
         DiscreteTimeHybridAutomaton system;
         system.new_mode(mode, DifferenceAlgebraicEquation(
-            List<PrimedRealAssignment>{next(x) = x + 1}));
+                                  List<PrimedRealAssignment>{next(x) = x + 1}));
         Evolver evolver(system);
         evolver.configuration().set_maximum_nodes(3u);
         std::unique_ptr<Evolver::Interface> copy(evolver.clone());
@@ -136,7 +143,7 @@ class TestHybridDiscreteTimeEvolver : public Ariadne::Testing::ContextFixture {
         ARIADNE_TESTING_EXPECT_EQUAL(resumed.final().front().time_range().lower_bound().raw().get_d(), 4.0);
         evolver.configuration().set_maximum_nodes(2u);
         ARIADNE_TESTING_EXPECT_THROWS(std::length_error,
-            evolver.orbit(shifted, Termination(Integer(2), Integer(4)), Semantics::UPPER));
+                                      evolver.orbit(shifted, Termination(Integer(2), Integer(4)), Semantics::UPPER));
         ARIADNE_TESTING_EXPECT_EQUAL(
             copy->orbit(shifted, Termination(Integer(2), Integer(4)), Semantics::UPPER).final().size(), 1u);
     }
@@ -146,8 +153,8 @@ class TestHybridDiscreteTimeEvolver : public Ariadne::Testing::ContextFixture {
         const DiscreteLocation mode(1);
         DiscreteTimeHybridAutomaton system;
         system.new_mode(mode, DifferenceAlgebraicInclusion(
-            List<PrimedRealAssignment>{next(x) = x + u},
-            RealVariablesBox({-1 <= u <= 1})));
+                                  List<PrimedRealAssignment>{next(x) = x + u},
+                                  RealVariablesBox({-1 <= u <= 1})));
         Evolver evolver(system);
         const auto orbit = evolver.orbit(
             initial(mode), Termination(Integer(0), Integer(2)), Semantics::UPPER);
@@ -188,27 +195,27 @@ class TestHybridDiscreteTimeEvolver : public Ariadne::Testing::ContextFixture {
         const DiscreteEvent event("choice");
         DiscreteTimeHybridAutomaton system;
         system.new_mode(mode, DifferenceAlgebraicInclusion(
-            List<PrimedRealAssignment>{next(x) = x + u},
-            RealVariablesBox({-1 <= u <= 1})));
+                                  List<PrimedRealAssignment>{next(x) = x + u},
+                                  RealVariablesBox({-1 <= u <= 1})));
         system.new_mode(target, DifferenceAlgebraicEquation(
-            List<PrimedRealAssignment>{next(x) = x}));
+                                    List<PrimedRealAssignment>{next(x) = x}));
         system.new_urgent_transition(mode, event, target,
-                                     {next(x) = x + 10}, x >= 1/2_q);
+                                     {next(x) = x + 10}, x >= 1 / 2_q);
         Evolver evolver(system);
         const auto source = initial(mode);
         const auto orbit = evolver.orbit(source, Termination(Integer(0), Integer(1)),
-                                        Semantics::UPPER);
+                                         Semantics::UPPER);
         ARIADNE_TESTING_EXPECT_EQUAL(orbit.reach().size(), 2u);
         ARIADNE_TESTING_EXPECT_EQUAL(orbit.final().size(), 2u);
         const auto tree = evolver.explore(source, Termination(Integer(0), Integer(1)),
-                                         Semantics::UPPER);
+                                          Semantics::UPPER);
         ARIADNE_TESTING_EXPECT_EQUAL(tree.nodes.size(), 3u);
         ARIADNE_TESTING_PROVE(tree.nodes[1u].incoming_branch.has_value());
         ARIADNE_TESTING_PROVE(tree.nodes[1u].incoming_branch->event.has_value());
         ARIADNE_TESTING_EXPECT_EQUAL(
             tree.nodes[2u].enclosure.continuous_set().number_of_parameters(), 2u);
         ARIADNE_TESTING_EXPECT_THROWS(std::invalid_argument,
-            evolver.orbit(source, Termination(Integer(0), Integer(1)), Semantics::LOWER));
+                                      evolver.orbit(source, Termination(Integer(0), Integer(1)), Semantics::LOWER));
     }
 
     Void test_public_transition_into_inclusion_and_continue_upper() {
@@ -217,10 +224,10 @@ class TestHybridDiscreteTimeEvolver : public Ariadne::Testing::ContextFixture {
         const DiscreteEvent jump("to_inclusion");
         DiscreteTimeHybridAutomaton automaton;
         automaton.new_mode(source, DifferenceAlgebraicEquation(
-            List<PrimedRealAssignment>{next(x) = x}));
+                                       List<PrimedRealAssignment>{next(x) = x}));
         automaton.new_mode(destination, DifferenceAlgebraicInclusion(
-            List<PrimedRealAssignment>{next(x) = x + u},
-            RealVariablesBox({-1 <= u <= 1})));
+                                            List<PrimedRealAssignment>{next(x) = x + u},
+                                            RealVariablesBox({-1 <= u <= 1})));
         automaton.new_urgent_transition(source, jump, destination,
                                         {next(x) = x + 10}, x >= -1);
         Evolver evolver(automaton);
@@ -264,20 +271,20 @@ class TestHybridDiscreteTimeEvolver : public Ariadne::Testing::ContextFixture {
         const DiscreteLocation mode(1);
         DiscreteTimeHybridAutomaton system;
         system.new_mode(mode, DifferenceAlgebraicInclusion(
-            List<PrimedRealAssignment>{next(x) = x + a},
-            List<RealAssignment>{let(a) = x + u},
-            RealVariablesBox({-1 <= u <= 1})));
+                                  List<PrimedRealAssignment>{next(x) = x + a},
+                                  List<RealAssignment>{let(a) = x + u},
+                                  RealVariablesBox({-1 <= u <= 1})));
         Evolver evolver(system);
         const auto source = initial(mode);
         const auto zero = evolver.orbit(source,
-            Termination(Integer(0), Integer(0)), Semantics::UPPER);
+                                        Termination(Integer(0), Integer(0)), Semantics::UPPER);
         ARIADNE_TESTING_EXPECT_EQUAL(zero.initial().auxiliary_space(), RealSpace({a}));
         ARIADNE_TESTING_EXPECT_EQUAL(zero.initial().continuous_set().number_of_parameters(), 2u);
         ARIADNE_TESTING_EXPECT_EQUAL(zero.final().size(), 1u);
         ARIADNE_TESTING_EXPECT_EQUAL(zero.reach().size(), 0u);
 
         const auto history = evolver.explore(source,
-            Termination(Integer(0), Integer(2)), Semantics::UPPER);
+                                             Termination(Integer(0), Integer(2)), Semantics::UPPER);
         ARIADNE_TESTING_EXPECT_EQUAL(history.nodes.size(), 3u);
         ARIADNE_TESTING_EXPECT_EQUAL(history.nodes[1u].enclosure.auxiliary_space(), RealSpace({a}));
         const auto& final = history.nodes[2u].enclosure;
@@ -290,19 +297,19 @@ class TestHybridDiscreteTimeEvolver : public Ariadne::Testing::ContextFixture {
         ARIADNE_TESTING_EXPECT_EQUAL(source.continuous_set().number_of_parameters(), 1u);
 
         const auto continued = evolver.orbit(final,
-            Termination(Integer(2), Integer(3)), Semantics::UPPER);
+                                             Termination(Integer(2), Integer(3)), Semantics::UPPER);
         ARIADNE_TESTING_EXPECT_EQUAL(continued.final().size(), 1u);
         ARIADNE_TESTING_EXPECT_EQUAL(continued.final().front().continuous_set().number_of_parameters(), 5u);
         ARIADNE_TESTING_EXPECT_EQUAL(continued.final().front().auxiliary_space(), RealSpace({a}));
 
         const auto lower_zero = evolver.orbit(source,
-            Termination(Integer(0), Integer(0)), Semantics::LOWER);
+                                              Termination(Integer(0), Integer(0)), Semantics::LOWER);
         ARIADNE_TESTING_EXPECT_EQUAL(lower_zero.initial().auxiliary_space(), RealSpace({a}));
         ARIADNE_TESTING_EXPECT_EQUAL(
             lower_zero.initial().continuous_set().number_of_parameters(), 2u);
         ARIADNE_TESTING_EXPECT_EQUAL(lower_zero.initial().number_of_constraints(), 0u);
         const auto lower = evolver.orbit(source,
-            Termination(Integer(0), Integer(2)), Semantics::LOWER);
+                                         Termination(Integer(0), Integer(2)), Semantics::LOWER);
         ARIADNE_TESTING_REQUIRE(lower.final().size() == 1u);
         const auto& lf = lower.final().front();
         ARIADNE_TESTING_EXPECT_EQUAL(lf.continuous_set().number_of_parameters(), 4u);
@@ -312,7 +319,7 @@ class TestHybridDiscreteTimeEvolver : public Ariadne::Testing::ContextFixture {
         ARIADNE_TESTING_PROVE(bounds.lower_bound().raw().get_d() <= -3.0);
         ARIADNE_TESTING_PROVE(bounds.upper_bound().raw().get_d() >= 7.0);
         const auto resumed = evolver.orbit(lf,
-            Termination(Integer(2), Integer(3)), Semantics::LOWER);
+                                           Termination(Integer(2), Integer(3)), Semantics::LOWER);
         ARIADNE_TESTING_REQUIRE(resumed.final().size() == 1u);
         ARIADNE_TESTING_EXPECT_EQUAL(
             resumed.final().front().continuous_set().number_of_parameters(), 5u);
@@ -326,19 +333,19 @@ class TestHybridDiscreteTimeEvolver : public Ariadne::Testing::ContextFixture {
         const DiscreteEvent event("state_guard");
         DiscreteTimeHybridAutomaton system;
         system.new_mode(source_mode, DifferenceAlgebraicInclusion(
-            List<PrimedRealAssignment>{next(x) = x + a},
-            List<RealAssignment>{let(a) = x + u},
-            RealVariablesBox({-1 <= u <= 1})));
+                                         List<PrimedRealAssignment>{next(x) = x + a},
+                                         List<RealAssignment>{let(a) = x + u},
+                                         RealVariablesBox({-1 <= u <= 1})));
         system.new_mode(target_mode, DifferenceAlgebraicEquation(
-            List<PrimedRealAssignment>{next(x) = x}));
+                                         List<PrimedRealAssignment>{next(x) = x}));
         // The event depends on x alone. Its predicate and reset must not
         // be evaluated using an unconstrained or sampled auxiliary a.
         system.new_permissive_transition(source_mode, event, target_mode,
-            {next(x) = x + 3}, x >= 0, x <= 1);
+                                         {next(x) = x + 3}, x >= 0, x <= 1);
         Evolver evolver(system);
         const HybridEnclosure original = initial(source_mode);
         const auto history = evolver.explore(original,
-            Termination(Integer(0), Integer(1)), Semantics::UPPER);
+                                             Termination(Integer(0), Integer(1)), Semantics::UPPER);
         ARIADNE_TESTING_EXPECT_EQUAL(history.nodes.size(), 3u);
         ARIADNE_TESTING_EXPECT_EQUAL(history.nodes[0u].enclosure.auxiliary_space(), RealSpace({a}));
         ARIADNE_TESTING_EXPECT_EQUAL(history.nodes[0u].enclosure.continuous_set().number_of_parameters(), 2u);
@@ -368,7 +375,7 @@ class TestHybridDiscreteTimeEvolver : public Ariadne::Testing::ContextFixture {
         ARIADNE_TESTING_EXPECT_EQUAL(original.continuous_set().number_of_parameters(), 1u);
         ARIADNE_TESTING_EXPECT_EQUAL(original.auxiliary_space().dimension(), 0u);
         const auto orb = evolver.orbit(original,
-            Termination(Integer(0), Integer(1)), Semantics::UPPER);
+                                       Termination(Integer(0), Integer(1)), Semantics::UPPER);
         ARIADNE_TESTING_EXPECT_EQUAL(orb.final().size(), 2u);
     }
 
@@ -378,11 +385,11 @@ class TestHybridDiscreteTimeEvolver : public Ariadne::Testing::ContextFixture {
         const DiscreteEvent jump("arrival_input");
         DiscreteTimeHybridAutomaton automaton;
         automaton.new_mode(source_mode, DifferenceAlgebraicEquation(
-            List<PrimedRealAssignment>{next(x) = x}));
+                                            List<PrimedRealAssignment>{next(x) = x}));
         automaton.new_mode(target_mode, DifferenceAlgebraicInclusion(
-            List<PrimedRealAssignment>{next(x) = x + a},
-            List<RealAssignment>{let(a) = x + u},
-            RealVariablesBox({-1 <= u <= 1})));
+                                            List<PrimedRealAssignment>{next(x) = x + a},
+                                            List<RealAssignment>{let(a) = x + u},
+                                            RealVariablesBox({-1 <= u <= 1})));
         // Strictly enabled on the entire initial x in [0,1], so
         // this horizon has one transition branch and one continuation.
         automaton.new_urgent_transition(source_mode, jump, target_mode,
@@ -390,7 +397,7 @@ class TestHybridDiscreteTimeEvolver : public Ariadne::Testing::ContextFixture {
         Evolver evolver(automaton);
         const HybridEnclosure source = initial(source_mode);
         const auto history = evolver.explore(source,
-            Termination(Integer(0), Integer(2)), Semantics::UPPER);
+                                             Termination(Integer(0), Integer(2)), Semantics::UPPER);
         ARIADNE_TESTING_EXPECT_EQUAL(history.nodes.size(), 3u);
         ARIADNE_TESTING_PROVE(history.nodes[1u].enclosure.location() == target_mode);
         ARIADNE_TESTING_EXPECT_EQUAL(
@@ -417,13 +424,13 @@ class TestHybridDiscreteTimeEvolver : public Ariadne::Testing::ContextFixture {
         ARIADNE_TESTING_PROVE(bounds.lower_bound().raw().get_d() <= 5.0);
         ARIADNE_TESTING_PROVE(bounds.upper_bound().raw().get_d() >= 9.0);
         const auto result = evolver.orbit(source,
-            Termination(Integer(0), Integer(2)), Semantics::UPPER);
+                                          Termination(Integer(0), Integer(2)), Semantics::UPPER);
         ARIADNE_TESTING_EXPECT_EQUAL(result.final().size(), 1u);
         ARIADNE_TESTING_EXPECT_EQUAL(source.continuous_set().number_of_parameters(), 1u);
         ARIADNE_TESTING_EXPECT_EQUAL(source.auxiliary_space().dimension(), 0u);
 
         const auto lower = evolver.orbit(source,
-            Termination(Integer(0), Integer(2)), Semantics::LOWER);
+                                         Termination(Integer(0), Integer(2)), Semantics::LOWER);
         ARIADNE_TESTING_REQUIRE(lower.final().size() == 1u);
         const auto& lf = lower.final().front();
         ARIADNE_TESTING_PROVE(lf.location() == target_mode);
@@ -443,34 +450,43 @@ class TestHybridDiscreteTimeEvolver : public Ariadne::Testing::ContextFixture {
         const DiscreteEvent event("state_only_guard");
         DiscreteTimeHybridAutomaton system;
         system.new_mode(source_mode, DifferenceAlgebraicInclusion(
-            List<PrimedRealAssignment>{next(x) = x + a},
-            List<RealAssignment>{let(a) = x + u},
-            RealVariablesBox({-1 <= u <= 1})));
+                                         List<PrimedRealAssignment>{next(x) = x + a},
+                                         List<RealAssignment>{let(a) = x + u},
+                                         RealVariablesBox({-1 <= u <= 1})));
         system.new_mode(target_mode, DifferenceAlgebraicEquation(
-            List<PrimedRealAssignment>{next(x) = x}));
+                                         List<PrimedRealAssignment>{next(x) = x}));
         system.new_urgent_transition(source_mode, event, target_mode,
-            {next(x) = x + a + 3}, x >= 1 / 2_q);
+                                     {next(x) = x + a + 3}, x >= 1 / 2_q);
         Evolver evolver(system);
 
         // Guard-boundary sources cannot be split to publish one
         // independently claimed LOWER witness.
         const HybridEnclosure undecided_reset(HybridExactBox(
-            source_mode, RealSpace({x}), ExactBoxType({{0.5_x, 1.0_x}})),
-            configuration());
+                                                  source_mode, RealSpace({
+                                                                   x
+        }),
+                                                  ExactBoxType({{0.5_x, 1.0_x}})),
+                                              configuration());
         ARIADNE_TESTING_EXPECT_THROWS(std::invalid_argument,
-            evolver.orbit(undecided_reset, Termination(Integer(0), Integer(1)),
-                          Semantics::LOWER));
+                                      evolver.orbit(undecided_reset, Termination(Integer(0), Integer(1)),
+                                                    Semantics::LOWER));
         const HybridEnclosure undecided_progression(HybridExactBox(
-            source_mode, RealSpace({x}), ExactBoxType({{0.0_x, 0.5_x}})),
-            configuration());
+                                                        source_mode, RealSpace({
+                                                                         x
+        }),
+                                                        ExactBoxType({{0.0_x, 0.5_x}})),
+                                                    configuration());
         ARIADNE_TESTING_EXPECT_THROWS(std::invalid_argument,
-            evolver.orbit(undecided_progression, Termination(Integer(0), Integer(1)),
-                          Semantics::LOWER));
+                                      evolver.orbit(undecided_progression, Termination(Integer(0), Integer(1)),
+                                                    Semantics::LOWER));
         // Caller-supplied uniformly guard-true/false whole sources
         // still preserve every input value and the unchanged map.
         const HybridEnclosure reset_source(HybridExactBox(
-            source_mode, RealSpace({x}), ExactBoxType({{0.75_x, 1.0_x}})),
-            configuration());
+                                               source_mode, RealSpace({
+                                                                x
+        }),
+                                               ExactBoxType({{0.75_x, 1.0_x}})),
+                                           configuration());
         const auto reset_orbit = evolver.orbit(
             reset_source, Termination(Integer(0), Integer(1)), Semantics::LOWER);
         ARIADNE_TESTING_REQUIRE(reset_orbit.final().size() == 1u);
@@ -497,8 +513,11 @@ class TestHybridDiscreteTimeEvolver : public Ariadne::Testing::ContextFixture {
         // On the other state side, a strictly negative guard certifies
         // progression for the SAME entire input box at the next tick.
         const HybridEnclosure progression_source(HybridExactBox(
-            source_mode, RealSpace({x}), ExactBoxType({{0.0_x, 0.25_x}})),
-            configuration());
+                                                     source_mode, RealSpace({
+                                                                      x
+        }),
+                                                     ExactBoxType({{0.0_x, 0.25_x}})),
+                                                 configuration());
         const auto progression_orbit = evolver.orbit(
             progression_source, Termination(Integer(0), Integer(1)), Semantics::LOWER);
         ARIADNE_TESTING_REQUIRE(progression_orbit.final().size() == 1u);
@@ -527,13 +546,13 @@ class TestHybridDiscreteTimeEvolver : public Ariadne::Testing::ContextFixture {
         const DiscreteEvent event("uniform_auxiliary_guard");
         DiscreteTimeHybridAutomaton system;
         system.new_mode(source_mode, DifferenceAlgebraicInclusion(
-            List<PrimedRealAssignment>{next(x) = x + a},
-            List<RealAssignment>{let(a) = x + u},
-            RealVariablesBox({-1 <= u <= 1})));
+                                         List<PrimedRealAssignment>{next(x) = x + a},
+                                         List<RealAssignment>{let(a) = x + u},
+                                         RealVariablesBox({-1 <= u <= 1})));
         system.new_mode(target_mode, DifferenceAlgebraicEquation(
-            List<PrimedRealAssignment>{next(x) = x}));
+                                         List<PrimedRealAssignment>{next(x) = x}));
         system.new_urgent_transition(source_mode, event, target_mode,
-            {next(x) = x + a + 3}, a >= -2);
+                                     {next(x) = x + a + 3}, a >= -2);
         Evolver evolver(system);
         const auto source = initial(source_mode);
         const auto lower = evolver.orbit(
@@ -557,31 +576,31 @@ class TestHybridDiscreteTimeEvolver : public Ariadne::Testing::ContextFixture {
 
         DiscreteTimeHybridAutomaton ambiguous;
         ambiguous.new_mode(source_mode, DifferenceAlgebraicInclusion(
-            List<PrimedRealAssignment>{next(x) = x + a},
-            List<RealAssignment>{let(a) = x + u},
-            RealVariablesBox({-1 <= u <= 1})));
+                                            List<PrimedRealAssignment>{next(x) = x + a},
+                                            List<RealAssignment>{let(a) = x + u},
+                                            RealVariablesBox({-1 <= u <= 1})));
         ambiguous.new_mode(target_mode, DifferenceAlgebraicEquation(
-            List<PrimedRealAssignment>{next(x) = x}));
+                                            List<PrimedRealAssignment>{next(x) = x}));
         ambiguous.new_urgent_transition(source_mode, event, target_mode,
-            {next(x) = x + a + 3}, a >= 0);
+                                        {next(x) = x + a + 3}, a >= 0);
         Evolver undecided(ambiguous);
         // A varying guard is not a licence to sample u or prefer a branch.
         ARIADNE_TESTING_EXPECT_THROWS(std::invalid_argument,
-            undecided.orbit(source, Termination(Integer(0), Integer(1)),
-                            Semantics::LOWER));
+                                      undecided.orbit(source, Termination(Integer(0), Integer(1)),
+                                                      Semantics::LOWER));
 
         // The SAME guard may be optional: with a uniformly safe
         // progression invariant, LOWER ignores PERMISSIVE reset and
         // applies x'=x+a to ALL x and ALL u in [-1,1].
         DiscreteTimeHybridAutomaton optional_model;
         optional_model.new_mode(source_mode, DifferenceAlgebraicInclusion(
-            List<PrimedRealAssignment>{next(x) = x + a},
-            List<RealAssignment>{let(a) = x + u},
-            RealVariablesBox({-1 <= u <= 1})));
+                                                 List<PrimedRealAssignment>{next(x) = x + a},
+                                                 List<RealAssignment>{let(a) = x + u},
+                                                 RealVariablesBox({-1 <= u <= 1})));
         optional_model.new_mode(target_mode, DifferenceAlgebraicEquation(
-            List<PrimedRealAssignment>{next(x) = x}));
+                                                 List<PrimedRealAssignment>{next(x) = x}));
         optional_model.new_permissive_transition(source_mode, event, target_mode,
-            {next(x) = x + a + 3}, a >= 0, a <= 3);
+                                                 {next(x) = x + a + 3}, a >= 0, a <= 3);
         Evolver optional_evolver(optional_model);
         const auto optional_orbit = optional_evolver.orbit(
             source, Termination(Integer(0), Integer(1)), Semantics::LOWER);
@@ -603,16 +622,16 @@ class TestHybridDiscreteTimeEvolver : public Ariadne::Testing::ContextFixture {
         // every x and u. Preserve BOTH complete-input alternatives.
         DiscreteTimeHybridAutomaton both_model;
         both_model.new_mode(source_mode, DifferenceAlgebraicInclusion(
-            List<PrimedRealAssignment>{next(x) = x + a},
-            List<RealAssignment>{let(a) = x + u},
-            RealVariablesBox({-1 <= u <= 1})));
+                                             List<PrimedRealAssignment>{next(x) = x + a},
+                                             List<RealAssignment>{let(a) = x + u},
+                                             RealVariablesBox({-1 <= u <= 1})));
         both_model.new_mode(target_mode, DifferenceAlgebraicEquation(
-            List<PrimedRealAssignment>{next(x) = x}));
+                                             List<PrimedRealAssignment>{next(x) = x}));
         both_model.new_permissive_transition(source_mode, event, target_mode,
-            {next(x) = x + a + 3}, a >= -2, a <= 3);
+                                             {next(x) = x + a + 3}, a >= -2, a <= 3);
         Evolver all_choices(both_model);
         const auto two_branches = all_choices.orbit(source,
-            Termination(Integer(0), Integer(1)), Semantics::LOWER);
+                                                    Termination(Integer(0), Integer(1)), Semantics::LOWER);
         ARIADNE_TESTING_REQUIRE(two_branches.final().size() == 2u);
         bool saw_input_progression = false;
         bool saw_input_reset = false;
@@ -649,13 +668,13 @@ class TestHybridDiscreteTimeEvolver : public Ariadne::Testing::ContextFixture {
         // No state/input value is selected to make the guard pass.
         DiscreteTimeHybridAutomaton optional_reset_model;
         optional_reset_model.new_mode(source_mode, DifferenceAlgebraicInclusion(
-            List<PrimedRealAssignment>{next(x) = x + a},
-            List<RealAssignment>{let(a) = x + u},
-            RealVariablesBox({-1 <= u <= 1})));
+                                                       List<PrimedRealAssignment>{next(x) = x + a},
+                                                       List<RealAssignment>{let(a) = x + u},
+                                                       RealVariablesBox({-1 <= u <= 1})));
         optional_reset_model.new_mode(target_mode, DifferenceAlgebraicEquation(
-            List<PrimedRealAssignment>{next(x) = x}));
+                                                       List<PrimedRealAssignment>{next(x) = x}));
         optional_reset_model.new_permissive_transition(source_mode, event, target_mode,
-            {next(x) = x + a + 3}, a >= -2, a <= 0);
+                                                       {next(x) = x + a + 3}, a >= -2, a <= 0);
         Evolver optional_reset_evolver(optional_reset_model);
         const auto optional_reset = optional_reset_evolver.orbit(
             source, Termination(Integer(0), Integer(1)), Semantics::LOWER);
@@ -684,8 +703,8 @@ class TestHybridDiscreteTimeEvolver : public Ariadne::Testing::ContextFixture {
         const DiscreteLocation mode(1);
         DiscreteTimeHybridAutomaton system;
         system.new_mode(mode, DifferenceAlgebraicEquation(
-            List<PrimedRealAssignment>{next(x) = x + 1},
-            List<RealAssignment>{let(a) = 2 * x}));
+                                  List<PrimedRealAssignment>{next(x) = x + 1},
+                                  List<RealAssignment>{let(a) = 2 * x}));
         Evolver evolver(system);
         const auto source = initial(mode);
         // A nonempty unconstrained ExactBox is a constructive existential
@@ -730,7 +749,7 @@ class TestHybridDiscreteTimeEvolver : public Ariadne::Testing::ContextFixture {
 
         evolver.configuration().set_maximum_nodes(2u);
         ARIADNE_TESTING_EXPECT_THROWS(std::length_error,
-            evolver.orbit(source, Termination(Integer(0), Integer(3)), Semantics::LOWER));
+                                      evolver.orbit(source, Termination(Integer(0), Integer(3)), Semantics::LOWER));
         const auto short_orbit = evolver.orbit(
             source, Termination(Integer(0), Integer(1)), Semantics::LOWER);
         ARIADNE_TESTING_EXPECT_EQUAL(short_orbit.final().size(), 1u);
@@ -741,7 +760,7 @@ class TestHybridDiscreteTimeEvolver : public Ariadne::Testing::ContextFixture {
         const DiscreteLocation mode(1);
         DiscreteTimeHybridAutomaton system;
         system.new_mode(mode, DifferenceAlgebraicEquation(
-            List<PrimedRealAssignment>{next(x) = x + 1}));
+                                  List<PrimedRealAssignment>{next(x) = x + 1}));
         Evolver evolver(system);
 
         // Not all x in [0,1] satisfy these constraints, but x=1/2
@@ -778,11 +797,11 @@ class TestHybridDiscreteTimeEvolver : public Ariadne::Testing::ContextFixture {
         contradiction.new_positive_state_constraint(coordinate - Real(2));
         impossible.replace_continuous_set(contradiction);
         ARIADNE_TESTING_EXPECT_THROWS(std::invalid_argument,
-            evolver.orbit(impossible,
-                          Termination(Integer(0), Integer(0)), Semantics::LOWER));
+                                      evolver.orbit(impossible,
+                                                    Termination(Integer(0), Integer(0)), Semantics::LOWER));
         ARIADNE_TESTING_EXPECT_THROWS(std::invalid_argument,
-            evolver.orbit(impossible,
-                          Termination(Integer(0), Integer(1)), Semantics::LOWER));
+                                      evolver.orbit(impossible,
+                                                    Termination(Integer(0), Integer(1)), Semantics::LOWER));
     }
 
     Void test_lower_forced_urgent_jump_and_disabled_progression() {
@@ -791,9 +810,9 @@ class TestHybridDiscreteTimeEvolver : public Ariadne::Testing::ContextFixture {
         const DiscreteEvent event("forced_urgent");
         DiscreteTimeHybridAutomaton system;
         system.new_mode(source_mode, DifferenceAlgebraicEquation(
-            List<PrimedRealAssignment>{next(x) = x + 1}));
+                                         List<PrimedRealAssignment>{next(x) = x + 1}));
         system.new_mode(target_mode, DifferenceAlgebraicEquation(
-            List<PrimedRealAssignment>{next(x) = x + 1}));
+                                         List<PrimedRealAssignment>{next(x) = x + 1}));
         // A strictly positive guard is uniformly true on x[0] in [0,1].
         // This urgent reset is forced, so every initial witness follows it.
         system.new_urgent_transition(source_mode, event, target_mode,
@@ -801,7 +820,7 @@ class TestHybridDiscreteTimeEvolver : public Ariadne::Testing::ContextFixture {
         Evolver evolver(system);
         const auto source = initial(source_mode);
         const auto lower = evolver.orbit(source,
-            Termination(Integer(0), Integer(2)), Semantics::LOWER);
+                                         Termination(Integer(0), Integer(2)), Semantics::LOWER);
         ARIADNE_TESTING_EXPECT_EQUAL(lower.reach().size(), 2u);
         ARIADNE_TESTING_EXPECT_EQUAL(lower.intermediate().size(), 1u);
         ARIADNE_TESTING_EXPECT_EQUAL(lower.final().size(), 1u);
@@ -823,14 +842,14 @@ class TestHybridDiscreteTimeEvolver : public Ariadne::Testing::ContextFixture {
         // original mode's deterministic progression is possible.
         DiscreteTimeHybridAutomaton disabled;
         disabled.new_mode(source_mode, DifferenceAlgebraicEquation(
-            List<PrimedRealAssignment>{next(x) = x + 1}));
+                                           List<PrimedRealAssignment>{next(x) = x + 1}));
         disabled.new_mode(target_mode, DifferenceAlgebraicEquation(
-            List<PrimedRealAssignment>{next(x) = x}));
+                                           List<PrimedRealAssignment>{next(x) = x}));
         disabled.new_urgent_transition(source_mode, event, target_mode,
                                        {next(x) = x + 3}, x >= 2);
         Evolver no_jump(disabled);
         const auto progressed = no_jump.orbit(source,
-            Termination(Integer(0), Integer(1)), Semantics::LOWER);
+                                              Termination(Integer(0), Integer(1)), Semantics::LOWER);
         ARIADNE_TESTING_EXPECT_EQUAL(progressed.final().size(), 1u);
         const auto& survivor = progressed.final().front();
         ARIADNE_TESTING_PROVE(survivor.location() == source_mode);
@@ -846,9 +865,9 @@ class TestHybridDiscreteTimeEvolver : public Ariadne::Testing::ContextFixture {
         const DiscreteEvent event("undecided");
         DiscreteTimeHybridAutomaton system;
         system.new_mode(source_mode, DifferenceAlgebraicEquation(
-            List<PrimedRealAssignment>{next(x) = x + 1}));
+                                         List<PrimedRealAssignment>{next(x) = x + 1}));
         system.new_mode(target_mode, DifferenceAlgebraicEquation(
-            List<PrimedRealAssignment>{next(x) = x}));
+                                         List<PrimedRealAssignment>{next(x) = x}));
         system.new_urgent_transition(source_mode, event, target_mode,
                                      {next(x) = x + 3}, x >= 1 / 2_q);
         Evolver evolver(system);
@@ -857,14 +876,17 @@ class TestHybridDiscreteTimeEvolver : public Ariadne::Testing::ContextFixture {
         // An ambiguous whole source cannot be replaced by an
         // independently selected child of its outer LOWER enclosure.
         ARIADNE_TESTING_EXPECT_THROWS(std::invalid_argument,
-            evolver.orbit(source, Termination(Integer(0), Integer(1)),
-                          Semantics::LOWER));
+                                      evolver.orbit(source, Termination(Integer(0), Integer(1)),
+                                                    Semantics::LOWER));
 
         // The caller provides a uniformly guard-positive source,
         // with reachable reset witness x[0]=7/8. No split is made.
         const HybridEnclosure reset_source(HybridExactBox(
-            source_mode, RealSpace({x}), ExactBoxType({{0.75_x, 1.0_x}})),
-            configuration());
+                                               source_mode, RealSpace({
+                                                                x
+        }),
+                                               ExactBoxType({{0.75_x, 1.0_x}})),
+                                           configuration());
         const auto lower = evolver.orbit(
             reset_source, Termination(Integer(0), Integer(1)), Semantics::LOWER);
         ARIADNE_TESTING_EXPECT_EQUAL(lower.final().size(), 1u);
@@ -895,14 +917,20 @@ class TestHybridDiscreteTimeEvolver : public Ariadne::Testing::ContextFixture {
         ARIADNE_TESTING_EXPECT_EQUAL(reset_source.number_of_constraints(), 0u);
         ARIADNE_TESTING_EXPECT_EQUAL(
             evolver.orbit(source, Termination(Integer(0), Integer(0)),
-                          Semantics::LOWER).final().size(), 1u);
+                          Semantics::LOWER)
+                .final()
+                .size(),
+            1u);
 
         // The caller-supplied guard-negative source preserves
         // the event-free progression witness
         // x[0]=1/8 -> x[1]=9/8.
         const HybridEnclosure progression_source(HybridExactBox(
-            source_mode, RealSpace({x}), ExactBoxType({{0.0_x, 0.25_x}})),
-            configuration());
+                                                     source_mode, RealSpace({
+                                                                      x
+        }),
+                                                     ExactBoxType({{0.0_x, 0.25_x}})),
+                                                 configuration());
         const auto progression = evolver.orbit(
             progression_source, Termination(Integer(0), Integer(1)), Semantics::LOWER);
         ARIADNE_TESTING_REQUIRE(progression.final().size() == 1u);
@@ -941,11 +969,14 @@ class TestHybridDiscreteTimeEvolver : public Ariadne::Testing::ContextFixture {
         // A guard-boundary singleton cannot be treated as a
         // uniformly decided transition without inventing evidence.
         const HybridEnclosure boundary(HybridExactBox(
-            source_mode, RealSpace({x}),
-            ExactBoxType({{0.5_x, 0.5_x}})), configuration());
+                                           source_mode, RealSpace({
+                                                            x
+        }),
+                                           ExactBoxType({{0.5_x, 0.5_x}})),
+                                       configuration());
         ARIADNE_TESTING_EXPECT_THROWS(std::invalid_argument,
-            evolver.orbit(boundary, Termination(Integer(0), Integer(1)),
-                          Semantics::LOWER));
+                                      evolver.orbit(boundary, Termination(Integer(0), Integer(1)),
+                                                    Semantics::LOWER));
     }
 
     Void test_lower_preserves_unsplit_multidimensional_source() {
@@ -954,25 +985,31 @@ class TestHybridDiscreteTimeEvolver : public Ariadne::Testing::ContextFixture {
         const DiscreteEvent event("guard_on_y");
         DiscreteTimeHybridAutomaton system;
         system.new_mode(source_mode, DifferenceAlgebraicEquation(
-            List<PrimedRealAssignment>{next(x) = x + 1, next(y) = y}));
+                                         List<PrimedRealAssignment>{next(x) = x + 1, next(y) = y}));
         system.new_mode(target_mode, DifferenceAlgebraicEquation(
-            List<PrimedRealAssignment>{next(x) = x, next(y) = y}));
+                                         List<PrimedRealAssignment>{next(x) = x, next(y) = y}));
         system.new_urgent_transition(source_mode, event, target_mode,
-            {next(x) = x + 3, next(y) = y}, y >= 1 / 2_q);
+                                     {next(x) = x + 3, next(y) = y}, y >= 1 / 2_q);
         Evolver evolver(system);
 
         // A second coordinate with an undecided guard cannot be
         // isolated as an independent LOWER child.
         const HybridEnclosure ambiguous(HybridExactBox(
-            source_mode, RealSpace({x, y}),
-            ExactBoxType({{0.0_x, 1.0_x}, {0.0_x, 1.0_x}})), configuration());
+                                            source_mode, RealSpace({
+                                                             x, y
+        }),
+                                            ExactBoxType({{0.0_x, 1.0_x}, {0.0_x, 1.0_x}})),
+                                        configuration());
         ARIADNE_TESTING_EXPECT_THROWS(std::invalid_argument,
-            evolver.orbit(ambiguous, Termination(Integer(0), Integer(1)),
-                          Semantics::LOWER));
+                                      evolver.orbit(ambiguous, Termination(Integer(0), Integer(1)),
+                                                    Semantics::LOWER));
         // Uniformly decided whole sources remain supported.
         const HybridEnclosure reset_source(HybridExactBox(
-            source_mode, RealSpace({x, y}),
-            ExactBoxType({{0.0_x, 1.0_x}, {0.75_x, 1.0_x}})), configuration());
+                                               source_mode, RealSpace({
+                                                                x, y
+        }),
+                                               ExactBoxType({{0.0_x, 1.0_x}, {0.75_x, 1.0_x}})),
+                                           configuration());
         const auto reset_orbit = evolver.orbit(
             reset_source, Termination(Integer(0), Integer(1)), Semantics::LOWER);
         ARIADNE_TESTING_REQUIRE(reset_orbit.final().size() == 1u);
@@ -996,8 +1033,11 @@ class TestHybridDiscreteTimeEvolver : public Ariadne::Testing::ContextFixture {
         // On the other side, the only certifiable branch is progression:
         // (x,y)=(1/2,1/8) -> (3/2,1/8), with no recorded event.
         const HybridEnclosure progression_source(HybridExactBox(
-            source_mode, RealSpace({x, y}),
-            ExactBoxType({{0.0_x, 1.0_x}, {0.0_x, 0.25_x}})), configuration());
+                                                     source_mode, RealSpace({
+                                                                      x, y
+        }),
+                                                     ExactBoxType({{0.0_x, 1.0_x}, {0.0_x, 0.25_x}})),
+                                                 configuration());
         const auto progression_orbit = evolver.orbit(
             progression_source, Termination(Integer(0), Integer(1)), Semantics::LOWER);
         ARIADNE_TESTING_REQUIRE(progression_orbit.final().size() == 1u);
@@ -1018,11 +1058,14 @@ class TestHybridDiscreteTimeEvolver : public Ariadne::Testing::ContextFixture {
         // The boundary singleton is feasible but cannot force either
         // branch under strict three-valued predicate certification.
         const HybridEnclosure boundary(HybridExactBox(
-            source_mode, RealSpace({x, y}),
-            ExactBoxType({{0.0_x, 1.0_x}, {0.5_x, 0.5_x}})), configuration());
+                                           source_mode, RealSpace({
+                                                            x, y
+        }),
+                                           ExactBoxType({{0.0_x, 1.0_x}, {0.5_x, 0.5_x}})),
+                                       configuration());
         ARIADNE_TESTING_EXPECT_THROWS(std::invalid_argument,
-            evolver.orbit(boundary, Termination(Integer(0), Integer(1)),
-                          Semantics::LOWER));
+                                      evolver.orbit(boundary, Termination(Integer(0), Integer(1)),
+                                                    Semantics::LOWER));
     }
 
     Void test_lower_unique_permissive_branch() {
@@ -1031,17 +1074,17 @@ class TestHybridDiscreteTimeEvolver : public Ariadne::Testing::ContextFixture {
         const DiscreteEvent event("permissive_choice");
         DiscreteTimeHybridAutomaton system;
         system.new_mode(source_mode, DifferenceAlgebraicEquation(
-            List<PrimedRealAssignment>{next(x) = x + 1}));
+                                         List<PrimedRealAssignment>{next(x) = x + 1}));
         system.new_mode(target_mode, DifferenceAlgebraicEquation(
-            List<PrimedRealAssignment>{next(x) = x + 1}));
+                                         List<PrimedRealAssignment>{next(x) = x + 1}));
 
         // Explicit invariant FALSE means progression is prohibited,
         // while guard TRUE forces the reset despite PERMISSIVE kind.
         system.new_permissive_transition(source_mode, event, target_mode,
-            {next(x) = x + 3}, x >= -1, x <= -1);
+                                         {next(x) = x + 3}, x >= -1, x <= -1);
         Evolver jump(system);
         const auto reset = jump.orbit(initial(source_mode),
-            Termination(Integer(0), Integer(2)), Semantics::LOWER);
+                                      Termination(Integer(0), Integer(2)), Semantics::LOWER);
         ARIADNE_TESTING_EXPECT_EQUAL(reset.final().size(), 1u);
         ARIADNE_TESTING_EXPECT_EQUAL(reset.reach().size(), 2u);
         const auto& image = reset.reach().front();
@@ -1056,14 +1099,14 @@ class TestHybridDiscreteTimeEvolver : public Ariadne::Testing::ContextFixture {
         // the deterministic state update, with no false event.
         DiscreteTimeHybridAutomaton progress;
         progress.new_mode(source_mode, DifferenceAlgebraicEquation(
-            List<PrimedRealAssignment>{next(x) = x + 1}));
+                                           List<PrimedRealAssignment>{next(x) = x + 1}));
         progress.new_mode(target_mode, DifferenceAlgebraicEquation(
-            List<PrimedRealAssignment>{next(x) = x}));
+                                           List<PrimedRealAssignment>{next(x) = x}));
         progress.new_permissive_transition(source_mode, event, target_mode,
-            {next(x) = x + 3}, x >= 2, x <= 2);
+                                           {next(x) = x + 3}, x >= 2, x <= 2);
         Evolver no_jump(progress);
         const auto progressed = no_jump.orbit(initial(source_mode),
-            Termination(Integer(0), Integer(1)), Semantics::LOWER);
+                                              Termination(Integer(0), Integer(1)), Semantics::LOWER);
         ARIADNE_TESTING_EXPECT_EQUAL(progressed.final().size(), 1u);
         ARIADNE_TESTING_PROVE(progressed.final().front().location() == source_mode);
         ARIADNE_TESTING_EXPECT_EQUAL(progressed.final().front().previous_events().size(), 0u);
@@ -1073,14 +1116,14 @@ class TestHybridDiscreteTimeEvolver : public Ariadne::Testing::ContextFixture {
         // Continuous hybrid LOWER already follows this exact rule.
         DiscreteTimeHybridAutomaton ambiguous;
         ambiguous.new_mode(source_mode, DifferenceAlgebraicEquation(
-            List<PrimedRealAssignment>{next(x) = x + 1}));
+                                            List<PrimedRealAssignment>{next(x) = x + 1}));
         ambiguous.new_mode(target_mode, DifferenceAlgebraicEquation(
-            List<PrimedRealAssignment>{next(x) = x}));
+                                            List<PrimedRealAssignment>{next(x) = x}));
         ambiguous.new_permissive_transition(source_mode, event, target_mode,
-            {next(x) = x + 3}, x >= -1, x <= 2);
+                                            {next(x) = x + 3}, x >= -1, x <= 2);
         Evolver undecided(ambiguous);
         const auto optional = undecided.orbit(initial(source_mode),
-            Termination(Integer(0), Integer(1)), Semantics::LOWER);
+                                              Termination(Integer(0), Integer(1)), Semantics::LOWER);
         ARIADNE_TESTING_REQUIRE(optional.final().size() == 2u);
         ARIADNE_TESTING_EXPECT_EQUAL(optional.reach().size(), 2u);
         bool found_progression = false;
@@ -1109,22 +1152,24 @@ class TestHybridDiscreteTimeEvolver : public Ariadne::Testing::ContextFixture {
         // ticks; the lower frontier must retain all three descendants.
         DiscreteTimeHybridAutomaton persistent;
         persistent.new_mode(source_mode, DifferenceAlgebraicEquation(
-            List<PrimedRealAssignment>{next(x) = x + 1}));
+                                             List<PrimedRealAssignment>{next(x) = x + 1}));
         persistent.new_mode(target_mode, DifferenceAlgebraicEquation(
-            List<PrimedRealAssignment>{next(x) = x}));
+                                             List<PrimedRealAssignment>{next(x) = x}));
         persistent.new_permissive_transition(source_mode, event, target_mode,
-            {next(x) = x + 3}, x >= -1, x <= 5);
+                                             {next(x) = x + 3}, x >= -1, x <= 5);
         Evolver repeated(persistent);
         const auto two_ticks = repeated.orbit(initial(source_mode),
-            Termination(Integer(0), Integer(2)), Semantics::LOWER);
+                                              Termination(Integer(0), Integer(2)), Semantics::LOWER);
         ARIADNE_TESTING_REQUIRE(two_ticks.final().size() == 3u);
         ARIADNE_TESTING_EXPECT_EQUAL(two_ticks.reach().size(), 5u);
         ARIADNE_TESTING_EXPECT_EQUAL(two_ticks.intermediate().size(), 2u);
         SizeType source_finals = 0u;
         SizeType target_finals = 0u;
         for (const auto& final: two_ticks.final()) {
-            if (final.location() == source_mode) ++source_finals;
-            if (final.location() == target_mode) ++target_finals;
+            if (final.location() == source_mode)
+                ++source_finals;
+            if (final.location() == target_mode)
+                ++target_finals;
             ARIADNE_TESTING_EXPECT_EQUAL(
                 final.time_range().lower_bound().raw().get_d(), 2.0);
         }
@@ -1134,21 +1179,21 @@ class TestHybridDiscreteTimeEvolver : public Ariadne::Testing::ContextFixture {
         Evolver bounded_budget(ambiguous);
         bounded_budget.configuration().set_maximum_nodes(2u);
         ARIADNE_TESTING_EXPECT_THROWS(std::length_error,
-            bounded_budget.orbit(initial(source_mode),
-                Termination(Integer(0), Integer(1)), Semantics::LOWER));
+                                      bounded_budget.orbit(initial(source_mode),
+                                                           Termination(Integer(0), Integer(1)), Semantics::LOWER));
 
         // A varying optional guard does not prevent certain progression.
         // Even if the reset is only POSSIBLE, skipping it is permitted.
         DiscreteTimeHybridAutomaton varying;
         varying.new_mode(source_mode, DifferenceAlgebraicEquation(
-            List<PrimedRealAssignment>{next(x) = x + 1}));
+                                          List<PrimedRealAssignment>{next(x) = x + 1}));
         varying.new_mode(target_mode, DifferenceAlgebraicEquation(
-            List<PrimedRealAssignment>{next(x) = x}));
+                                          List<PrimedRealAssignment>{next(x) = x}));
         varying.new_permissive_transition(source_mode, event, target_mode,
-            {next(x) = x + 3}, x >= 1 / 2_q, x <= 2);
+                                          {next(x) = x + 3}, x >= 1 / 2_q, x <= 2);
         Evolver varying_guard(varying);
         const auto optional_unknown = varying_guard.orbit(initial(source_mode),
-            Termination(Integer(0), Integer(1)), Semantics::LOWER);
+                                                          Termination(Integer(0), Integer(1)), Semantics::LOWER);
         ARIADNE_TESTING_REQUIRE(optional_unknown.final().size() == 1u);
         ARIADNE_TESTING_PROVE(optional_unknown.final().front().location() == source_mode);
         ARIADNE_TESTING_EXPECT_EQUAL(
@@ -1163,14 +1208,14 @@ class TestHybridDiscreteTimeEvolver : public Ariadne::Testing::ContextFixture {
         // The original whole source is reset without selecting a child.
         DiscreteTimeHybridAutomaton certain_reset;
         certain_reset.new_mode(source_mode, DifferenceAlgebraicEquation(
-            List<PrimedRealAssignment>{next(x) = x + 1}));
+                                                List<PrimedRealAssignment>{next(x) = x + 1}));
         certain_reset.new_mode(target_mode, DifferenceAlgebraicEquation(
-            List<PrimedRealAssignment>{next(x) = x}));
+                                                List<PrimedRealAssignment>{next(x) = x}));
         certain_reset.new_permissive_transition(source_mode, event, target_mode,
-            {next(x) = x + 3}, x >= -1, x <= 1 / 2_q);
+                                                {next(x) = x + 3}, x >= -1, x <= 1 / 2_q);
         Evolver optional_jump(certain_reset);
         const auto taken = optional_jump.orbit(initial(source_mode),
-            Termination(Integer(0), Integer(1)), Semantics::LOWER);
+                                               Termination(Integer(0), Integer(1)), Semantics::LOWER);
         ARIADNE_TESTING_REQUIRE(taken.final().size() == 1u);
         const auto& taken_final = taken.final().front();
         ARIADNE_TESTING_PROVE(taken_final.location() == target_mode);
@@ -1185,15 +1230,15 @@ class TestHybridDiscreteTimeEvolver : public Ariadne::Testing::ContextFixture {
         // unresolved, neither branch is uniformly known to be valid.
         DiscreteTimeHybridAutomaton uncertain_invariant;
         uncertain_invariant.new_mode(source_mode, DifferenceAlgebraicEquation(
-            List<PrimedRealAssignment>{next(x) = x + 1}));
+                                                      List<PrimedRealAssignment>{next(x) = x + 1}));
         uncertain_invariant.new_mode(target_mode, DifferenceAlgebraicEquation(
-            List<PrimedRealAssignment>{next(x) = x}));
+                                                      List<PrimedRealAssignment>{next(x) = x}));
         uncertain_invariant.new_permissive_transition(source_mode, event, target_mode,
-            {next(x) = x + 3}, x >= 1 / 2_q, x <= 1 / 2_q);
+                                                      {next(x) = x + 3}, x >= 1 / 2_q, x <= 1 / 2_q);
         Evolver blocked(uncertain_invariant);
         ARIADNE_TESTING_EXPECT_THROWS(std::invalid_argument,
-            blocked.orbit(initial(source_mode),
-                Termination(Integer(0), Integer(1)), Semantics::LOWER));
+                                      blocked.orbit(initial(source_mode),
+                                                    Termination(Integer(0), Integer(1)), Semantics::LOWER));
     }
 
     Void test_lower_unique_branch_across_competing_events() {
@@ -1202,16 +1247,16 @@ class TestHybridDiscreteTimeEvolver : public Ariadne::Testing::ContextFixture {
         const DiscreteEvent disabled("disabled"), forced("forced");
         DiscreteTimeHybridAutomaton system;
         system.new_mode(source_mode, DifferenceAlgebraicEquation(
-            List<PrimedRealAssignment>{next(x) = x + 1}));
+                                         List<PrimedRealAssignment>{next(x) = x + 1}));
         system.new_mode(target_mode, DifferenceAlgebraicEquation(
-            List<PrimedRealAssignment>{next(x) = x}));
+                                         List<PrimedRealAssignment>{next(x) = x}));
         system.new_urgent_transition(source_mode, disabled, target_mode,
-            {next(x) = x + 100}, x >= 2);
+                                     {next(x) = x + 100}, x >= 2);
         system.new_urgent_transition(source_mode, forced, target_mode,
-            {next(x) = x + 3}, x >= -1);
+                                     {next(x) = x + 3}, x >= -1);
         Evolver evolver(system);
         const auto lower = evolver.orbit(initial(source_mode),
-            Termination(Integer(0), Integer(1)), Semantics::LOWER);
+                                         Termination(Integer(0), Integer(1)), Semantics::LOWER);
         ARIADNE_TESTING_EXPECT_EQUAL(lower.final().size(), 1u);
         ARIADNE_TESTING_PROVE(lower.final().front().location() == target_mode);
         ARIADNE_TESTING_EXPECT_EQUAL(lower.final().front().previous_events().size(), 1u);
@@ -1221,16 +1266,16 @@ class TestHybridDiscreteTimeEvolver : public Ariadne::Testing::ContextFixture {
         // resets. Aggregate BOTH; URGENT suppresses progression.
         DiscreteTimeHybridAutomaton competing;
         competing.new_mode(source_mode, DifferenceAlgebraicEquation(
-            List<PrimedRealAssignment>{next(x) = x + 1}));
+                                            List<PrimedRealAssignment>{next(x) = x + 1}));
         competing.new_mode(target_mode, DifferenceAlgebraicEquation(
-            List<PrimedRealAssignment>{next(x) = x}));
+                                            List<PrimedRealAssignment>{next(x) = x}));
         competing.new_urgent_transition(source_mode, disabled, target_mode,
-            {next(x) = x + 100}, x >= -1);
+                                        {next(x) = x + 100}, x >= -1);
         competing.new_urgent_transition(source_mode, forced, target_mode,
-            {next(x) = x + 3}, x >= -1);
+                                        {next(x) = x + 3}, x >= -1);
         Evolver multiple_resets(competing);
         const auto both = multiple_resets.orbit(initial(source_mode),
-            Termination(Integer(0), Integer(1)), Semantics::LOWER);
+                                                Termination(Integer(0), Integer(1)), Semantics::LOWER);
         ARIADNE_TESTING_REQUIRE(both.final().size() == 2u);
         ARIADNE_TESTING_EXPECT_EQUAL(both.reach().size(), 2u);
         bool saw_first = false;
@@ -1261,16 +1306,19 @@ class TestHybridDiscreteTimeEvolver : public Ariadne::Testing::ContextFixture {
         const DiscreteEvent event("conditional_jump");
         DiscreteTimeHybridAutomaton with_event;
         with_event.new_mode(mode, DifferenceAlgebraicEquation(
-            List<PrimedRealAssignment>{next(x) = x + 1}));
+                                      List<PrimedRealAssignment>{next(x) = x + 1}));
         with_event.new_mode(target, DifferenceAlgebraicEquation(
-            List<PrimedRealAssignment>{next(x) = x}));
+                                        List<PrimedRealAssignment>{next(x) = x}));
         with_event.new_permissive_transition(mode, event, target,
-            {next(x) = x + 1}, x >= 0, x <= 2);
+                                             {next(x) = x + 1}, x >= 0, x <= 2);
         Evolver guarded(with_event);
         // Zero horizon requires an initial witness but no event decision.
         ARIADNE_TESTING_EXPECT_EQUAL(
             guarded.orbit(initial(mode), Termination(Integer(0), Integer(0)),
-                          Semantics::LOWER).final().size(), 1u);
+                          Semantics::LOWER)
+                .final()
+                .size(),
+            1u);
         // Certain progression with a PERMISSIVE alternative is a
         // legitimate full-source LOWER step, not an invented priority.
         const auto optional = guarded.orbit(
@@ -1285,12 +1333,15 @@ class TestHybridDiscreteTimeEvolver : public Ariadne::Testing::ContextFixture {
 
         DiscreteTimeHybridAutomaton inclusion;
         inclusion.new_mode(mode, DifferenceAlgebraicInclusion(
-            List<PrimedRealAssignment>{next(x) = x + u},
-            RealVariablesBox({-1 <= u <= 1})));
+                                     List<PrimedRealAssignment>{next(x) = x + u},
+                                     RealVariablesBox({-1 <= u <= 1})));
         Evolver inclusion_evolver(inclusion);
         ARIADNE_TESTING_EXPECT_EQUAL(
             inclusion_evolver.orbit(initial(mode), Termination(Integer(0), Integer(0)),
-                                   Semantics::LOWER).final().size(), 1u);
+                                    Semantics::LOWER)
+                .final()
+                .size(),
+            1u);
         const auto lower = inclusion_evolver.orbit(
             initial(mode), Termination(Integer(0), Integer(1)), Semantics::LOWER);
         ARIADNE_TESTING_REQUIRE(lower.final().size() == 1u);
@@ -1300,11 +1351,11 @@ class TestHybridDiscreteTimeEvolver : public Ariadne::Testing::ContextFixture {
 
         DiscreteTimeHybridAutomaton deterministic;
         deterministic.new_mode(mode, DifferenceAlgebraicEquation(
-            List<PrimedRealAssignment>{next(x) = x + 1}));
+                                         List<PrimedRealAssignment>{next(x) = x + 1}));
         Evolver no_jump(deterministic);
         ARIADNE_TESTING_EXPECT_THROWS(std::invalid_argument,
-            no_jump.orbit(initial(mode), Termination(Integer(1), Integer(1)),
-                          Semantics::LOWER));
+                                      no_jump.orbit(initial(mode), Termination(Integer(1), Integer(1)),
+                                                    Semantics::LOWER));
     }
 
     Void test_rejections() {
@@ -1312,27 +1363,30 @@ class TestHybridDiscreteTimeEvolver : public Ariadne::Testing::ContextFixture {
         const DiscreteLocation mode(1);
         DiscreteTimeHybridAutomaton system;
         system.new_mode(mode, DifferenceAlgebraicEquation(
-            List<PrimedRealAssignment>{next(x) = x}));
+                                  List<PrimedRealAssignment>{next(x) = x}));
         Evolver evolver(system);
         ARIADNE_TESTING_EXPECT_THROWS(std::invalid_argument,
-            evolver.configuration().set_maximum_nodes(0u));
+                                      evolver.configuration().set_maximum_nodes(0u));
         ARIADNE_TESTING_EXPECT_THROWS(std::invalid_argument,
-            Termination(Integer(2), Integer(1)));
+                                      Termination(Integer(2), Integer(1)));
         ARIADNE_TESTING_EXPECT_EQUAL(
             evolver.orbit(initial(mode), Termination(Integer(0), Integer(0)),
-                          Semantics::LOWER).final().size(), 1u);
+                          Semantics::LOWER)
+                .final()
+                .size(),
+            1u);
         ARIADNE_TESTING_EXPECT_THROWS(std::invalid_argument,
-            evolver.orbit(initial(mode), Termination(Integer(1), Integer(1)), Semantics::UPPER));
+                                      evolver.orbit(initial(mode), Termination(Integer(1), Integer(1)), Semantics::UPPER));
         DiscreteTimeHybridAutomaton inclusion;
         const RealVariable a("a");
         inclusion.new_mode(mode, DifferenceAlgebraicInclusion(
-            List<PrimedRealAssignment>{next(x) = x + u},
-            List<RealAssignment>{let(a) = x + u},
-            RealVariablesBox({-1 <= u <= 1})));
+                                     List<PrimedRealAssignment>{next(x) = x + u},
+                                     List<RealAssignment>{let(a) = x + u},
+                                     RealVariablesBox({-1 <= u <= 1})));
         const DiscreteLocation target(2);
         const DiscreteEvent event("auxiliary_guard");
         inclusion.new_mode(target, DifferenceAlgebraicEquation(
-            List<PrimedRealAssignment>{next(x) = x}));
+                                       List<PrimedRealAssignment>{next(x) = x}));
         inclusion.new_urgent_transition(mode, event, target, {next(x) = x}, a >= 0);
         Evolver validated(inclusion);
         const auto source = initial(mode);

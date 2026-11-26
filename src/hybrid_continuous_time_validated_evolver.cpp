@@ -526,7 +526,8 @@ Void HybridContinuousTimeEvolverBase<ValidatedTag>::
             const auto& predicate = entry.second;
             if (predicate.event_kind == EventKind::INVARIANT &&
                 !definitely(initial_set.range_of(predicate.guard_function,
-                                                 predicate.source_arguments).upper_bound() <= 0))
+                                                 predicate.source_arguments)
+                                .upper_bound() <= 0))
                 safely_flowable = false;
         }
     }
@@ -718,9 +719,20 @@ Void HybridContinuousTimeEvolverBase<ValidatedTag>::
     // A full-source URGENT reset does NOT need the progression guard
     // to be safe: these are distinct legal hybrid behaviors.
     // IMPACT additionally needs direction evidence, so mere guard
-    // activation does not license it. Other uncertain blockers,
-    // including PROGRESS, still require explicit event reasoning.
+    // activation does not license it. PROGRESS may also be bypassed
+    // by a FULL_SOURCE PERMISSIVE reset: it constrains progression,
+    // not an instantaneous optional jump. Other obligations remain.
     if (semantics == Semantics::LOWER && this->system().inclusion(location)) {
+        bool has_full_source_permissive_reset = false;
+        for (const auto& entry: transitions) {
+            const auto& transition = entry.second;
+            if (transition.event_kind == EventKind::PERMISSIVE &&
+                EvolutionDetail::classify_initial_guard(initial_set, transition) ==
+                    EvolutionDetail::HybridInitialGuardActivation::FULL_SOURCE) {
+                has_full_source_permissive_reset = true;
+                break;
+            }
+        }
         for (const auto& entry: transitions) {
             const auto& predicate = entry.second;
             if (lower_inclusion_flow_predicate_certified(initial_set, predicate))
@@ -728,6 +740,8 @@ Void HybridContinuousTimeEvolverBase<ValidatedTag>::
             if (predicate.event_kind == EventKind::URGENT &&
                 EvolutionDetail::classify_initial_guard(initial_set, predicate) ==
                     EvolutionDetail::HybridInitialGuardActivation::FULL_SOURCE)
+                continue;
+            if (predicate.event_kind == EventKind::PROGRESS && has_full_source_permissive_reset)
                 continue;
             throw std::invalid_argument(
                 "Hybrid inclusion LOWER initial guard does not certify a legal whole-source continuation");
@@ -966,8 +980,8 @@ Void HybridContinuousTimeEvolverBase<ValidatedTag>::_evolve_inclusion(
     const auto transitions = this->_extract_transitions(initial.location());
     const auto horizon = FloatDPBounds(final_time, dp);
     const StepSizeType remaining = StepSizeType(
-        semantics == Semantics::LOWER ? horizon.lower_raw() : horizon.upper_raw()) -
-        StepSizeType(initial.time_range().lower_bound().raw());
+                                       semantics == Semantics::LOWER ? horizon.lower_raw() : horizon.upper_raw()) -
+                                   StepSizeType(initial.time_range().lower_bound().raw());
     const auto maximum_step = EvolutionDetail::limit_step_to_remaining_time(
         this->configuration().maximum_step_size(), remaining);
     const auto& source = initial.continuous_set();
@@ -1071,8 +1085,8 @@ Void HybridContinuousTimeEvolverBase<ValidatedTag>::_evolve_outer_equation(
                         continue;
                     const auto range = tube.range_of(other.guard_function, other.source_arguments);
                     const bool safe = other.event_kind == EventKind::INVARIANT
-                        ? definitely(range.upper_bound() <= 0)
-                        : definitely(range.upper_bound() < 0);
+                                        ? definitely(range.upper_bound() <= 0)
+                                        : definitely(range.upper_bound() < 0);
                     if (!safe) {
                         no_competing_blocker = false;
                         break;
@@ -1083,8 +1097,8 @@ Void HybridContinuousTimeEvolverBase<ValidatedTag>::_evolve_outer_equation(
 
                 HybridEnclosure witnessed_crossing = tube;
                 witnessed_crossing.new_guard(crossing.event,
-                                            crossing.guard_function,
-                                            crossing.source_arguments);
+                                             crossing.guard_function,
+                                             crossing.source_arguments);
                 if (definitely(witnessed_crossing.is_empty()))
                     continue;
                 result.record_reach(witnessed_crossing);
@@ -1110,8 +1124,8 @@ Void HybridContinuousTimeEvolverBase<ValidatedTag>::_evolve_outer_equation(
                     continue;
                 const auto range = reach.range_of(transition.guard_function, transition.source_arguments);
                 const bool safe = transition.event_kind == EventKind::INVARIANT
-                    ? definitely(range.upper_bound() <= 0)
-                    : definitely(range.upper_bound() < 0);
+                                    ? definitely(range.upper_bound() <= 0)
+                                    : definitely(range.upper_bound() < 0);
                 if (!safe) {
                     result.stop_reason = HybridEvolutionStopReason::NO_CONTINUATION;
                     return;

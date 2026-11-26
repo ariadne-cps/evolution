@@ -84,9 +84,9 @@ static_assert(std::is_same_v<HybridDiscreteTimeEvolver<ApproximateTag>::ResultTy
                              HybridDiscreteTimeApproximateOrbit>);
 static_assert(!HasSetSemantics<HybridDiscreteTimeEvolver<ApproximateTag>>);
 static_assert(std::is_constructible_v<DiscreteTimeEvolver<ApproximateTag>,
-    const DifferenceAlgebraicInclusion&, const InputSamplingPolicy&>);
+                                      const DifferenceAlgebraicInclusion&, const InputSamplingPolicy&>);
 static_assert(!std::is_constructible_v<DiscreteTimeEvolver<ApproximateTag>,
-    const DifferenceAlgebraicInclusion&>);
+                                       const DifferenceAlgebraicInclusion&>);
 static_assert(CompleteType<DiscreteTimeEvolver<ApproximateTag>>);
 static_assert(HasSampledOrbit<DiscreteTimeEvolver<ApproximateTag>>);
 static_assert(!HasSetSemantics<DiscreteTimeEvolver<ApproximateTag>>);

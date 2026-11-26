@@ -27,9 +27,10 @@
  */
 
 #include "evolution/hybrid_discrete_time_upper_scheduler.hpp"
-#include "hybrid_discrete_time_inclusion_capability.hpp"
 
 #include <stdexcept>
+
+#include "hybrid_discrete_time_inclusion_capability.hpp"
 
 namespace Ariadne {
 namespace {

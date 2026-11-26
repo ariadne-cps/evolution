@@ -48,8 +48,8 @@ HybridSourceGuardStatus classify_source_guard(
     HybridEnclosure candidate = source;
     restrict_source_guard(candidate, DiscreteEvent("_guard_test"), positive_indicator, arguments);
     return definitely(candidate.is_empty())
-               ? HybridSourceGuardStatus::EXCLUDED
-               : HybridSourceGuardStatus::UNRESOLVED;
+             ? HybridSourceGuardStatus::EXCLUDED
+             : HybridSourceGuardStatus::UNRESOLVED;
 }
 
 } // namespace Ariadne::EvolutionDetail

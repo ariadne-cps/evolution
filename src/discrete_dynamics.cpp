@@ -41,25 +41,29 @@ DiscreteDynamics* DiscreteDynamics::clone() const { return new DiscreteDynamics(
 SizeType DiscreteDynamics::dimension() const {
     return std::visit([](const auto& system) -> SizeType {
         return system->dimension();
-    }, _declaration);
+    },
+                      _declaration);
 }
 
 RealSpace DiscreteDynamics::state_space() const {
     return std::visit([](const auto& system) -> RealSpace {
         return system->state_space();
-    }, _declaration);
+    },
+                      _declaration);
 }
 
 RealSpace DiscreteDynamics::auxiliary_space() const {
     return std::visit([](const auto& system) -> RealSpace {
         return system->auxiliary_space();
-    }, _declaration);
+    },
+                      _declaration);
 }
 
 RealSpace DiscreteDynamics::state_auxiliary_space() const {
     return std::visit([](const auto& system) -> RealSpace {
         return system->state_auxiliary_space();
-    }, _declaration);
+    },
+                      _declaration);
 }
 
 Bool DiscreteDynamics::has_equation() const { return equation() != nullptr; }

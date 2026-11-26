@@ -106,7 +106,9 @@ class TestDiscreteTimeEvolver : public Ariadne::Testing::ContextFixture {
         const RealVariable x("x");
         const DifferenceAlgebraicEquation translation(List<PrimedRealAssignment>{next(x) = x + 1});
         DiscreteTimeEvolver<ValidatedTag> evolver(translation);
-        const auto initial = evolver.enclosure(ExactBoxType({{-1.0_x, 1.0_x}}));
+        const auto initial = evolver.enclosure(ExactBoxType({
+            {-1.0_x, 1.0_x}
+        }));
         evolver.configuration().set_enable_subdivisions(true);
         evolver.configuration().set_enable_premature_termination(false);
         evolver.configuration().set_maximum_enclosure_radius(0.75);
@@ -135,7 +137,9 @@ class TestDiscreteTimeEvolver : public Ariadne::Testing::ContextFixture {
         nonlinear.configuration().set_enable_premature_termination(false);
         nonlinear.configuration().set_maximum_enclosure_radius(0.75);
         const auto nonlinear_lower = nonlinear.orbit(
-            nonlinear.enclosure(ExactBoxType({{-1.0_x, 1.0_x}})),
+            nonlinear.enclosure(ExactBoxType({
+                {-1.0_x, 1.0_x}
+        })),
             Integer(1), Semantics::LOWER);
         ARIADNE_TESTING_EXPECT_EQUAL(nonlinear_lower.final().size(), 1u);
         const auto quadratic_bounds =
@@ -154,7 +158,9 @@ class TestDiscreteTimeEvolver : public Ariadne::Testing::ContextFixture {
         const auto identity = EffectiveVectorMultivariateFunction::identity(1u);
         ARIADNE_TESTING_EXPECT_EQUAL(identity.result_size(), 1u);
         const auto coordinate = identity[0u];
-        auto initial = evolver.enclosure(ExactBoxType({{-1.0_x, 1.0_x}}));
+        auto initial = evolver.enclosure(ExactBoxType({
+            {-1.0_x, 1.0_x}
+        }));
 
         // This feasible constrained set has a witness x0=3/8, but none
         // of the centre or endpoint candidate values from the former

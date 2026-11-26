@@ -46,12 +46,12 @@ DiscreteTimeInclusionEvolver::DiscreteTimeInclusionEvolver(const DiscreteTimeInc
       _configuration(std::make_shared<ConfigurationType>(*other._configuration)) {}
 
 DiscreteTimeInclusionEvolver::FunctionFactoryType
-DiscreteTimeInclusionEvolver::function_factory() const {
+    DiscreteTimeInclusionEvolver::function_factory() const {
     return ValidatedFunctionPatchFactory(make_taylor_function_patch_factory());
 }
 
 DiscreteTimeInclusionEvolver::EnclosureType
-DiscreteTimeInclusionEvolver::enclosure(const ExactBoxType& box) const {
+    DiscreteTimeInclusionEvolver::enclosure(const ExactBoxType& box) const {
     if (box.dimension() != this->system().dimension())
         throw std::invalid_argument("Ordinary discrete inclusion initial box dimension mismatch");
     return EnclosureType(box, this->system().state_space(),
@@ -59,8 +59,8 @@ DiscreteTimeInclusionEvolver::enclosure(const ExactBoxType& box) const {
 }
 
 DiscreteTimeInclusionEvolver::OrbitType
-DiscreteTimeInclusionEvolver::orbit(const RealExpressionBoundedConstraintSet& initial,
-                                    const TerminationType& stop, Semantics semantics) const {
+    DiscreteTimeInclusionEvolver::orbit(const RealExpressionBoundedConstraintSet& initial,
+                                        const TerminationType& stop, Semantics semantics) const {
     return orbit(EnclosureType(initial.euclidean_set(this->system().state_space()),
                                this->system().state_space(),
                                EnclosureConfiguration(this->function_factory())),
@@ -68,8 +68,8 @@ DiscreteTimeInclusionEvolver::orbit(const RealExpressionBoundedConstraintSet& in
 }
 
 DiscreteTimeInclusionEvolver::OrbitType
-DiscreteTimeInclusionEvolver::orbit(const EnclosureType& initial,
-                                    const TerminationType& stop, Semantics semantics) const {
+    DiscreteTimeInclusionEvolver::orbit(const EnclosureType& initial,
+                                        const TerminationType& stop, Semantics semantics) const {
     if (semantics != Semantics::UPPER && semantics != Semantics::LOWER)
         throw std::invalid_argument("Unknown ordinary discrete inclusion evolution semantics");
     if (stop < Integer(0))

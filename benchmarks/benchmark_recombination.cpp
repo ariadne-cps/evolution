@@ -265,8 +265,8 @@ struct Scenario {
 };
 
 ContinuousTimeHybridAutomaton make_system(const Scenario& scenario, DiscreteLocation source,
-                            DiscreteLocation target, DiscreteEvent jump,
-                            RealVariable x, RealVariable y) {
+                                          DiscreteLocation target, DiscreteEvent jump,
+                                          RealVariable x, RealVariable y) {
     ContinuousTimeHybridAutomaton system(scenario.name);
     system.new_mode(source, {dot(x) = 1, dot(y) = sqr(x)});
     system.new_mode(target, {dot(x) = 1 + sqr(y), dot(y) = 1});

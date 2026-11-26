@@ -3450,3 +3450,65 @@ must be green on its exact SHA before claiming
 this supported capability. The partial LOWER
 cell and canonical opening design contract
 remain unchanged.
+
+## v7.30 — Whole-source PERMISSIVE inclusion LOWER resets beside PROGRESS
+
+**Proof before implementation.** The original physical inclusion remains
+`x'=f(x,u)` on its complete declared input domain. Let the incoming outer
+enclosure `E_L` carry a nonempty reached subset `S_L`. If every source
+invariant holds on all of `E_L` and a PERMISSIVE guard is strictly positive
+on all of `E_L`, the original shared reset `r` is legal on all of `S_L`.
+Consequently `r(S_L)` is nonempty, genuinely reached and enclosed by the
+validated numerical reset of the whole source. PROGRESS can prohibit
+continuous advancement; it does not prohibit this instantaneous optional
+reset. No subbox, sampled input, new dynamics, event ordering or unknown
+guard interpretation is needed. Existing state/input/time correlations
+and source constraints must survive. The canonical opening contract is
+unchanged.
+
+**Small production change.** Before restricting a LOWER inclusion source,
+`_process_jumped_set` detects whether an existing PERMISSIVE transition is
+`FULL_SOURCE` according to the shared strict initial-guard classifier.
+Only in that case may an active or undecidable PROGRESS predicate bypass
+the uninterrupted-flow precondition. The existing common starting-event
+handler emits all certified reset alternatives and suppresses flow if a
+blocker is not certainly inactive. Invariant checks, unresolved URGENT
+guards, IMPACT direction obligations, structured-integrator requirements
+and physical-parameter limitations retain their previous treatment.
+Neither the numerical integration kernel nor UPPER is changed.
+
+**Public regressions.** Two new registered methods bring
+`test_hybrid_inclusions` to 19 methods. In both flat and tree backends,
+two certain PERMISSIVE resets beside `x>=0` PROGRESS retain both target
+branches and no source final. The source is either `x=1` (active blocker)
+or a carried LOWER enclosure produced by four full-input steps of `x'=u`,
+`u in [-1,1]`, to `t=1/8` (undecidable blocker). With a one-jump budget,
+both resets retain the original time, entire parameter domain, variable
+kinds and event provenance. Numerical bounds check both the complete
+reset image and its accuracy; source state/domain/constraints are not
+mutated. Separate negative cases retain rejection for an uncertain
+PERMISSIVE guard, an invariant not certified on the whole source,
+an unresolved URGENT guard and an active IMPACT lacking direction.
+Existing whole-tube, zero-horizon, urgent-reset and UPPER tests remain.
+
+**Validation and formatting.** The three focused baseline tests passed on
+v7.29. The new positive regression failed on the old production path with
+the expected whole-source-continuation exception, then passed after the
+change alongside both focused companion suites. As explicitly requested
+by the user, `apply-format` and `check-format` run before committing;
+formatting also normalizes accumulated drift in other root-repository
+C++ files. No submodule source or gitlink is changed.
+The full local Debug build with warnings as errors and enforced Python
+tests passed all 49 CTest entries. Installation and both existing C++ and
+Python tutorials against the installed library also passed. All 51
+collateral C++ file changes exactly match clang-format applied to HEAD.
+
+**Acceptance.** On 26 November 2026 all five functional v7.29 workflows
+(Ubuntu, macOS, Windows, Coverage and Sanitizers) succeeded on exact SHA
+`025d7b7f5fddb365cb901cb02f8dd306091de9b2`. The two separate Codecov
+threshold checks failed; this is distinct from the successful Coverage
+workflow. v7.30 remains a candidate until the same five functional
+workflows succeed on its exact published SHA. The capability matrix
+remains unchanged: Approximate 8 complete, UPPER 6 complete + 2 partial,
+LOWER 2 complete + 6 partial. Python tutorial parity remains deferred to
+the final phase; no work is added to the separate paving decoupling.

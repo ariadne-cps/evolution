@@ -29,8 +29,8 @@
 #ifndef ARIADNE_EVOLUTION_INITIAL_POINT_SAMPLING_HPP
 #define ARIADNE_EVOLUTION_INITIAL_POINT_SAMPLING_HPP
 
-#include "evolution/hybrid_continuous_time_approximate_evolver.hpp"
 #include "evolution/continuous_time_approximate_evolver.hpp"
+#include "evolution/hybrid_continuous_time_approximate_evolver.hpp"
 
 namespace Ariadne::EvolutionDetail {
 

@@ -80,7 +80,7 @@ class HybridDiscreteTimeEvolverConfiguration<ApproximateTag> : public Configurat
   public:
     HybridDiscreteTimeEvolverConfiguration() = default;
     Void set_sampling_counts(SamplingCounts counts) {
-        for (const auto& item : counts)
+        for (const auto& item: counts)
             ARIADNE_PRECONDITION(item.second > 0u);
         _sampling_counts = std::move(counts);
     }

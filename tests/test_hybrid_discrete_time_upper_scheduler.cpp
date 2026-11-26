@@ -34,6 +34,7 @@
 #include "logging/test_runner.hpp"
 #include "numeric/rational.hpp"
 #include "system/discrete_time_hybrid_automaton.hpp"
+
 #include "ariadne-testing.hpp"
 
 using namespace Ariadne;
@@ -50,8 +51,11 @@ class TestHybridDiscreteTimeUpperScheduler : public Ariadne::Testing::ContextFix
 
     static HybridEnclosure initial(DiscreteLocation location) {
         const RealVariable x("x");
-        return HybridEnclosure(HybridExactBox(location, RealSpace({x}),
-                               ExactBoxType({{0.0_x, 1.0_x}})), configuration());
+        return HybridEnclosure(HybridExactBox(location, RealSpace({
+                                                            x
+        }),
+                                              ExactBoxType({{0.0_x, 1.0_x}})),
+                               configuration());
     }
 
     Void test_horizon_and_linear_provenance() {
@@ -59,7 +63,7 @@ class TestHybridDiscreteTimeUpperScheduler : public Ariadne::Testing::ContextFix
         const DiscreteLocation mode(1);
         DiscreteTimeHybridAutomaton system;
         system.new_mode(mode, DifferenceAlgebraicEquation(
-            List<PrimedRealAssignment>{next(x) = x + 1}));
+                                  List<PrimedRealAssignment>{next(x) = x + 1}));
         const auto source = initial(mode);
         const auto zero = HybridDiscreteTimeUpperScheduler::evolve(
             system, source, Integer(0), Integer(0), 1u);
@@ -93,9 +97,9 @@ class TestHybridDiscreteTimeUpperScheduler : public Ariadne::Testing::ContextFix
         const DiscreteEvent event("choice");
         DiscreteTimeHybridAutomaton system;
         system.new_mode(mode, DifferenceAlgebraicEquation(
-            List<PrimedRealAssignment>{next(x) = x + 1}));
+                                  List<PrimedRealAssignment>{next(x) = x + 1}));
         system.new_mode(target, DifferenceAlgebraicEquation(
-            List<PrimedRealAssignment>{next(x) = x}));
+                                    List<PrimedRealAssignment>{next(x) = x}));
         system.new_permissive_transition(mode, event, target, {next(x) = x + 3},
                                          x >= 0, x <= 2);
         const auto full = HybridDiscreteTimeUpperScheduler::evolve(
@@ -130,9 +134,9 @@ class TestHybridDiscreteTimeUpperScheduler : public Ariadne::Testing::ContextFix
         const DiscreteEvent event("blocked");
         DiscreteTimeHybridAutomaton blocked;
         blocked.new_mode(mode, DifferenceAlgebraicEquation(
-            List<PrimedRealAssignment>{next(x) = x}));
+                                   List<PrimedRealAssignment>{next(x) = x}));
         blocked.new_mode(target, DifferenceAlgebraicEquation(
-            List<PrimedRealAssignment>{next(x) = x}));
+                                     List<PrimedRealAssignment>{next(x) = x}));
         blocked.new_permissive_transition(mode, event, target, {next(x) = x},
                                           x >= 2, x <= -1);
         const auto result = HybridDiscreteTimeUpperScheduler::evolve(
@@ -143,16 +147,16 @@ class TestHybridDiscreteTimeUpperScheduler : public Ariadne::Testing::ContextFix
 
         DiscreteTimeHybridAutomaton unblocked;
         unblocked.new_mode(mode, DifferenceAlgebraicEquation(
-            List<PrimedRealAssignment>{next(x) = x}));
+                                     List<PrimedRealAssignment>{next(x) = x}));
         ARIADNE_TESTING_EXPECT_THROWS(std::length_error,
-            HybridDiscreteTimeUpperScheduler::evolve(
-                unblocked, initial(mode), Integer(0), Integer(2), 2u));
+                                      HybridDiscreteTimeUpperScheduler::evolve(
+                                          unblocked, initial(mode), Integer(0), Integer(2), 2u));
         ARIADNE_TESTING_EXPECT_THROWS(std::invalid_argument,
-            HybridDiscreteTimeUpperScheduler::evolve(
-                unblocked, initial(mode), Integer(2), Integer(1), 5u));
+                                      HybridDiscreteTimeUpperScheduler::evolve(
+                                          unblocked, initial(mode), Integer(2), Integer(1), 5u));
         ARIADNE_TESTING_EXPECT_THROWS(std::invalid_argument,
-            HybridDiscreteTimeUpperScheduler::evolve(
-                unblocked, initial(mode), Integer(0), Integer(2), 0u));
+                                      HybridDiscreteTimeUpperScheduler::evolve(
+                                          unblocked, initial(mode), Integer(0), Integer(2), 0u));
     }
 
     Void test_time_index_matches_entire_enclosure() {
@@ -160,20 +164,20 @@ class TestHybridDiscreteTimeUpperScheduler : public Ariadne::Testing::ContextFix
         const DiscreteLocation mode(1);
         DiscreteTimeHybridAutomaton system;
         system.new_mode(mode, DifferenceAlgebraicEquation(
-            List<PrimedRealAssignment>{next(x) = x + 1}));
+                                  List<PrimedRealAssignment>{next(x) = x + 1}));
 
         const auto source = initial(mode);
         // This also applies to a zero-length exploration: it must not silently
         // certify a mismatched initial state as a horizon terminal.
         ARIADNE_TESTING_EXPECT_THROWS(std::invalid_argument,
-            HybridDiscreteTimeUpperScheduler::evolve(
-                system, source, Integer(1), Integer(1), 1u));
+                                      HybridDiscreteTimeUpperScheduler::evolve(
+                                          system, source, Integer(1), Integer(1), 1u));
 
         HybridEnclosure shifted = source;
         shifted.set_time_function(shifted.time_function() + StepSizeType(2, 0u));
         ARIADNE_TESTING_EXPECT_THROWS(std::invalid_argument,
-            HybridDiscreteTimeUpperScheduler::evolve(
-                system, shifted, Integer(0), Integer(2), 3u));
+                                      HybridDiscreteTimeUpperScheduler::evolve(
+                                          system, shifted, Integer(0), Integer(2), 3u));
         const auto resumed = HybridDiscreteTimeUpperScheduler::evolve(
             system, shifted, Integer(2), Integer(4), 3u);
         ARIADNE_TESTING_EXPECT_EQUAL(resumed.nodes.size(), 3u);
@@ -185,8 +189,8 @@ class TestHybridDiscreteTimeUpperScheduler : public Ariadne::Testing::ContextFix
         HybridEnclosure uncertain = source;
         uncertain.set_time_function(uncertain.state_function()[0u]);
         ARIADNE_TESTING_EXPECT_THROWS(std::invalid_argument,
-            HybridDiscreteTimeUpperScheduler::evolve(
-                system, uncertain, Integer(0), Integer(0), 1u));
+                                      HybridDiscreteTimeUpperScheduler::evolve(
+                                          system, uncertain, Integer(0), Integer(0), 1u));
     }
 
     Void test_orbit_projection_and_blocked_terminal() {
@@ -195,7 +199,7 @@ class TestHybridDiscreteTimeUpperScheduler : public Ariadne::Testing::ContextFix
         const DiscreteEvent event("blocked");
         DiscreteTimeHybridAutomaton live;
         live.new_mode(mode, DifferenceAlgebraicEquation(
-            List<PrimedRealAssignment>{next(x) = x + 1}));
+                                List<PrimedRealAssignment>{next(x) = x + 1}));
 
         const auto source = initial(mode);
         const auto zero = HybridDiscreteTimeUpperScheduler::evolve(
@@ -218,9 +222,9 @@ class TestHybridDiscreteTimeUpperScheduler : public Ariadne::Testing::ContextFix
 
         DiscreteTimeHybridAutomaton blocked;
         blocked.new_mode(mode, DifferenceAlgebraicEquation(
-            List<PrimedRealAssignment>{next(x) = x}));
+                                   List<PrimedRealAssignment>{next(x) = x}));
         blocked.new_mode(target, DifferenceAlgebraicEquation(
-            List<PrimedRealAssignment>{next(x) = x}));
+                                     List<PrimedRealAssignment>{next(x) = x}));
         blocked.new_permissive_transition(mode, event, target, {next(x) = x},
                                           x >= 2, x <= -1);
         const auto stopped = HybridDiscreteTimeUpperScheduler::evolve(
@@ -238,8 +242,8 @@ class TestHybridDiscreteTimeUpperScheduler : public Ariadne::Testing::ContextFix
         const DiscreteLocation mode(1);
         DiscreteTimeHybridAutomaton system;
         system.new_mode(mode, DifferenceAlgebraicInclusion(
-            List<PrimedRealAssignment>{next(x) = x + u},
-            RealVariablesBox({-1 <= u <= 1})));
+                                  List<PrimedRealAssignment>{next(x) = x + u},
+                                  RealVariablesBox({-1 <= u <= 1})));
         const auto result = HybridDiscreteTimeUpperScheduler::evolve(
             system, initial(mode), Integer(0), Integer(2), 3u);
         ARIADNE_TESTING_EXPECT_EQUAL(result.nodes.size(), 3u);
@@ -261,12 +265,12 @@ class TestHybridDiscreteTimeUpperScheduler : public Ariadne::Testing::ContextFix
         const DiscreteEvent event("choice");
         DiscreteTimeHybridAutomaton system;
         system.new_mode(mode, DifferenceAlgebraicInclusion(
-            List<PrimedRealAssignment>{next(x) = x + u},
-            RealVariablesBox({-1 <= u <= 1})));
+                                  List<PrimedRealAssignment>{next(x) = x + u},
+                                  RealVariablesBox({-1 <= u <= 1})));
         system.new_mode(target, DifferenceAlgebraicEquation(
-            List<PrimedRealAssignment>{next(x) = x}));
+                                    List<PrimedRealAssignment>{next(x) = x}));
         system.new_permissive_transition(mode, event, target,
-                                         {next(x) = x + 10}, x >= 1/2_q, x <= 1/4_q);
+                                         {next(x) = x + 10}, x >= 1 / 2_q, x <= 1 / 4_q);
         const auto result = HybridDiscreteTimeUpperScheduler::evolve(
             system, initial(mode), Integer(0), Integer(1), 3u);
         ARIADNE_TESTING_EXPECT_EQUAL(result.nodes.size(), 3u);
@@ -289,15 +293,15 @@ class TestHybridDiscreteTimeUpperScheduler : public Ariadne::Testing::ContextFix
         const DiscreteEvent jump("to_inclusion");
         DiscreteTimeHybridAutomaton system;
         system.new_mode(source, DifferenceAlgebraicInclusion(
-            // A source progression leaves the guard region before tick 1,
-            // so only the target branch can reach the target at tick 2.
-            List<PrimedRealAssignment>{next(x) = x + u - 10},
-            RealVariablesBox({-1 <= u <= 1})));
+                                    // A source progression leaves the guard region before tick 1,
+                                    // so only the target branch can reach the target at tick 2.
+                                    List<PrimedRealAssignment>{next(x) = x + u - 10},
+                                    RealVariablesBox({-1 <= u <= 1})));
         system.new_mode(destination, DifferenceAlgebraicInclusion(
-            List<PrimedRealAssignment>{next(x) = x + v},
-            RealVariablesBox({-2 <= v <= 2})));
+                                         List<PrimedRealAssignment>{next(x) = x + v},
+                                         RealVariablesBox({-2 <= v <= 2})));
         system.new_urgent_transition(source, jump, destination,
-                                     {next(x) = x + 10}, x >= 1/2_q);
+                                     {next(x) = x + 10}, x >= 1 / 2_q);
 
         // Closed pre-state restriction retains both possible alternatives.
         // The arrival state uses no fresh input; its subsequent progression
@@ -316,7 +320,7 @@ class TestHybridDiscreteTimeUpperScheduler : public Ariadne::Testing::ContextFix
         ARIADNE_TESTING_PROVE(*result.nodes[1u].incoming_branch->event == jump);
 
         SizeType target_steps = 0u;
-        for (const auto& node : result.nodes) {
+        for (const auto& node: result.nodes) {
             if (node.index == Integer(2) && node.enclosure.location() == destination) {
                 ++target_steps;
                 ARIADNE_TESTING_EXPECT_EQUAL(
@@ -337,9 +341,9 @@ class TestHybridDiscreteTimeUpperScheduler : public Ariadne::Testing::ContextFix
         const DiscreteLocation mode(1), target(2);
         DiscreteTimeHybridAutomaton system;
         system.new_mode(mode, DifferenceAlgebraicInclusion(
-            List<PrimedRealAssignment>{next(x) = x + u},
-            List<RealAssignment>{let(a) = x + u},
-            RealVariablesBox({-1 <= u <= 1})));
+                                  List<PrimedRealAssignment>{next(x) = x + u},
+                                  List<RealAssignment>{let(a) = x + u},
+                                  RealVariablesBox({-1 <= u <= 1})));
         // The initial output a[0]=x[0]+u[0] exists even at horizon zero.
         const auto zero = HybridDiscreteTimeUpperScheduler::evolve(
             system, initial(mode), Integer(0), Integer(0), 10u);
@@ -365,7 +369,7 @@ class TestHybridDiscreteTimeUpperScheduler : public Ariadne::Testing::ContextFix
         // closed UPPER alternatives must remain present.
         const DiscreteEvent event("auxiliary_guard");
         system.new_mode(target, DifferenceAlgebraicEquation(
-            List<PrimedRealAssignment>{next(x) = x}));
+                                    List<PrimedRealAssignment>{next(x) = x}));
         system.new_urgent_transition(mode, event, target,
                                      {next(x) = a}, a >= 0);
         const auto with_event_zero = HybridDiscreteTimeUpperScheduler::evolve(

@@ -37,17 +37,23 @@ DiscreteTimePredicateEvidence checked_evidence(DiscreteTimePredicateEvidence val
     switch (value) {
         case DiscreteTimePredicateEvidence::TRUE:
         case DiscreteTimePredicateEvidence::FALSE:
-        case DiscreteTimePredicateEvidence::UNKNOWN: return value;
-        default: throw std::invalid_argument("Unknown predicate evidence");
+        case DiscreteTimePredicateEvidence::UNKNOWN:
+            return value;
+        default:
+            throw std::invalid_argument("Unknown predicate evidence");
     }
 }
 
 DiscreteTimePredicateEvidence complement(DiscreteTimePredicateEvidence value) {
     switch (value) {
-        case DiscreteTimePredicateEvidence::TRUE: return DiscreteTimePredicateEvidence::FALSE;
-        case DiscreteTimePredicateEvidence::FALSE: return DiscreteTimePredicateEvidence::TRUE;
-        case DiscreteTimePredicateEvidence::UNKNOWN: return DiscreteTimePredicateEvidence::UNKNOWN;
-        default: throw std::invalid_argument("Unknown predicate evidence");
+        case DiscreteTimePredicateEvidence::TRUE:
+            return DiscreteTimePredicateEvidence::FALSE;
+        case DiscreteTimePredicateEvidence::FALSE:
+            return DiscreteTimePredicateEvidence::TRUE;
+        case DiscreteTimePredicateEvidence::UNKNOWN:
+            return DiscreteTimePredicateEvidence::UNKNOWN;
+        default:
+            throw std::invalid_argument("Unknown predicate evidence");
     }
 }
 
@@ -68,7 +74,7 @@ HybridDiscreteTimeStepPlan HybridDiscreteTimeStepPlanner::plan(
 
     for (const DiscreteEvent& event: automaton.events(source)) {
         const auto guard = checked_evidence(evaluate(source, event, DiscreteTimePredicateRole::GUARD,
-                                    automaton.guard_predicate(source, event)));
+                                                     automaton.guard_predicate(source, event)));
         DiscreteTimePredicateEvidence invariant;
         if (automaton.transition_kind(source, event) == DiscreteTimeTransitionKind::URGENT) {
             // Derive from guard classification: the two predicates are
@@ -76,7 +82,7 @@ HybridDiscreteTimeStepPlan HybridDiscreteTimeStepPlanner::plan(
             invariant = complement(guard);
         } else if (automaton.transition_kind(source, event) == DiscreteTimeTransitionKind::PERMISSIVE) {
             invariant = checked_evidence(evaluate(source, event, DiscreteTimePredicateRole::PROGRESSION_INVARIANT,
-                                 automaton.invariant_predicate(source, event)));
+                                                  automaton.invariant_predicate(source, event)));
         } else {
             throw std::invalid_argument("Unknown discrete hybrid transition kind");
         }

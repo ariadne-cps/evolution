@@ -31,6 +31,7 @@
 #include "evolution/hybrid_discrete_time_step_planner.hpp"
 #include "logging/test_runner.hpp"
 #include "system/discrete_time_hybrid_automaton.hpp"
+
 #include "ariadne-testing.hpp"
 
 using namespace Ariadne;
@@ -64,7 +65,7 @@ class TestHybridDiscreteTimeStepPlanner : public Ariadne::Testing::ContextFixtur
         ARIADNE_TESTING_PROVE(!plan.branches[0u].event.has_value());
         ARIADNE_TESTING_PROVE(plan.branches[0u].target == source);
         ARIADNE_TESTING_EXPECT_THROWS(std::invalid_argument,
-            HybridDiscreteTimeStepPlanner::plan(automaton, DiscreteLocation(9), Integer(4), constant(Evidence::TRUE)));
+                                      HybridDiscreteTimeStepPlanner::plan(automaton, DiscreteLocation(9), Integer(4), constant(Evidence::TRUE)));
     }
 
     Void test_urgent_complement() {
@@ -114,9 +115,9 @@ class TestHybridDiscreteTimeStepPlanner : public Ariadne::Testing::ContextFixtur
         // The evaluator contract must reject an invalid enum rather than
         // treating it as uncertain evidence.
         ARIADNE_TESTING_EXPECT_THROWS(std::invalid_argument,
-            HybridDiscreteTimeStepPlanner::plan(
-                automaton, source, Integer(0),
-                constant(static_cast<Evidence>(255))));
+                                      HybridDiscreteTimeStepPlanner::plan(
+                                          automaton, source, Integer(0),
+                                          constant(static_cast<Evidence>(255))));
     }
 
     Void test_invalid_permissive_evidence() {
@@ -136,12 +137,13 @@ class TestHybridDiscreteTimeStepPlanner : public Ariadne::Testing::ContextFixtur
         const auto invalid_invariant = [](DiscreteLocation, DiscreteEvent, Role role,
                                           const ContinuousPredicate&) {
             return role == Role::PROGRESSION_INVARIANT
-                ? static_cast<Evidence>(255) : Evidence::TRUE;
+                     ? static_cast<Evidence>(255)
+                     : Evidence::TRUE;
         };
         ARIADNE_TESTING_EXPECT_THROWS(std::invalid_argument,
-            HybridDiscreteTimeStepPlanner::plan(automaton, source, Integer(0), invalid_guard));
+                                      HybridDiscreteTimeStepPlanner::plan(automaton, source, Integer(0), invalid_guard));
         ARIADNE_TESTING_EXPECT_THROWS(std::invalid_argument,
-            HybridDiscreteTimeStepPlanner::plan(automaton, source, Integer(0), invalid_invariant));
+                                      HybridDiscreteTimeStepPlanner::plan(automaton, source, Integer(0), invalid_invariant));
     }
 
     Void test_permissive_overlap_and_simultaneous_events() {

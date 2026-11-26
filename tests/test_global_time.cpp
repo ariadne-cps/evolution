@@ -145,9 +145,9 @@ class TestGlobalTime : public Testing::ContextFixture {
             ARIADNE_TESTING_EXPECT_EQUAL(lower_zero.final()[0u].location(), q);
             ARIADNE_TESTING_EXPECT_EQUAL(lower_zero.final()[0u].previous_events().size(), 0u);
             ARIADNE_TESTING_PROVE(subset(ExactIntervalType(0, 0),
-                cast_exact_interval(lower_zero.final()[0u].state_function()[0u].range())));
+                                         cast_exact_interval(lower_zero.final()[0u].state_function()[0u].range())));
             ARIADNE_TESTING_PROVE(subset(ExactIntervalType(0, 0),
-                cast_exact_interval(lower_zero.final()[0u].auxiliary_function()[0u].range())));
+                                         cast_exact_interval(lower_zero.final()[0u].auxiliary_function()[0u].range())));
 
             const auto lower = hybrid.orbit(initial, HybridTime(0.125_x, 1), Semantics::LOWER);
             ARIADNE_TESTING_REQUIRE(lower.final().size() == 1u);
@@ -157,9 +157,9 @@ class TestGlobalTime : public Testing::ContextFixture {
             ARIADNE_TESTING_EXPECT_EQUAL(witnessed.previous_events().size(), 0u);
             // x' = t, x(0) = 0: x(1/8) = 1/128 and a=x+t=17/128.
             ARIADNE_TESTING_PROVE(subset(ExactIntervalType(0.0078125_x, 0.0078125_x),
-                cast_exact_interval(witnessed.state_function()[0u].range())));
+                                         cast_exact_interval(witnessed.state_function()[0u].range())));
             ARIADNE_TESTING_PROVE(subset(ExactIntervalType(0.1328125_x, 0.1328125_x),
-                cast_exact_interval(witnessed.auxiliary_function()[0u].range())));
+                                         cast_exact_interval(witnessed.auxiliary_function()[0u].range())));
             ARIADNE_TESTING_PROVE(subset(
                 cast_exact_interval(witnessed.time_range()), ExactIntervalType(0.125_x, 0.125_x)));
         }

@@ -30,6 +30,7 @@
 #define ARIADNE_EVOLUTION_HYBRID_DISCRETE_TIME_PREDICATE_FUNCTION_HPP
 
 #include <stdexcept>
+
 #include "evolution/hybrid_enclosure.hpp"
 #include "hybrid_discrete_time_inclusion_capability.hpp"
 #include "symbolic/assignment.hpp"

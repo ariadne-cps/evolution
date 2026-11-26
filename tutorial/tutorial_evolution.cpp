@@ -105,7 +105,9 @@ int main() {
         RealVariablesBox({-1 <= u <= 1}));
     DiscreteTimeEvolver<ApproximateTag> sampled_discrete_inclusion(
         discrete_inclusion, MidpointInputSampling());
-    const ExactBoxType discrete_initial({{0.0_x, 0.0_x}});
+    const ExactBoxType discrete_initial({
+        {0.0_x, 0.0_x}
+    });
     auto sampled_ticks = sampled_discrete_inclusion.orbit(discrete_initial, Integer(2));
     std::cout << "Approximate discrete inclusion: " << sampled_ticks.curves().size()
               << " trajectory(s)\n";
@@ -135,11 +137,11 @@ int main() {
     // A permissive discrete hybrid tick has both a map and a reset successor.
     DiscreteTimeHybridAutomaton tick_automaton;
     tick_automaton.new_mode(idle, DifferenceAlgebraicEquation(
-        List<PrimedRealAssignment>{next(x) = x + 1}));
+                                      List<PrimedRealAssignment>{next(x) = x + 1}));
     tick_automaton.new_mode(active, DifferenceAlgebraicEquation(
-        List<PrimedRealAssignment>{next(x) = x}));
+                                        List<PrimedRealAssignment>{next(x) = x}));
     tick_automaton.new_permissive_transition(idle, activate, active,
-        {next(x) = x + 2}, x >= 0, x <= 3);
+                                             {next(x) = x + 2}, x >= 0, x <= 3);
 
     HybridDiscreteTimeEvolver<ApproximateTag> approximate_tick_evolver(tick_automaton);
     const HybridApproximatePoint tick_initial_point(
@@ -150,7 +152,10 @@ int main() {
 
     HybridDiscreteTimeEvolver<ValidatedTag> validated_tick_evolver(tick_automaton);
     const HybridEnclosure tick_initial_set(
-        HybridExactBox(idle, RealSpace({x}), ExactBoxType({{0.875_x, 1.125_x}})),
+        HybridExactBox(idle, RealSpace({
+                                 x
+    }),
+                       ExactBoxType({{0.875_x, 1.125_x}})),
         EnclosureConfiguration(validated_discrete_evolver.function_factory()));
     const auto validated_branches = validated_tick_evolver.orbit(
         tick_initial_set, HybridDiscreteTimeTerminationCriterion(Integer(0), Integer(1)),
@@ -164,16 +169,19 @@ int main() {
     const RealVariable a("a");
     DiscreteTimeHybridAutomaton auxiliary_tick_automaton;
     auxiliary_tick_automaton.new_mode(idle, DifferenceAlgebraicInclusion(
-        List<PrimedRealAssignment>{next(x) = x + u},
-        List<RealAssignment>{let(a) = x + u},
-        RealVariablesBox({-1 <= u <= 1})));
+                                                List<PrimedRealAssignment>{next(x) = x + u},
+                                                List<RealAssignment>{let(a) = x + u},
+                                                RealVariablesBox({-1 <= u <= 1})));
     auxiliary_tick_automaton.new_mode(active, DifferenceAlgebraicEquation(
-        List<PrimedRealAssignment>{next(x) = x}));
+                                                  List<PrimedRealAssignment>{next(x) = x}));
     auxiliary_tick_automaton.new_permissive_transition(
         idle, activate, active, {next(x) = a + 3}, a >= 0, a <= 0);
     HybridDiscreteTimeEvolver<ValidatedTag> auxiliary_tick_evolver(auxiliary_tick_automaton);
     const HybridEnclosure auxiliary_tick_initial(
-        HybridExactBox(idle, RealSpace({x}), ExactBoxType({{0.0_x, 1.0_x}})),
+        HybridExactBox(idle, RealSpace({
+                                 x
+    }),
+                       ExactBoxType({{0.0_x, 1.0_x}})),
         EnclosureConfiguration(validated_discrete_evolver.function_factory()));
     const auto auxiliary_tick_orbit = auxiliary_tick_evolver.orbit(
         auxiliary_tick_initial,

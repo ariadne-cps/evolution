@@ -30,6 +30,7 @@
 #define ARIADNE_EVOLUTION_HYBRID_GUARD_PREDICATE_HPP
 
 #include <cstdint>
+
 #include "evolution/hybrid_enclosure.hpp"
 
 namespace Ariadne::EvolutionDetail {

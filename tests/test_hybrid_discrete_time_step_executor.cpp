@@ -34,6 +34,7 @@
 #include "logging/test_runner.hpp"
 #include "numeric/rational.hpp"
 #include "system/discrete_time_hybrid_automaton.hpp"
+
 #include "ariadne-testing.hpp"
 
 using namespace Ariadne;
@@ -51,8 +52,11 @@ class TestHybridDiscreteTimeStepExecutor : public Ariadne::Testing::ContextFixtu
 
     static HybridEnclosure initial(DiscreteLocation source) {
         const RealVariable x("x");
-        return HybridEnclosure(HybridExactBox(source, RealSpace({x}),
-                               ExactBoxType({{0.0_x, 1.0_x}})), configuration());
+        return HybridEnclosure(HybridExactBox(source, RealSpace({
+                                                          x
+        }),
+                                              ExactBoxType({{0.0_x, 1.0_x}})),
+                               configuration());
     }
 
     Void test_independent_permissive_branches() {
@@ -61,9 +65,9 @@ class TestHybridDiscreteTimeStepExecutor : public Ariadne::Testing::ContextFixtu
         const DiscreteEvent event("jump");
         DiscreteTimeHybridAutomaton automaton;
         automaton.new_mode(source, DifferenceAlgebraicEquation(
-            List<PrimedRealAssignment>{next(x) = x + 1}));
+                                       List<PrimedRealAssignment>{next(x) = x + 1}));
         automaton.new_mode(destination, DifferenceAlgebraicEquation(
-            List<PrimedRealAssignment>{next(x) = x - 1}));
+                                            List<PrimedRealAssignment>{next(x) = x - 1}));
         automaton.new_permissive_transition(source, event, destination,
                                             {next(x) = x + 3}, x >= 0, x <= 2);
 
@@ -91,9 +95,13 @@ class TestHybridDiscreteTimeStepExecutor : public Ariadne::Testing::ContextFixtu
         ARIADNE_TESTING_EXPECT_EQUAL(progress.enclosure.time_range().lower_bound().raw().get_d(), 1.0);
         ARIADNE_TESTING_EXPECT_EQUAL(input.time_range().lower_bound().raw().get_d(), 0.0);
         ARIADNE_TESTING_PROVE(definitely(jump.enclosure.state_bounding_box().inside(
-            ExactBoxType({{2.0_x, 5.0_x}}))));
+            ExactBoxType({
+                {2.0_x, 5.0_x}
+        }))));
         ARIADNE_TESTING_PROVE(definitely(progress.enclosure.state_bounding_box().inside(
-            ExactBoxType({{0.0_x, 3.0_x}}))));
+            ExactBoxType({
+                {0.0_x, 3.0_x}
+        }))));
     }
 
     Void test_urgent_branch_alternatives() {
@@ -102,9 +110,9 @@ class TestHybridDiscreteTimeStepExecutor : public Ariadne::Testing::ContextFixtu
         const DiscreteEvent event("urgent");
         DiscreteTimeHybridAutomaton automaton;
         automaton.new_mode(source, DifferenceAlgebraicEquation(
-            List<PrimedRealAssignment>{next(x) = x + 1}));
+                                       List<PrimedRealAssignment>{next(x) = x + 1}));
         automaton.new_mode(destination, DifferenceAlgebraicEquation(
-            List<PrimedRealAssignment>{next(x) = x}));
+                                            List<PrimedRealAssignment>{next(x) = x}));
         automaton.new_urgent_transition(source, event, destination,
                                         {next(x) = x + 2}, x >= 0);
 
@@ -131,9 +139,9 @@ class TestHybridDiscreteTimeStepExecutor : public Ariadne::Testing::ContextFixtu
         const DiscreteEvent event("blocked");
         DiscreteTimeHybridAutomaton automaton;
         automaton.new_mode(source, DifferenceAlgebraicEquation(
-            List<PrimedRealAssignment>{next(x) = x}));
+                                       List<PrimedRealAssignment>{next(x) = x}));
         automaton.new_mode(destination, DifferenceAlgebraicEquation(
-            List<PrimedRealAssignment>{next(x) = x}));
+                                            List<PrimedRealAssignment>{next(x) = x}));
         automaton.new_permissive_transition(source, event, destination,
                                             {next(x) = x}, x >= 0, x <= 0);
         const auto evidence = [](DiscreteLocation, DiscreteEvent, Role role,
@@ -153,13 +161,13 @@ class TestHybridDiscreteTimeStepExecutor : public Ariadne::Testing::ContextFixtu
         const DiscreteEvent event("auxiliary_permissive");
         DiscreteTimeHybridAutomaton automaton;
         automaton.new_mode(source, DifferenceAlgebraicInclusion(
-            List<PrimedRealAssignment>{next(x) = x + u},
-            List<RealAssignment>{let(a) = x + u},
-            RealVariablesBox({-1 <= u <= 1})));
+                                       List<PrimedRealAssignment>{next(x) = x + u},
+                                       List<RealAssignment>{let(a) = x + u},
+                                       RealVariablesBox({-1 <= u <= 1})));
         automaton.new_mode(target, DifferenceAlgebraicEquation(
-            List<PrimedRealAssignment>{next(x) = x}));
+                                       List<PrimedRealAssignment>{next(x) = x}));
         automaton.new_permissive_transition(source, event, target,
-            {next(x) = a + 3}, a >= 0, a <= 0);
+                                            {next(x) = a + 3}, a >= 0, a <= 0);
 
         const auto original = initial(source);
         const auto result = HybridDiscreteTimeStepExecutor::execute_certified(
@@ -233,13 +241,13 @@ class TestHybridDiscreteTimeStepExecutor : public Ariadne::Testing::ContextFixtu
         DiscreteTimeHybridAutomaton automaton;
         const RealVariable a("a");
         automaton.new_mode(source, DifferenceAlgebraicInclusion(
-            List<PrimedRealAssignment>{next(x) = x + u},
-            List<RealAssignment>{let(a) = x + u},
-            RealVariablesBox({-1 <= u <= 1})));
+                                       List<PrimedRealAssignment>{next(x) = x + u},
+                                       List<RealAssignment>{let(a) = x + u},
+                                       RealVariablesBox({-1 <= u <= 1})));
         const DiscreteLocation target(2);
         const DiscreteEvent event("auxiliary_guard");
         automaton.new_mode(target, DifferenceAlgebraicEquation(
-            List<PrimedRealAssignment>{next(x) = x}));
+                                       List<PrimedRealAssignment>{next(x) = x}));
         // The same a=x+u selects the branch and computes the reset.
         automaton.new_urgent_transition(source, event, target, {next(x) = a}, a >= 0);
         // The guard a=x+u is undecided over x in [0,1] and u in [-1,1].

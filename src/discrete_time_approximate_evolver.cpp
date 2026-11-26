@@ -76,7 +76,7 @@ PointType with_auxiliary(const DiscreteDynamics& system,
     for (SizeType i = 0u; i != output_space.dimension(); ++i) {
         const auto variable = output_space[i];
         output[i] = states.contains(variable) ? state[states[variable]]
-                                             : values[auxiliaries[variable]];
+                                              : values[auxiliaries[variable]];
     }
     return PointType(output_space, output);
 }
@@ -92,8 +92,7 @@ ValueVector sampled_inputs(const DifferenceAlgebraicInclusion* inclusion,
     const InputSamplingContext context{
         trajectory, step,
         FloatDPApproximation(ExactDouble(time.get_d()), dp),
-        FloatDPApproximation(1, dp)
-    };
+        FloatDPApproximation(1, dp)};
     const ValueVector inputs = policy->sample(inclusion->inputs(), context);
     if (inputs.size() != inclusion->number_of_inputs())
         throw std::invalid_argument("Discrete input policy produced the wrong dimension");
@@ -129,7 +128,8 @@ auto DiscreteTimeEvolver<ApproximateTag>::orbit(
     if (initial_box.dimension() != system().dimension())
         throw std::invalid_argument("Discrete approximate initial box dimension differs from the state space");
     return orbit(EvolutionDetail::sample_vector_field_initial_points(
-        initial_box, system().state_space(), _configuration->sampling_counts()), stop);
+                     initial_box, system().state_space(), _configuration->sampling_counts()),
+                 stop);
 }
 
 auto DiscreteTimeEvolver<ApproximateTag>::orbit(
@@ -152,7 +152,7 @@ auto DiscreteTimeEvolver<ApproximateTag>::orbit(
     InitialType canonical;
     std::vector<ValueVector> initial_inputs;
     initial_inputs.reserve(initial.size());
-    for (const auto& given : initial) {
+    for (const auto& given: initial) {
         const SizeType trajectory = canonical.size();
         const ValueVector input = sampled_inputs(inclusion, _input_sampling.get(), trajectory, 0u, FloatDP(0, dp));
         canonical.push_back(with_auxiliary(dynamics, auxiliary, canonical_state(given, state_space), input));

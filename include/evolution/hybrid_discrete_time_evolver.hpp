@@ -30,6 +30,7 @@
 #define ARIADNE_HYBRID_DISCRETE_TIME_EVOLVER_HPP
 
 #include <memory>
+
 #include "evolution/configuration_interface.hpp"
 #include "evolution/evolver.decl.hpp"
 #include "evolution/evolver_interface.hpp"
@@ -45,6 +46,7 @@ class HybridDiscreteTimeTerminationCriterion {
     HybridDiscreteTimeTerminationCriterion(Integer initial_index, Integer termination_index);
     const Integer& initial_index() const { return _initial_index; }
     const Integer& termination_index() const { return _termination_index; }
+
   private:
     Integer _initial_index;
     Integer _termination_index;
@@ -59,6 +61,7 @@ class HybridDiscreteTimeEvolverConfiguration<ValidatedTag> : public Configuratio
     SizeType maximum_nodes() const { return _maximum_nodes; }
     Void set_maximum_nodes(SizeType value);
     OutputStream& _write(OutputStream& os) const override;
+
   private:
     SizeType _maximum_nodes;
 };
@@ -107,7 +110,7 @@ class HybridDiscreteTimeEvolver<ValidatedTag>
   public:
     using Paradigm = ValidatedTag;
     using Interface = EvolverInterface<ValidatedTag, DiscreteTimeHybridAutomatonInterface,
-                                      HybridEnclosure, HybridDiscreteTimeTerminationCriterion>;
+                                       HybridEnclosure, HybridDiscreteTimeTerminationCriterion>;
     using SystemType = DiscreteTimeHybridAutomatonInterface;
     using ConfigurationType = HybridDiscreteTimeEvolverConfiguration<ValidatedTag>;
     using TimeType = Integer;
@@ -134,6 +137,7 @@ class HybridDiscreteTimeEvolver<ValidatedTag>
     HybridDiscreteTimeUpperExploration explore(
         const EnclosureType& initial, const TerminationType& termination,
         Semantics semantics) const;
+
   private:
     std::shared_ptr<const SystemType> _system;
     std::shared_ptr<ConfigurationType> _configuration;

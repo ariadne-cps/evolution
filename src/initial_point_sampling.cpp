@@ -65,7 +65,7 @@ ContinuousTimeEvolver<ApproximateTag>::ApproximateListPointType sample_vector_fi
     const auto domains = bisect_domain(domain, ordered_sampling_counts(domain, space, counts));
     ContinuousTimeEvolver<ApproximateTag>::ApproximateListPointType result(
         domains.size(), LabelledPoint<FloatDPApproximation>(
-            space, Point<FloatDPApproximation>()));
+                            space, Point<FloatDPApproximation>()));
     for (SizeType i = 0u; i < domains.size(); ++i)
         result.at(i) = LabelledPoint<FloatDPApproximation>(space, domains[i].centre());
     return result;

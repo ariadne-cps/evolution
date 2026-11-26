@@ -237,7 +237,6 @@ class TestContinuousInclusions : public Ariadne::Testing::ContextFixture {
                                       evolver.orbit(RealVariablesBox({x == 0}), Real(0u), Semantics::LOWER));
     }
 
-
     Void test_structured_lower_inclusion_preserves_switching_inputs() {
         const RealVariable x("x"), y("y"), u("u");
         const OrdinaryDifferentialAlgebraicInclusion system(
@@ -266,9 +265,8 @@ class TestContinuousInclusions : public Ariadne::Testing::ContextFixture {
         // u[0]=+1, u[1]=-1 gives x[2]=0 and y[2]=1/256.
         // The enclosure must contain the same actual trajectory for
         // LOWER, not merely a numerical input-midpoint witness.
-        const Vector<FloatDPBounds> switching({
-            FloatDPBounds(0, dp), FloatDPBounds(0, dp),
-            FloatDPBounds(1, dp), FloatDPBounds(-1, dp)});
+        const Vector<FloatDPBounds> switching({FloatDPBounds(0, dp), FloatDPBounds(0, dp),
+                                               FloatDPBounds(1, dp), FloatDPBounds(-1, dp)});
         const auto lower_values = lower_final.state_function()(switching);
         const auto upper_values = upper_final.state_function()(switching);
         ARIADNE_TESTING_PROVE(refines(FloatDPBounds(0, dp), lower_values[0u]));
@@ -295,15 +293,18 @@ class TestContinuousInclusions : public Ariadne::Testing::ContextFixture {
         ARIADNE_TESTING_REQUIRE(lower.final().size() == 1u);
         const auto original = cast_exact_box(
             lower.final()[0u].bounding_box().euclidean_set());
-        ARIADNE_TESTING_PROVE(subset(ExactBoxType({{-0.25_x, 0.25_x}}), original));
+        ARIADNE_TESTING_PROVE(subset(ExactBoxType({
+                                         {-0.25_x, 0.25_x}
+        }),
+                                     original));
         ARIADNE_TESTING_EXPECT_EQUAL(lower.final()[0u].number_of_parameters(), 1u);
 
         const FirstOrderMultifunctionIntegrator box_integrator;
         ContinuousTimeEvolver<ValidatedTag> boxes(system, box_integrator);
         ARIADNE_TESTING_EXPECT_THROWS(std::invalid_argument,
-            boxes.orbit(RealVariablesBox({x == 0}), Real(0.125_x), Semantics::LOWER));
+                                      boxes.orbit(RealVariablesBox({x == 0}), Real(0.125_x), Semantics::LOWER));
         ARIADNE_TESTING_EXPECT_THROWS(std::invalid_argument,
-            boxes.orbit(RealVariablesBox({x == 0}), Real(0), Semantics::LOWER));
+                                      boxes.orbit(RealVariablesBox({x == 0}), Real(0), Semantics::LOWER));
     }
 
     Void test_pointwise_interval_field_and_domain_rejection() {

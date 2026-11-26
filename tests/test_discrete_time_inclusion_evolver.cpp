@@ -32,6 +32,7 @@
 #include "evolution/discrete_time_inclusion_evolver.hpp"
 #include "logging/test_runner.hpp"
 #include "system/difference_algebraic_inclusion.hpp"
+
 #include "ariadne-testing.hpp"
 
 using namespace Ariadne;
@@ -46,7 +47,9 @@ class TestDiscreteTimeInclusionEvolver : public Ariadne::Testing::ContextFixture
             List<PrimedRealAssignment>{next(x) = x + u},
             RealVariablesBox({-1 <= u <= 1}));
         DiscreteTimeInclusionEvolver evolver(inclusion);
-        const auto initial = evolver.enclosure(ExactBoxType({{0.0_x, 0.0_x}}));
+        const auto initial = evolver.enclosure(ExactBoxType({
+            {0.0_x, 0.0_x}
+        }));
 
         const auto zero = evolver.orbit(initial, Integer(0), Semantics::UPPER);
         ARIADNE_TESTING_EXPECT_EQUAL(zero.final().size(), 1u);
@@ -102,7 +105,9 @@ class TestDiscreteTimeInclusionEvolver : public Ariadne::Testing::ContextFixture
         DiscreteTimeInclusionEvolver evolver(inclusion);
         const auto identity = EffectiveVectorMultivariateFunction::identity(1u);
         const auto coordinate = identity[0u];
-        auto initial = evolver.enclosure(ExactBoxType({{-1.0_x, 1.0_x}}));
+        auto initial = evolver.enclosure(ExactBoxType({
+            {-1.0_x, 1.0_x}
+        }));
         initial.new_positive_state_constraint(coordinate - Real(1 / 4_q));
         initial.new_negative_state_constraint(coordinate - Real(1 / 2_q));
 
@@ -148,12 +153,14 @@ class TestDiscreteTimeInclusionEvolver : public Ariadne::Testing::ContextFixture
         DiscreteTimeInclusionEvolver evolver(inclusion);
         evolver.configuration().set_enable_subdivisions(true);
         evolver.configuration().set_maximum_enclosure_radius(0.75);
-        const auto initial = evolver.enclosure(ExactBoxType({{-1.0_x, 1.0_x}}));
+        const auto initial = evolver.enclosure(ExactBoxType({
+            {-1.0_x, 1.0_x}
+        }));
         const auto result = evolver.orbit(initial, Integer(1), Semantics::UPPER);
         ARIADNE_TESTING_PROVE(result.final().size() > 1u);
         bool covers_negative = false;
         bool covers_positive = false;
-        for (const auto& leaf : result.final()) {
+        for (const auto& leaf: result.final()) {
             const auto extent = leaf.euclidean_set().bounding_box()[0u];
             covers_negative = covers_negative ||
                               extent.lower_bound().raw().get_d() <= -2.0;
@@ -181,7 +188,9 @@ class TestDiscreteTimeInclusionEvolver : public Ariadne::Testing::ContextFixture
             List<RealAssignment>{let(a) = x + u},
             RealVariablesBox({-1 <= u <= 1}));
         DiscreteTimeInclusionEvolver evolver(inclusion);
-        const auto initial = evolver.enclosure(ExactBoxType({{0.0_x, 0.0_x}}));
+        const auto initial = evolver.enclosure(ExactBoxType({
+            {0.0_x, 0.0_x}
+        }));
 
         // u[0] is a free coordinate already at horizon zero: a[0]=u[0].
         const auto zero = evolver.orbit(initial, Integer(0), Semantics::UPPER);
@@ -208,8 +217,7 @@ class TestDiscreteTimeInclusionEvolver : public Ariadne::Testing::ContextFixture
         ARIADNE_TESTING_PROVE(bounds.lower_bound().raw().get_d() <= -3.0);
         ARIADNE_TESTING_PROVE(bounds.upper_bound().raw().get_d() >= 3.0);
         const auto aux = evolved.final()[0u].auxiliary_function();
-        const auto current_input = evolved.final()[0u].configuration()
-            .function_factory().create_coordinate(evolved.final()[0u].parameter_domain(), 3u);
+        const auto current_input = evolved.final()[0u].configuration().function_factory().create_coordinate(evolved.final()[0u].parameter_domain(), 3u);
         const auto relation = aux[0u] - evolved.final()[0u].state_function()[0u] - current_input;
         const auto error = relation.range();
         ARIADNE_TESTING_PROVE(error.lower_bound().raw().get_d() >= -1e-6);
@@ -231,8 +239,7 @@ class TestDiscreteTimeInclusionEvolver : public Ariadne::Testing::ContextFixture
         ARIADNE_TESTING_PROVE(lower_input.lower_bound().raw().get_d() <= -1.0);
         ARIADNE_TESTING_PROVE(lower_input.upper_bound().raw().get_d() >= 1.0);
         const auto lower_auxiliary = lower.final()[0u].auxiliary_function();
-        const auto lower_current_input = lower.final()[0u].configuration()
-            .function_factory().create_coordinate(lower.final()[0u].parameter_domain(), 3u);
+        const auto lower_current_input = lower.final()[0u].configuration().function_factory().create_coordinate(lower.final()[0u].parameter_domain(), 3u);
         const auto lower_relation =
             lower_auxiliary[0u] - lower.final()[0u].state_function()[0u] - lower_current_input;
         const auto lower_error = lower_relation.range();
@@ -242,7 +249,7 @@ class TestDiscreteTimeInclusionEvolver : public Ariadne::Testing::ContextFixture
         // Reuse the last full current-input box without silently resampling
         // a[2]; progression consumes u[2] and allocates a new u[3].
         const auto resumed = evolver.orbit(evolved.final()[0u], Integer(1),
-                                            Semantics::UPPER);
+                                           Semantics::UPPER);
         ARIADNE_TESTING_EXPECT_EQUAL(resumed.final().size(), 1u);
         ARIADNE_TESTING_EXPECT_EQUAL(resumed.final()[0u].number_of_parameters(), 5u);
         ARIADNE_TESTING_EXPECT_EQUAL(resumed.final()[0u].auxiliary_space(), RealSpace({a}));
@@ -256,7 +263,9 @@ class TestDiscreteTimeInclusionEvolver : public Ariadne::Testing::ContextFixture
             List<PrimedRealAssignment>{next(x) = x + u},
             RealVariablesBox({-1 <= u <= 1}));
         DiscreteTimeInclusionEvolver evolver(inclusion);
-        const auto initial = evolver.enclosure(ExactBoxType({{0.0_x, 1.0_x}}));
+        const auto initial = evolver.enclosure(ExactBoxType({
+            {0.0_x, 1.0_x}
+        }));
         // Both semantics accept ordinary discrete inclusion evolution.
         const auto lower_zero = evolver.orbit(initial, Integer(0), Semantics::LOWER);
         ARIADNE_TESTING_EXPECT_EQUAL(lower_zero.final().size(), 1u);
@@ -265,14 +274,19 @@ class TestDiscreteTimeInclusionEvolver : public Ariadne::Testing::ContextFixture
         ARIADNE_TESTING_EXPECT_EQUAL(
             lower_one.final()[0u].euclidean_set().number_of_constraints(), 0u);
         ARIADNE_TESTING_EXPECT_THROWS(std::invalid_argument,
-            evolver.orbit(initial, Integer(-1), Semantics::UPPER));
+                                      evolver.orbit(initial, Integer(-1), Semantics::UPPER));
         ARIADNE_TESTING_EXPECT_THROWS(std::invalid_argument,
-            evolver.enclosure(ExactBoxType({{0.0_x, 1.0_x}, {0.0_x, 1.0_x}})));
-        const LabelledEnclosure wrong(ExactBoxType({{0.0_x, 1.0_x}}),
+                                      evolver.enclosure(ExactBoxType({
+                                          {0.0_x, 1.0_x},
+                                          {0.0_x, 1.0_x}
+        })));
+        const LabelledEnclosure wrong(ExactBoxType({
+                                          {0.0_x, 1.0_x}
+        }),
                                       RealSpace({y}),
                                       EnclosureConfiguration(evolver.function_factory()));
         ARIADNE_TESTING_EXPECT_THROWS(std::invalid_argument,
-            evolver.orbit(wrong, Integer(0), Semantics::UPPER));
+                                      evolver.orbit(wrong, Integer(0), Semantics::UPPER));
 
         const DifferenceAlgebraicInclusion auxiliaries(
             List<PrimedRealAssignment>{next(x) = x + a},
@@ -280,12 +294,16 @@ class TestDiscreteTimeInclusionEvolver : public Ariadne::Testing::ContextFixture
             RealVariablesBox({-1 <= u <= 1}));
         DiscreteTimeInclusionEvolver supported(auxiliaries);
         const auto zero = supported.orbit(
-            supported.enclosure(ExactBoxType({{0.0_x, 0.0_x}})),
+            supported.enclosure(ExactBoxType({
+                {0.0_x, 0.0_x}
+        })),
             Integer(0), Semantics::UPPER);
         ARIADNE_TESTING_EXPECT_EQUAL(zero.initial().auxiliary_space(), RealSpace({a}));
         ARIADNE_TESTING_EXPECT_EQUAL(zero.initial().number_of_parameters(), 2u);
         const auto lower_auxiliary_zero = supported.orbit(
-            supported.enclosure(ExactBoxType({{0.0_x, 0.0_x}})),
+            supported.enclosure(ExactBoxType({
+                {0.0_x, 0.0_x}
+        })),
             Integer(0), Semantics::LOWER);
         ARIADNE_TESTING_EXPECT_EQUAL(lower_auxiliary_zero.final().size(), 1u);
         ARIADNE_TESTING_EXPECT_EQUAL(lower_auxiliary_zero.initial().auxiliary_space(), RealSpace({a}));

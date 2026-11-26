@@ -32,8 +32,8 @@
 
 #include "algebra/algebra.hpp"
 #include "evolution/hybrid_orbit.hpp"
-#include "evolution/initial_point_sampling.hpp"
 #include "evolution/hybrid_time.hpp"
+#include "evolution/initial_point_sampling.hpp"
 #include "function/formula.hpp"
 #include "function/function.hpp"
 #include "function/functional.hpp"

@@ -28,8 +28,8 @@
 
 #include <stdexcept>
 
-#include "../src/hybrid_guard_predicate.hpp"
 #include "../src/hybrid_discrete_time_predicate_function.hpp"
+#include "../src/hybrid_guard_predicate.hpp"
 #include "evolution/hybrid_discrete_time_predicate_evaluator.hpp"
 #include "evolution/hybrid_discrete_time_step_executor.hpp"
 #include "function/taylor_function.hpp"
@@ -37,6 +37,7 @@
 #include "logging/test_runner.hpp"
 #include "numeric/rational.hpp"
 #include "system/discrete_time_hybrid_automaton.hpp"
+
 #include "ariadne-testing.hpp"
 
 using namespace Ariadne;
@@ -53,8 +54,11 @@ class TestHybridDiscreteTimePredicateEvaluator : public Ariadne::Testing::Contex
 
     static HybridEnclosure initial(DiscreteLocation mode) {
         const RealVariable x("x");
-        return HybridEnclosure(HybridExactBox(mode, RealSpace({x}),
-                               ExactBoxType({{0.0_x, 1.0_x}})), configuration());
+        return HybridEnclosure(HybridExactBox(mode, RealSpace({
+                                                        x
+        }),
+                                              ExactBoxType({{0.0_x, 1.0_x}})),
+                               configuration());
     }
 
     Void test_certified_signs_and_boundary() {
@@ -62,17 +66,17 @@ class TestHybridDiscreteTimePredicateEvaluator : public Ariadne::Testing::Contex
         const DiscreteLocation mode(1);
         DiscreteTimeHybridAutomaton automaton;
         automaton.new_mode(mode, DifferenceAlgebraicEquation(
-            List<PrimedRealAssignment>{next(x) = x + 1}));
+                                     List<PrimedRealAssignment>{next(x) = x + 1}));
         const auto source = initial(mode);
 
         ARIADNE_TESTING_PROVE(HybridDiscreteTimePredicateEvaluator::classify(
-            automaton, source, x >= -1) == Evidence::TRUE);
+                                  automaton, source, x >= -1) == Evidence::TRUE);
         ARIADNE_TESTING_PROVE(HybridDiscreteTimePredicateEvaluator::classify(
-            automaton, source, x >= 2) == Evidence::FALSE);
+                                  automaton, source, x >= 2) == Evidence::FALSE);
         // x=0 meets the boundary; a strict sign cannot be certified over
         // the entire enclosure, even when the non-strict predicate holds.
         ARIADNE_TESTING_PROVE(HybridDiscreteTimePredicateEvaluator::classify(
-            automaton, source, x >= 0) == Evidence::UNKNOWN);
+                                  automaton, source, x >= 0) == Evidence::UNKNOWN);
         ARIADNE_TESTING_EXPECT_EQUAL(source.time_range().lower_bound().raw().get_d(), 0.0);
     }
 
@@ -81,14 +85,14 @@ class TestHybridDiscreteTimePredicateEvaluator : public Ariadne::Testing::Contex
         const DiscreteLocation mode(1);
         DiscreteTimeHybridAutomaton automaton;
         automaton.new_mode(mode, DifferenceAlgebraicEquation(
-            List<PrimedRealAssignment>{next(x) = x + 1},
-            List<RealAssignment>{let(a) = x}));
+                                     List<PrimedRealAssignment>{next(x) = x + 1},
+                                     List<RealAssignment>{let(a) = x}));
         const auto source = initial(mode);
         // Algebraic substitution proves a-x+1 = 1 for every x in the set.
         ARIADNE_TESTING_PROVE(HybridDiscreteTimePredicateEvaluator::classify(
-            automaton, source, a - x + 1 >= 0) == Evidence::TRUE);
+                                  automaton, source, a - x + 1 >= 0) == Evidence::TRUE);
         ARIADNE_TESTING_PROVE(HybridDiscreteTimePredicateEvaluator::classify(
-            automaton, source, a - x - 1 >= 0) == Evidence::FALSE);
+                                  automaton, source, a - x - 1 >= 0) == Evidence::FALSE);
     }
 
     Void test_discrete_source_guard_uses_shared_certificates() {
@@ -96,8 +100,8 @@ class TestHybridDiscreteTimePredicateEvaluator : public Ariadne::Testing::Contex
         const DiscreteLocation mode(1);
         DiscreteTimeHybridAutomaton automaton;
         automaton.new_mode(mode, DifferenceAlgebraicEquation(
-            List<PrimedRealAssignment>{next(x) = x + 1},
-            List<RealAssignment>{let(a) = x}));
+                                     List<PrimedRealAssignment>{next(x) = x + 1},
+                                     List<RealAssignment>{let(a) = x}));
         const HybridEnclosure source = initial(mode);
         const auto check = [&](const ContinuousPredicate& predicate,
                                EvolutionDetail::HybridSourceGuardStatus expected,
@@ -108,17 +112,17 @@ class TestHybridDiscreteTimePredicateEvaluator : public Ariadne::Testing::Contex
                                          EnclosureFunctionArguments::STATE);
             ARIADNE_TESTING_EXPECT_EQUAL(
                 EvolutionDetail::classify_source_guard(source, indicator.function,
-                                                       indicator.arguments), expected);
+                                                       indicator.arguments),
+                expected);
             ARIADNE_TESTING_PROVE(
-                HybridDiscreteTimePredicateEvaluator::classify(automaton, source, predicate)
-                == discrete_expected);
+                HybridDiscreteTimePredicateEvaluator::classify(automaton, source, predicate) == discrete_expected);
         };
         check(a >= 2, EvolutionDetail::HybridSourceGuardStatus::EXCLUDED, Evidence::FALSE);
-        check(a >= 1/2_q, EvolutionDetail::HybridSourceGuardStatus::UNRESOLVED, Evidence::UNKNOWN);
+        check(a >= 1 / 2_q, EvolutionDetail::HybridSourceGuardStatus::UNRESOLVED, Evidence::UNKNOWN);
         check(a >= -1, EvolutionDetail::HybridSourceGuardStatus::FULL_SOURCE, Evidence::TRUE);
 
         const auto indicator = EvolutionDetail::discrete_source_indicator(
-            automaton, source, a >= 1/2_q);
+            automaton, source, a >= 1 / 2_q);
         HybridEnclosure restricted = source;
         EvolutionDetail::restrict_source_guard(restricted, DiscreteEvent("discrete"),
                                                indicator.function, indicator.arguments);
@@ -132,19 +136,19 @@ class TestHybridDiscreteTimePredicateEvaluator : public Ariadne::Testing::Contex
         const DiscreteEvent event("urgent");
         DiscreteTimeHybridAutomaton automaton;
         automaton.new_mode(mode, DifferenceAlgebraicInclusion(
-            List<PrimedRealAssignment>{next(x) = x + u},
-            RealVariablesBox({-1 <= u <= 1})));
+                                     List<PrimedRealAssignment>{next(x) = x + u},
+                                     RealVariablesBox({-1 <= u <= 1})));
         automaton.new_mode(target, DifferenceAlgebraicEquation(
-            List<PrimedRealAssignment>{next(x) = x}));
+                                       List<PrimedRealAssignment>{next(x) = x}));
         automaton.new_urgent_transition(mode, event, target,
-                                        {next(x) = x + 10}, x >= 1/2_q);
+                                        {next(x) = x + 10}, x >= 1 / 2_q);
         const auto source = initial(mode);
         ARIADNE_TESTING_PROVE(HybridDiscreteTimePredicateEvaluator::classify(
-            automaton, source, x >= 2) == Evidence::FALSE);
+                                  automaton, source, x >= 2) == Evidence::FALSE);
         ARIADNE_TESTING_PROVE(HybridDiscreteTimePredicateEvaluator::classify(
-            automaton, source, x >= -1) == Evidence::TRUE);
+                                  automaton, source, x >= -1) == Evidence::TRUE);
         ARIADNE_TESTING_PROVE(HybridDiscreteTimePredicateEvaluator::classify(
-            automaton, source, x >= 1/2_q) == Evidence::UNKNOWN);
+                                  automaton, source, x >= 1 / 2_q) == Evidence::UNKNOWN);
         const auto branches = HybridDiscreteTimeStepExecutor::execute_certified(
             automaton, source, Integer(0));
         ARIADNE_TESTING_EXPECT_EQUAL(branches.successors.size(), 2u);
@@ -159,7 +163,7 @@ class TestHybridDiscreteTimePredicateEvaluator : public Ariadne::Testing::Contex
         ARIADNE_TESTING_EXPECT_EQUAL(jump.enclosure.continuous_set().number_of_parameters(), 1u);
         ARIADNE_TESTING_EXPECT_EQUAL(progress.enclosure.continuous_set().number_of_parameters(), 2u);
         ARIADNE_TESTING_EXPECT_EQUAL(progress.enclosure.continuous_set().variable_kinds().back(),
-                                    EnclosureVariableKind::INPUT);
+                                     EnclosureVariableKind::INPUT);
         ARIADNE_TESTING_EXPECT_EQUAL(jump.enclosure.previous_events().size(), 1u);
         ARIADNE_TESTING_PROVE(jump.enclosure.previous_events()[0u] == event);
         ARIADNE_TESTING_EXPECT_EQUAL(jump.enclosure.time_range().lower_bound().raw().get_d(), 1.0);
@@ -174,9 +178,9 @@ class TestHybridDiscreteTimePredicateEvaluator : public Ariadne::Testing::Contex
         const DiscreteEvent urgent("urgent");
         DiscreteTimeHybridAutomaton automaton;
         automaton.new_mode(mode, DifferenceAlgebraicEquation(
-            List<PrimedRealAssignment>{next(x) = x + 1}));
+                                     List<PrimedRealAssignment>{next(x) = x + 1}));
         automaton.new_mode(target, DifferenceAlgebraicEquation(
-            List<PrimedRealAssignment>{next(x) = x}));
+                                       List<PrimedRealAssignment>{next(x) = x}));
         // Guard x >= 2 is certainly false on [0,1]. No reset branch.
         automaton.new_urgent_transition(mode, urgent, target,
                                         {next(x) = x}, x >= 2);
@@ -199,9 +203,9 @@ class TestHybridDiscreteTimePredicateEvaluator : public Ariadne::Testing::Contex
         const DiscreteEvent urgent("urgent");
         DiscreteTimeHybridAutomaton automaton;
         automaton.new_mode(mode, DifferenceAlgebraicEquation(
-            List<PrimedRealAssignment>{next(x) = x + 1}));
+                                     List<PrimedRealAssignment>{next(x) = x + 1}));
         automaton.new_mode(target, DifferenceAlgebraicEquation(
-            List<PrimedRealAssignment>{next(x) = x}));
+                                       List<PrimedRealAssignment>{next(x) = x}));
         automaton.new_urgent_transition(mode, urgent, target,
                                         {next(x) = x}, x >= 0);
         const auto result = HybridDiscreteTimeStepExecutor::execute_certified(
@@ -221,15 +225,15 @@ class TestHybridDiscreteTimePredicateEvaluator : public Ariadne::Testing::Contex
         const DiscreteEvent event("split");
         DiscreteTimeHybridAutomaton automaton;
         automaton.new_mode(mode, DifferenceAlgebraicEquation(
-            List<PrimedRealAssignment>{next(x) = x + 1},
-            List<RealAssignment>{let(a) = x}));
+                                     List<PrimedRealAssignment>{next(x) = x + 1},
+                                     List<RealAssignment>{let(a) = x}));
         automaton.new_mode(target, DifferenceAlgebraicEquation(
-            List<PrimedRealAssignment>{next(x) = x}));
+                                       List<PrimedRealAssignment>{next(x) = x}));
         // A correlated auxiliary determines the split. The guard and
         // invariant cover different pre-state subsets at a nonzero boundary.
         automaton.new_permissive_transition(mode, event, target,
                                             {next(x) = x + 10},
-                                            a >= 1/2_q, x <= 1/4_q);
+                                            a >= 1 / 2_q, x <= 1 / 4_q);
         const HybridEnclosure source = initial(mode);
         const auto restricted = HybridDiscreteTimeStepExecutor::execute_certified(
             automaton, source, Integer(0));
@@ -262,11 +266,11 @@ class TestHybridDiscreteTimePredicateEvaluator : public Ariadne::Testing::Contex
         const DiscreteEvent event("urgent");
         DiscreteTimeHybridAutomaton automaton;
         automaton.new_mode(mode, DifferenceAlgebraicEquation(
-            List<PrimedRealAssignment>{next(x) = x + 1}));
+                                     List<PrimedRealAssignment>{next(x) = x + 1}));
         automaton.new_mode(target, DifferenceAlgebraicEquation(
-            List<PrimedRealAssignment>{next(x) = x}));
+                                       List<PrimedRealAssignment>{next(x) = x}));
         automaton.new_urgent_transition(mode, event, target,
-                                        {next(x) = x + 10}, x >= 1/2_q);
+                                        {next(x) = x + 10}, x >= 1 / 2_q);
         const auto result = HybridDiscreteTimeStepExecutor::execute_certified(
             automaton, initial(mode), Integer(0));
         ARIADNE_TESTING_EXPECT_EQUAL(result.successors.size(), 2u);
@@ -281,50 +285,50 @@ class TestHybridDiscreteTimePredicateEvaluator : public Ariadne::Testing::Contex
         const DiscreteLocation mode(1);
         DiscreteTimeHybridAutomaton inclusion;
         inclusion.new_mode(mode, DifferenceAlgebraicInclusion(
-            List<PrimedRealAssignment>{next(x) = x + u},
-            RealVariablesBox({-1 <= u <= 1})));
+                                     List<PrimedRealAssignment>{next(x) = x + u},
+                                     RealVariablesBox({-1 <= u <= 1})));
         const auto source = initial(mode);
 
         // The state-only predicate is now supported for a bounded-input
         // inclusion without auxiliaries. On x in [0,1], x >= 0 touches
         // the boundary and remains UNKNOWN rather than a false certificate.
         ARIADNE_TESTING_PROVE(HybridDiscreteTimePredicateEvaluator::classify(
-            inclusion, source, x >= 0) == Evidence::UNKNOWN);
+                                  inclusion, source, x >= 0) == Evidence::UNKNOWN);
         ARIADNE_TESTING_PROVE(HybridDiscreteTimePredicateEvaluator::classify(
-            inclusion, source, x >= -1) == Evidence::TRUE);
+                                  inclusion, source, x >= -1) == Evidence::TRUE);
         ARIADNE_TESTING_PROVE(HybridDiscreteTimePredicateEvaluator::classify(
-            inclusion, source, x >= 2) == Evidence::FALSE);
+                                  inclusion, source, x >= 2) == Evidence::FALSE);
 
         // An inclusion with input-dependent auxiliary outputs can still
         // classify a predicate depending only on the source state.
         DiscreteTimeHybridAutomaton with_auxiliary;
         with_auxiliary.new_mode(mode, DifferenceAlgebraicInclusion(
-            List<PrimedRealAssignment>{next(x) = x + u},
-            List<RealAssignment>{let(a) = x + u},
-            RealVariablesBox({-1 <= u <= 1})));
+                                          List<PrimedRealAssignment>{next(x) = x + u},
+                                          List<RealAssignment>{let(a) = x + u},
+                                          RealVariablesBox({-1 <= u <= 1})));
         ARIADNE_TESTING_PROVE(HybridDiscreteTimePredicateEvaluator::classify(
-            with_auxiliary, source, x >= 0) == Evidence::UNKNOWN);
+                                  with_auxiliary, source, x >= 0) == Evidence::UNKNOWN);
         ARIADNE_TESTING_PROVE(HybridDiscreteTimePredicateEvaluator::classify(
-            with_auxiliary, source, x >= -1) == Evidence::TRUE);
+                                  with_auxiliary, source, x >= -1) == Evidence::TRUE);
         ARIADNE_TESTING_PROVE(HybridDiscreteTimePredicateEvaluator::classify(
-            with_auxiliary, source, x >= 2) == Evidence::FALSE);
+                                  with_auxiliary, source, x >= 2) == Evidence::FALSE);
         // The guard reads a[0]=x[0]+u[0] over the SAME correlated state
         // and the entire independent input box u[0] in [-1,1].
         // On x[0] in [0,1], a spans [-1,2] rather than a sample.
         ARIADNE_TESTING_PROVE(HybridDiscreteTimePredicateEvaluator::classify(
-            with_auxiliary, source, a >= 0) == Evidence::UNKNOWN);
+                                  with_auxiliary, source, a >= 0) == Evidence::UNKNOWN);
         ARIADNE_TESTING_PROVE(HybridDiscreteTimePredicateEvaluator::classify(
-            with_auxiliary, source, a >= -2) == Evidence::TRUE);
+                                  with_auxiliary, source, a >= -2) == Evidence::TRUE);
         ARIADNE_TESTING_PROVE(HybridDiscreteTimePredicateEvaluator::classify(
-            with_auxiliary, source, a >= 3) == Evidence::FALSE);
+                                  with_auxiliary, source, a >= 3) == Evidence::FALSE);
         ARIADNE_TESTING_EXPECT_EQUAL(source.continuous_set().number_of_parameters(), 1u);
 
         // A mismatched state space is still a contract violation.
         DiscreteTimeHybridAutomaton equation;
         equation.new_mode(mode, DifferenceAlgebraicEquation(
-            List<PrimedRealAssignment>{next(y) = y}));
+                                    List<PrimedRealAssignment>{next(y) = y}));
         ARIADNE_TESTING_EXPECT_THROWS(std::invalid_argument,
-            HybridDiscreteTimePredicateEvaluator::classify(equation, source, y >= 0));
+                                      HybridDiscreteTimePredicateEvaluator::classify(equation, source, y >= 0));
     }
 };
 

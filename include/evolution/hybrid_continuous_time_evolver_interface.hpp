@@ -35,8 +35,8 @@
 #include "evolution/hybrid_time.hpp"
 #include "hybrid/hybrid_set.decl.hpp"
 #include "logging/logging.hpp"
-#include "system/discrete_event.hpp"
 #include "system/continuous_time_hybrid_automaton_interface.hpp"
+#include "system/discrete_event.hpp"
 
 namespace Ariadne {
 

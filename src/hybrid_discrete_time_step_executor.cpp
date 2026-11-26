@@ -27,12 +27,13 @@
  */
 
 #include "evolution/hybrid_discrete_time_step_executor.hpp"
-#include "evolution/hybrid_discrete_time_predicate_evaluator.hpp"
-#include "hybrid_discrete_time_predicate_function.hpp"
-#include "hybrid_discrete_time_inclusion_capability.hpp"
-#include "hybrid_guard_predicate.hpp"
 
 #include <stdexcept>
+
+#include "evolution/hybrid_discrete_time_predicate_evaluator.hpp"
+#include "hybrid_discrete_time_inclusion_capability.hpp"
+#include "hybrid_discrete_time_predicate_function.hpp"
+#include "hybrid_guard_predicate.hpp"
 
 namespace Ariadne {
 namespace {
@@ -99,9 +100,9 @@ HybridDiscreteTimeStepExecution execute_impl(
         // restricted only by its own necessary pre-state predicates.
         // A failure aborts the entire operation; there is no partial UPPER.
         const HybridEnclosure branch_source = restrict_prestate
-            ? constrained_branch_source(automaton, source, branch) : source;
-        result.successors.push_back({
-            branch, HybridDiscreteTimeStepImage::apply(automaton, branch_source, branch)});
+                                                ? constrained_branch_source(automaton, source, branch)
+                                                : source;
+        result.successors.push_back({branch, HybridDiscreteTimeStepImage::apply(automaton, branch_source, branch)});
     }
     return result;
 }
@@ -114,8 +115,8 @@ HybridDiscreteTimeStepExecution HybridDiscreteTimeStepExecutor::execute_certifie
     // The certified planner must classify and restrict exactly the same
     // current-input-augmented enclosure as the numerical branch image.
     const HybridEnclosure prepared = automaton.has_inclusion(source.location())
-        ? EvolutionDetail::prepare_discrete_inclusion_source(automaton, source)
-        : source;
+                                       ? EvolutionDetail::prepare_discrete_inclusion_source(automaton, source)
+                                       : source;
     const auto evaluate = [&](DiscreteLocation, DiscreteEvent,
                               DiscreteTimePredicateRole, const ContinuousPredicate& predicate) {
         return HybridDiscreteTimePredicateEvaluator::classify(automaton, prepared, predicate);

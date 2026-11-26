@@ -27,15 +27,16 @@
  */
 
 #include "evolution/hybrid_discrete_time_evolver.hpp"
-#include "evolution/hybrid_discrete_time_step_image.hpp"
-#include "evolution/hybrid_discrete_time_predicate_evaluator.hpp"
-#include "evolution/hybrid_discrete_time_step_planner.hpp"
-#include "hybrid_discrete_time_predicate_function.hpp"
-#include "hybrid_discrete_time_inclusion_capability.hpp"
 
-#include <vector>
 #include <stdexcept>
 #include <utility>
+#include <vector>
+
+#include "evolution/hybrid_discrete_time_predicate_evaluator.hpp"
+#include "evolution/hybrid_discrete_time_step_image.hpp"
+#include "evolution/hybrid_discrete_time_step_planner.hpp"
+#include "hybrid_discrete_time_inclusion_capability.hpp"
+#include "hybrid_discrete_time_predicate_function.hpp"
 
 namespace Ariadne {
 namespace {

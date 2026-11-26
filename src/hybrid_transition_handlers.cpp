@@ -27,9 +27,9 @@
  */
 
 #include "hybrid_transition_handlers.hpp"
-#include "hybrid_guard_predicate.hpp"
 
 #include "function/function.hpp"
+#include "hybrid_guard_predicate.hpp"
 #include "logging/logging.hpp"
 
 namespace Ariadne::EvolutionDetail {

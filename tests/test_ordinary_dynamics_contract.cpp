@@ -120,8 +120,9 @@ class TestOrdinaryDynamicsContract : public Ariadne::Testing::ContextFixture {
         ARIADNE_TESTING_EXPECT_EQUAL(timed_final.number_of_constraints(), 0u);
         const auto timed_box = cast_exact_box(timed_final.euclidean_set().bounding_box());
         ARIADNE_TESTING_PROVE(subset(ExactBoxType({
-            {-0.060546875_x, 0.064453125_x}
-        }), timed_box));
+                                         {-0.060546875_x, 0.064453125_x}
+        }),
+                                     timed_box));
         const auto timed_zero = timed_evolver.orbit(
             RealVariablesBox({x == 0}), Real(0), Semantics::LOWER);
         ARIADNE_TESTING_EXPECT_EQUAL(timed_zero.final().size(), 1u);
@@ -131,11 +132,11 @@ class TestOrdinaryDynamicsContract : public Ariadne::Testing::ContextFixture {
         ContinuousTimeEvolver<ValidatedTag> parameterised_evolver(
             parameterised, integrator, ZeroApproximation(), ConstantApproximation());
         ARIADNE_TESTING_EXPECT_THROWS(std::invalid_argument,
-            parameterised_evolver.orbit(
-                RealVariablesBox({x == 0}), Real(0.0625_x), Semantics::LOWER));
+                                      parameterised_evolver.orbit(
+                                          RealVariablesBox({x == 0}), Real(0.0625_x), Semantics::LOWER));
         ARIADNE_TESTING_EXPECT_THROWS(std::invalid_argument,
-            parameterised_evolver.orbit(
-                RealVariablesBox({x == 0}), Real(0), Semantics::LOWER));
+                                      parameterised_evolver.orbit(
+                                          RealVariablesBox({x == 0}), Real(0), Semantics::LOWER));
     }
 
     Void test_interval_inclusion_is_not_treated_as_an_input_function() {

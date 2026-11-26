@@ -277,7 +277,8 @@ class TestHybridStepContracts : public Testing::ContextFixture {
         LinearGuardScenario scenario(ExactBoxType({
                                          {-0.25_x, 0.25_x},
                                          {      0,      0}
-        }), Dyadic(0.25_x));
+        }),
+                                     Dyadic(0.25_x));
         const auto partial = scenario.transition(EventKind::URGENT, scenario.x);
         HybridEnclosure common = scenario.initial;
         HybridEnclosure original = scenario.initial;
@@ -290,16 +291,16 @@ class TestHybridStepContracts : public Testing::ContextFixture {
         ARIADNE_TESTING_EXPECT_EQUAL(scenario.initial.number_of_constraints(), 0u);
         ARIADNE_TESTING_PROVE(!definitely(common.is_empty()));
         ARIADNE_TESTING_EXPECT_EQUAL(classify_source_guard(
-            scenario.initial, partial.guard_function, partial.source_arguments),
-            HybridSourceGuardStatus::UNRESOLVED);
+                                         scenario.initial, partial.guard_function, partial.source_arguments),
+                                     HybridSourceGuardStatus::UNRESOLVED);
         const auto excluded = scenario.transition(EventKind::URGENT, scenario.x - 1);
         const auto full = scenario.transition(EventKind::URGENT, scenario.x + 1);
         ARIADNE_TESTING_EXPECT_EQUAL(classify_source_guard(
-            scenario.initial, excluded.guard_function, excluded.source_arguments),
-            HybridSourceGuardStatus::EXCLUDED);
+                                         scenario.initial, excluded.guard_function, excluded.source_arguments),
+                                     HybridSourceGuardStatus::EXCLUDED);
         ARIADNE_TESTING_EXPECT_EQUAL(classify_source_guard(
-            scenario.initial, full.guard_function, full.source_arguments),
-            HybridSourceGuardStatus::FULL_SOURCE);
+                                         scenario.initial, full.guard_function, full.source_arguments),
+                                     HybridSourceGuardStatus::FULL_SOURCE);
         // The continuous hybrid LOWER policy still requires whole-source evidence.
         ARIADNE_TESTING_PROVE(!permits_initial_reset(
             classify_initial_guard(scenario.initial, partial), Semantics::LOWER));

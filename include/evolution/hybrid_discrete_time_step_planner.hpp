@@ -48,10 +48,12 @@ enum class DiscreteTimePredicateEvidence : std::uint8_t {
 };
 
 //! \brief Whether the predicate is a guard or an explicit advancement invariant.
-enum class DiscreteTimePredicateRole : std::uint8_t { GUARD, PROGRESSION_INVARIANT };
+enum class DiscreteTimePredicateRole : std::uint8_t { GUARD,
+                                                      PROGRESSION_INVARIANT };
 
 //! \brief Type of a one-tick branch; each branch advances the index by exactly one.
-enum class HybridDiscreteTimeBranchKind : std::uint8_t { PROGRESSION, TRANSITION };
+enum class HybridDiscreteTimeBranchKind : std::uint8_t { PROGRESSION,
+                                                         TRANSITION };
 
 //! \brief A possible next-index branch and what has been proved about its precondition.
 //! \details certain means that its *predicate precondition* holds over the

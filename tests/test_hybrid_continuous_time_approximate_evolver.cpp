@@ -136,8 +136,8 @@ class TestHybridContinuousTimeApproximateEvolver : public Ariadne::Testing::Cont
             progress.new_mode(q, {dot(x) = 1, dot(y) = 0}, {let(z) = x + 2 * y});
             progress.new_invariant(q, x <= 1, block);
             HybridContinuousTimeEvolver<ApproximateTag> evolver(kind == EventKind::INVARIANT
-                                                                      ? static_cast<const ContinuousTimeHybridAutomatonInterface&>(base)
-                                                                      : static_cast<const ContinuousTimeHybridAutomatonInterface&>(progress));
+                                                                    ? static_cast<const ContinuousTimeHybridAutomatonInterface&>(base)
+                                                                    : static_cast<const ContinuousTimeHybridAutomatonInterface&>(progress));
             for (unsigned verbosity: {0u, 100u}) {
                 LogVerbosityScope logging(verbosity);
                 auto stopped = evolver.orbit(point(2.0), HybridTime(1.0_x, 3));
@@ -153,12 +153,18 @@ class TestHybridContinuousTimeApproximateEvolver : public Ariadne::Testing::Cont
     Void test_box_sampling() {
         auto system = flow_system();
         HybridContinuousTimeEvolver<ApproximateTag> evolver(system);
-        HybridUpperBox box(q, RealSpace({x, y}), UpperBoxType({{0, 1}, {1, 2}}));
+        HybridUpperBox box(q, RealSpace({
+                                  x, y
+        }),
+                           UpperBoxType({{0, 1}, {1, 2}}));
         auto default_orbit = evolver.orbit(
             box, q, system.state_space(), HybridTime(0.0_x, 3));
         ARIADNE_TESTING_EXPECT_EQUAL(default_orbit.number_of_trajectories(), 1u);
 
-        evolver.configuration().set_sampling_counts(SamplingCounts{{x, 3u}, {y, 2u}});
+        evolver.configuration().set_sampling_counts(SamplingCounts{
+            {x, 3u},
+            {y, 2u}
+        });
         auto sampled = evolver.orbit(box, q, system.state_space(), HybridTime(0.0_x, 3));
         ARIADNE_TESTING_EXPECT_EQUAL(sampled.number_of_trajectories(), 6u);
         for (SizeType i = 0u; i < sampled.number_of_trajectories(); ++i) {
@@ -167,7 +173,10 @@ class TestHybridContinuousTimeApproximateEvolver : public Ariadne::Testing::Cont
             ARIADNE_TESTING_PROVE(p[1].raw().get_d() >= 1.0 && p[1].raw().get_d() <= 2.0);
         }
 
-        HybridUpperBox flat(q, RealSpace({x, y}), UpperBoxType({{0, 0}, {1, 2}}));
+        HybridUpperBox flat(q, RealSpace({
+                                   x, y
+        }),
+                            UpperBoxType({{0, 0}, {1, 2}}));
         auto flat_orbit = evolver.orbit(flat, q, system.state_space(), HybridTime(0.0_x, 3));
         ARIADNE_TESTING_EXPECT_EQUAL(flat_orbit.number_of_trajectories(), 2u);
         evolver.configuration().clear_sampling_counts();
@@ -177,7 +186,6 @@ class TestHybridContinuousTimeApproximateEvolver : public Ariadne::Testing::Cont
         expect_endpoint(singleton.curves(0u)[0], 0.0, 0.0, 2.0, 4.0);
         ARIADNE_TESTING_EXPECT_EXCEPTION(evolver.configuration().set_sampling_count(x, 0u));
     }
-
 };
 
 int main(int argc, char* argv[]) {

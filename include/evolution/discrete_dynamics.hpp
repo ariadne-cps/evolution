@@ -58,7 +58,8 @@ class DiscreteDynamics {
 
   private:
     std::variant<std::shared_ptr<const DifferenceAlgebraicEquation>,
-                 std::shared_ptr<const DifferenceAlgebraicInclusion>> _declaration;
+                 std::shared_ptr<const DifferenceAlgebraicInclusion>>
+        _declaration;
 
     const DifferenceAlgebraicEquation* equation() const;
     const DifferenceAlgebraicInclusion* inclusion() const;

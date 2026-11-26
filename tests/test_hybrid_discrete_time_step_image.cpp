@@ -31,9 +31,10 @@
 #include "evolution/hybrid_discrete_time_step_image.hpp"
 #include "function/taylor_function.hpp"
 #include "hybrid/hybrid_set.hpp"
-#include "numeric/rational.hpp"
 #include "logging/test_runner.hpp"
+#include "numeric/rational.hpp"
 #include "system/discrete_time_hybrid_automaton.hpp"
+
 #include "ariadne-testing.hpp"
 
 using namespace Ariadne;
@@ -52,14 +53,17 @@ class TestHybridDiscreteTimeStepImage : public Ariadne::Testing::ContextFixture 
         const DiscreteEvent event("jump");
         DiscreteTimeHybridAutomaton automaton;
         automaton.new_mode(source, DifferenceAlgebraicEquation(
-            List<PrimedRealAssignment>{next(x) = x + 1}));
+                                       List<PrimedRealAssignment>{next(x) = x + 1}));
         automaton.new_mode(destination, DifferenceAlgebraicEquation(
-            List<PrimedRealAssignment>{next(x) = x - 1}));
+                                            List<PrimedRealAssignment>{next(x) = x - 1}));
         automaton.new_permissive_transition(source, event, destination,
                                             {next(x) = x + 3}, x >= 0, x <= 3);
 
-        HybridEnclosure initial(HybridExactBox(source, RealSpace({x}),
-                                               ExactBoxType({{0.0_x, 1.0_x}})), configuration());
+        HybridEnclosure initial(HybridExactBox(source, RealSpace({
+                                                           x
+        }),
+                                               ExactBoxType({{0.0_x, 1.0_x}})),
+                                configuration());
         const HybridDiscreteTimePlannedBranch progression{
             HybridDiscreteTimeBranchKind::PROGRESSION, source, std::nullopt, true};
         const HybridDiscreteTimePlannedBranch jump{
@@ -75,9 +79,13 @@ class TestHybridDiscreteTimeStepImage : public Ariadne::Testing::ContextFixture 
         ARIADNE_TESTING_EXPECT_EQUAL(reset.previous_events().size(), 1u);
         ARIADNE_TESTING_PROVE(reset.previous_events()[0u] == event);
         ARIADNE_TESTING_PROVE(definitely(evolved.state_bounding_box().inside(
-            ExactBoxType({{0.0_x, 3.0_x}}))));
+            ExactBoxType({
+                {0.0_x, 3.0_x}
+        }))));
         ARIADNE_TESTING_PROVE(definitely(reset.state_bounding_box().inside(
-            ExactBoxType({{2.0_x, 5.0_x}}))));
+            ExactBoxType({
+                {2.0_x, 5.0_x}
+        }))));
         ARIADNE_TESTING_EXPECT_EQUAL(initial.time_range().lower_bound().raw().get_d(), 0.0);
     }
 
@@ -87,20 +95,25 @@ class TestHybridDiscreteTimeStepImage : public Ariadne::Testing::ContextFixture 
         const DiscreteEvent event("swap");
         DiscreteTimeHybridAutomaton automaton;
         automaton.new_mode(source, DifferenceAlgebraicEquation(
-            List<PrimedRealAssignment>{next(x) = x, next(y) = y}));
+                                       List<PrimedRealAssignment>{next(x) = x, next(y) = y}));
         automaton.new_mode(destination, DifferenceAlgebraicEquation(
-            List<PrimedRealAssignment>{next(x) = x, next(y) = y}));
+                                            List<PrimedRealAssignment>{next(x) = x, next(y) = y}));
         automaton.new_urgent_transition(source, event, destination,
                                         {next(y) = x + 10, next(x) = y + 20}, x >= 0);
 
-        HybridEnclosure initial(HybridExactBox(source, RealSpace({x, y}),
-                                               ExactBoxType({{0.0_x, 1.0_x}, {2.0_x, 3.0_x}})), configuration());
+        HybridEnclosure initial(HybridExactBox(source, RealSpace({
+                                                           x, y
+        }),
+                                               ExactBoxType({{0.0_x, 1.0_x}, {2.0_x, 3.0_x}})),
+                                configuration());
         const HybridDiscreteTimePlannedBranch branch{
             HybridDiscreteTimeBranchKind::TRANSITION, destination, event, true};
         const auto result = HybridDiscreteTimeStepImage::apply(automaton, initial, branch);
         const auto bounds = result.state_bounding_box();
         ARIADNE_TESTING_PROVE(definitely(bounds.inside(ExactBoxType({
-            {21.0_x, 24.0_x}, {9.0_x, 12.0_x}}))));
+            {21.0_x, 24.0_x},
+            { 9.0_x, 12.0_x}
+        }))));
         ARIADNE_TESTING_EXPECT_EQUAL(result.time_range().lower_bound().raw().get_d(), 1.0);
     }
 
@@ -109,18 +122,21 @@ class TestHybridDiscreteTimeStepImage : public Ariadne::Testing::ContextFixture 
         const DiscreteLocation source(1), uncertain(2);
         DiscreteTimeHybridAutomaton automaton;
         automaton.new_mode(source, DifferenceAlgebraicEquation(
-            List<PrimedRealAssignment>{next(x) = x}));
+                                       List<PrimedRealAssignment>{next(x) = x}));
         automaton.new_mode(uncertain, DifferenceAlgebraicInclusion(
-            List<PrimedRealAssignment>{next(x) = x + u}, RealVariablesBox({-1 <= u <= 1})));
-        HybridEnclosure initial(HybridExactBox(source, RealSpace({x}),
-                                               ExactBoxType({{0.0_x, 1.0_x}})), configuration());
+                                          List<PrimedRealAssignment>{next(x) = x + u}, RealVariablesBox({-1 <= u <= 1})));
+        HybridEnclosure initial(HybridExactBox(source, RealSpace({
+                                                           x
+        }),
+                                               ExactBoxType({{0.0_x, 1.0_x}})),
+                                configuration());
 
         const HybridDiscreteTimePlannedBranch progression{
             HybridDiscreteTimeBranchKind::PROGRESSION, source, std::nullopt, true};
         const HybridDiscreteTimePlannedBranch wrong{
             HybridDiscreteTimeBranchKind::PROGRESSION, uncertain, std::nullopt, true};
         ARIADNE_TESTING_EXPECT_THROWS(std::invalid_argument,
-            HybridDiscreteTimeStepImage::apply(automaton, initial, wrong));
+                                      HybridDiscreteTimeStepImage::apply(automaton, initial, wrong));
 
         const DiscreteEvent event("to_inclusion");
         automaton.new_urgent_transition(source, event, uncertain, {next(x) = x}, x >= 0);
@@ -140,13 +156,16 @@ class TestHybridDiscreteTimeStepImage : public Ariadne::Testing::ContextFixture 
             automaton, arrived, target_progression);
         ARIADNE_TESTING_EXPECT_EQUAL(continued.continuous_set().number_of_parameters(), 2u);
         ARIADNE_TESTING_EXPECT_EQUAL(continued.continuous_set().variable_kinds().back(),
-                                    EnclosureVariableKind::INPUT);
+                                     EnclosureVariableKind::INPUT);
         ARIADNE_TESTING_EXPECT_EQUAL(continued.time_range().lower_bound().raw().get_d(), 2.0);
         ARIADNE_TESTING_EXPECT_NO_THROW(
             HybridDiscreteTimeStepImage::apply(automaton, initial, progression));
 
-        HybridEnclosure from_inclusion(HybridExactBox(uncertain, RealSpace({x}),
-                                               ExactBoxType({{0.0_x, 1.0_x}})), configuration());
+        HybridEnclosure from_inclusion(HybridExactBox(uncertain, RealSpace({
+                                                                     x
+        }),
+                                                      ExactBoxType({{0.0_x, 1.0_x}})),
+                                       configuration());
         const HybridDiscreteTimePlannedBranch uncertain_progression{
             HybridDiscreteTimeBranchKind::PROGRESSION, uncertain, std::nullopt, true};
         const auto image = HybridDiscreteTimeStepImage::apply(
@@ -154,9 +173,11 @@ class TestHybridDiscreteTimeStepImage : public Ariadne::Testing::ContextFixture 
         ARIADNE_TESTING_EXPECT_EQUAL(image.time_range().lower_bound().raw().get_d(), 1.0);
         ARIADNE_TESTING_EXPECT_EQUAL(image.continuous_set().number_of_parameters(), 2u);
         ARIADNE_TESTING_EXPECT_EQUAL(image.continuous_set().variable_kinds().back(),
-                                    EnclosureVariableKind::INPUT);
+                                     EnclosureVariableKind::INPUT);
         ARIADNE_TESTING_PROVE(definitely(image.state_bounding_box().inside(
-            ExactBoxType({{-2.0_x, 3.0_x}}))));
+            ExactBoxType({
+                {-2.0_x, 3.0_x}
+        }))));
     }
 
     Void test_reset_into_auxiliary_inclusion_with_fresh_arrival_input() {
@@ -165,15 +186,18 @@ class TestHybridDiscreteTimeStepImage : public Ariadne::Testing::ContextFixture 
         const DiscreteEvent event("to_auxiliary_inclusion");
         DiscreteTimeHybridAutomaton automaton;
         automaton.new_mode(source, DifferenceAlgebraicEquation(
-            List<PrimedRealAssignment>{next(x) = x}));
+                                       List<PrimedRealAssignment>{next(x) = x}));
         automaton.new_mode(target, DifferenceAlgebraicInclusion(
-            List<PrimedRealAssignment>{next(x) = x + a},
-            List<RealAssignment>{let(a) = x + u},
-            RealVariablesBox({-1 <= u <= 1})));
+                                       List<PrimedRealAssignment>{next(x) = x + a},
+                                       List<RealAssignment>{let(a) = x + u},
+                                       RealVariablesBox({-1 <= u <= 1})));
         automaton.new_urgent_transition(source, event, target,
-                                         {next(x) = x + 1}, x >= 0);
-        const HybridEnclosure initial(HybridExactBox(source, RealSpace({x}),
-            ExactBoxType({{0.0_x, 0.0_x}})), configuration());
+                                        {next(x) = x + 1}, x >= 0);
+        const HybridEnclosure initial(HybridExactBox(source, RealSpace({
+                                                                 x
+        }),
+                                                     ExactBoxType({{0.0_x, 0.0_x}})),
+                                      configuration());
         const HybridDiscreteTimePlannedBranch jump{
             HybridDiscreteTimeBranchKind::TRANSITION, target, event, true};
         const HybridDiscreteTimePlannedBranch progress{
@@ -221,17 +245,20 @@ class TestHybridDiscreteTimeStepImage : public Ariadne::Testing::ContextFixture 
         const DiscreteEvent event("reset_to_new_input");
         DiscreteTimeHybridAutomaton automaton;
         automaton.new_mode(source, DifferenceAlgebraicInclusion(
-            List<PrimedRealAssignment>{next(x) = x + a},
-            List<RealAssignment>{let(a) = x + u},
-            RealVariablesBox({-1 <= u <= 1})));
+                                       List<PrimedRealAssignment>{next(x) = x + a},
+                                       List<RealAssignment>{let(a) = x + u},
+                                       RealVariablesBox({-1 <= u <= 1})));
         automaton.new_mode(target, DifferenceAlgebraicInclusion(
-            List<PrimedRealAssignment>{next(x) = x + b},
-            List<RealAssignment>{let(b) = x + v},
-            RealVariablesBox({-2 <= v <= 2})));
+                                       List<PrimedRealAssignment>{next(x) = x + b},
+                                       List<RealAssignment>{let(b) = x + v},
+                                       RealVariablesBox({-2 <= v <= 2})));
         automaton.new_permissive_transition(source, event, target,
                                             {next(x) = x + 3}, x >= 0, x <= 1);
-        const HybridEnclosure original(HybridExactBox(source, RealSpace({x}),
-            ExactBoxType({{0.0_x, 0.0_x}})), configuration());
+        const HybridEnclosure original(HybridExactBox(source, RealSpace({
+                                                                  x
+        }),
+                                                      ExactBoxType({{0.0_x, 0.0_x}})),
+                                       configuration());
         const HybridDiscreteTimePlannedBranch jump{
             HybridDiscreteTimeBranchKind::TRANSITION, target, event, true};
         const auto arrived = HybridDiscreteTimeStepImage::apply(automaton, original, jump);
@@ -261,10 +288,13 @@ class TestHybridDiscreteTimeStepImage : public Ariadne::Testing::ContextFixture 
         const DiscreteLocation mode(1);
         DiscreteTimeHybridAutomaton automaton;
         automaton.new_mode(mode, DifferenceAlgebraicInclusion(
-            List<PrimedRealAssignment>{next(x) = x + u},
-            RealVariablesBox({-1 <= u <= 1})));
-        HybridEnclosure initial(HybridExactBox(mode, RealSpace({x}),
-            ExactBoxType({{0.0_x, 0.0_x}})), configuration());
+                                     List<PrimedRealAssignment>{next(x) = x + u},
+                                     RealVariablesBox({-1 <= u <= 1})));
+        HybridEnclosure initial(HybridExactBox(mode, RealSpace({
+                                                         x
+        }),
+                                               ExactBoxType({{0.0_x, 0.0_x}})),
+                                configuration());
         const HybridDiscreteTimePlannedBranch progress{
             HybridDiscreteTimeBranchKind::PROGRESSION, mode, std::nullopt, true};
         const auto first = HybridDiscreteTimeStepImage::apply(automaton, initial, progress);
@@ -272,9 +302,9 @@ class TestHybridDiscreteTimeStepImage : public Ariadne::Testing::ContextFixture 
         ARIADNE_TESTING_EXPECT_EQUAL(first.continuous_set().number_of_parameters(), 2u);
         ARIADNE_TESTING_EXPECT_EQUAL(second.continuous_set().number_of_parameters(), 3u);
         ARIADNE_TESTING_EXPECT_EQUAL(second.continuous_set().variable_kinds()[1u],
-                                    EnclosureVariableKind::INPUT);
+                                     EnclosureVariableKind::INPUT);
         ARIADNE_TESTING_EXPECT_EQUAL(second.continuous_set().variable_kinds()[2u],
-                                    EnclosureVariableKind::INPUT);
+                                     EnclosureVariableKind::INPUT);
         ARIADNE_TESTING_EXPECT_EQUAL(second.time_range().lower_bound().raw().get_d(), 2.0);
         const auto extent = second.state_bounding_box()[0u];
         ARIADNE_TESTING_PROVE(extent.lower_bound().raw().get_d() <= -2.0);
@@ -288,14 +318,17 @@ class TestHybridDiscreteTimeStepImage : public Ariadne::Testing::ContextFixture 
         const DiscreteEvent event("jump");
         DiscreteTimeHybridAutomaton automaton;
         automaton.new_mode(mode, DifferenceAlgebraicInclusion(
-            List<PrimedRealAssignment>{next(x) = x + u},
-            RealVariablesBox({-1 <= u <= 1})));
+                                     List<PrimedRealAssignment>{next(x) = x + u},
+                                     RealVariablesBox({-1 <= u <= 1})));
         automaton.new_mode(target, DifferenceAlgebraicEquation(
-            List<PrimedRealAssignment>{next(x) = x}));
+                                       List<PrimedRealAssignment>{next(x) = x}));
         automaton.new_permissive_transition(mode, event, target,
-                                            {next(x) = x + 3}, x >= 1/2_q, x <= 1);
-        HybridEnclosure source(HybridExactBox(mode, RealSpace({x}),
-            ExactBoxType({{0.0_x, 1.0_x}})), configuration());
+                                            {next(x) = x + 3}, x >= 1 / 2_q, x <= 1);
+        HybridEnclosure source(HybridExactBox(mode, RealSpace({
+                                                        x
+        }),
+                                              ExactBoxType({{0.0_x, 1.0_x}})),
+                               configuration());
         const HybridDiscreteTimePlannedBranch jump{
             HybridDiscreteTimeBranchKind::TRANSITION, target, event, false};
         const HybridDiscreteTimePlannedBranch progress{
@@ -317,13 +350,16 @@ class TestHybridDiscreteTimeStepImage : public Ariadne::Testing::ContextFixture 
         const DiscreteLocation mode(1);
         DiscreteTimeHybridAutomaton automaton;
         automaton.new_mode(mode, DifferenceAlgebraicInclusion(
-            List<PrimedRealAssignment>{next(x) = x + a},
-            List<RealAssignment>{let(a) = x + u},
-            RealVariablesBox({-1 <= u <= 1})));
+                                     List<PrimedRealAssignment>{next(x) = x + a},
+                                     List<RealAssignment>{let(a) = x + u},
+                                     RealVariablesBox({-1 <= u <= 1})));
         const HybridDiscreteTimePlannedBranch progress{
             HybridDiscreteTimeBranchKind::PROGRESSION, mode, std::nullopt, true};
-        const HybridEnclosure source(HybridExactBox(mode, RealSpace({x}),
-            ExactBoxType({{0.0_x, 0.0_x}})), configuration());
+        const HybridEnclosure source(HybridExactBox(mode, RealSpace({
+                                                              x
+        }),
+                                                    ExactBoxType({{0.0_x, 0.0_x}})),
+                                     configuration());
         const auto first = HybridDiscreteTimeStepImage::apply(automaton, source, progress);
         const auto second = HybridDiscreteTimeStepImage::apply(automaton, first, progress);
         ARIADNE_TESTING_EXPECT_EQUAL(first.auxiliary_space(), RealSpace({a}));
@@ -359,15 +395,18 @@ class TestHybridDiscreteTimeStepImage : public Ariadne::Testing::ContextFixture 
         const DiscreteEvent event("state_only");
         DiscreteTimeHybridAutomaton automaton;
         automaton.new_mode(mode, DifferenceAlgebraicInclusion(
-            List<PrimedRealAssignment>{next(x) = x + a},
-            List<RealAssignment>{let(a) = x + u},
-            RealVariablesBox({-1 <= u <= 1})));
+                                     List<PrimedRealAssignment>{next(x) = x + a},
+                                     List<RealAssignment>{let(a) = x + u},
+                                     RealVariablesBox({-1 <= u <= 1})));
         automaton.new_mode(target, DifferenceAlgebraicEquation(
-            List<PrimedRealAssignment>{next(x) = x}));
+                                       List<PrimedRealAssignment>{next(x) = x}));
         automaton.new_permissive_transition(mode, event, target,
-            {next(x) = x + 3}, x >= 0, x <= 1);
-        const HybridEnclosure source(HybridExactBox(mode, RealSpace({x}),
-            ExactBoxType({{0.0_x, 0.0_x}})), configuration());
+                                            {next(x) = x + 3}, x >= 0, x <= 1);
+        const HybridEnclosure source(HybridExactBox(mode, RealSpace({
+                                                              x
+        }),
+                                                    ExactBoxType({{0.0_x, 0.0_x}})),
+                                     configuration());
         const HybridDiscreteTimePlannedBranch reset{
             HybridDiscreteTimeBranchKind::TRANSITION, target, event, true};
         const HybridDiscreteTimePlannedBranch progress{
@@ -408,13 +447,16 @@ class TestHybridDiscreteTimeStepImage : public Ariadne::Testing::ContextFixture 
             RealVariablesBox({-1 <= u <= 1}));
         const DifferenceAlgebraicEquation target_equation(
             List<PrimedRealAssignment>{next(x) = x});
-        const HybridEnclosure source(HybridExactBox(mode, RealSpace({x}),
-            ExactBoxType({{0.0_x, 1.0_x}})), configuration());
+        const HybridEnclosure source(HybridExactBox(mode, RealSpace({
+                                                              x
+        }),
+                                                    ExactBoxType({{0.0_x, 1.0_x}})),
+                                     configuration());
         DiscreteTimeHybridAutomaton reset_system;
         reset_system.new_mode(mode, inclusion);
         reset_system.new_mode(target, target_equation);
         reset_system.new_urgent_transition(mode, reset_event, target,
-            {next(x) = a + 3}, x >= 0);
+                                           {next(x) = a + 3}, x >= 0);
         const HybridDiscreteTimePlannedBranch reset{
             HybridDiscreteTimeBranchKind::TRANSITION, target, reset_event, true};
         const HybridDiscreteTimePlannedBranch progress{
@@ -434,7 +476,7 @@ class TestHybridDiscreteTimeStepImage : public Ariadne::Testing::ContextFixture 
         invariant_system.new_mode(mode, inclusion);
         invariant_system.new_mode(target, target_equation);
         invariant_system.new_permissive_transition(mode, invariant_event, target,
-            {next(x) = x}, x >= 0, a <= 1);
+                                                   {next(x) = x}, x >= 0, a <= 1);
         const auto continued = HybridDiscreteTimeStepImage::apply(
             invariant_system, source, progress);
         ARIADNE_TESTING_PROVE(continued.location() == mode);
@@ -451,14 +493,17 @@ class TestHybridDiscreteTimeStepImage : public Ariadne::Testing::ContextFixture 
         const DiscreteEvent event("input_dependent_guard");
         DiscreteTimeHybridAutomaton automaton;
         automaton.new_mode(mode, DifferenceAlgebraicInclusion(
-            List<PrimedRealAssignment>{next(x) = x + u},
-            List<RealAssignment>{let(a) = x + u},
-            RealVariablesBox({-1 <= u <= 1})));
+                                     List<PrimedRealAssignment>{next(x) = x + u},
+                                     List<RealAssignment>{let(a) = x + u},
+                                     RealVariablesBox({-1 <= u <= 1})));
         automaton.new_mode(target, DifferenceAlgebraicEquation(
-            List<PrimedRealAssignment>{next(x) = x}));
+                                       List<PrimedRealAssignment>{next(x) = x}));
         automaton.new_urgent_transition(mode, event, target, {next(x) = a}, a >= 0);
-        const HybridEnclosure original(HybridExactBox(mode, RealSpace({x}),
-            ExactBoxType({{0.0_x, 1.0_x}})), configuration());
+        const HybridEnclosure original(HybridExactBox(mode, RealSpace({
+                                                                x
+        }),
+                                                      ExactBoxType({{0.0_x, 1.0_x}})),
+                                       configuration());
         const HybridDiscreteTimePlannedBranch progress{
             HybridDiscreteTimeBranchKind::PROGRESSION, mode, std::nullopt, false};
         const auto image = HybridDiscreteTimeStepImage::apply(automaton, original, progress);
@@ -468,7 +513,6 @@ class TestHybridDiscreteTimeStepImage : public Ariadne::Testing::ContextFixture 
             image.continuous_set().variable_kinds()[2u], EnclosureVariableKind::INPUT);
         ARIADNE_TESTING_EXPECT_EQUAL(original.continuous_set().number_of_parameters(), 1u);
     }
-
 };
 
 int main(int argc, char** argv) {

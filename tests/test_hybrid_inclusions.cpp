@@ -480,14 +480,17 @@ class TestHybridInclusions : public Testing::ContextFixture {
         const RealVariable x("x"), u("u");
         ContinuousTimeHybridAutomaton system;
         system.new_mode(q, OrdinaryDifferentialAlgebraicInclusion(
-            {dot(x) = u}, RealVariablesBox({-1 <= u <= 1})));
+                               {dot(x) = u}, RealVariablesBox({-1 <= u <= 1})));
         HybridContinuousTimeEvolver<ValidatedTag> evolver(system);
         TaylorPicardIntegrator base(step_maximum_error = 1e-6);
         evolver.set_integrator(base, ZeroApproximation(), ConstantApproximation());
         evolver.configuration().set_maximum_step_size(0.03125);
         evolver.configuration().set_enable_reconditioning(false);
         const auto initial = evolver.enclosure(HybridExactBox(
-            q, RealSpace({x}), ExactBoxType({{-0.125_x, 0.125_x}})));
+            q, RealSpace({
+                   x
+        }),
+            ExactBoxType({{-0.125_x, 0.125_x}})));
         const auto lower = evolver.orbit(initial, HybridTime(0.125_x, 1), Semantics::LOWER);
         const auto upper = evolver.orbit(initial, HybridTime(0.125_x, 1), Semantics::UPPER);
         ARIADNE_TESTING_REQUIRE(lower.final().size() == 1u);
@@ -499,8 +502,14 @@ class TestHybridInclusions : public Testing::ContextFixture {
         ARIADNE_TESTING_EXPECT_EQUAL(lower_final.state_dimension(), 1u);
         const auto lower_box = cast_exact_box(lower_final.state_bounding_box());
         const auto upper_box = cast_exact_box(upper.final()[0u].state_bounding_box());
-        ARIADNE_TESTING_PROVE(subset(ExactBoxType({{-0.25_x, 0.25_x}}), lower_box));
-        ARIADNE_TESTING_PROVE(subset(ExactBoxType({{-0.25_x, 0.25_x}}), upper_box));
+        ARIADNE_TESTING_PROVE(subset(ExactBoxType({
+                                         {-0.25_x, 0.25_x}
+        }),
+                                     lower_box));
+        ARIADNE_TESTING_PROVE(subset(ExactBoxType({
+                                         {-0.25_x, 0.25_x}
+        }),
+                                     upper_box));
         ARIADNE_TESTING_PROVE(subset(cast_exact_interval(lower_final.time_range()),
                                      ExactIntervalType(0.125_x, 0.125_x)));
         const auto& parameter_kinds = lower_final.continuous_set().variable_kinds();
@@ -522,9 +531,9 @@ class TestHybridInclusions : public Testing::ContextFixture {
         box_evolver.set_integrator(FirstOrderMultifunctionIntegrator());
         const auto zero = HybridTime(0u, 1);
         ARIADNE_TESTING_EXPECT_THROWS(std::invalid_argument,
-            box_evolver.orbit(initial, zero, Semantics::LOWER));
+                                      box_evolver.orbit(initial, zero, Semantics::LOWER));
         ARIADNE_TESTING_EXPECT_THROWS(std::invalid_argument,
-            box_evolver.orbit(initial, HybridTime(0.125_x, 1), Semantics::LOWER));
+                                      box_evolver.orbit(initial, HybridTime(0.125_x, 1), Semantics::LOWER));
     }
 
     Void test_lower_inclusion_ignores_optional_jump_but_rejects_blockers() {
@@ -533,7 +542,7 @@ class TestHybridInclusions : public Testing::ContextFixture {
         const DiscreteEvent optional("optional");
         ContinuousTimeHybridAutomaton system;
         system.new_mode(source, OrdinaryDifferentialAlgebraicInclusion(
-            {dot(x) = u}, RealVariablesBox({-1 <= u <= 1})));
+                                    {dot(x) = u}, RealVariablesBox({-1 <= u <= 1})));
         system.new_mode(target, OrdinaryDifferentialAlgebraicEquation({dot(x) = 0}));
         system.new_transition(source, optional, target, {next(x) = 0},
                               x >= 0.03125_x, EventKind::PERMISSIVE);
@@ -542,7 +551,10 @@ class TestHybridInclusions : public Testing::ContextFixture {
         evolver.set_integrator(base, ZeroApproximation(), ConstantApproximation());
         evolver.configuration().set_maximum_step_size(0.03125);
         const auto initial = HybridExactBox(
-            source, RealSpace({x}), ExactBoxType({{0, 0}}));
+            source, RealSpace({
+                        x
+        }),
+            ExactBoxType({{0, 0}}));
 
         // Never taking an optional jump is a legal behavior. Even if
         // its guard becomes possible during a step, LOWER can retain
@@ -553,31 +565,34 @@ class TestHybridInclusions : public Testing::ContextFixture {
         ARIADNE_TESTING_PROVE(final.location() == source);
         ARIADNE_TESTING_PROVE(final.previous_events().empty());
         const auto box = cast_exact_box(final.state_bounding_box());
-        ARIADNE_TESTING_PROVE(subset(ExactBoxType({{-0.125_x, 0.125_x}}), box));
+        ARIADNE_TESTING_PROVE(subset(ExactBoxType({
+                                         {-0.125_x, 0.125_x}
+        }),
+                                     box));
 
         // A blocking URGENT transition may invalidate uninterrupted
         // flow and cannot be ignored without an independent event proof.
         ContinuousTimeHybridAutomaton urgent;
         urgent.new_mode(source, OrdinaryDifferentialAlgebraicInclusion(
-            {dot(x) = u}, RealVariablesBox({-1 <= u <= 1})));
+                                    {dot(x) = u}, RealVariablesBox({-1 <= u <= 1})));
         urgent.new_mode(target, OrdinaryDifferentialAlgebraicEquation({dot(x) = 0}));
         urgent.new_transition(source, optional, target, {next(x) = 0},
                               x >= 0, EventKind::URGENT);
         HybridContinuousTimeEvolver<ValidatedTag> blocked(urgent);
         blocked.set_integrator(base, ZeroApproximation(), ConstantApproximation());
         ARIADNE_TESTING_EXPECT_THROWS(std::invalid_argument,
-            blocked.orbit(initial, HybridTime(0.125_x, 1), Semantics::LOWER));
+                                      blocked.orbit(initial, HybridTime(0.125_x, 1), Semantics::LOWER));
         ARIADNE_TESTING_EXPECT_THROWS(std::invalid_argument,
-            blocked.orbit(initial, HybridTime(0u, 1), Semantics::LOWER));
+                                      blocked.orbit(initial, HybridTime(0u, 1), Semantics::LOWER));
 
         ContinuousTimeHybridAutomaton constrained;
         constrained.new_mode(source, OrdinaryDifferentialAlgebraicInclusion(
-            {dot(x) = u}, RealVariablesBox({-1 <= u <= 1})));
+                                         {dot(x) = u}, RealVariablesBox({-1 <= u <= 1})));
         constrained.new_invariant(source, x <= 0, DiscreteEvent("bound"));
         HybridContinuousTimeEvolver<ValidatedTag> invariant(constrained);
         invariant.set_integrator(base, ZeroApproximation(), ConstantApproximation());
         ARIADNE_TESTING_EXPECT_THROWS(std::invalid_argument,
-            invariant.orbit(initial, HybridTime(0.125_x, 1), Semantics::LOWER));
+                                      invariant.orbit(initial, HybridTime(0.125_x, 1), Semantics::LOWER));
     }
 
     Void test_lower_inclusion_certified_whole_tube_invariants() {
@@ -586,7 +601,7 @@ class TestHybridInclusions : public Testing::ContextFixture {
         const DiscreteEvent bound("bound");
         ContinuousTimeHybridAutomaton system;
         system.new_mode(q, OrdinaryDifferentialAlgebraicInclusion(
-            {dot(x) = u}, RealVariablesBox({-1 <= u <= 1})));
+                               {dot(x) = u}, RealVariablesBox({-1 <= u <= 1})));
         system.new_invariant(q, x <= 0, bound);
         HybridContinuousTimeEvolver<ValidatedTag> evolver(system);
         TaylorPicardIntegrator base(step_maximum_error = 1e-6);
@@ -597,7 +612,10 @@ class TestHybridInclusions : public Testing::ContextFixture {
         // The WHOLE x=-1 source and its complete input-dependent reach
         // tube remain strictly inside x<=0 for all times in [0,1/8].
         const auto safe_source = HybridExactBox(
-            q, RealSpace({x}), ExactBoxType({{-1.0_x, -1.0_x}}));
+            q, RealSpace({
+                   x
+        }),
+            ExactBoxType({{-1.0_x, -1.0_x}}));
         const auto lower = evolver.orbit(
             safe_source, HybridTime(0.125_x, 1), Semantics::LOWER);
         ARIADNE_TESTING_REQUIRE(lower.final().size() == 1u);
@@ -607,7 +625,10 @@ class TestHybridInclusions : public Testing::ContextFixture {
         ARIADNE_TESTING_PROVE(final.previous_events().empty());
         const auto bounds = cast_exact_box(final.state_bounding_box());
         ARIADNE_TESTING_PROVE(subset(
-            ExactBoxType({{-1.125_x, -0.875_x}}), bounds));
+            ExactBoxType({
+                {-1.125_x, -0.875_x}
+        }),
+            bounds));
         ARIADNE_TESTING_PROVE(subset(
             cast_exact_interval(final.time_range()),
             ExactIntervalType(0.125_x, 0.125_x)));
@@ -627,39 +648,54 @@ class TestHybridInclusions : public Testing::ContextFixture {
         // but the full input box can subsequently violate x<=0:
         // no fabricated LOWER subbox or input choice is permitted.
         const auto boundary = HybridExactBox(
-            q, RealSpace({x}), ExactBoxType({{0, 0}}));
+            q, RealSpace({
+                   x
+        }),
+            ExactBoxType({{0, 0}}));
         const auto zero = evolver.orbit(
             boundary, HybridTime(0u, 1), Semantics::LOWER);
         ARIADNE_TESTING_REQUIRE(zero.final().size() == 1u);
         ARIADNE_TESTING_EXPECT_THROWS(std::invalid_argument,
-            evolver.orbit(boundary, HybridTime(0.125_x, 1), Semantics::LOWER));
+                                      evolver.orbit(boundary, HybridTime(0.125_x, 1), Semantics::LOWER));
 
         // This already-invalid WHOLE source is rejected even at
         // zero horizon: intersecting an outer LOWER enclosure with
         // the invariant does not establish a reachable witness.
         const auto invalid = HybridExactBox(
-            q, RealSpace({x}), ExactBoxType({{0.25_x, 0.25_x}}));
+            q, RealSpace({
+                   x
+        }),
+            ExactBoxType({{0.25_x, 0.25_x}}));
         ARIADNE_TESTING_EXPECT_THROWS(std::invalid_argument,
-            evolver.orbit(invalid, HybridTime(0u, 1), Semantics::LOWER));
+                                      evolver.orbit(invalid, HybridTime(0u, 1), Semantics::LOWER));
     }
 
     Void test_lower_inclusion_certainly_inactive_blockers() {
         const DiscreteLocation q(1), target(2);
         const RealVariable x("x"), u("u");
         const auto safe = HybridExactBox(
-            q, RealSpace({x}), ExactBoxType({{-1.0_x, -1.0_x}}));
+            q, RealSpace({
+                   x
+        }),
+            ExactBoxType({{-1.0_x, -1.0_x}}));
         const auto near_crossing = HybridExactBox(
-            q, RealSpace({x}), ExactBoxType({{-0.0625_x, -0.0625_x}}));
+            q, RealSpace({
+                   x
+        }),
+            ExactBoxType({{-0.0625_x, -0.0625_x}}));
         const auto active = HybridExactBox(
-            q, RealSpace({x}), ExactBoxType({{0, 0}}));
+            q, RealSpace({
+                   x
+        }),
+            ExactBoxType({{0, 0}}));
 
         // These guards have identical flow-blocking semantics when
         // certainly inactive, despite differing transition/reset rules.
         for (EventKind kind: {
-                EventKind::URGENT, EventKind::PROGRESS, EventKind::IMPACT}) {
+                 EventKind::URGENT, EventKind::PROGRESS, EventKind::IMPACT}) {
             ContinuousTimeHybridAutomaton system;
             system.new_mode(q, OrdinaryDifferentialAlgebraicInclusion(
-                {dot(x) = u}, RealVariablesBox({-1 <= u <= 1})));
+                                   {dot(x) = u}, RealVariablesBox({-1 <= u <= 1})));
             const DiscreteEvent event("blocker");
             if (kind == EventKind::PROGRESS) {
                 system.new_guard(q, event, x >= 0, kind);
@@ -688,7 +724,9 @@ class TestHybridInclusions : public Testing::ContextFixture {
             ARIADNE_TESTING_EXPECT_EQUAL(
                 final.time_range().lower_bound().raw().get_d(), 0.125);
             ARIADNE_TESTING_PROVE(subset(
-                ExactBoxType({{-1.125_x, -0.875_x}}),
+                ExactBoxType({
+                    {-1.125_x, -0.875_x}
+            }),
                 cast_exact_box(final.state_bounding_box())));
             const auto& kinds = final.continuous_set().variable_kinds();
             const auto& parameters = final.continuous_set().parameter_domain();
@@ -707,12 +745,12 @@ class TestHybridInclusions : public Testing::ContextFixture {
             // A source strictly below the guard does NOT prove that
             // the complete following tube stays below it.
             ARIADNE_TESTING_EXPECT_THROWS(std::invalid_argument,
-                evolver.orbit(near_crossing,
-                    HybridTime(0.125_x, 1), Semantics::LOWER));
+                                          evolver.orbit(near_crossing,
+                                                        HybridTime(0.125_x, 1), Semantics::LOWER));
             // At an active or undecidable blocker, an unverified flow
             // must not be published, even at zero horizon.
             ARIADNE_TESTING_EXPECT_THROWS(std::invalid_argument,
-                evolver.orbit(active, HybridTime(0u, 1), Semantics::LOWER));
+                                          evolver.orbit(active, HybridTime(0u, 1), Semantics::LOWER));
         }
     }
 
@@ -722,7 +760,7 @@ class TestHybridInclusions : public Testing::ContextFixture {
         const DiscreteEvent first("first"), second("second");
         ContinuousTimeHybridAutomaton system;
         system.new_mode(source, OrdinaryDifferentialAlgebraicInclusion(
-            {dot(x) = u}, RealVariablesBox({-1 <= u <= 1})));
+                                    {dot(x) = u}, RealVariablesBox({-1 <= u <= 1})));
         system.new_mode(target, OrdinaryDifferentialAlgebraicEquation({dot(x) = 0}));
         system.new_mode(alternate, OrdinaryDifferentialAlgebraicEquation({dot(x) = 0}));
         system.new_transition(source, first, target, {next(x) = x + 2},
@@ -739,7 +777,10 @@ class TestHybridInclusions : public Testing::ContextFixture {
         // Each immediate reset is a real legal behavior, independent
         // of the blocked ordinary progression. Do not order events.
         const auto initial = HybridExactBox(
-            source, RealSpace({x}), ExactBoxType({{1, 1}}));
+            source, RealSpace({
+                        x
+        }),
+            ExactBoxType({{1, 1}}));
         const auto orbit = evolver.orbit(
             initial, HybridTime(0.125_x, 2), Semantics::LOWER);
         ARIADNE_TESTING_REQUIRE(orbit.final().size() == 2u);
@@ -754,13 +795,17 @@ class TestHybridInclusions : public Testing::ContextFixture {
                 found_first = true;
                 ARIADNE_TESTING_EXPECT_EQUAL(final.previous_events()[0u], first);
                 ARIADNE_TESTING_PROVE(subset(
-                    ExactBoxType({{3, 3}}),
+                    ExactBoxType({
+                        {3, 3}
+                }),
                     cast_exact_box(final.state_bounding_box())));
             } else if (final.location() == alternate) {
                 found_second = true;
                 ARIADNE_TESTING_EXPECT_EQUAL(final.previous_events()[0u], second);
                 ARIADNE_TESTING_PROVE(subset(
-                    ExactBoxType({{5, 5}}),
+                    ExactBoxType({
+                        {5, 5}
+                }),
                     cast_exact_box(final.state_bounding_box())));
             } else {
                 ARIADNE_TESTING_REQUIRE(false);
@@ -772,17 +817,20 @@ class TestHybridInclusions : public Testing::ContextFixture {
         // whole-source reset certificate. Do not choose a favourable
         // input or numerical child to make an urgent reset fire.
         const auto boundary = HybridExactBox(
-            source, RealSpace({x}), ExactBoxType({{0, 0}}));
+            source, RealSpace({
+                        x
+        }),
+            ExactBoxType({{0, 0}}));
         ARIADNE_TESTING_EXPECT_THROWS(std::invalid_argument,
-            evolver.orbit(boundary, HybridTime(0.125_x, 2),
-                          Semantics::LOWER));
+                                      evolver.orbit(boundary, HybridTime(0.125_x, 2),
+                                                    Semantics::LOWER));
 
         // An IMPACT guard being true is not a direction witness.
         // Reuse the same full-source initial state, but no fabricated
         // impact reset may be emitted without derivative evidence.
         ContinuousTimeHybridAutomaton impact;
         impact.new_mode(source, OrdinaryDifferentialAlgebraicInclusion(
-            {dot(x) = u}, RealVariablesBox({-1 <= u <= 1})));
+                                    {dot(x) = u}, RealVariablesBox({-1 <= u <= 1})));
         impact.new_mode(target, OrdinaryDifferentialAlgebraicEquation({dot(x) = 0}));
         impact.new_transition(source, first, target, {next(x) = x + 2},
                               x >= 0, EventKind::IMPACT);
@@ -790,8 +838,165 @@ class TestHybridInclusions : public Testing::ContextFixture {
         impact_evolver.set_integrator(
             base, ZeroApproximation(), ConstantApproximation());
         ARIADNE_TESTING_EXPECT_THROWS(std::invalid_argument,
-            impact_evolver.orbit(initial, HybridTime(0.125_x, 2),
-                                Semantics::LOWER));
+                                      impact_evolver.orbit(initial, HybridTime(0.125_x, 2),
+                                                           Semantics::LOWER));
+    }
+
+    Void test_lower_inclusion_permissive_reset_beside_uncertain_progress() {
+        const DiscreteLocation source(1), target(2), alternate(3);
+        const RealVariable x("x"), u("u");
+        const DiscreteEvent first("first"), second("second"), progress("progress");
+        TaylorPicardIntegrator base(step_maximum_error = 1e-6);
+        ContinuousTimeHybridAutomaton unblocked;
+        unblocked.new_mode(source, OrdinaryDifferentialAlgebraicInclusion(
+                                       {dot(x) = u}, RealVariablesBox({-1 <= u <= 1})));
+        HybridContinuousTimeEvolver<ValidatedTag> flow(unblocked);
+        flow.set_integrator(base, ZeroApproximation(), ConstantApproximation());
+        flow.configuration().set_maximum_step_size(0.03125);
+        flow.configuration().set_enable_reconditioning(false);
+        const auto carried = flow.orbit(
+            HybridExactBox(source, RealSpace({
+                                       x
+        }),
+                           ExactBoxType({{0, 0}})),
+            HybridTime(0.125_x, 1), Semantics::LOWER);
+        ARIADNE_TESTING_REQUIRE(carried.final().size() == 1u);
+        SizeType full_inputs = 0u;
+        const auto& carried_set = carried.final()[0u].continuous_set();
+        for (SizeType i = 0u; i != carried_set.number_of_parameters(); ++i) {
+            if (carried_set.variable_kinds()[i] != EnclosureVariableKind::INPUT)
+                continue;
+            ++full_inputs;
+            ARIADNE_TESTING_PROVE(carried_set.parameter_domain()[i].lower_bound().raw().get_d() <= -1.0);
+            ARIADNE_TESTING_PROVE(carried_set.parameter_domain()[i].upper_bound().raw().get_d() >= 1.0);
+        }
+        ARIADNE_TESTING_PROVE(full_inputs >= 4u);
+
+        ContinuousTimeHybridAutomaton system;
+        system.new_mode(source, OrdinaryDifferentialAlgebraicInclusion(
+                                    {dot(x) = u}, RealVariablesBox({-1 <= u <= 1})));
+        system.new_mode(target, OrdinaryDifferentialAlgebraicEquation({dot(x) = 0}));
+        system.new_mode(alternate, OrdinaryDifferentialAlgebraicEquation({dot(x) = 0}));
+        system.new_invariant(source, x <= 2, DiscreteEvent("bound"));
+        system.new_guard(source, progress, x >= 0, EventKind::PROGRESS);
+        system.new_transition(source, first, target, {next(x) = x + 2},
+                              x + 1 >= 0, EventKind::PERMISSIVE);
+        system.new_transition(source, second, alternate, {next(x) = x + 4},
+                              x + 1 >= 0, EventKind::PERMISSIVE);
+        for (bool tree: {false, true}) {
+            HybridContinuousTimeEvolver<ValidatedTag> evolver(system);
+            evolver.set_integrator(base, ZeroApproximation(), ConstantApproximation());
+            evolver.configuration().set_enable_reconditioning(false);
+            if (tree)
+                evolver.set_evolution_backend_factory(TreeHybridEvolutionBackendFactory());
+            const auto active = evolver.enclosure(HybridExactBox(
+                source, RealSpace({
+                            x
+            }),
+                ExactBoxType({{1, 1}})));
+            // The carried enclosure contains a reached subset after full-input
+            // propagation. Its PROGRESS guard is UNKNOWN; do not select a
+            // numerical child or discard its independent input history.
+            for (bool history: {false, true}) {
+                const auto& initial = history ? carried.final()[0u] : active;
+                const auto source_box = cast_exact_box(initial.state_bounding_box());
+                const auto source_domain = initial.continuous_set().parameter_domain();
+                const auto source_kinds = initial.continuous_set().variable_kinds();
+                const auto source_constraints = initial.number_of_constraints();
+                const auto orbit = evolver.orbit(
+                    initial, HybridTime(0.25_x, 1), Semantics::LOWER);
+                ARIADNE_TESTING_REQUIRE(orbit.final().size() == 2u);
+                bool found_first = false, found_second = false;
+                for (const auto& final: orbit.final()) {
+                    ARIADNE_TESTING_REQUIRE(final.previous_events().size() == 1u);
+                    ARIADNE_TESTING_EXPECT_EQUAL(final.continuous_set().parameter_domain(), source_domain);
+                    ARIADNE_TESTING_EXPECT_EQUAL(final.continuous_set().variable_kinds(), source_kinds);
+                    ARIADNE_TESTING_PROVE(subset(cast_exact_interval(final.time_range()),
+                                                 cast_exact_interval(initial.time_range())));
+                    const auto box = cast_exact_box(final.state_bounding_box());
+                    if (final.location() == target) {
+                        found_first = true;
+                        ARIADNE_TESTING_EXPECT_EQUAL(final.previous_events()[0u], first);
+                        ARIADNE_TESTING_PROVE(subset(
+                            history ? ExactBoxType({
+                                          {1.875_x, 2.125_x}
+                        })
+                                    : ExactBoxType({{3, 3}}),
+                            box));
+                        ARIADNE_TESTING_PROVE(subset(box, history
+                                                              ? ExactBoxType({
+                                                                    {1.8740234375_x, 2.1259765625_x}
+                        })
+                                                              : ExactBoxType({{2.9990234375_x, 3.0009765625_x}})));
+                    } else if (final.location() == alternate) {
+                        found_second = true;
+                        ARIADNE_TESTING_EXPECT_EQUAL(final.previous_events()[0u], second);
+                        ARIADNE_TESTING_PROVE(subset(
+                            history ? ExactBoxType({
+                                          {3.875_x, 4.125_x}
+                        })
+                                    : ExactBoxType({{5, 5}}),
+                            box));
+                        ARIADNE_TESTING_PROVE(subset(box, history
+                                                              ? ExactBoxType({
+                                                                    {3.8740234375_x, 4.1259765625_x}
+                        })
+                                                              : ExactBoxType({{4.9990234375_x, 5.0009765625_x}})));
+                    } else {
+                        ARIADNE_TESTING_REQUIRE(false);
+                    }
+                }
+                ARIADNE_TESTING_PROVE(found_first && found_second);
+                ARIADNE_TESTING_EXPECT_EQUAL(initial.continuous_set().parameter_domain(), source_domain);
+                ARIADNE_TESTING_EXPECT_EQUAL(cast_exact_box(initial.state_bounding_box()), source_box);
+                ARIADNE_TESTING_EXPECT_EQUAL(initial.number_of_constraints(), source_constraints);
+            }
+        }
+    }
+
+    Void test_lower_inclusion_permissive_reset_requires_whole_source_certificates() {
+        const DiscreteLocation source(1), target(2);
+        const RealVariable x("x"), u("u");
+        const DiscreteEvent jump("jump"), progress("progress");
+        const auto initial = HybridExactBox(
+            source, RealSpace({
+                        x
+        }),
+            ExactBoxType({{-0.125_x, 0.125_x}}));
+        TaylorPicardIntegrator base(step_maximum_error = 1e-6);
+        for (bool tree: {false, true}) {
+            for (EventKind other: {EventKind::PERMISSIVE, EventKind::INVARIANT,
+                                   EventKind::URGENT, EventKind::IMPACT}) {
+                ContinuousTimeHybridAutomaton system;
+                system.new_mode(source, OrdinaryDifferentialAlgebraicInclusion(
+                                            {dot(x) = u}, RealVariablesBox({-1 <= u <= 1})));
+                system.new_mode(target, OrdinaryDifferentialAlgebraicEquation({dot(x) = 0}));
+                system.new_guard(source, progress, x >= 0, EventKind::PROGRESS);
+                // Even a certain optional reset cannot discharge invariants,
+                // uncertain URGENT guards or an IMPACT direction obligation.
+                // An uncertain optional reset cannot discharge PROGRESS either.
+                if (other == EventKind::PERMISSIVE) {
+                    system.new_transition(source, jump, target, {next(x) = x + 2},
+                                          x >= 0, EventKind::PERMISSIVE);
+                } else {
+                    system.new_transition(source, jump, target, {next(x) = x + 2},
+                                          x + 1 >= 0, EventKind::PERMISSIVE);
+                    if (other == EventKind::INVARIANT)
+                        system.new_invariant(source, x <= 0, DiscreteEvent("bound"));
+                    else
+                        system.new_transition(source, DiscreteEvent("blocker"), target,
+                                              {next(x) = x},
+                                              other == EventKind::URGENT ? x >= 0 : x + 1 >= 0,
+                                              other);
+                }
+                HybridContinuousTimeEvolver<ValidatedTag> evolver(system);
+                evolver.set_integrator(base, ZeroApproximation(), ConstantApproximation());
+                if (tree)
+                    evolver.set_evolution_backend_factory(TreeHybridEvolutionBackendFactory());
+                ARIADNE_TESTING_EXPECT_THROWS(std::invalid_argument,
+                                              evolver.orbit(initial, HybridTime(0.25_x, 1), Semantics::LOWER));
+            }
+        }
     }
 
     Void test_unsupported_capabilities_fail_explicitly() {
@@ -864,6 +1069,8 @@ int main(int argc, char** argv) {
     ARIADNE_TESTING_ADD_TEST(TestHybridInclusions, test_lower_inclusion_certified_whole_tube_invariants);
     ARIADNE_TESTING_ADD_TEST(TestHybridInclusions, test_lower_inclusion_certainly_inactive_blockers);
     ARIADNE_TESTING_ADD_TEST(TestHybridInclusions, test_lower_inclusion_full_source_urgent_reset_without_flow);
+    ARIADNE_TESTING_ADD_TEST(TestHybridInclusions, test_lower_inclusion_permissive_reset_beside_uncertain_progress);
+    ARIADNE_TESTING_ADD_TEST(TestHybridInclusions, test_lower_inclusion_permissive_reset_requires_whole_source_certificates);
     ARIADNE_TESTING_ADD_TEST(TestHybridInclusions, test_unsupported_capabilities_fail_explicitly);
     return Testing::run_logging_suite(ariadne_test_suite, argc, argv);
 }

@@ -39,12 +39,17 @@ class TestDomainBisectionSampling : public Testing::ContextFixture {
     using Testing::ContextFixture::ContextFixture;
 
     Void test_two_axis_order_and_coordinates() {
-        const UpperBoxType domain({{0, 1}, {0, 1}});
+        const UpperBoxType domain({
+            {0, 1},
+            {0, 1}
+        });
         const auto pieces = EvolutionDetail::bisect_domain(domain, {2u, 2u});
         ARIADNE_TESTING_EXPECT_EQUAL(pieces.size(), 4u);
         const double expected[4][2] = {
-            {0.25, 0.25}, {0.25, 0.75},
-            {0.75, 0.25}, {0.75, 0.75}
+            {0.25, 0.25},
+            {0.25, 0.75},
+            {0.75, 0.25},
+            {0.75, 0.75}
         };
         for (SizeType i = 0u; i < pieces.size(); ++i) {
             const auto point = pieces[i].midpoint();
@@ -54,7 +59,10 @@ class TestDomainBisectionSampling : public Testing::ContextFixture {
     }
 
     Void test_unequal_counts_and_flat_axis() {
-        const UpperBoxType domain({{0, 1}, {2, 2}});
+        const UpperBoxType domain({
+            {0, 1},
+            {2, 2}
+        });
         const auto pieces = EvolutionDetail::bisect_domain(domain, {3u, 1u});
         ARIADNE_TESTING_EXPECT_EQUAL(pieces.size(), 3u);
         const double expected[3] = {0.25, 0.625, 0.875};
@@ -68,7 +76,6 @@ class TestDomainBisectionSampling : public Testing::ContextFixture {
         ARIADNE_TESTING_EXPECT_EXCEPTION(
             EvolutionDetail::bisect_domain(domain, {0u, 1u}));
     }
-
 };
 } // namespace
 

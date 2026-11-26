@@ -30,6 +30,7 @@
 #define ARIADNE_EVOLUTION_HYBRID_DISCRETE_TIME_INCLUSION_CAPABILITY_HPP
 
 #include <stdexcept>
+
 #include "evolution/hybrid_enclosure.hpp"
 #include "system/discrete_time_hybrid_automaton_interface.hpp"
 

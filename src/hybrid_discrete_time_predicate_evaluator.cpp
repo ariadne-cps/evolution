@@ -27,10 +27,11 @@
  */
 
 #include "evolution/hybrid_discrete_time_predicate_evaluator.hpp"
-#include "hybrid_discrete_time_predicate_function.hpp"
-#include "hybrid_guard_predicate.hpp"
 
 #include <stdexcept>
+
+#include "hybrid_discrete_time_predicate_function.hpp"
+#include "hybrid_guard_predicate.hpp"
 
 namespace Ariadne {
 
@@ -40,8 +41,8 @@ DiscreteTimePredicateEvidence HybridDiscreteTimePredicateEvaluator::classify(
     const ContinuousPredicate& predicate) {
     // Public direct classification also needs a full current input box.
     const HybridEnclosure prepared = automaton.has_inclusion(source.location())
-        ? EvolutionDetail::prepare_discrete_inclusion_source(automaton, source)
-        : source;
+                                       ? EvolutionDetail::prepare_discrete_inclusion_source(automaton, source)
+                                       : source;
     const auto indicator =
         EvolutionDetail::discrete_source_indicator(automaton, prepared, predicate);
     switch (EvolutionDetail::classify_source_guard(

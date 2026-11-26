@@ -114,12 +114,12 @@ class TestHybridConstantParameters : public Testing::ContextFixture {
         for (bool tree: {false, true}) {
             ContinuousTimeHybridAutomaton system;
             system.new_mode(source, OrdinaryDifferentialAlgebraicEquation(
-                {dot(x) = 1 + t}, RealVariablesBox(), t));
+                                        {dot(x) = 1 + t}, RealVariablesBox(), t));
             HybridContinuousTimeEvolver<ValidatedTag> evolver(system);
             configure(evolver, tree);
 
             const auto lower = evolver.orbit(initial(evolver), HybridTime(0.125_x, 1),
-                                            Semantics::LOWER);
+                                             Semantics::LOWER);
             ARIADNE_TESTING_REQUIRE(lower.final().size() == 1u);
             ARIADNE_TESTING_PROVE(lower.reach().size() > 0u);
             const auto& result = lower.final()[0u];
@@ -144,10 +144,10 @@ class TestHybridConstantParameters : public Testing::ContextFixture {
                 ContinuousTimeHybridAutomaton excluded;
                 if (timed)
                     excluded.new_mode(source, OrdinaryDifferentialAlgebraicEquation(
-                        {dot(x) = 0}, parameters, t));
+                                                  {dot(x) = 0}, parameters, t));
                 else
                     excluded.new_mode(source, OrdinaryDifferentialAlgebraicEquation(
-                        {dot(x) = 0}, parameters));
+                                                  {dot(x) = 0}, parameters));
                 excluded.new_transition(source, DiscreteEvent("inactive"), source,
                                         {next(x) = x}, x >= 2, EventKind::URGENT);
                 HybridContinuousTimeEvolver<ValidatedTag> safe(excluded);
@@ -163,14 +163,14 @@ class TestHybridConstantParameters : public Testing::ContextFixture {
                 ContinuousTimeHybridAutomaton active;
                 if (timed) {
                     active.new_mode(source, OrdinaryDifferentialAlgebraicEquation(
-                        {dot(x) = 0}, parameters, t));
+                                                {dot(x) = 0}, parameters, t));
                     active.new_mode(target, OrdinaryDifferentialAlgebraicEquation(
-                        {dot(x) = 0}, parameters, t));
+                                                {dot(x) = 0}, parameters, t));
                 } else {
                     active.new_mode(source, OrdinaryDifferentialAlgebraicEquation(
-                        {dot(x) = 0}, parameters));
+                                                {dot(x) = 0}, parameters));
                     active.new_mode(target, OrdinaryDifferentialAlgebraicEquation(
-                        {dot(x) = 0}, parameters));
+                                                {dot(x) = 0}, parameters));
                 }
                 const DiscreteEvent jump("active");
                 active.new_transition(source, jump, target, {next(x) = x + 1},
@@ -184,28 +184,28 @@ class TestHybridConstantParameters : public Testing::ContextFixture {
                 ARIADNE_TESTING_REQUIRE(reset.final()[0u].previous_events().size() == 1u);
                 ARIADNE_TESTING_EXPECT_EQUAL(reset.final()[0u].previous_events()[0u], jump);
                 ARIADNE_TESTING_PROVE(subset(ExactIntervalType(1, 1),
-                    cast_exact_interval(reset.final()[0u].state_function()[0u].range())));
+                                             cast_exact_interval(reset.final()[0u].state_function()[0u].range())));
 
                 // An unresolved initial guard may intersect an UPPER
                 // source, but it does not certify any LOWER reset.
                 ContinuousTimeHybridAutomaton unresolved;
                 if (timed) {
                     unresolved.new_mode(source, OrdinaryDifferentialAlgebraicEquation(
-                        {dot(x) = 0}, parameters, t));
+                                                    {dot(x) = 0}, parameters, t));
                     unresolved.new_mode(target, OrdinaryDifferentialAlgebraicEquation(
-                        {dot(x) = 0}, parameters, t));
+                                                    {dot(x) = 0}, parameters, t));
                 } else {
                     unresolved.new_mode(source, OrdinaryDifferentialAlgebraicEquation(
-                        {dot(x) = 0}, parameters));
+                                                    {dot(x) = 0}, parameters));
                     unresolved.new_mode(target, OrdinaryDifferentialAlgebraicEquation(
-                        {dot(x) = 0}, parameters));
+                                                    {dot(x) = 0}, parameters));
                 }
                 unresolved.new_transition(source, DiscreteEvent("boundary"), target,
                                           {next(x) = x + 1}, x >= 0, EventKind::URGENT);
                 HybridContinuousTimeEvolver<ValidatedTag> uncertain(unresolved);
                 configure(uncertain, tree);
                 const auto stop = uncertain.orbit(initial(uncertain), HybridTime(0.125_x, 1),
-                                                 Semantics::LOWER);
+                                                  Semantics::LOWER);
                 ARIADNE_TESTING_EXPECT_EQUAL(stop.final().size(), 0u);
             }
     }
@@ -221,21 +221,21 @@ class TestHybridConstantParameters : public Testing::ContextFixture {
                 ContinuousTimeHybridAutomaton system;
                 if (timed) {
                     system.new_mode(source, OrdinaryDifferentialAlgebraicEquation(
-                        {dot(x) = 1 + t}, parameter_box, t));
+                                                {dot(x) = 1 + t}, parameter_box, t));
                     system.new_mode(target, OrdinaryDifferentialAlgebraicEquation(
-                        {dot(x) = 0}, parameter_box, t));
+                                                {dot(x) = 0}, parameter_box, t));
                 } else {
                     system.new_mode(source, OrdinaryDifferentialAlgebraicEquation(
-                        {dot(x) = p}, parameter_box));
+                                                {dot(x) = p}, parameter_box));
                     system.new_mode(target, OrdinaryDifferentialAlgebraicEquation(
-                        {dot(x) = 0}, parameter_box));
+                                                {dot(x) = 0}, parameter_box));
                 }
                 system.new_transition(source, crossing, target,
-                    {next(x) = x + 1}, x >= Real(1 / 64_q), EventKind::URGENT);
+                                      {next(x) = x + 1}, x >= Real(1 / 64_q), EventKind::URGENT);
                 HybridContinuousTimeEvolver<ValidatedTag> evolver(system);
                 configure(evolver, tree);
                 const auto orbit = evolver.orbit(initial(evolver), HybridTime(0.125_x, 1),
-                                                Semantics::LOWER);
+                                                 Semantics::LOWER);
                 ARIADNE_TESTING_REQUIRE(orbit.final().size() == 1u);
                 const auto& final = orbit.final()[0u];
                 ARIADNE_TESTING_EXPECT_EQUAL(final.location(), target);
@@ -260,23 +260,23 @@ class TestHybridConstantParameters : public Testing::ContextFixture {
             ContinuousTimeHybridAutomaton system;
             if (timed) {
                 system.new_mode(source, OrdinaryDifferentialAlgebraicEquation(
-                    {dot(x) = 1 + t}, parameter_box, t));
+                                            {dot(x) = 1 + t}, parameter_box, t));
                 system.new_mode(target, OrdinaryDifferentialAlgebraicEquation(
-                    {dot(x) = 0}, parameter_box, t));
+                                            {dot(x) = 0}, parameter_box, t));
             } else {
                 system.new_mode(source, OrdinaryDifferentialAlgebraicEquation(
-                    {dot(x) = p}, parameter_box));
+                                            {dot(x) = p}, parameter_box));
                 system.new_mode(target, OrdinaryDifferentialAlgebraicEquation(
-                    {dot(x) = 0}, parameter_box));
+                                            {dot(x) = 0}, parameter_box));
             }
             system.new_transition(source, DiscreteEvent("later"), target,
-                {next(x) = x + 1}, x >= Real(1 / 64_q), EventKind::URGENT);
+                                  {next(x) = x + 1}, x >= Real(1 / 64_q), EventKind::URGENT);
             system.new_transition(source, DiscreteEvent("earlier"), target,
-                {next(x) = x + 2}, x >= Real(1 / 128_q), EventKind::URGENT);
+                                  {next(x) = x + 2}, x >= Real(1 / 128_q), EventKind::URGENT);
             HybridContinuousTimeEvolver<ValidatedTag> evolver(system);
             configure(evolver, false);
             const auto lower = evolver.orbit(initial(evolver), HybridTime(0.125_x, 1),
-                                            Semantics::LOWER);
+                                             Semantics::LOWER);
             ARIADNE_TESTING_EXPECT_EQUAL(lower.final().size(), 0u);
             // An UPPER branch may still over-approximate both candidates;
             // LOWER must not choose one by an uncertified tube filter.
@@ -292,16 +292,16 @@ class TestHybridConstantParameters : public Testing::ContextFixture {
             const DiscreteEvent crossing("joint_clock_parameter_crossing");
             ContinuousTimeHybridAutomaton system;
             system.new_mode(source, OrdinaryDifferentialAlgebraicEquation(
-                {dot(x) = p + t}, parameters, t));
+                                        {dot(x) = p + t}, parameters, t));
             system.new_mode(target, OrdinaryDifferentialAlgebraicEquation(
-                {dot(x) = 0}, parameters, t));
+                                        {dot(x) = 0}, parameters, t));
             system.new_transition(source, crossing, target,
-                {next(x) = x - t + 1}, x >= t + Real(1 / 64_q), EventKind::URGENT);
+                                  {next(x) = x - t + 1}, x >= t + Real(1 / 64_q), EventKind::URGENT);
 
             HybridContinuousTimeEvolver<ValidatedTag> evolver(system);
             configure(evolver, tree);
             const auto lower = evolver.orbit(initial(evolver), HybridTime(0.125_x, 1),
-                                            Semantics::LOWER);
+                                             Semantics::LOWER);
             ARIADNE_TESTING_REQUIRE(lower.final().size() == 1u);
             const auto& final = lower.final()[0u];
             ARIADNE_TESTING_EXPECT_EQUAL(final.location(), target);
@@ -319,17 +319,17 @@ class TestHybridConstantParameters : public Testing::ContextFixture {
             // potentially overlapping first-entry candidates.
             ContinuousTimeHybridAutomaton competing;
             competing.new_mode(source, OrdinaryDifferentialAlgebraicEquation(
-                {dot(x) = p + t}, parameters, t));
+                                           {dot(x) = p + t}, parameters, t));
             competing.new_mode(target, OrdinaryDifferentialAlgebraicEquation(
-                {dot(x) = 0}, parameters, t));
+                                           {dot(x) = 0}, parameters, t));
             competing.new_transition(source, DiscreteEvent("later"), target,
-                {next(x) = x - t + 1}, x >= t + Real(1 / 64_q), EventKind::URGENT);
+                                     {next(x) = x - t + 1}, x >= t + Real(1 / 64_q), EventKind::URGENT);
             competing.new_transition(source, DiscreteEvent("earlier"), target,
-                {next(x) = x - t + 2}, x >= t + Real(1 / 128_q), EventKind::URGENT);
+                                     {next(x) = x - t + 2}, x >= t + Real(1 / 128_q), EventKind::URGENT);
             HybridContinuousTimeEvolver<ValidatedTag> conservative(competing);
             configure(conservative, tree);
             const auto blocked = conservative.orbit(initial(conservative),
-                HybridTime(0.125_x, 1), Semantics::LOWER);
+                                                    HybridTime(0.125_x, 1), Semantics::LOWER);
             ARIADNE_TESTING_EXPECT_EQUAL(blocked.final().size(), 0u);
         }
     }
@@ -344,23 +344,23 @@ class TestHybridConstantParameters : public Testing::ContextFixture {
                 const DiscreteEvent crossing("parameter_clock_crossing");
                 ContinuousTimeHybridAutomaton system;
                 system.new_mode(source, OrdinaryDifferentialAlgebraicEquation(
-                    {dot(x) = p + t}, parameters, t));
+                                            {dot(x) = p + t}, parameters, t));
                 system.new_mode(target, OrdinaryDifferentialAlgebraicEquation(
-                    {dot(x) = 0}, parameters, t));
+                                            {dot(x) = 0}, parameters, t));
                 system.new_transition(source, crossing, target,
-                    {next(x) = x - t - p / 256 + 1},
-                    x >= t + p / 256, EventKind::URGENT);
+                                      {next(x) = x - t - p / 256 + 1},
+                                      x >= t + p / 256, EventKind::URGENT);
                 if (competing) {
                     // This strictly earlier blocker invalidates a unique
                     // first-crossing certificate for the later transition.
                     system.new_transition(source, DiscreteEvent("earlier"), target,
-                        {next(x) = x - t - p / 512 + 2},
-                        x >= t + p / 512, EventKind::URGENT);
+                                          {next(x) = x - t - p / 512 + 2},
+                                          x >= t + p / 512, EventKind::URGENT);
                 }
                 HybridContinuousTimeEvolver<ValidatedTag> evolver(system);
                 configure(evolver, tree);
                 const auto lower = evolver.orbit(initial(evolver),
-                    HybridTime(0.125_x, 1), Semantics::LOWER);
+                                                 HybridTime(0.125_x, 1), Semantics::LOWER);
                 if (competing) {
                     ARIADNE_TESTING_EXPECT_EQUAL(lower.final().size(), 0u);
                 } else {
@@ -385,7 +385,7 @@ class TestHybridConstantParameters : public Testing::ContextFixture {
                     // This separately checks the time-horizon contract,
                     // without weakening the event-limited witness assertion.
                     const auto continued = evolver.orbit(initial(evolver),
-                        HybridTime(0.125_x, 2), Semantics::LOWER);
+                                                         HybridTime(0.125_x, 2), Semantics::LOWER);
                     ARIADNE_TESTING_REQUIRE(continued.final().size() == 1u);
                     const auto& at_horizon = continued.final()[0u];
                     ARIADNE_TESTING_EXPECT_EQUAL(at_horizon.location(), target);
@@ -409,20 +409,21 @@ class TestHybridConstantParameters : public Testing::ContextFixture {
         for (bool parameterized: {false, true})
             for (bool tree: {false, true}) {
                 const RealVariablesBox parameters = parameterized
-                    ? RealVariablesBox({2 <= p <= 3}) : RealVariablesBox();
+                                                      ? RealVariablesBox({2 <= p <= 3})
+                                                      : RealVariablesBox();
                 const DiscreteEvent crossing("closed_endpoint_crossing");
                 ContinuousTimeHybridAutomaton system;
                 system.new_mode(source, OrdinaryDifferentialAlgebraicEquation(
-                    {dot(x) = 0}, parameters, t));
+                                            {dot(x) = 0}, parameters, t));
                 system.new_mode(target, OrdinaryDifferentialAlgebraicEquation(
-                    {dot(x) = 0}, parameters, t));
+                                            {dot(x) = 0}, parameters, t));
                 system.new_transition(source, crossing, target,
-                    {next(x) = x + 1}, t >= Real(1 / 32_q), EventKind::URGENT);
+                                      {next(x) = x + 1}, t >= Real(1 / 32_q), EventKind::URGENT);
                 HybridContinuousTimeEvolver<ValidatedTag> evolver(system);
                 configure(evolver, tree);
 
                 const auto at_endpoint = evolver.orbit(initial(evolver),
-                    HybridTime(0.0625_x, 1), Semantics::LOWER);
+                                                       HybridTime(0.0625_x, 1), Semantics::LOWER);
                 ARIADNE_TESTING_REQUIRE(at_endpoint.final().size() == 1u);
                 const auto& final = at_endpoint.final()[0u];
                 ARIADNE_TESTING_EXPECT_EQUAL(final.location(), target);
@@ -440,7 +441,7 @@ class TestHybridConstantParameters : public Testing::ContextFixture {
                 // The same guard is strictly excluded before its first
                 // contact; the shorter horizon must not invent a jump.
                 const auto before = evolver.orbit(initial(evolver),
-                    HybridTime(0.015625_x, 1), Semantics::LOWER);
+                                                  HybridTime(0.015625_x, 1), Semantics::LOWER);
                 ARIADNE_TESTING_REQUIRE(before.final().size() == 1u);
                 ARIADNE_TESTING_EXPECT_EQUAL(before.final()[0u].location(), source);
                 ARIADNE_TESTING_EXPECT_EQUAL(before.final()[0u].previous_events().size(), 0u);

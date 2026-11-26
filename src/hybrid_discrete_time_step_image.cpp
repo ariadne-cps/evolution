@@ -27,10 +27,10 @@
  */
 
 #include "evolution/hybrid_discrete_time_step_image.hpp"
-#include "hybrid_discrete_time_inclusion_capability.hpp"
 
 #include <stdexcept>
 
+#include "hybrid_discrete_time_inclusion_capability.hpp"
 #include "system/system_function.hpp"
 
 namespace Ariadne {
@@ -83,14 +83,15 @@ HybridEnclosure apply_tick_reset(const DiscreteTimeHybridAutomatonInterface& aut
     // directly, not an a(x,u[n]) substitution into a state-only function.
     // The source's current input is distinct from the arrival input.
     const RealSpace reset_arguments = correlated_auxiliary
-        ? join(source_space, source.auxiliary_space()) : source_space;
+                                        ? join(source_space, source.auxiliary_space())
+                                        : source_space;
     const auto reset_function = make_reset_function(
         reset_arguments,
         correlated_auxiliary ? List<RealAssignment>{} : source_auxiliaries,
         reset);
     const EnclosureFunctionArguments source_layout = correlated_auxiliary
-        ? EnclosureFunctionArguments::STATE_AUXILIARY
-        : EnclosureFunctionArguments::STATE;
+                                                       ? EnclosureFunctionArguments::STATE_AUXILIARY
+                                                       : EnclosureFunctionArguments::STATE;
     HybridEnclosure next = source;
     if (automaton.has_equation(branch.target)) {
         const auto& destination = automaton.equation(branch.target);

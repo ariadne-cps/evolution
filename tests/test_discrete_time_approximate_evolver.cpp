@@ -30,10 +30,11 @@
 #include <memory>
 #include <type_traits>
 
-#include "ariadne-evolution.hpp"
-#include "ariadne-testing.hpp"
 #include "logging/test_runner.hpp"
 #include "system/difference_algebraic_inclusion.hpp"
+
+#include "ariadne-evolution.hpp"
+#include "ariadne-testing.hpp"
 
 using namespace Ariadne;
 
@@ -124,13 +125,19 @@ class TestDiscreteTimeApproximateEvolver : public Testing::ContextFixture {
         const RealVariable x("x"), y("y"), missing("missing");
         const DifferenceAlgebraicEquation map({next(x) = x, next(y) = y});
         Evolver evolver(map);
-        const UpperBoxType box({{0, 1}, {2, 4}});
+        const UpperBoxType box({
+            {0, 1},
+            {2, 4}
+        });
         auto defaults = evolver.orbit(box, Integer(0));
         ARIADNE_TESTING_EXPECT_EQUAL(defaults.curves().size(), 1u);
         ARIADNE_TESTING_EXPECT_WITHIN(defaults.curve(0u).begin()->second[0u].raw().get_d(), 0.5, 1e-14);
         ARIADNE_TESTING_EXPECT_WITHIN(defaults.curve(0u).begin()->second[1u].raw().get_d(), 3.0, 1e-14);
 
-        evolver.configuration().set_sampling_counts(SamplingCounts{{x, 3u}, {y, 2u}});
+        evolver.configuration().set_sampling_counts(SamplingCounts{
+            {x, 3u},
+            {y, 2u}
+        });
         auto samples = evolver.orbit(box, Integer(1));
         ARIADNE_TESTING_EXPECT_EQUAL(samples.curves().size(), 6u);
         for (const auto& curve: samples.curves()) {
@@ -142,17 +149,25 @@ class TestDiscreteTimeApproximateEvolver : public Testing::ContextFixture {
             ARIADNE_TESTING_PROVE(point[1u].raw().get_d() <= 4.0);
         }
 
-        const UpperBoxType flat({{0, 0}, {2, 4}});
+        const UpperBoxType flat({
+            {0, 0},
+            {2, 4}
+        });
         auto flat_samples = evolver.orbit(flat, Integer(0));
         ARIADNE_TESTING_EXPECT_EQUAL(flat_samples.curves().size(), 2u);
 
         evolver.configuration().clear_sampling_counts();
         ARIADNE_TESTING_EXPECT_EQUAL(evolver.orbit(flat, Integer(0)).curves().size(), 1u);
         ARIADNE_TESTING_EXPECT_EXCEPTION(evolver.configuration().set_sampling_count(x, 0u));
-        evolver.configuration().set_sampling_counts(SamplingCounts{{missing, 2u}});
+        evolver.configuration().set_sampling_counts(SamplingCounts{
+            {missing, 2u}
+        });
         ARIADNE_TESTING_EXPECT_EXCEPTION(evolver.orbit(box, Integer(0)));
         evolver.configuration().clear_sampling_counts();
-        ARIADNE_TESTING_EXPECT_EXCEPTION(evolver.orbit(UpperBoxType({{0, 1}}), Integer(0)));
+        ARIADNE_TESTING_EXPECT_EXCEPTION(evolver.orbit(UpperBoxType({
+                                                           {0, 1}
+        }),
+                                                       Integer(0)));
     }
 
     Void test_bounded_input_inclusion_tick_sampling_and_auxiliaries() {
@@ -166,8 +181,7 @@ class TestDiscreteTimeApproximateEvolver : public Testing::ContextFixture {
         ARIADNE_TESTING_PROVE(copy->system().has_inclusion());
         const Evolver::InitialType initial{
             Evolver::ApproximatePointType(RealSpace({x}), FloatDPApproximationPoint({0.0_x}, dp)),
-            Evolver::ApproximatePointType(RealSpace({x}), FloatDPApproximationPoint({0.0_x}, dp))
-        };
+            Evolver::ApproximatePointType(RealSpace({x}), FloatDPApproximationPoint({0.0_x}, dp))};
         auto orbit = copy->orbit(initial, Integer(2));
         ARIADNE_TESTING_EXPECT_EQUAL(orbit.curves().size(), 2u);
         for (SizeType j = 0u; j < 2u; ++j) {
@@ -186,7 +200,10 @@ class TestDiscreteTimeApproximateEvolver : public Testing::ContextFixture {
         }
 
         evolver.configuration().set_sampling_count(x, 3u);
-        auto sampled = evolver.orbit(UpperBoxType({{0, 1}}), Integer(1));
+        auto sampled = evolver.orbit(UpperBoxType({
+                                         {0, 1}
+        }),
+                                     Integer(1));
         ARIADNE_TESTING_EXPECT_EQUAL(sampled.curves().size(), 3u);
 
         MidpointInputSampling midpoint;
@@ -205,7 +222,6 @@ class TestDiscreteTimeApproximateEvolver : public Testing::ContextFixture {
         // No samples are required when no initial trajectories exist.
         ARIADNE_TESTING_EXPECT_EQUAL(evolver.orbit(Evolver::InitialType{}, Integer(2)).curves().size(), 0u);
     }
-
 };
 
 } // namespace

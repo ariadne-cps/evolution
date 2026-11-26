@@ -34,8 +34,8 @@
 
 #include "evolution/hybrid_discrete_time_step_planner.hpp"
 #include "evolution/initial_point_sampling.hpp"
-#include "function/functional.hpp"
 #include "function/function.hpp"
+#include "function/functional.hpp"
 #include "system/system_function.hpp"
 
 namespace Ariadne {
@@ -76,7 +76,7 @@ Values sample_inputs(const DiscreteTimeHybridAutomatonInterface& system,
     const auto& inclusion = system.inclusion(location);
     const FloatDP time(Integer(tick), near, dp);
     const InputSamplingContext context{trajectory, tick,
-        FloatDPApproximation(ExactDouble(time.get_d()), dp), FloatDPApproximation(1, dp)};
+                                       FloatDPApproximation(ExactDouble(time.get_d()), dp), FloatDPApproximation(1, dp)};
     const Values sample = policy->sample(inclusion.inputs(), context);
     if (sample.size() != inclusion.number_of_inputs())
         throw std::invalid_argument("Hybrid approximate input dimension mismatch");
@@ -95,17 +95,17 @@ HybridApproximatePoint labelled_point(
     DiscreteLocation location, const State& state, const Values& inputs) {
     const RealSpace state_space = system.state_space(location);
     const RealSpace output_space = system.has_equation(location)
-        ? system.equation(location).state_auxiliary_space()
-        : system.inclusion(location).state_auxiliary_space();
+                                     ? system.equation(location).state_auxiliary_space()
+                                     : system.inclusion(location).state_auxiliary_space();
     const RealSpace auxiliary_space = system.has_equation(location)
-        ? system.equation(location).auxiliary_space()
-        : system.inclusion(location).auxiliary_space();
+                                        ? system.equation(location).auxiliary_space()
+                                        : system.inclusion(location).auxiliary_space();
     const Values aux = evaluate(system.auxiliary_function(location), arguments(state, inputs));
     State output(output_space.dimension(), FloatDPApproximation(0, dp));
     for (SizeType i = 0u; i != output_space.dimension(); ++i) {
         const RealVariable variable = output_space[i];
         output[i] = state_space.contains(variable) ? state[state_space[variable]]
-                                                  : aux[auxiliary_space[variable]];
+                                                   : aux[auxiliary_space[variable]];
     }
     return HybridApproximatePoint(location, output_space, output);
 }
@@ -114,11 +114,11 @@ Evidence classify(const DiscreteTimeHybridAutomatonInterface& system,
                   DiscreteLocation location, const State& state,
                   const ContinuousPredicate& predicate) {
     const auto& auxiliaries = system.has_equation(location)
-        ? system.equation(location).auxiliary_assignments()
-        : system.inclusion(location).auxiliary_assignments();
+                                ? system.equation(location).auxiliary_assignments()
+                                : system.inclusion(location).auxiliary_assignments();
     const auto fn = make_constraint_function(system.state_space(location),
-                                              algebraic_sort(auxiliaries),
-                                              predicate, Sign::POSITIVE);
+                                             algebraic_sort(auxiliaries),
+                                             predicate, Sign::POSITIVE);
     if (fn.argument_size() != state.dimension())
         throw std::invalid_argument("Hybrid predicate depends on unsupported free input variables");
     const double x = evaluate(fn, Values(state)).raw().get_d();
@@ -137,9 +137,9 @@ List<PrimedRealAssignment> ordered_reset(
     const List<PrimedRealAssignment>& assignments,
     const RealSpace& destination) {
     List<PrimedRealAssignment> result;
-    for (const RealVariable& variable : destination.variables()) {
+    for (const RealVariable& variable: destination.variables()) {
         Bool found = false;
-        for (const PrimedRealAssignment& assignment : assignments) {
+        for (const PrimedRealAssignment& assignment: assignments) {
             if (assignment.lhs.base() == variable) {
                 result.append(assignment);
                 found = true;
@@ -156,11 +156,11 @@ State apply_reset(const DiscreteTimeHybridAutomatonInterface& system,
                   DiscreteLocation location, DiscreteEvent event, const State& state) {
     const auto destination = system.target(location, event);
     const auto aux_assignments = system.has_equation(location)
-        ? system.equation(location).auxiliary_assignments()
-        : system.inclusion(location).auxiliary_assignments();
+                                   ? system.equation(location).auxiliary_assignments()
+                                   : system.inclusion(location).auxiliary_assignments();
     const auto map = make_reset_function(system.state_space(location),
-        algebraic_sort(aux_assignments),
-        ordered_reset(system.reset_assignments(location, event), system.state_space(destination)));
+                                         algebraic_sort(aux_assignments),
+                                         ordered_reset(system.reset_assignments(location, event), system.state_space(destination)));
     return State(evaluate(map, Values(state)));
 }
 
@@ -199,7 +199,8 @@ auto HybridDiscreteTimeEvolver<ApproximateTag>::orbit(
     if (!system().has_mode(location))
         throw std::invalid_argument("Hybrid approximate initial location does not exist");
     return orbit(EvolutionDetail::sample_hybrid_initial_points(
-        box, location, system().state_space(location), configuration().sampling_counts()), horizon);
+                     box, location, system().state_space(location), configuration().sampling_counts()),
+                 horizon);
 }
 
 auto HybridDiscreteTimeEvolver<ApproximateTag>::orbit(
@@ -215,15 +216,17 @@ auto HybridDiscreteTimeEvolver<ApproximateTag>::orbit(
             throw std::invalid_argument("Hybrid approximate initial mode does not exist");
         const State state = canonical_state(initial[i], system().state_space(location));
         const Values inputs = sample_inputs(system(), _input_sampling.get(), location, i, 0u);
-        pending.push_back({ApproximateHybridPath{i, {labelled_point(system(), location, state, inputs)}, {}, false},
-                           state, inputs});
+        pending.push_back({
+            ApproximateHybridPath{i, {labelled_point(system(), location, state, inputs)}, {}, false},
+            state, inputs
+        });
     }
 
     OrbitType result;
     SizeType tick = 0u;
     for (Integer index = 0; index < horizon; ++index) {
         std::vector<Frontier> successors;
-        for (const Frontier& entry : pending) {
+        for (const Frontier& entry: pending) {
             const DiscreteLocation location = entry.path.points.back().location();
             const auto evaluator = [&](DiscreteLocation, DiscreteEvent,
                                        DiscreteTimePredicateRole, const ContinuousPredicate& predicate) {
@@ -236,16 +239,16 @@ auto HybridDiscreteTimeEvolver<ApproximateTag>::orbit(
                 result._paths.push_back(std::move(stopped));
                 continue;
             }
-            for (const auto& branch : plan.branches) {
+            for (const auto& branch: plan.branches) {
                 if (successors.size() + result._paths.size() >= configuration().maximum_paths())
                     throw std::overflow_error("Hybrid approximate branch budget exceeded");
                 const State next_state = branch.kind == HybridDiscreteTimeBranchKind::TRANSITION
-                    ? apply_reset(system(), location, *branch.event, entry.state)
-                    : State(evaluate(system().update_function(location),
-                                     arguments(entry.state, entry.inputs)));
+                                           ? apply_reset(system(), location, *branch.event, entry.state)
+                                           : State(evaluate(system().update_function(location),
+                                                            arguments(entry.state, entry.inputs)));
                 const SizeType new_path_id = successors.size();
                 const Values next_inputs = sample_inputs(system(), _input_sampling.get(),
-                    branch.target, new_path_id, tick + 1u);
+                                                         branch.target, new_path_id, tick + 1u);
                 ApproximateHybridPath branch_path = entry.path;
                 branch_path.points.push_back(labelled_point(system(), branch.target, next_state, next_inputs));
                 branch_path.events.push_back(branch.event);
@@ -255,7 +258,7 @@ auto HybridDiscreteTimeEvolver<ApproximateTag>::orbit(
         pending = std::move(successors);
         ++tick;
     }
-    for (auto& survivor : pending)
+    for (auto& survivor: pending)
         result._paths.push_back(std::move(survivor.path));
     return result;
 }

@@ -30,10 +30,11 @@
 #include <stdexcept>
 #include <type_traits>
 
-#include "ariadne-evolution.hpp"
-#include "ariadne-testing.hpp"
 #include "logging/test_runner.hpp"
 #include "system/discrete_time_hybrid_automaton.hpp"
+
+#include "ariadne-evolution.hpp"
+#include "ariadne-testing.hpp"
 
 using namespace Ariadne;
 
@@ -49,7 +50,7 @@ class AlternatingInputSampling final : public InputSamplingPolicy {
   public:
     AlternatingInputSampling* clone() const override { return new AlternatingInputSampling(*this); }
     Vector<FloatDPApproximation> sample(const ExactBoxType&,
-                                         const InputSamplingContext& ctx) const override {
+                                        const InputSamplingContext& ctx) const override {
         const int choice = ctx.step % 2u == 0u ? 1 : -1;
         return Vector<FloatDPApproximation>({FloatDPApproximation(choice, dp)});
     }
@@ -73,7 +74,7 @@ class TestHybridDiscreteTimeApproximateEvolver : public Testing::ContextFixture 
 
     HybridApproximatePoint point(DiscreteLocation location, double value) const {
         return HybridApproximatePoint(location, RealSpace({x}),
-            FloatDPApproximationPoint({ExactDouble(value)}, dp));
+                                      FloatDPApproximationPoint({ExactDouble(value)}, dp));
     }
 
     DiscreteTimeHybridAutomaton permissive() const {
@@ -83,9 +84,9 @@ class TestHybridDiscreteTimeApproximateEvolver : public Testing::ContextFixture 
         system.new_mode(second_target, hold());
         // The progression and BOTH transitions are enabled at x=1.
         system.new_permissive_transition(source, first, first_target,
-                                         {next(x) = x + 10}, x <= 3/2_q, x <= 2);
+                                         {next(x) = x + 10}, x <= 3 / 2_q, x <= 2);
         system.new_permissive_transition(source, second, second_target,
-                                         {next(x) = x + 20}, x <= 3/2_q, x <= 2);
+                                         {next(x) = x + 20}, x <= 3 / 2_q, x <= 2);
         return system;
     }
 
@@ -96,7 +97,7 @@ class TestHybridDiscreteTimeApproximateEvolver : public Testing::ContextFixture 
         ARIADNE_TESTING_EXPECT_EQUAL(result.number_of_trajectories(), 3u);
 
         SizeType progress = 0u, first_branch = 0u, second_branch = 0u;
-        for (const auto& path : result.trajectories()) {
+        for (const auto& path: result.trajectories()) {
             ARIADNE_TESTING_EXPECT_EQUAL(path.initial_index, 0u);
             ARIADNE_TESTING_EXPECT_EQUAL(path.points.size(), 3u);
             ARIADNE_TESTING_EXPECT_EQUAL(path.events.size(), 2u);
@@ -130,13 +131,13 @@ class TestHybridDiscreteTimeApproximateEvolver : public Testing::ContextFixture 
         system.new_mode(first_target, hold());
         system.new_mode(second_target, hold());
         system.new_urgent_transition(source, first, first_target,
-                                     {next(x) = x + 10}, x >= 1/2_q);
+                                     {next(x) = x + 10}, x >= 1 / 2_q);
         system.new_urgent_transition(source, second, second_target,
-                                     {next(x) = x + 20}, x >= 1/2_q);
+                                     {next(x) = x + 20}, x >= 1 / 2_q);
         Evolver evolver(system);
         auto paths = evolver.orbit(point(source, 1.0), Integer(1));
         ARIADNE_TESTING_EXPECT_EQUAL(paths.number_of_trajectories(), 2u);
-        for (const auto& p : paths.trajectories()) {
+        for (const auto& p: paths.trajectories()) {
             ARIADNE_TESTING_EXPECT_EQUAL(p.events.size(), 1u);
             ARIADNE_TESTING_PROVE(p.events[0u].has_value());
             ARIADNE_TESTING_PROVE(p.points[1u].location() != source);
@@ -150,15 +151,24 @@ class TestHybridDiscreteTimeApproximateEvolver : public Testing::ContextFixture 
 
     Void test_initial_bisection_and_explicit_path_budget() {
         Evolver evolver(permissive());
-        auto initial_only = evolver.orbit(UpperBoxType({{0, 1}}), source, Integer(0));
+        auto initial_only = evolver.orbit(UpperBoxType({
+                                              {0, 1}
+        }),
+                                          source, Integer(0));
         ARIADNE_TESTING_EXPECT_EQUAL(initial_only.number_of_trajectories(), 1u);
         ARIADNE_TESTING_EXPECT_WITHIN(
             initial_only.trajectory(0u).points[0u].point()[0u].raw().get_d(), 0.5, 1e-14);
         evolver.configuration().set_sampling_count(x, 3u);
-        auto sampled = evolver.orbit(UpperBoxType({{0, 1}}), source, Integer(0));
+        auto sampled = evolver.orbit(UpperBoxType({
+                                         {0, 1}
+        }),
+                                     source, Integer(0));
         ARIADNE_TESTING_EXPECT_EQUAL(sampled.number_of_trajectories(), 3u);
         evolver.configuration().set_maximum_paths(2u);
-        ARIADNE_TESTING_EXPECT_EXCEPTION(evolver.orbit(UpperBoxType({{0, 1}}), source, Integer(0)));
+        ARIADNE_TESTING_EXPECT_EXCEPTION(evolver.orbit(UpperBoxType({
+                                                           {0, 1}
+        }),
+                                                       source, Integer(0)));
         evolver.configuration().clear_sampling_counts();
         ARIADNE_TESTING_EXPECT_EXCEPTION(evolver.orbit(point(source, 1.0), Integer(1)));
         ARIADNE_TESTING_EXPECT_EXCEPTION(evolver.orbit(point(source, 1.0), Integer(-1)));
@@ -169,17 +179,17 @@ class TestHybridDiscreteTimeApproximateEvolver : public Testing::ContextFixture 
         const RealVariable u("u");
         DiscreteTimeHybridAutomaton system;
         system.new_mode(source, DifferenceAlgebraicInclusion(
-            List<PrimedRealAssignment>{next(x) = x + u},
-            RealVariablesBox({-1 <= u <= 1})));
+                                    List<PrimedRealAssignment>{next(x) = x + u},
+                                    RealVariablesBox({-1 <= u <= 1})));
         system.new_mode(first_target, hold());
         system.new_permissive_transition(source, first, first_target,
-                                         {next(x) = x + 10}, x <= 3/2_q, x <= 2);
+                                         {next(x) = x + 10}, x <= 3 / 2_q, x <= 2);
         AlternatingInputSampling policy;
         Evolver evolver(system, policy);
         auto paths = evolver.orbit(point(source, 1.0), Integer(2));
         ARIADNE_TESTING_EXPECT_EQUAL(paths.number_of_trajectories(), 2u);
         SizeType progressed = 0u, reset = 0u;
-        for (const auto& path : paths.trajectories()) {
+        for (const auto& path: paths.trajectories()) {
             ARIADNE_TESTING_EXPECT_EQUAL(path.points.size(), 3u);
             if (!path.events[0u].has_value()) {
                 ++progressed;

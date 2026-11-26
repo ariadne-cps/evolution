@@ -31,8 +31,8 @@
 #include <stdexcept>
 
 #include "algebra/algebra.hpp"
-#include "evolution/orbit.hpp"
 #include "evolution/initial_point_sampling.hpp"
+#include "evolution/orbit.hpp"
 #include "function/formula.hpp"
 #include "function/function.hpp"
 #include "function/functional.hpp"
@@ -142,7 +142,8 @@ auto ContinuousTimeEvolver<ApproximateTag>::orbit(const RealBoxType& init_bx, co
 auto ContinuousTimeEvolver<ApproximateTag>::orbit(UpperBoxType& initial_box, const TerminationType& termination) const
     -> OrbitType {
     return orbit(EvolutionDetail::sample_vector_field_initial_points(
-        initial_box, _system->state_space(), _configuration->sampling_counts()), termination);
+                     initial_box, _system->state_space(), _configuration->sampling_counts()),
+                 termination);
 }
 
 auto ContinuousTimeEvolver<ApproximateTag>::orbit(const ApproximateListPointType& initial_points, const TerminationType& termination) const -> OrbitType {

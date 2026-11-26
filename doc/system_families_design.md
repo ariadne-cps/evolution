@@ -3334,3 +3334,53 @@ Coverage and Sanitizers green on the EXACT v7.27 SHA, and review the
 existing continuous-hybrid event semantics before extending to active
 URGENT/PROGRESS/IMPACT crossings. The binding contract and older
 journal entries remain unchanged.
+
+## v7.28 — Distinguish initial LOWER validity from future IMPACT tangency
+
+**Observed failure and classification.** On v7.27 `7b08ca17`,
+`test_hybrid_inclusion_impacts` reported 4 passed and 1 failed.
+The failing case `tangency_with_structured_and_box_methods_and_both_backends`
+expected a `std::invalid_argument` for LOWER at horizon **zero**,
+for both the structured and box-only integrators. After v7.27,
+that old blanket expectation is incorrect for a structured integrator:
+the whole initial source has a strictly inactive IMPACT guard.
+This is a stale capability/expectation mismatch, not sufficient
+evidence of a kernel or numerical correctness bug. The box-only
+integrator is still not supported under LOWER.
+
+**Mathematics of the exact test model.** The source mode obeys
+`x'=1, y'=u, u in [-1/8,1/8]`; its IMPACT guard is
+`g(x,y)=y-x^2 >= 0`. Initially `x=-1/16,y=0`, so
+`g=-1/256 < 0` on the **entire** source. At horizon zero,
+no flow step or reset is needed, and the initial enclosure
+rigorously encloses a genuinely reachable nonempty subset
+regardless of later contact. For positive horizon H=1/8,
+the family has possible crossings (including the tangency
+at t=1/16 for u=0). The current LOWER path implements only
+uninterrupted flow under fully inactive blockers and cannot
+claim that whole flow is legal when the reach-tube guard is
+not provably negative.
+
+**Precise regression change.** Preserve all existing UPPER
+tangency, target-mode reset, metadata, exact-contact time and
+state assertions in all four structured/box x flat/tree
+backend combinations. For the box-only method, continue to
+require LOWER rejection even at zero horizon. For the
+structured method, require one event-free LOWER final
+enclosure at zero time, with original source location,
+original exact state and no invented jump. Additionally
+require conservative rejection of the structured LOWER
+uninterrupted-flow attempt to H=1/8, where the impact
+guard can become active. This latter check is a stated
+implementation limitation, not a prohibition against
+future certified LOWER impact transitions.
+
+**Source and validation:** only
+`tests/test_hybrid_inclusion_impacts.cpp` and this design
+journal are changed. The immutable contract in the
+document's opening section is unchanged. No production
+kernel, original UPPER behavior, physical input choice,
+test registration, matrix cell or guard interpretation
+changes. Require Ubuntu/macOS/Windows/Coverage/Sanitizers
+success on the exact v7.28 SHA, including Debug and installed
+tutorial, before accepting the regression correction.

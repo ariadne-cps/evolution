@@ -255,8 +255,34 @@ class TestHybridInclusionImpacts : public Testing::ContextFixture {
                     ARIADNE_TESTING_EXPECT_EQUAL(final.location(), scenario.source);
                     ARIADNE_TESTING_PROVE(final.previous_events().empty());
                 }
-                ARIADNE_TESTING_EXPECT_THROWS(std::invalid_argument,
-                                              evolver.orbit(initial, HybridTime(0u, 1), Semantics::LOWER));
+                // At t=0, g=y-x^2=-1/256 is strictly negative.
+                // The structured method may retain the WHOLE initial
+                // LOWER source. A box-only outer integrator still
+                // cannot provide a correlated LOWER continuation.
+                if (boxes) {
+                    ARIADNE_TESTING_EXPECT_THROWS(std::invalid_argument,
+                        evolver.orbit(initial, HybridTime(0u, 1), Semantics::LOWER));
+                } else {
+                    const auto lower_zero = evolver.orbit(
+                        initial, HybridTime(0u, 1), Semantics::LOWER);
+                    ARIADNE_TESTING_REQUIRE(lower_zero.final().size() == 1u);
+                    const auto& lower_final = lower_zero.final().front();
+                    ARIADNE_TESTING_PROVE(lower_final.location() == scenario.source);
+                    ARIADNE_TESTING_PROVE(lower_final.previous_events().empty());
+                    ARIADNE_TESTING_PROVE(subset(
+                        ExactBoxType({{-0.0625_x, -0.0625_x}, {0, 0}}),
+                        cast_exact_box(lower_final.state_bounding_box())));
+                    ARIADNE_TESTING_PROVE(subset(
+                        cast_exact_interval(lower_final.time_range()),
+                        ExactIntervalType(0, 0)));
+
+                    // A tangent or input-dependent crossing is possible
+                    // before t=1/8. The presently unblocked-flow-only
+                    // LOWER path must not claim a legal full-source flow.
+                    ARIADNE_TESTING_EXPECT_THROWS(std::invalid_argument,
+                        evolver.orbit(initial, HybridTime(0.125_x, 1),
+                                     Semantics::LOWER));
+                }
             }
         }
     }

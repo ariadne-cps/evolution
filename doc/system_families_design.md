@@ -1822,3 +1822,56 @@ The v7.00 tests were red on the reported LOWER cases, so the
 fix must be accepted only if all five v7.01 workflows pass
 on its exact commit. The installed tutorial continues to include
 only ariadne-evolution.hpp and has no unsupported examples.
+
+## v7.02 — Constructive singleton witnesses for constrained hybrid discrete LOWER
+
+The predecessor v7.01 `e4b53752087eb9f835cdb962ae83ec8b7c3d33d6`
+has Ubuntu, macOS and Coverage green. At this checkpoint, its
+Windows and Sanitizers workflows were still running: v7.01 should
+not be described as fully accepted until those exact checks finish.
+
+The preceding admission helper correctly rejects the negation
+of an inconclusive `Enclosure::is_empty()` result as a witness,
+but was unnecessarily incomplete for constrained initial sources:
+it required **every** point in the entire reduced parameter
+box to satisfy every constraint.
+
+v7.02 first accepts that strong whole-domain certificate when
+it holds, and otherwise attempts a **single constructive parameter
+witness**. Provided the exact reduced domain is provably
+nonempty and bounded, construct its coordinatewise midpoint
+as an exact singleton parameter box. Evaluate the *full vector*
+of existing constraints on this singleton with validated
+interval arithmetic. Accept only when the result is
+provably contained in all declared constraint bounds.
+
+Such a proof certifies at least one feasible parameter, hence
+a real initial state and a witness-preserving trajectory under
+the existing deterministic equation update. Unknown comparisons
+are not converted into truth. The source enclosure, its full
+constraints, state function, time, auxiliary mapping and history
+remain unchanged: the singleton is used only for admission,
+not to replace the result with an arbitrarily chosen sample.
+If midpoint verification fails, the conservative capability
+gate still rejects the source. This is not a general nonlinear
+constraint feasibility algorithm.
+
+New numerical regression:
+- `x[0] in [0,1]` with `x>=1/4` and `x<=3/4` has
+  a certified interior midpoint `x[0]=1/2` even though
+  the entire original domain does not satisfy both constraints.
+  A zero-horizon LOWER result and a two-tick
+  `x[n+1]=x[n]+1` evolution must exist and preserve both
+  constraints; the final validated set must cover the concrete
+  witness `x[2]=2.5`.
+- `x[0] in [0,1]` with the impossible constraint
+  `x>=2` must be rejected at zero horizon and one tick.
+- Existing event/inclusion negative regressions and all
+  unconstrained deterministic LOWER tests remain enabled.
+
+No transition-level LOWER witness inference is added; the
+hybrid discrete equation LOWER capability remains **partial**.
+The user-facing C++ tutorial is unchanged, with exactly the
+single `#include "ariadne-evolution.hpp"`, and only
+implemented examples. v7.02 acceptance requires all five
+functional workflow results on this exact commit.

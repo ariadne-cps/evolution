@@ -39,11 +39,11 @@ namespace {
 // Enclosure::is_empty(): that one-sided predicate can prove emptiness
 // but its indeterminate result cannot establish a LOWER witness.
 //
-// Any nonempty exact parameter domain defines a feasible point when
-// the enclosure has no constraints. With constraints, additionally
-// require a validated proof that every point of the (nonempty)
-// reduced parameter domain satisfies all constraints. This is a
-// conservative sufficient condition, not a complete feasibility solver.
+// A nonempty exact parameter domain provides an initial witness when
+// no constraints are present. With constraints, certify either the entire
+// reduced domain or one explicit point in it. Both checks use validated
+// ranges: an UNKNOWN constraint result never becomes a LOWER witness.
+// This is a sufficient test, not a general existential solver.
 Bool has_certified_lower_source(const Enclosure& source) {
     const ExactBoxType domain = source.reduced_domain();
     if (!definitely(!domain.is_empty()))
@@ -51,8 +51,25 @@ Bool has_certified_lower_source(const Enclosure& source) {
     if (source.number_of_constraints() == 0u)
         return true;
 
-    const auto values = Ariadne::apply(source.constraint_function(), domain);
-    return definitely(Ariadne::subset(values, source.constraint_bounds()));
+    const auto constraint_function = source.constraint_function();
+    const ExactBoxType constraints = source.constraint_bounds();
+    const auto range = Ariadne::apply(constraint_function, domain);
+    if (definitely(Ariadne::subset(range, constraints)))
+        return true;
+
+    // A bounded box has an exactly representable midpoint. Proving that
+    // every constraint contains its validated value at this singleton
+    // proves the existence of at least one feasible initial parameter.
+    // Preserve the original constrained enclosure for the actual orbit:
+    // the witness certificate must not weaken or delete its constraints.
+    if (!definitely(domain.is_bounded()))
+        return false;
+    const auto centre = domain.midpoint();
+    const ExactBoxType point(domain.dimension(), [&](SizeType i) {
+        return ExactIntervalType(centre[i]);
+    });
+    const auto point_values = Ariadne::apply(constraint_function, point);
+    return definitely(Ariadne::subset(point_values, constraints));
 }
 
 } // namespace

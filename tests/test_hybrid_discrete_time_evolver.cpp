@@ -422,6 +422,55 @@ class TestHybridDiscreteTimeEvolver : public Ariadne::Testing::ContextFixture {
         ARIADNE_TESTING_EXPECT_EQUAL(short_orbit.final().size(), 1u);
     }
 
+    Void test_lower_constrained_point_witness() {
+        const RealVariable x("x");
+        const DiscreteLocation mode(1);
+        DiscreteTimeHybridAutomaton system;
+        system.new_mode(mode, DifferenceAlgebraicEquation(
+            List<PrimedRealAssignment>{next(x) = x + 1}));
+        Evolver evolver(system);
+
+        // Not all x in [0,1] satisfy these constraints, but x=1/2
+        // does. The validated midpoint certificate must admit LOWER
+        // without dropping the original constraints or choosing a
+        // different existential semantics from the ordinary evolver.
+        auto feasible = initial(mode);
+        Enclosure constrained = feasible.continuous_set();
+        const auto coordinate = EffectiveScalarMultivariateFunction::coordinate(1u, 0u);
+        constrained.new_positive_state_constraint(coordinate - Real(1 / 4_q));
+        constrained.new_negative_state_constraint(coordinate - Real(3 / 4_q));
+        feasible.replace_continuous_set(constrained);
+        ARIADNE_TESTING_EXPECT_EQUAL(feasible.number_of_constraints(), 2u);
+        const auto zero = evolver.orbit(
+            feasible, Termination(Integer(0), Integer(0)), Semantics::LOWER);
+        ARIADNE_TESTING_EXPECT_EQUAL(zero.final().size(), 1u);
+        ARIADNE_TESTING_EXPECT_EQUAL(zero.initial().number_of_constraints(), 2u);
+
+        const auto reached = evolver.orbit(
+            feasible, Termination(Integer(0), Integer(2)), Semantics::LOWER);
+        ARIADNE_TESTING_EXPECT_EQUAL(reached.final().size(), 1u);
+        ARIADNE_TESTING_EXPECT_EQUAL(reached.final().front().number_of_constraints(), 2u);
+        const auto bounds = reached.final().front().state_bounding_box()[0u];
+        // Starting at the certified x[0]=1/2 gives x[2]=2.5.
+        ARIADNE_TESTING_PROVE(bounds.lower_bound().raw().get_d() <= 2.5);
+        ARIADNE_TESTING_PROVE(bounds.upper_bound().raw().get_d() >= 2.5);
+        ARIADNE_TESTING_EXPECT_EQUAL(feasible.number_of_constraints(), 2u);
+        ARIADNE_TESTING_EXPECT_EQUAL(
+            feasible.time_range().lower_bound().raw().get_d(), 0.0);
+
+        // An impossible constraint is not an admissible LOWER source.
+        auto impossible = initial(mode);
+        Enclosure contradiction = impossible.continuous_set();
+        contradiction.new_positive_state_constraint(coordinate - Real(2));
+        impossible.replace_continuous_set(contradiction);
+        ARIADNE_TESTING_EXPECT_THROWS(std::invalid_argument,
+            evolver.orbit(impossible,
+                          Termination(Integer(0), Integer(0)), Semantics::LOWER));
+        ARIADNE_TESTING_EXPECT_THROWS(std::invalid_argument,
+            evolver.orbit(impossible,
+                          Termination(Integer(0), Integer(1)), Semantics::LOWER));
+    }
+
     Void test_lower_excludes_unproved_branches() {
         const RealVariable x("x"), u("u");
         const DiscreteLocation mode(1), target(2);
@@ -522,6 +571,7 @@ int main(int argc, char** argv) {
     ARIADNE_TESTING_ADD_TEST(TestHybridDiscreteTimeEvolver, test_state_only_event_from_auxiliary_inclusion_upper);
     ARIADNE_TESTING_ADD_TEST(TestHybridDiscreteTimeEvolver, test_public_reset_into_inclusion_with_auxiliary_and_continue);
     ARIADNE_TESTING_ADD_TEST(TestHybridDiscreteTimeEvolver, test_lower_event_free_equation_witness);
+    ARIADNE_TESTING_ADD_TEST(TestHybridDiscreteTimeEvolver, test_lower_constrained_point_witness);
     ARIADNE_TESTING_ADD_TEST(TestHybridDiscreteTimeEvolver, test_lower_excludes_unproved_branches);
     ARIADNE_TESTING_ADD_TEST(TestHybridDiscreteTimeEvolver, test_rejections);
     return Ariadne::Testing::run_logging_suite(ariadne_test_suite, argc, argv);

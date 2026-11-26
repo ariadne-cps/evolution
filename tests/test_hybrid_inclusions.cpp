@@ -716,6 +716,84 @@ class TestHybridInclusions : public Testing::ContextFixture {
         }
     }
 
+    Void test_lower_inclusion_full_source_urgent_reset_without_flow() {
+        const DiscreteLocation source(1), target(2), alternate(3);
+        const RealVariable x("x"), u("u");
+        const DiscreteEvent first("first"), second("second");
+        ContinuousTimeHybridAutomaton system;
+        system.new_mode(source, OrdinaryDifferentialAlgebraicInclusion(
+            {dot(x) = u}, RealVariablesBox({-1 <= u <= 1})));
+        system.new_mode(target, OrdinaryDifferentialAlgebraicEquation({dot(x) = 0}));
+        system.new_mode(alternate, OrdinaryDifferentialAlgebraicEquation({dot(x) = 0}));
+        system.new_transition(source, first, target, {next(x) = x + 2},
+                              x >= 0, EventKind::URGENT);
+        system.new_transition(source, second, alternate, {next(x) = x + 4},
+                              x >= 0, EventKind::URGENT);
+        HybridContinuousTimeEvolver<ValidatedTag> evolver(system);
+        TaylorPicardIntegrator base(step_maximum_error = 1e-6);
+        evolver.set_integrator(base, ZeroApproximation(), ConstantApproximation());
+        evolver.configuration().set_maximum_step_size(0.03125);
+        evolver.configuration().set_enable_reconditioning(false);
+
+        // Both guards hold STRICTLY on the complete original source.
+        // Each immediate reset is a real legal behavior, independent
+        // of the blocked ordinary progression. Do not order events.
+        const auto initial = HybridExactBox(
+            source, RealSpace({x}), ExactBoxType({{1, 1}}));
+        const auto orbit = evolver.orbit(
+            initial, HybridTime(0.125_x, 2), Semantics::LOWER);
+        ARIADNE_TESTING_REQUIRE(orbit.final().size() == 2u);
+        bool found_first = false;
+        bool found_second = false;
+        for (const auto& final: orbit.final()) {
+            ARIADNE_TESTING_REQUIRE(final.previous_events().size() == 1u);
+            ARIADNE_TESTING_PROVE(subset(
+                cast_exact_interval(final.time_range()),
+                ExactIntervalType(0.125_x, 0.125_x)));
+            if (final.location() == target) {
+                found_first = true;
+                ARIADNE_TESTING_EXPECT_EQUAL(final.previous_events()[0u], first);
+                ARIADNE_TESTING_PROVE(subset(
+                    ExactBoxType({{3, 3}}),
+                    cast_exact_box(final.state_bounding_box())));
+            } else if (final.location() == alternate) {
+                found_second = true;
+                ARIADNE_TESTING_EXPECT_EQUAL(final.previous_events()[0u], second);
+                ARIADNE_TESTING_PROVE(subset(
+                    ExactBoxType({{5, 5}}),
+                    cast_exact_box(final.state_bounding_box())));
+            } else {
+                ARIADNE_TESTING_REQUIRE(false);
+            }
+        }
+        ARIADNE_TESTING_PROVE(found_first && found_second);
+
+        // An outer guard touching the boundary is UNKNOWN, not a
+        // whole-source reset certificate. Do not choose a favourable
+        // input or numerical child to make an urgent reset fire.
+        const auto boundary = HybridExactBox(
+            source, RealSpace({x}), ExactBoxType({{0, 0}}));
+        ARIADNE_TESTING_EXPECT_THROWS(std::invalid_argument,
+            evolver.orbit(boundary, HybridTime(0.125_x, 2),
+                          Semantics::LOWER));
+
+        // An IMPACT guard being true is not a direction witness.
+        // Reuse the same full-source initial state, but no fabricated
+        // impact reset may be emitted without derivative evidence.
+        ContinuousTimeHybridAutomaton impact;
+        impact.new_mode(source, OrdinaryDifferentialAlgebraicInclusion(
+            {dot(x) = u}, RealVariablesBox({-1 <= u <= 1})));
+        impact.new_mode(target, OrdinaryDifferentialAlgebraicEquation({dot(x) = 0}));
+        impact.new_transition(source, first, target, {next(x) = x + 2},
+                              x >= 0, EventKind::IMPACT);
+        HybridContinuousTimeEvolver<ValidatedTag> impact_evolver(impact);
+        impact_evolver.set_integrator(
+            base, ZeroApproximation(), ConstantApproximation());
+        ARIADNE_TESTING_EXPECT_THROWS(std::invalid_argument,
+            impact_evolver.orbit(initial, HybridTime(0.125_x, 2),
+                                Semantics::LOWER));
+    }
+
     Void test_unsupported_capabilities_fail_explicitly() {
         const DiscreteLocation q(1);
         const RealVariable x("x"), u("u"), t("t"), p("p");
@@ -785,6 +863,7 @@ int main(int argc, char** argv) {
     ARIADNE_TESTING_ADD_TEST(TestHybridInclusions, test_lower_inclusion_ignores_optional_jump_but_rejects_blockers);
     ARIADNE_TESTING_ADD_TEST(TestHybridInclusions, test_lower_inclusion_certified_whole_tube_invariants);
     ARIADNE_TESTING_ADD_TEST(TestHybridInclusions, test_lower_inclusion_certainly_inactive_blockers);
+    ARIADNE_TESTING_ADD_TEST(TestHybridInclusions, test_lower_inclusion_full_source_urgent_reset_without_flow);
     ARIADNE_TESTING_ADD_TEST(TestHybridInclusions, test_unsupported_capabilities_fail_explicitly);
     return Testing::run_logging_suite(ariadne_test_suite, argc, argv);
 }

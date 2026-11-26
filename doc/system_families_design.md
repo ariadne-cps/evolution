@@ -3384,3 +3384,69 @@ test registration, matrix cell or guard interpretation
 changes. Require Ubuntu/macOS/Windows/Coverage/Sanitizers
 success on the exact v7.28 SHA, including Debug and installed
 tutorial, before accepting the regression correction.
+
+## v7.29 — Full-source URGENT immediate resets for continuous hybrid inclusion LOWER
+
+**Semantic contract preserved:** validated LOWER returns rigorous OUTER
+numerical enclosures of a NONEMPTY genuinely reached subset, never a
+geometrical INNER approximation. The initial source remains the full
+original enclosure with all independent input domains. Neither
+priorities among events nor sampled input selections are invented.
+
+**Distinguish a jump from the permission to progress:** the v7.27
+full-tube blocker policy deliberately certifies uninterrupted
+flow only while every URGENT/PROGRESS/IMPACT guard is strictly
+inactive. However it incorrectly applied this FLOW precondition
+also to CERTAIN URGENT IMMEDIATE RESETS. A nonempty source set with
+uniformly positive URGENT guard guarantees an immediate jump,
+whether or not ordinary progression is permitted. Treating
+the two conditions as one was a conservative but unnecessary
+capability limitation, not a licence to ignore the actual event
+semantics.
+
+**Production:** `_process_jumped_set` continues to check all
+INVARIANTs and absent blockers over the full source, but now
+also accepts an URGENT guard only when
+`classify_initial_guard` certifies `FULL_SOURCE`
+(strictly positive lower guard bound). Uncertain guards,
+active PROGRESS, and active IMPACT are still rejected by
+this sufficient source proof: a mere impact guard truth
+does not prove its direction. The existing common
+`_process_starting_events` already admits only uniformly
+certain initial LOWER resets; its `guarded_clocked_lower`
+safety check now also includes inclusion modes. Thus a
+certain URGENT jump is emitted with full source and
+event provenance while an ordinary no-jump flow is
+suppressed if that blocker can activate. Multiple
+certain URGENT events produce separate legal reset
+branches; no arbitrary order is imposed. Numerical
+integration and the later full-tube test remain
+unchanged for all uninterrupted branches.
+
+**Public regression:** new
+`test_lower_inclusion_full_source_urgent_reset_without_flow`
+with source `x'=u`, entire `u in [-1,1]`, initial
+`x=1`, and TWO urgent transitions `x>=0` to distinct
+stationary destinations with resets `x'=x+2`
+and `x'=x+4`. LOWER with H=1/8 and max two
+discrete transitions must reach BOTH target modes,
+with one event each, source values 3 and 5, and
+time exactly H. There must be NO spurious source
+final. This checks explicit aggregation and does
+not change the existing whole-tube input tests.
+A guard only known on the boundary `x=0` remains
+UNKNOWN and is rejected. An IMPACT starting with
+a certainly true guard remains rejected without
+a directional contact witness. UPPER and the
+original v7.27/v7.28 tests remain untouched.
+17 `test_hybrid_inclusions` methods are registered;
+the new test passes static local-variable preflight.
+
+**Acceptance:** v7.28 had green Ubuntu/macOS
+CI at preparation time; other workflows were
+still in progress. ALL five v7.29 workflows
+Ubuntu, macOS, Windows, Coverage and Sanitizers
+must be green on its exact SHA before claiming
+this supported capability. The partial LOWER
+cell and canonical opening design contract
+remain unchanged.

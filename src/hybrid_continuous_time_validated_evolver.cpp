@@ -515,7 +515,8 @@ Void HybridContinuousTimeEvolverBase<ValidatedTag>::
     HybridEnclosure flowable_set = invariant_set;
     const bool guarded_clocked_lower =
         semantics == Semantics::LOWER &&
-        (this->system().time_variable(initial_set.location()).has_value() ||
+        (this->system().inclusion(initial_set.location()) != nullptr ||
+         this->system().time_variable(initial_set.location()).has_value() ||
          EvolutionDetail::hybrid_parameter_space(this->system(), initial_set.location()).dimension() != 0u);
     bool safely_flowable = true;
     if (guarded_clocked_lower) {
@@ -711,16 +712,25 @@ Void HybridContinuousTimeEvolverBase<ValidatedTag>::
     Set<DiscreteEvent> events = transitions.keys();
 
     // Before ANY initial restriction, including at zero horizon,
-    // certify that the full witness-bearing enclosure satisfies every
-    // invariant and that every blocking guard is strictly inactive.
-    // Independently filtering an outer LOWER set cannot establish
-    // that the reachable subset survives the filter.
+    // certify the entire witness-bearing source. A blocker may either
+    // be strictly inactive (proving uninterrupted flow), or an URGENT
+    // jump may be FULL_SOURCE active (proving an immediate reset).
+    // A full-source URGENT reset does NOT need the progression guard
+    // to be safe: these are distinct legal hybrid behaviors.
+    // IMPACT additionally needs direction evidence, so mere guard
+    // activation does not license it. Other uncertain blockers,
+    // including PROGRESS, still require explicit event reasoning.
     if (semantics == Semantics::LOWER && this->system().inclusion(location)) {
         for (const auto& entry: transitions) {
-            if (!lower_inclusion_flow_predicate_certified(
-                    initial_set, entry.second))
-                throw std::invalid_argument(
-                    "Hybrid inclusion LOWER initial invariant/blocker is not certified for uninterrupted flow");
+            const auto& predicate = entry.second;
+            if (lower_inclusion_flow_predicate_certified(initial_set, predicate))
+                continue;
+            if (predicate.event_kind == EventKind::URGENT &&
+                EvolutionDetail::classify_initial_guard(initial_set, predicate) ==
+                    EvolutionDetail::HybridInitialGuardActivation::FULL_SOURCE)
+                continue;
+            throw std::invalid_argument(
+                "Hybrid inclusion LOWER initial guard does not certify a legal whole-source continuation");
         }
     }
 

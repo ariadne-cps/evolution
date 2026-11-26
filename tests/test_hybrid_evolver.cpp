@@ -38,6 +38,7 @@
 #include "function/taylor_function.decl.hpp"
 #include "function/taylor_model.hpp"
 #include "integration/integrator.hpp"
+#include "hybrid/hybrid_expression_set.hpp"
 #include "log_verbosity_scope.hpp"
 #include "logging/test_runner.hpp"
 #include "system/hybrid_automata.hpp"

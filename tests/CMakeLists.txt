@@ -10,6 +10,7 @@ set(UNIT_TESTS
     test_hybrid_evolution_backend
     test_hybrid_evolution_tree
     test_hybrid_step_contracts
+    test_hybrid_provider_integration
     test_hybrid_simulator
     test_first_order_pde
     test_first_order_pde_evolution_header

@@ -32,6 +32,7 @@
 #include "evolution/hybrid_orbit.hpp"
 #include "evolution/hybrid_simulator.hpp"
 #include "evolution/hybrid_time.hpp"
+#include "hybrid/hybrid_bounded_constraint_set.hpp"
 #include "log_verbosity_scope.hpp"
 #include "logging/test_runner.hpp"
 #include "system/hybrid_automata.hpp"

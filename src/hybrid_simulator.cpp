@@ -38,6 +38,7 @@
 #include "function/functional.hpp"
 #include "function/taylor_model.hpp"
 #include "hybrid/hybrid_set.hpp"
+#include "hybrid/hybrid_bounded_constraint_set.hpp"
 #include "integration/runge_kutta_integrator.hpp"
 #include "logging/logging.hpp"
 #include "symbolic/assignment.hpp"

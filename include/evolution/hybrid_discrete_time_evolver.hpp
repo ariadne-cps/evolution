@@ -80,18 +80,18 @@ class HybridDiscreteTimeEvolverConfiguration<ValidatedTag> : public Configuratio
 //! a full independent input box is preserved at every discrete tick.
 //! LOWER never splits an outer enclosure into independently published
 //! children, since its reachable subset could be lost. This follows
-//! the existing hybrid-continuous LOWER contract. The current limited
-//! planner accepts one uniformly admissible branch on the entire
-//! enclosure, without priority between events. As in continuous hybrid
-//! LOWER, an optional PERMISSIVE jump may be ignored when progression
-//! is certain on the WHOLE source: the uninterrupted map is then a
-//! legitimate reachable subset, even if the optional jump is possible.
-//! A uniformly certain PERMISSIVE reset may likewise be taken when
-//! progression is undecidable, provided no other jump competes: its
-//! guard alone certifies the reset's admissibility on the entire set.
-//! UNKNOWN guard evidence and URGENT blockers are never promoted to
-//! certain transitions. These are sufficient supported conditions,
-//! not the definition of LOWER.
+//! the existing hybrid-continuous LOWER contract. Every hybrid branch
+//! that is certainly admissible on the WHOLE current LOWER enclosure
+//! advances separately, retaining its own location and event history.
+//! All such branch images are aggregated, with no event priority and
+//! no splitting of a numerical enclosure into arbitrary children.
+//! PERMISSIVE reset and uninterrupted progression are independent:
+//! each is returned when its own preconditions are certain. UNKNOWN
+//! guard or invariant evidence never becomes a certain branch;
+//! URGENT events block progression as prescribed by the model.
+//! If no certain continuation reaches the requested horizon, LOWER
+//! fails conservatively. These are sufficient implemented conditions,
+//! not a redefinition of the mathematical LOWER semantics.
 //! All equation and inclusion modes apply the same set-valued map as UPPER,
 //! keeping full input boxes and auxiliary correlations. A reset may
 //! target equation or inclusion modes, with full fresh arrival inputs.

@@ -33,7 +33,7 @@
 #include "hybrid_discrete_time_predicate_function.hpp"
 #include "hybrid_discrete_time_inclusion_capability.hpp"
 
-#include <optional>
+#include <vector>
 #include <stdexcept>
 #include <utility>
 
@@ -82,7 +82,11 @@ Bool has_certified_lower_source(const Enclosure& source) {
 // single branch whose precondition is certified for the entire source.
 // Unlike UPPER, UNKNOWN evidence never yields a LOWER witness. In particular
 // we do not impose an arbitrary priority on competing transitions.
-std::optional<HybridDiscreteTimePlannedBranch> unique_certified_lower_branch(
+// Each branch that is certain on the WHOLE current LOWER enclosure
+// carries a real reachable source subset to a legal successor.
+// Aggregate all such branches, preserving provenance and without ever
+// splitting the numerical enclosure or prioritising one event.
+List<HybridDiscreteTimePlannedBranch> certified_lower_branches(
     const DiscreteTimeHybridAutomatonInterface& automaton,
     const HybridEnclosure& source, const Integer& index) {
     if (!automaton.has_mode(source.location()) ||
@@ -98,81 +102,18 @@ std::optional<HybridDiscreteTimePlannedBranch> unique_certified_lower_branch(
     };
     const auto plan = HybridDiscreteTimeStepPlanner::plan(
         automaton, source.location(), index, evaluate);
-
-    // As in continuous hybrid LOWER, a PERMISSIVE reset can be ignored:
-    // if progression is certainly allowed over the whole current set,
-    // the uninterrupted map is a valid reachable LOWER subset.
-    // Explicitly exclude any competing non-permissive transitions:
-    // this is not a priority rule for URGENT events.
+    List<HybridDiscreteTimePlannedBranch> certain;
     for (const auto& candidate: plan.branches) {
-        if (candidate.kind != HybridDiscreteTimeBranchKind::PROGRESSION ||
-            !candidate.certain)
+        if (!candidate.certain)
             continue;
-        Bool alternatives_are_optional = true;
-        for (const auto& other: plan.branches) {
-            if (other.kind == HybridDiscreteTimeBranchKind::PROGRESSION)
-                continue;
-            if (other.kind != HybridDiscreteTimeBranchKind::TRANSITION ||
-                !other.event.has_value() ||
-                automaton.transition_kind(source.location(), *other.event) !=
-                    DiscreteTimeTransitionKind::PERMISSIVE) {
-                alternatives_are_optional = false;
-                break;
-            }
-        }
-        if (alternatives_are_optional)
-            return candidate;
-    }
-
-    // A PERMISSIVE reset whose guard is TRUE over the whole source is
-    // equally admissible even if its progression invariant is UNKNOWN:
-    // resetting the reachable LOWER subset does not require proving
-    // that uninterrupted progression is safe. Reject competing jumps
-    // rather than invent an ordering among different events.
-    for (const auto& candidate: plan.branches) {
-        if (candidate.kind != HybridDiscreteTimeBranchKind::TRANSITION ||
-            !candidate.certain || !candidate.event.has_value() ||
-            automaton.transition_kind(source.location(), *candidate.event) !=
-                DiscreteTimeTransitionKind::PERMISSIVE ||
-            (!automaton.has_equation(candidate.target) &&
-             !automaton.has_inclusion(candidate.target)))
+        if (candidate.kind == HybridDiscreteTimeBranchKind::TRANSITION &&
+            !automaton.has_equation(candidate.target) &&
+            !automaton.has_inclusion(candidate.target))
             continue;
-        Bool only_progression_competes = true;
-        for (const auto& other: plan.branches) {
-            if (&other != &candidate &&
-                other.kind != HybridDiscreteTimeBranchKind::PROGRESSION) {
-                only_progression_competes = false;
-                break;
-            }
-        }
-        if (only_progression_competes)
-            return candidate;
+        certain.append(candidate);
     }
-
-    // Otherwise, only one universally certain alternative is currently
-    // supported. An UNKNOWN guard, urgent blocker, or competing event
-    // cannot be converted into a lower continuation by branch choice.
-    if (plan.branches.size() != 1u || !plan.branches.front().certain)
-        return std::nullopt;
-    const auto branch = plan.branches.front();
-    if (branch.kind == HybridDiscreteTimeBranchKind::TRANSITION &&
-        !automaton.has_equation(branch.target) &&
-        !automaton.has_inclusion(branch.target))
-        return std::nullopt;
-    return branch;
-}
-
-// The common numerical map is unchanged: only hybrid branch
-// admissibility is checked on the original unsplit enclosure.
-// A uniformly certain branch is sufficient, not the definition of LOWER.
-HybridDiscreteTimePlannedBranch certified_lower_step(
-    const DiscreteTimeHybridAutomatonInterface& automaton,
-    const HybridEnclosure& source, const Integer& index) {
-    const auto branch = unique_certified_lower_branch(automaton, source, index);
-    if (!branch)
-        throw std::invalid_argument(
-            "Discrete hybrid LOWER cannot choose a branch on the whole enclosure");
-    return *branch;
+    // UNKNOWN guards/invariants never become a certified LOWER branch.
+    return certain;
 }
 
 } // namespace
@@ -276,23 +217,38 @@ Orbit<HybridEnclosure> HybridDiscreteTimeEvolver<ValidatedTag>::orbit(
     check_index(initial, termination.initial_index());
 
     OrbitType orbit(current);
+    std::vector<HybridEnclosure> frontier{current};
     Integer index = termination.initial_index();
     SizeType nodes = 1u;
     while (index < termination.termination_index()) {
-        if (nodes >= this->configuration().maximum_nodes())
-            throw std::length_error("Discrete hybrid LOWER evolution exceeds node budget");
-        const auto branch = certified_lower_step(this->system(), current, index);
-        // Advance the SAME original, unsplit set-valued image as UPPER.
-        current = HybridDiscreteTimeStepImage::apply(
-            this->system(), current, branch);
-        index = index + Integer(1);
-        ++nodes;
-        check_index(current, index);
-        orbit.adjoin_reach(current);
-        if (index < termination.termination_index())
-            orbit.adjoin_intermediate(current);
+        const Integer successor_index = index + Integer(1);
+        std::vector<HybridEnclosure> next_frontier;
+        // Every alternative uses the complete original source and the
+        // same numerical map as UPPER. No subboxes or input sampling.
+        for (const HybridEnclosure& source: frontier) {
+            const auto choices =
+                certified_lower_branches(this->system(), source, index);
+            for (const auto& choice: choices) {
+                if (nodes >= this->configuration().maximum_nodes())
+                    throw std::length_error("Discrete hybrid LOWER evolution exceeds node budget");
+                HybridEnclosure successor =
+                    HybridDiscreteTimeStepImage::apply(this->system(), source, choice);
+                ++nodes;
+                check_index(successor, successor_index);
+                orbit.adjoin_reach(successor);
+                if (successor_index < termination.termination_index())
+                    orbit.adjoin_intermediate(successor);
+                next_frontier.push_back(std::move(successor));
+            }
+        }
+        if (next_frontier.empty())
+            throw std::invalid_argument(
+                "Discrete hybrid LOWER has no certain continuation to the requested horizon");
+        frontier = std::move(next_frontier);
+        index = successor_index;
     }
-    orbit.adjoin_final(current);
+    for (const HybridEnclosure& final: frontier)
+        orbit.adjoin_final(final);
     return orbit;
 }
 

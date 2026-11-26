@@ -2957,3 +2957,56 @@ planner, test removals, source splitting or canonical
 semantics change. All five CI workflows must be green on the
 exact v7.21 commit before its behavior is accepted; no matrix
 cell is promoted on an unvalidated candidate.
+
+## v7.22 — Aggregate every uniformly certain hybrid LOWER branch without splitting the source
+
+**Mathematical contract:** the immutable introductory section remains binding.
+A LOWER result is a rigorous outer numerical enclosure of a nonempty
+reachable subset, not an INNER image. If an unsplit source enclosure
+contains such a subset and two hybrid branches are admissible
+throughout that entire source, both propagate a genuine reachable
+subset. Keeping both successor enclosures aggregates actual alternative
+behaviors without independently splitting the numerical state/input
+enclosure or fabricating an event priority. A branch with UNKNOWN
+preconditions is not thereby declared certain.
+
+**Production:** replace the former singled-out jump/progression
+preference logic with the shared planner's complete list of
+`certain` branches whose target dynamics are supported. At each tick,
+validated LOWER applies the UNCHANGED `HybridDiscreteTimeStepImage::apply`
+to the original complete source for every certain branch and preserves
+each successor's location and event history. A frontier of enclosures
+is advanced breadth-first. Reach/intermediate/final lists retain
+all resulting certain branches. Uncertified branches are omitted;
+if none reach the requested horizon, the call conservatively fails.
+The existing maximum-node limit is applied per actual successor.
+No new numerical integration method, free input selection, synthetic
+parameter constraints, state splitting, urgency priority or changed
+model dynamics is introduced.
+
+**Public regression extensions (20 registered test methods):**
+A PERMISSIVE guard and progress invariant both certainly true yield
+BOTH the reset and uninterrupted evolution, with original state
+intervals, separate event histories and two final enclosures.
+A second two-tick model with generously true invariants produces
+three final branches and five reachable nodes; a branching node
+budget triggers as expected. Two simultaneously true URGENT events
+yield two reset descendants with their individual event identities
+and exact model-based bounds, and no false progression. A hybrid
+inclusion `a=x+u`, `u in [-1,1]`, with optional guard `a>=-2`
+and progression invariant `a<=3` yields two distinct successors:
+full-input progression over [-1,3] and correlated reset over [2,6].
+The original input coordinate range and arrival input binding
+are checked separately, with no input-equality constraints.
+Old rejections for genuinely uncertain transitions and all existing
+UPPER, resume, invalid-source and other regressions remain.
+Pre-commit static inspection found exactly 20 registered methods
+and no duplicate local `const auto` names.
+
+**Acceptance:** v7.20 was five-for-five green. v7.21 was green for
+Ubuntu, macOS and Coverage but Windows and Sanitizers had not
+finished at preparation time. This new behavior is a CANDIDATE
+until all Ubuntu, macOS, Windows, Coverage, Sanitizers workflows
+succeed on the exact v7.22 SHA. Do not promote any capability matrix
+cell merely due to a new candidate. No changes to System, Integration,
+the continuous evolvers, UPPER scheduler or canonical semantic rules.

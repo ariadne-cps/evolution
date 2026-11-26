@@ -599,6 +599,51 @@ class TestHybridDiscreteTimeEvolver : public Ariadne::Testing::ContextFixture {
         ARIADNE_TESTING_PROVE(optional_bounds.lower_bound().raw().get_d() <= -1.0);
         ARIADNE_TESTING_PROVE(optional_bounds.upper_bound().raw().get_d() >= 3.0);
 
+        // Both an optional reset and progression can be certain for
+        // every x and u. Preserve BOTH complete-input alternatives.
+        DiscreteTimeHybridAutomaton both_model;
+        both_model.new_mode(source_mode, DifferenceAlgebraicInclusion(
+            List<PrimedRealAssignment>{next(x) = x + a},
+            List<RealAssignment>{let(a) = x + u},
+            RealVariablesBox({-1 <= u <= 1})));
+        both_model.new_mode(target_mode, DifferenceAlgebraicEquation(
+            List<PrimedRealAssignment>{next(x) = x}));
+        both_model.new_permissive_transition(source_mode, event, target_mode,
+            {next(x) = x + a + 3}, a >= -2, a <= 3);
+        Evolver all_choices(both_model);
+        const auto two_branches = all_choices.orbit(source,
+            Termination(Integer(0), Integer(1)), Semantics::LOWER);
+        ARIADNE_TESTING_REQUIRE(two_branches.final().size() == 2u);
+        bool saw_input_progression = false;
+        bool saw_input_reset = false;
+        for (const auto& branch_final: two_branches.final()) {
+            ARIADNE_TESTING_EXPECT_EQUAL(branch_final.number_of_constraints(), 0u);
+            const auto branch_input =
+                branch_final.continuous_set().parameter_domain()[1u];
+            ARIADNE_TESTING_PROVE(branch_input.lower_bound().raw().get_d() <= -1.0);
+            ARIADNE_TESTING_PROVE(branch_input.upper_bound().raw().get_d() >= 1.0);
+            const auto branch_bounds = branch_final.state_bounding_box()[0u];
+            if (branch_final.location() == source_mode) {
+                saw_input_progression = true;
+                ARIADNE_TESTING_EXPECT_EQUAL(branch_final.previous_events().size(), 0u);
+                ARIADNE_TESTING_EXPECT_EQUAL(
+                    branch_final.continuous_set().number_of_parameters(), 3u);
+                ARIADNE_TESTING_PROVE(branch_bounds.lower_bound().raw().get_d() <= -1.0);
+                ARIADNE_TESTING_PROVE(branch_bounds.upper_bound().raw().get_d() >= 3.0);
+            } else if (branch_final.location() == target_mode) {
+                saw_input_reset = true;
+                ARIADNE_TESTING_REQUIRE(branch_final.previous_events().size() == 1u);
+                ARIADNE_TESTING_PROVE(branch_final.previous_events()[0u] == event);
+                ARIADNE_TESTING_EXPECT_EQUAL(
+                    branch_final.continuous_set().number_of_parameters(), 2u);
+                ARIADNE_TESTING_PROVE(branch_bounds.lower_bound().raw().get_d() <= 2.0);
+                ARIADNE_TESTING_PROVE(branch_bounds.upper_bound().raw().get_d() >= 6.0);
+            } else {
+                ARIADNE_TESTING_REQUIRE(false);
+            }
+        }
+        ARIADNE_TESTING_PROVE(saw_input_progression && saw_input_reset);
+
         // With a guard true for ALL x and u, the optional reset is
         // valid even when progression has an uncertain invariant.
         // No state/input value is selected to make the guard pass.
@@ -1036,14 +1081,61 @@ class TestHybridDiscreteTimeEvolver : public Ariadne::Testing::ContextFixture {
         Evolver undecided(ambiguous);
         const auto optional = undecided.orbit(initial(source_mode),
             Termination(Integer(0), Integer(1)), Semantics::LOWER);
-        ARIADNE_TESTING_REQUIRE(optional.final().size() == 1u);
-        const auto& optional_final = optional.final().front();
-        ARIADNE_TESTING_PROVE(optional_final.location() == source_mode);
-        ARIADNE_TESTING_EXPECT_EQUAL(optional_final.previous_events().size(), 0u);
-        ARIADNE_TESTING_EXPECT_EQUAL(optional_final.number_of_constraints(), 0u);
-        const auto optional_bounds = optional_final.state_bounding_box()[0u];
-        ARIADNE_TESTING_PROVE(optional_bounds.lower_bound().raw().get_d() <= 1.0);
-        ARIADNE_TESTING_PROVE(optional_bounds.upper_bound().raw().get_d() >= 2.0);
+        ARIADNE_TESTING_REQUIRE(optional.final().size() == 2u);
+        ARIADNE_TESTING_EXPECT_EQUAL(optional.reach().size(), 2u);
+        bool found_progression = false;
+        bool found_reset = false;
+        for (const auto& branch_final: optional.final()) {
+            ARIADNE_TESTING_EXPECT_EQUAL(branch_final.number_of_constraints(), 0u);
+            const auto branch_bounds = branch_final.state_bounding_box()[0u];
+            if (branch_final.location() == source_mode) {
+                found_progression = true;
+                ARIADNE_TESTING_EXPECT_EQUAL(branch_final.previous_events().size(), 0u);
+                ARIADNE_TESTING_PROVE(branch_bounds.lower_bound().raw().get_d() <= 1.0);
+                ARIADNE_TESTING_PROVE(branch_bounds.upper_bound().raw().get_d() >= 2.0);
+            } else if (branch_final.location() == target_mode) {
+                found_reset = true;
+                ARIADNE_TESTING_REQUIRE(branch_final.previous_events().size() == 1u);
+                ARIADNE_TESTING_PROVE(branch_final.previous_events()[0u] == event);
+                ARIADNE_TESTING_PROVE(branch_bounds.lower_bound().raw().get_d() <= 3.0);
+                ARIADNE_TESTING_PROVE(branch_bounds.upper_bound().raw().get_d() >= 4.0);
+            } else {
+                ARIADNE_TESTING_REQUIRE(false);
+            }
+        }
+        ARIADNE_TESTING_PROVE(found_progression && found_reset);
+
+        // A separate system keeps both alternatives certain for TWO
+        // ticks; the lower frontier must retain all three descendants.
+        DiscreteTimeHybridAutomaton persistent;
+        persistent.new_mode(source_mode, DifferenceAlgebraicEquation(
+            List<PrimedRealAssignment>{next(x) = x + 1}));
+        persistent.new_mode(target_mode, DifferenceAlgebraicEquation(
+            List<PrimedRealAssignment>{next(x) = x}));
+        persistent.new_permissive_transition(source_mode, event, target_mode,
+            {next(x) = x + 3}, x >= -1, x <= 5);
+        Evolver repeated(persistent);
+        const auto two_ticks = repeated.orbit(initial(source_mode),
+            Termination(Integer(0), Integer(2)), Semantics::LOWER);
+        ARIADNE_TESTING_REQUIRE(two_ticks.final().size() == 3u);
+        ARIADNE_TESTING_EXPECT_EQUAL(two_ticks.reach().size(), 5u);
+        ARIADNE_TESTING_EXPECT_EQUAL(two_ticks.intermediate().size(), 2u);
+        SizeType source_finals = 0u;
+        SizeType target_finals = 0u;
+        for (const auto& final: two_ticks.final()) {
+            if (final.location() == source_mode) ++source_finals;
+            if (final.location() == target_mode) ++target_finals;
+            ARIADNE_TESTING_EXPECT_EQUAL(
+                final.time_range().lower_bound().raw().get_d(), 2.0);
+        }
+        ARIADNE_TESTING_EXPECT_EQUAL(source_finals, 1u);
+        ARIADNE_TESTING_EXPECT_EQUAL(target_finals, 2u);
+
+        Evolver bounded_budget(ambiguous);
+        bounded_budget.configuration().set_maximum_nodes(2u);
+        ARIADNE_TESTING_EXPECT_THROWS(std::length_error,
+            bounded_budget.orbit(initial(source_mode),
+                Termination(Integer(0), Integer(1)), Semantics::LOWER));
 
         // A varying optional guard does not prevent certain progression.
         // Even if the reset is only POSSIBLE, skipping it is permitted.
@@ -1125,8 +1217,8 @@ class TestHybridDiscreteTimeEvolver : public Ariadne::Testing::ContextFixture {
         ARIADNE_TESTING_EXPECT_EQUAL(lower.final().front().previous_events().size(), 1u);
         ARIADNE_TESTING_PROVE(lower.final().front().previous_events()[0u] == forced);
 
-        // Two uniformly true urgent guards create two alternatives.
-        // LOWER must not use event enumeration order as priority.
+        // Both uniformly true URGENT guards are distinct admissible
+        // resets. Aggregate BOTH; URGENT suppresses progression.
         DiscreteTimeHybridAutomaton competing;
         competing.new_mode(source_mode, DifferenceAlgebraicEquation(
             List<PrimedRealAssignment>{next(x) = x + 1}));
@@ -1136,10 +1228,31 @@ class TestHybridDiscreteTimeEvolver : public Ariadne::Testing::ContextFixture {
             {next(x) = x + 100}, x >= -1);
         competing.new_urgent_transition(source_mode, forced, target_mode,
             {next(x) = x + 3}, x >= -1);
-        Evolver not_unique(competing);
-        ARIADNE_TESTING_EXPECT_THROWS(std::invalid_argument,
-            not_unique.orbit(initial(source_mode),
-                Termination(Integer(0), Integer(1)), Semantics::LOWER));
+        Evolver multiple_resets(competing);
+        const auto both = multiple_resets.orbit(initial(source_mode),
+            Termination(Integer(0), Integer(1)), Semantics::LOWER);
+        ARIADNE_TESTING_REQUIRE(both.final().size() == 2u);
+        ARIADNE_TESTING_EXPECT_EQUAL(both.reach().size(), 2u);
+        bool saw_first = false;
+        bool saw_second = false;
+        for (const auto& branch_final: both.final()) {
+            ARIADNE_TESTING_PROVE(branch_final.location() == target_mode);
+            ARIADNE_TESTING_REQUIRE(branch_final.previous_events().size() == 1u);
+            const auto& recorded = branch_final.previous_events()[0u];
+            const auto event_bounds = branch_final.state_bounding_box()[0u];
+            if (recorded == disabled) {
+                saw_first = true;
+                ARIADNE_TESTING_PROVE(event_bounds.lower_bound().raw().get_d() <= 100.5);
+                ARIADNE_TESTING_PROVE(event_bounds.upper_bound().raw().get_d() >= 100.5);
+            } else if (recorded == forced) {
+                saw_second = true;
+                ARIADNE_TESTING_PROVE(event_bounds.lower_bound().raw().get_d() <= 3.5);
+                ARIADNE_TESTING_PROVE(event_bounds.upper_bound().raw().get_d() >= 3.5);
+            } else {
+                ARIADNE_TESTING_REQUIRE(false);
+            }
+        }
+        ARIADNE_TESTING_PROVE(saw_first && saw_second);
     }
 
     Void test_lower_excludes_unproved_branches() {

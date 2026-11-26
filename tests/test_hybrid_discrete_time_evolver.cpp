@@ -569,6 +569,35 @@ class TestHybridDiscreteTimeEvolver : public Ariadne::Testing::ContextFixture {
         ARIADNE_TESTING_EXPECT_THROWS(std::invalid_argument,
             undecided.orbit(source, Termination(Integer(0), Integer(1)),
                             Semantics::LOWER));
+
+        // The SAME guard may be optional: with a uniformly safe
+        // progression invariant, LOWER ignores PERMISSIVE reset and
+        // applies x'=x+a to ALL x and ALL u in [-1,1].
+        DiscreteTimeHybridAutomaton optional_model;
+        optional_model.new_mode(source_mode, DifferenceAlgebraicInclusion(
+            List<PrimedRealAssignment>{next(x) = x + a},
+            List<RealAssignment>{let(a) = x + u},
+            RealVariablesBox({-1 <= u <= 1})));
+        optional_model.new_mode(target_mode, DifferenceAlgebraicEquation(
+            List<PrimedRealAssignment>{next(x) = x}));
+        optional_model.new_permissive_transition(source_mode, event, target_mode,
+            {next(x) = x + a + 3}, a >= 0, a <= 3);
+        Evolver optional_evolver(optional_model);
+        const auto optional_orbit = optional_evolver.orbit(
+            source, Termination(Integer(0), Integer(1)), Semantics::LOWER);
+        ARIADNE_TESTING_REQUIRE(optional_orbit.final().size() == 1u);
+        const auto& optional_final = optional_orbit.final().front();
+        ARIADNE_TESTING_PROVE(optional_final.location() == source_mode);
+        ARIADNE_TESTING_EXPECT_EQUAL(optional_final.previous_events().size(), 0u);
+        ARIADNE_TESTING_EXPECT_EQUAL(
+            optional_final.continuous_set().number_of_parameters(), 3u);
+        ARIADNE_TESTING_EXPECT_EQUAL(optional_final.number_of_constraints(), 0u);
+        const auto optional_input = optional_final.continuous_set().parameter_domain()[1u];
+        ARIADNE_TESTING_PROVE(optional_input.lower_bound().raw().get_d() <= -1.0);
+        ARIADNE_TESTING_PROVE(optional_input.upper_bound().raw().get_d() >= 1.0);
+        const auto optional_bounds = optional_final.state_bounding_box()[0u];
+        ARIADNE_TESTING_PROVE(optional_bounds.lower_bound().raw().get_d() <= -1.0);
+        ARIADNE_TESTING_PROVE(optional_bounds.upper_bound().raw().get_d() >= 3.0);
     }
 
     Void test_lower_event_free_equation_witness() {
@@ -960,8 +989,9 @@ class TestHybridDiscreteTimeEvolver : public Ariadne::Testing::ContextFixture {
         ARIADNE_TESTING_PROVE(progressed.final().front().location() == source_mode);
         ARIADNE_TESTING_EXPECT_EQUAL(progressed.final().front().previous_events().size(), 0u);
 
-        // Neither a certain guard nor a certain invariant can justify
-        // arbitrarily choosing between two possible alternatives.
+        // With a PERMISSIVE reset and a certain progression invariant,
+        // ignoring the optional jump is an admissible LOWER continuation.
+        // Continuous hybrid LOWER already follows this exact rule.
         DiscreteTimeHybridAutomaton ambiguous;
         ambiguous.new_mode(source_mode, DifferenceAlgebraicEquation(
             List<PrimedRealAssignment>{next(x) = x + 1}));
@@ -970,8 +1000,50 @@ class TestHybridDiscreteTimeEvolver : public Ariadne::Testing::ContextFixture {
         ambiguous.new_permissive_transition(source_mode, event, target_mode,
             {next(x) = x + 3}, x >= -1, x <= 2);
         Evolver undecided(ambiguous);
+        const auto optional = undecided.orbit(initial(source_mode),
+            Termination(Integer(0), Integer(1)), Semantics::LOWER);
+        ARIADNE_TESTING_REQUIRE(optional.final().size() == 1u);
+        const auto& optional_final = optional.final().front();
+        ARIADNE_TESTING_PROVE(optional_final.location() == source_mode);
+        ARIADNE_TESTING_EXPECT_EQUAL(optional_final.previous_events().size(), 0u);
+        ARIADNE_TESTING_EXPECT_EQUAL(optional_final.number_of_constraints(), 0u);
+        const auto optional_bounds = optional_final.state_bounding_box()[0u];
+        ARIADNE_TESTING_PROVE(optional_bounds.lower_bound().raw().get_d() <= 1.0);
+        ARIADNE_TESTING_PROVE(optional_bounds.upper_bound().raw().get_d() >= 2.0);
+
+        // A varying optional guard does not prevent certain progression.
+        // Even if the reset is only POSSIBLE, skipping it is permitted.
+        DiscreteTimeHybridAutomaton varying;
+        varying.new_mode(source_mode, DifferenceAlgebraicEquation(
+            List<PrimedRealAssignment>{next(x) = x + 1}));
+        varying.new_mode(target_mode, DifferenceAlgebraicEquation(
+            List<PrimedRealAssignment>{next(x) = x}));
+        varying.new_permissive_transition(source_mode, event, target_mode,
+            {next(x) = x + 3}, x >= 1 / 2_q, x <= 2);
+        Evolver varying_guard(varying);
+        const auto optional_unknown = varying_guard.orbit(initial(source_mode),
+            Termination(Integer(0), Integer(1)), Semantics::LOWER);
+        ARIADNE_TESTING_REQUIRE(optional_unknown.final().size() == 1u);
+        ARIADNE_TESTING_PROVE(optional_unknown.final().front().location() == source_mode);
+        ARIADNE_TESTING_EXPECT_EQUAL(
+            optional_unknown.final().front().previous_events().size(), 0u);
+        const auto varying_bounds =
+            optional_unknown.final().front().state_bounding_box()[0u];
+        ARIADNE_TESTING_PROVE(varying_bounds.lower_bound().raw().get_d() <= 1.0);
+        ARIADNE_TESTING_PROVE(varying_bounds.upper_bound().raw().get_d() >= 2.0);
+
+        // When both the guard and the progression invariant are
+        // unresolved, neither branch is uniformly known to be valid.
+        DiscreteTimeHybridAutomaton uncertain_invariant;
+        uncertain_invariant.new_mode(source_mode, DifferenceAlgebraicEquation(
+            List<PrimedRealAssignment>{next(x) = x + 1}));
+        uncertain_invariant.new_mode(target_mode, DifferenceAlgebraicEquation(
+            List<PrimedRealAssignment>{next(x) = x}));
+        uncertain_invariant.new_permissive_transition(source_mode, event, target_mode,
+            {next(x) = x + 3}, x >= 1 / 2_q, x <= 1 / 2_q);
+        Evolver blocked(uncertain_invariant);
         ARIADNE_TESTING_EXPECT_THROWS(std::invalid_argument,
-            undecided.orbit(initial(source_mode),
+            blocked.orbit(initial(source_mode),
                 Termination(Integer(0), Integer(1)), Semantics::LOWER));
     }
 
@@ -1029,9 +1101,17 @@ class TestHybridDiscreteTimeEvolver : public Ariadne::Testing::ContextFixture {
         ARIADNE_TESTING_EXPECT_EQUAL(
             guarded.orbit(initial(mode), Termination(Integer(0), Integer(0)),
                           Semantics::LOWER).final().size(), 1u);
-        ARIADNE_TESTING_EXPECT_THROWS(std::invalid_argument,
-            guarded.orbit(initial(mode), Termination(Integer(0), Integer(1)),
-                          Semantics::LOWER));
+        // Certain progression with a PERMISSIVE alternative is a
+        // legitimate full-source LOWER step, not an invented priority.
+        const auto optional = guarded.orbit(
+            initial(mode), Termination(Integer(0), Integer(1)), Semantics::LOWER);
+        ARIADNE_TESTING_REQUIRE(optional.final().size() == 1u);
+        ARIADNE_TESTING_PROVE(optional.final().front().location() == mode);
+        ARIADNE_TESTING_EXPECT_EQUAL(
+            optional.final().front().previous_events().size(), 0u);
+        const auto optional_bounds = optional.final().front().state_bounding_box()[0u];
+        ARIADNE_TESTING_PROVE(optional_bounds.lower_bound().raw().get_d() <= 1.0);
+        ARIADNE_TESTING_PROVE(optional_bounds.upper_bound().raw().get_d() >= 2.0);
 
         DiscreteTimeHybridAutomaton inclusion;
         inclusion.new_mode(mode, DifferenceAlgebraicInclusion(

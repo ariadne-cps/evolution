@@ -98,6 +98,34 @@ std::optional<HybridDiscreteTimePlannedBranch> unique_certified_lower_branch(
     };
     const auto plan = HybridDiscreteTimeStepPlanner::plan(
         automaton, source.location(), index, evaluate);
+
+    // As in continuous hybrid LOWER, a PERMISSIVE reset can be ignored:
+    // if progression is certainly allowed over the whole current set,
+    // the uninterrupted map is a valid reachable LOWER subset.
+    // Explicitly exclude any competing non-permissive transitions:
+    // this is not a priority rule for URGENT events.
+    for (const auto& candidate: plan.branches) {
+        if (candidate.kind != HybridDiscreteTimeBranchKind::PROGRESSION ||
+            !candidate.certain)
+            continue;
+        Bool alternatives_are_optional = true;
+        for (const auto& other: plan.branches) {
+            if (other.kind == HybridDiscreteTimeBranchKind::PROGRESSION)
+                continue;
+            if (other.kind != HybridDiscreteTimeBranchKind::TRANSITION ||
+                !other.event.has_value() ||
+                automaton.transition_kind(source.location(), *other.event) !=
+                    DiscreteTimeTransitionKind::PERMISSIVE) {
+                alternatives_are_optional = false;
+                break;
+            }
+        }
+        if (alternatives_are_optional)
+            return candidate;
+    }
+
+    // Otherwise, only one universally certain alternative is currently
+    // supported. An UNKNOWN invariant or urgent blocker is not ignored.
     if (plan.branches.size() != 1u || !plan.branches.front().certain)
         return std::nullopt;
     const auto branch = plan.branches.front();

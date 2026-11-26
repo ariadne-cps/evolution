@@ -2835,3 +2835,68 @@ UPPER, System, Integration and numerical step-image code are untouched.
 This is a candidate until the Ubuntu, macOS, Windows, Coverage and
 Sanitizers workflows pass on this exact v7.19 commit. The capability
 matrix does not advance on an unvalidated candidate.
+
+## v7.20 — Safe permissive-event continuation in hybrid discrete validated LOWER
+
+**Base:** v7.19 `4f261d55f46ce919dffbe714a0715df751a41a5b`.
+Ubuntu, macOS, Windows, Coverage and Sanitizers all completed green
+on that exact SHA. The canonical UPPER/LOWER definitions at the very
+start of this document remain binding and unchanged.
+
+**Mathematical reason for the minimal extension.** In a hybrid
+system with a PERMISSIVE transition, an admissible progression is
+still an actual behavior even if a reset could also be taken.
+If the common discrete branch planner proves that the progression
+invariant is TRUE on the complete current LOWER enclosure, then
+applying the original unsplit map retains a genuinely reachable
+subset. The LOWER enclosure can choose that admissible
+uninterrupted subset; it does not claim to cover the optional
+resets. This follows the existing validated hybrid-continuous
+LOWER treatment, which explicitly ignores optional PERMISSIVE
+jumps when the uninterrupted flow is valid.
+No model-level priority between progression and reset is added:
+UPPER still explores every allowed alternative.
+
+**Implementation.** In `unique_certified_lower_branch`, keep the
+existing shared, three-valued full-source planner. Accept a
+certain PROGRESSION branch if every other listed alternative is
+a PERMISSIVE transition; explicitly reject any competing
+URGENT or unsupported event. When no such progression exists,
+preserve the previous fallback of one uniquely certain
+transition/progression. A possible guard never becomes TRUE or
+FALSE just to produce an answer. Uncertain progression
+invariants or urgent blockers are NOT ignored. Critically,
+there is NO state/input/parameter splitting, no input selection,
+and no changed numerical propagation kernel: both semantics
+still apply the SAME full set-valued discrete map
+`HybridDiscreteTimeStepImage::apply`, retaining all source
+correlations and independent input boxes.
+
+**Regression scope.** The existing public
+`test_lower_unique_permissive_branch` retains its mandatory
+reset on a forbidden progression invariant and its mandatory
+progression with disabled guard; it additionally checks
+progression when both PERMISSIVE reset and progression are
+certain, when the optional guard is UNKNOWN but progression
+is certain, and conservative rejection when both guard and
+invariant are UNKNOWN. The existing
+`test_lower_excludes_unproved_branches` retains zero-horizon,
+input inclusion and invalid resume coverage, but its formerly
+incorrect expectation of failure for a provably allowed
+PERMISSIVE continuation is replaced by a positive semantic
+assertion with the expected state image. An auxiliary-bearing
+hybrid inclusion regression also checks optional guard
+`a>=0` with safe invariant `a<=3`, intact full input
+`u in [-1,1]`, no event, independent arrival input and
+state image covering [-1,3]. Its otherwise identical URGENT
+ambiguous guard still requires conservative rejection.
+All 20 public test methods remain registered without duplicate
+local `const auto` declarations.
+
+**Scope/acceptance.** No changes to the automaton model,
+numerical step image, UPPER planner, continuous hybrid
+evolver, or the canonical UPPER/LOWER semantics. This is
+a narrow supported case of LOWER hybrid transitions, not a
+new semantics nor a capability-cell promotion. Full
+Ubuntu, macOS, Windows, Coverage, Sanitizers CI must be
+green on the exact v7.20 SHA before acceptance.

@@ -82,9 +82,13 @@ class HybridDiscreteTimeEvolverConfiguration<ValidatedTag> : public Configuratio
 //! children, since its reachable subset could be lost. This follows
 //! the existing hybrid-continuous LOWER contract. The current limited
 //! planner accepts one uniformly admissible branch on the entire
-//! enclosure, without priority between events; this is a sufficient
-//! implemented condition, not the definition of LOWER. All equation
-//! and inclusion modes apply the exact same set-valued map as UPPER,
+//! enclosure, without priority between events. As in continuous hybrid
+//! LOWER, an optional PERMISSIVE jump may be ignored when progression
+//! is certain on the WHOLE source: the uninterrupted map is then a
+//! legitimate reachable subset, even if the optional jump is possible.
+//! UNKNOWN progression invariants and URGENT blockers are never ignored.
+//! These are sufficient supported conditions, not the definition of LOWER.
+//! All equation and inclusion modes apply the same set-valued map as UPPER,
 //! keeping full input boxes and auxiliary correlations. A reset may
 //! target equation or inclusion modes, with full fresh arrival inputs.
 //! Unresolved/competing branches are rejected without independent

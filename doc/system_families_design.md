@@ -2253,3 +2253,44 @@ This is a **diagnostic candidate**, not a claimed SegFault repair. Acceptance
 requires the five functional CI workflows (Ubuntu, macOS, Windows, Coverage,
 Sanitizers) green on the exact new SHA; any failure is to be diagnosed rather
 than bypassed or compensated for by removing the expectation.
+
+## v7.10 — Correct LOWER witness expectations without imposing event priority
+
+The v7.09 macOS test result is **16 passed, 1 failed**, with no
+SegFault: the case `lower_refines_undecided_urgent_guard` reports
+`lower.final().front().location() == target_mode` at line 550 as a
+failed expectation, then terminates at the new
+`recorded_events.size() == 1u` requirement. These results are
+consistent with a legal, event-free progression, rather than a corrupt
+event history. The previous SegFault arose when a failing history-size
+check did not stop the test from indexing an empty list; it was not
+proof that reset memory was damaged.
+
+For the original x[0] in [0,1] and URGENT guard x >= 1/2, both
+branches have independently certifiable strict interiors: x in [0,1/4]
+forces progression and x in [3/4,1] forces reset. The bounded breadth-
+first search splits the left child first, so the whole-source LOWER call
+may select progression. Requiring the target mode and one recorded event
+for that call was **an erroneous test expectation**; forcing a reset
+in production would introduce an illegitimate priority and contradict
+the existing existential LOWER contract.
+
+The regression now preserves the unrestricted initial source and accepts
+either certified alternative, checking that the mode and event history
+agree and that a refined parameter constraint survives. It separately
+exercises both boundary-inclusive one-sided initial sets: [1/2,1]
+requires a refined urgent reset, retaining all original checks of
+target mode, event identity, state dimension, public bounding box and
+witness x[0]=7/8 -> x[1]=31/8; [0,1/2] requires refined progression
+without an event, checking the public bounding box against
+x[0]=1/8 -> x[1]=9/8. The constrained x>=3/4 variant, its two
+preserved constraints, zero-horizon checks, immutable sources and the
+rejection of a boundary singleton remain in place.
+
+This changes **only the test and the design journal**. Production
+LOWER/UPPER algorithms, System, Integration, the C++ umbrella-only
+tutorial and all other test scenarios remain unchanged. Classification
+UNKNOWN never becomes TRUE or FALSE without a validated subbox proof.
+The v7.10 candidate is published but must pass Ubuntu, macOS, Windows,
+Coverage and Sanitizers on its **own exact SHA**, including Debug and
+the installed tutorial; no CI result is inherited from v7.09.

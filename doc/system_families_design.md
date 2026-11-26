@@ -3512,3 +3512,86 @@ workflows succeed on its exact published SHA. The capability matrix
 remains unchanged: Approximate 8 complete, UPPER 6 complete + 2 partial,
 LOWER 2 complete + 6 partial. Python tutorial parity remains deferred to
 the final phase; no work is added to the separate paving decoupling.
+
+## v7.31 — Shared initial-reset policy beside PROGRESS
+
+**Proof before implementation.** For a full original LOWER enclosure E
+carrying nonempty reached S, whole-source invariants and a FULL_SOURCE
+initial reset guard imply that the original reset r maps S to a nonempty
+reached r(S) enclosed by the validated reset of E. This argument applies
+to both policies that reset initially: URGENT and PERMISSIVE. PROGRESS
+limits continuous flow, not an instantaneous certified reset. No event
+priority, input selection or source subdivision is introduced.
+
+**Implementation.** Extract the source proof into
+`validate_lower_inclusion_initial_continuation`, keeping initial event
+processing distinct from its sufficient continuation certificate. Use
+the shared `resets_initially` transition policy instead of an ad hoc
+PERMISSIVE-only condition. An active or unknown PROGRESS predicate can
+therefore coexist with a FULL_SOURCE URGENT reset as well. Unproved
+invariants, unresolved URGENT guards and IMPACT direction obligations
+retain their existing rejection behavior. The common reset handler and
+numerical integration remain unchanged; unsafe source flow is suppressed.
+
+**Regression.** Expand the v7.30 positive regression over both initial
+reset policies, retaining both flat/tree backends, active and uncertain
+PROGRESS sources, two reset branches, complete carried input domains,
+state/time/parameter correlations, event provenance, tight numerical
+bounds and source immutability. The URGENT extension fails on v7.30 with
+the expected continuation exception. Existing negative and architectural
+tests remain registered without weakened expectations.
+
+**Acceptance.** All five functional workflows passed on v7.30 exact SHA
+`d069c087164a90cada89e648b8bab0129cb683d6`; the separate Codecov threshold
+checks failed. v7.31 is a candidate until its five workflows pass on the
+exact published SHA. The canonical contract and capability matrix remain
+unchanged. Run apply-format/check-format and the full local suite before
+publication.
+
+**Local verification:** Debug build with warnings as errors and enforced Python tests, 49/49 CTest entries, both installed tutorials, apply-format and check-format all passed.
+
+### Requested support checkpoint: native systems and public evolvers
+
+This table records the current implementation scope, preserving the
+existing conservative capability classifications. "Implemented" does not
+extend a native model to undeclared time/parameter APIs or implicit DAEs.
+"Partial" means that the stated subset works, not that the entire family
+is absent. Validated LOWER remains an OUTER enclosure of a nonempty
+reached subset under the immutable opening contract.
+
+All named template evolvers in the table have `<ValidatedTag>`.
+
+| Native family | Public validated evolver | UPPER | LOWER |
+| --- | --- | --- | --- |
+| Ordinary discrete equation | `DiscreteTimeEvolver` | Implemented | Implemented |
+| Ordinary discrete bounded-input inclusion | `DiscreteTimeInclusionEvolver` (not a template) | Implemented | Partial: whole-input map, independent input history and correlated explicit outputs; no input sampling or source splitting |
+| Ordinary continuous equation / explicit ODAE | `ContinuousTimeEvolver` | Implemented, including explicit time and fixed physical parameters | Implemented for the existing no-physical-parameter scope, including explicit time; fixed physical parameters still rejected |
+| Ordinary continuous inclusion / explicit ODAI | `ContinuousTimeEvolver` | Implemented for both configured structured and box methods | Partial: structured selected-input method, full input domains and explicit time; no box-only method or fixed physical parameters |
+| Hybrid discrete equation modes | `HybridDiscreteTimeEvolver` | Implemented | Partial: certified feasible initial source and whole-source certain progression/reset branches; aggregates certain alternatives, rejects unresolved continuations |
+| Hybrid discrete bounded-input inclusion modes | `HybridDiscreteTimeEvolver` | Partial: full input propagation, correlated auxiliary guards/resets and inclusion targets are implemented | Partial: same full-input numerical map and certain-branch policy, preserving state/input/auxiliary provenance |
+| Hybrid continuous equation modes / explicit ODAE | `HybridContinuousTimeEvolver` | Implemented, including time/parameters | Partial: time/parameters, certified immediate resets and supported certified crossings; not every geometry or competing-event case |
+| Hybrid continuous inclusion modes / explicit ODAI | `HybridContinuousTimeEvolver` | Partial: both methods, time/parameters, invariant restrictions and conservative event/contact candidates | Partial: structured method, time, whole-source/whole-tube certified invariants and inactive blockers, certain immediate URGENT/PERMISSIVE resets; fixed physical parameters and general inclusion crossings remain unsupported |
+
+**v7.31 candidate delta only:** the certain-immediate-reset case in the
+last row now admits PROGRESS active or unknown beside either URGENT or
+PERMISSIVE, according to the shared initial-reset policy. The PERMISSIVE
+case is already covered by green v7.30 CI. The URGENT extension requires
+all five new workflows on the v7.31 SHA. No whole cell is promoted.
+
+**Time and parameters.** Continuous explicit time is an external clock,
+not an extra user state with derivative one. Discrete models currently
+declare state/auxiliary assignments and, for inclusions, bounded inputs;
+they do not yet expose the continuous model's explicit clock and named
+trajectory-constant physical-parameter declarations. Integer scheduler
+indices do not imply general symbolic nonautonomous discrete dynamics.
+Unifying ordinary continuous LOWER parameter support with the existing
+hybrid equation path, then structured inclusion paths, is the next audit.
+
+**Approximate evolvers.** All eight native equation/inclusion families
+have an implemented approximate path (`DiscreteTimeEvolver`,
+`ContinuousTimeEvolver`, `HybridDiscreteTimeEvolver` and
+`HybridContinuousTimeEvolver`, each with `<ApproximateTag>`). Inclusion
+inputs follow an explicit approximation/sampling policy. UPPER/LOWER are
+validated semantics and do not apply to those trajectories. General
+implicit DAEs/DAIs and final Python tutorial/binding parity are not
+implied by this matrix. Paving decoupling stays outside this work.

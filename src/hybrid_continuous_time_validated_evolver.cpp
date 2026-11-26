@@ -193,6 +193,37 @@ bool lower_inclusion_flow_predicate_certified(
     return false;
 }
 
+// Certify the original witness-bearing source before any restriction.
+// A FULL_SOURCE URGENT or PERMISSIVE reset is independent of permission
+// to progress. IMPACT still requires direction evidence, while uncertain
+// URGENT guards and unproved invariants retain their existing obligations.
+Void validate_lower_inclusion_initial_continuation(
+    const HybridEnclosure& initial_set, const Map<DiscreteEvent, TransitionData>& transitions) {
+    bool has_full_source_initial_reset = false;
+    for (const auto& entry: transitions) {
+        const auto& transition = entry.second;
+        if (EvolutionDetail::transition_policy(transition.event_kind).resets_initially &&
+            EvolutionDetail::classify_initial_guard(initial_set, transition) ==
+                EvolutionDetail::HybridInitialGuardActivation::FULL_SOURCE) {
+            has_full_source_initial_reset = true;
+            break;
+        }
+    }
+    for (const auto& entry: transitions) {
+        const auto& predicate = entry.second;
+        if (lower_inclusion_flow_predicate_certified(initial_set, predicate))
+            continue;
+        if (predicate.event_kind == EventKind::URGENT &&
+            EvolutionDetail::classify_initial_guard(initial_set, predicate) ==
+                EvolutionDetail::HybridInitialGuardActivation::FULL_SOURCE)
+            continue;
+        if (predicate.event_kind == EventKind::PROGRESS && has_full_source_initial_reset)
+            continue;
+        throw std::invalid_argument(
+            "Hybrid inclusion LOWER initial guard does not certify a legal whole-source continuation");
+    }
+}
+
 // Extract the blocking events.
 Set<DiscreteEvent> blocking_events(const Map<DiscreteEvent, TransitionData>& transitions) {
     Set<DiscreteEvent> events;
@@ -712,41 +743,8 @@ Void HybridContinuousTimeEvolverBase<ValidatedTag>::
     LOGGING_RUN_AT(1, auto transitions = this->_extract_transitions(location));
     Set<DiscreteEvent> events = transitions.keys();
 
-    // Before ANY initial restriction, including at zero horizon,
-    // certify the entire witness-bearing source. A blocker may either
-    // be strictly inactive (proving uninterrupted flow), or an URGENT
-    // jump may be FULL_SOURCE active (proving an immediate reset).
-    // A full-source URGENT reset does NOT need the progression guard
-    // to be safe: these are distinct legal hybrid behaviors.
-    // IMPACT additionally needs direction evidence, so mere guard
-    // activation does not license it. PROGRESS may also be bypassed
-    // by a FULL_SOURCE PERMISSIVE reset: it constrains progression,
-    // not an instantaneous optional jump. Other obligations remain.
-    if (semantics == Semantics::LOWER && this->system().inclusion(location)) {
-        bool has_full_source_permissive_reset = false;
-        for (const auto& entry: transitions) {
-            const auto& transition = entry.second;
-            if (transition.event_kind == EventKind::PERMISSIVE &&
-                EvolutionDetail::classify_initial_guard(initial_set, transition) ==
-                    EvolutionDetail::HybridInitialGuardActivation::FULL_SOURCE) {
-                has_full_source_permissive_reset = true;
-                break;
-            }
-        }
-        for (const auto& entry: transitions) {
-            const auto& predicate = entry.second;
-            if (lower_inclusion_flow_predicate_certified(initial_set, predicate))
-                continue;
-            if (predicate.event_kind == EventKind::URGENT &&
-                EvolutionDetail::classify_initial_guard(initial_set, predicate) ==
-                    EvolutionDetail::HybridInitialGuardActivation::FULL_SOURCE)
-                continue;
-            if (predicate.event_kind == EventKind::PROGRESS && has_full_source_permissive_reset)
-                continue;
-            throw std::invalid_argument(
-                "Hybrid inclusion LOWER initial guard does not certify a legal whole-source continuation");
-        }
-    }
+    if (semantics == Semantics::LOWER && this->system().inclusion(location))
+        validate_lower_inclusion_initial_continuation(initial_set, transitions);
 
     LOGGING_PRINTLN_AT(1, "initial_set " << initial_set);
     LOGGING_PRINTLN_AT(2, "transitions=" << transitions);

@@ -842,7 +842,7 @@ class TestHybridInclusions : public Testing::ContextFixture {
                                                            Semantics::LOWER));
     }
 
-    Void test_lower_inclusion_permissive_reset_beside_uncertain_progress() {
+    Void test_lower_inclusion_certified_reset_beside_uncertain_progress() {
         const DiscreteLocation source(1), target(2), alternate(3);
         const RealVariable x("x"), u("u");
         const DiscreteEvent first("first"), second("second"), progress("progress");
@@ -872,84 +872,86 @@ class TestHybridInclusions : public Testing::ContextFixture {
         }
         ARIADNE_TESTING_PROVE(full_inputs >= 4u);
 
-        ContinuousTimeHybridAutomaton system;
-        system.new_mode(source, OrdinaryDifferentialAlgebraicInclusion(
-                                    {dot(x) = u}, RealVariablesBox({-1 <= u <= 1})));
-        system.new_mode(target, OrdinaryDifferentialAlgebraicEquation({dot(x) = 0}));
-        system.new_mode(alternate, OrdinaryDifferentialAlgebraicEquation({dot(x) = 0}));
-        system.new_invariant(source, x <= 2, DiscreteEvent("bound"));
-        system.new_guard(source, progress, x >= 0, EventKind::PROGRESS);
-        system.new_transition(source, first, target, {next(x) = x + 2},
-                              x + 1 >= 0, EventKind::PERMISSIVE);
-        system.new_transition(source, second, alternate, {next(x) = x + 4},
-                              x + 1 >= 0, EventKind::PERMISSIVE);
-        for (bool tree: {false, true}) {
-            HybridContinuousTimeEvolver<ValidatedTag> evolver(system);
-            evolver.set_integrator(base, ZeroApproximation(), ConstantApproximation());
-            evolver.configuration().set_enable_reconditioning(false);
-            if (tree)
-                evolver.set_evolution_backend_factory(TreeHybridEvolutionBackendFactory());
-            const auto active = evolver.enclosure(HybridExactBox(
-                source, RealSpace({
-                            x
-            }),
-                ExactBoxType({{1, 1}})));
-            // The carried enclosure contains a reached subset after full-input
-            // propagation. Its PROGRESS guard is UNKNOWN; do not select a
-            // numerical child or discard its independent input history.
-            for (bool history: {false, true}) {
-                const auto& initial = history ? carried.final()[0u] : active;
-                const auto source_box = cast_exact_box(initial.state_bounding_box());
-                const auto source_domain = initial.continuous_set().parameter_domain();
-                const auto source_kinds = initial.continuous_set().variable_kinds();
-                const auto source_constraints = initial.number_of_constraints();
-                const auto orbit = evolver.orbit(
-                    initial, HybridTime(0.25_x, 1), Semantics::LOWER);
-                ARIADNE_TESTING_REQUIRE(orbit.final().size() == 2u);
-                bool found_first = false, found_second = false;
-                for (const auto& final: orbit.final()) {
-                    ARIADNE_TESTING_REQUIRE(final.previous_events().size() == 1u);
-                    ARIADNE_TESTING_EXPECT_EQUAL(final.continuous_set().parameter_domain(), source_domain);
-                    ARIADNE_TESTING_EXPECT_EQUAL(final.continuous_set().variable_kinds(), source_kinds);
-                    ARIADNE_TESTING_PROVE(subset(cast_exact_interval(final.time_range()),
-                                                 cast_exact_interval(initial.time_range())));
-                    const auto box = cast_exact_box(final.state_bounding_box());
-                    if (final.location() == target) {
-                        found_first = true;
-                        ARIADNE_TESTING_EXPECT_EQUAL(final.previous_events()[0u], first);
-                        ARIADNE_TESTING_PROVE(subset(
-                            history ? ExactBoxType({
-                                          {1.875_x, 2.125_x}
-                        })
-                                    : ExactBoxType({{3, 3}}),
-                            box));
-                        ARIADNE_TESTING_PROVE(subset(box, history
-                                                              ? ExactBoxType({
-                                                                    {1.8740234375_x, 2.1259765625_x}
-                        })
-                                                              : ExactBoxType({{2.9990234375_x, 3.0009765625_x}})));
-                    } else if (final.location() == alternate) {
-                        found_second = true;
-                        ARIADNE_TESTING_EXPECT_EQUAL(final.previous_events()[0u], second);
-                        ARIADNE_TESTING_PROVE(subset(
-                            history ? ExactBoxType({
-                                          {3.875_x, 4.125_x}
-                        })
-                                    : ExactBoxType({{5, 5}}),
-                            box));
-                        ARIADNE_TESTING_PROVE(subset(box, history
-                                                              ? ExactBoxType({
-                                                                    {3.8740234375_x, 4.1259765625_x}
-                        })
-                                                              : ExactBoxType({{4.9990234375_x, 5.0009765625_x}})));
-                    } else {
-                        ARIADNE_TESTING_REQUIRE(false);
+        for (EventKind reset_kind: {EventKind::PERMISSIVE, EventKind::URGENT}) {
+            ContinuousTimeHybridAutomaton system;
+            system.new_mode(source, OrdinaryDifferentialAlgebraicInclusion(
+                                        {dot(x) = u}, RealVariablesBox({-1 <= u <= 1})));
+            system.new_mode(target, OrdinaryDifferentialAlgebraicEquation({dot(x) = 0}));
+            system.new_mode(alternate, OrdinaryDifferentialAlgebraicEquation({dot(x) = 0}));
+            system.new_invariant(source, x <= 2, DiscreteEvent("bound"));
+            system.new_guard(source, progress, x >= 0, EventKind::PROGRESS);
+            system.new_transition(source, first, target, {next(x) = x + 2},
+                                  x + 1 >= 0, reset_kind);
+            system.new_transition(source, second, alternate, {next(x) = x + 4},
+                                  x + 1 >= 0, reset_kind);
+            for (bool tree: {false, true}) {
+                HybridContinuousTimeEvolver<ValidatedTag> evolver(system);
+                evolver.set_integrator(base, ZeroApproximation(), ConstantApproximation());
+                evolver.configuration().set_enable_reconditioning(false);
+                if (tree)
+                    evolver.set_evolution_backend_factory(TreeHybridEvolutionBackendFactory());
+                const auto active = evolver.enclosure(HybridExactBox(
+                    source, RealSpace({
+                                x
+                }),
+                    ExactBoxType({{1, 1}})));
+                // The carried enclosure contains a reached subset after full-input
+                // propagation. Its PROGRESS guard is UNKNOWN; do not select a
+                // numerical child or discard its independent input history.
+                for (bool history: {false, true}) {
+                    const auto& initial = history ? carried.final()[0u] : active;
+                    const auto source_box = cast_exact_box(initial.state_bounding_box());
+                    const auto source_domain = initial.continuous_set().parameter_domain();
+                    const auto source_kinds = initial.continuous_set().variable_kinds();
+                    const auto source_constraints = initial.number_of_constraints();
+                    const auto orbit = evolver.orbit(
+                        initial, HybridTime(0.25_x, 1), Semantics::LOWER);
+                    ARIADNE_TESTING_REQUIRE(orbit.final().size() == 2u);
+                    bool found_first = false, found_second = false;
+                    for (const auto& final: orbit.final()) {
+                        ARIADNE_TESTING_REQUIRE(final.previous_events().size() == 1u);
+                        ARIADNE_TESTING_EXPECT_EQUAL(final.continuous_set().parameter_domain(), source_domain);
+                        ARIADNE_TESTING_EXPECT_EQUAL(final.continuous_set().variable_kinds(), source_kinds);
+                        ARIADNE_TESTING_PROVE(subset(cast_exact_interval(final.time_range()),
+                                                     cast_exact_interval(initial.time_range())));
+                        const auto box = cast_exact_box(final.state_bounding_box());
+                        if (final.location() == target) {
+                            found_first = true;
+                            ARIADNE_TESTING_EXPECT_EQUAL(final.previous_events()[0u], first);
+                            ARIADNE_TESTING_PROVE(subset(
+                                history ? ExactBoxType({
+                                              {1.875_x, 2.125_x}
+                            })
+                                        : ExactBoxType({{3, 3}}),
+                                box));
+                            ARIADNE_TESTING_PROVE(subset(box, history
+                                                                  ? ExactBoxType({
+                                                                        {1.8740234375_x, 2.1259765625_x}
+                            })
+                                                                  : ExactBoxType({{2.9990234375_x, 3.0009765625_x}})));
+                        } else if (final.location() == alternate) {
+                            found_second = true;
+                            ARIADNE_TESTING_EXPECT_EQUAL(final.previous_events()[0u], second);
+                            ARIADNE_TESTING_PROVE(subset(
+                                history ? ExactBoxType({
+                                              {3.875_x, 4.125_x}
+                            })
+                                        : ExactBoxType({{5, 5}}),
+                                box));
+                            ARIADNE_TESTING_PROVE(subset(box, history
+                                                                  ? ExactBoxType({
+                                                                        {3.8740234375_x, 4.1259765625_x}
+                            })
+                                                                  : ExactBoxType({{4.9990234375_x, 5.0009765625_x}})));
+                        } else {
+                            ARIADNE_TESTING_REQUIRE(false);
+                        }
                     }
+                    ARIADNE_TESTING_PROVE(found_first && found_second);
+                    ARIADNE_TESTING_EXPECT_EQUAL(initial.continuous_set().parameter_domain(), source_domain);
+                    ARIADNE_TESTING_EXPECT_EQUAL(cast_exact_box(initial.state_bounding_box()), source_box);
+                    ARIADNE_TESTING_EXPECT_EQUAL(initial.number_of_constraints(), source_constraints);
                 }
-                ARIADNE_TESTING_PROVE(found_first && found_second);
-                ARIADNE_TESTING_EXPECT_EQUAL(initial.continuous_set().parameter_domain(), source_domain);
-                ARIADNE_TESTING_EXPECT_EQUAL(cast_exact_box(initial.state_bounding_box()), source_box);
-                ARIADNE_TESTING_EXPECT_EQUAL(initial.number_of_constraints(), source_constraints);
             }
         }
     }
@@ -1069,7 +1071,7 @@ int main(int argc, char** argv) {
     ARIADNE_TESTING_ADD_TEST(TestHybridInclusions, test_lower_inclusion_certified_whole_tube_invariants);
     ARIADNE_TESTING_ADD_TEST(TestHybridInclusions, test_lower_inclusion_certainly_inactive_blockers);
     ARIADNE_TESTING_ADD_TEST(TestHybridInclusions, test_lower_inclusion_full_source_urgent_reset_without_flow);
-    ARIADNE_TESTING_ADD_TEST(TestHybridInclusions, test_lower_inclusion_permissive_reset_beside_uncertain_progress);
+    ARIADNE_TESTING_ADD_TEST(TestHybridInclusions, test_lower_inclusion_certified_reset_beside_uncertain_progress);
     ARIADNE_TESTING_ADD_TEST(TestHybridInclusions, test_lower_inclusion_permissive_reset_requires_whole_source_certificates);
     ARIADNE_TESTING_ADD_TEST(TestHybridInclusions, test_unsupported_capabilities_fail_explicitly);
     return Testing::run_logging_suite(ariadne_test_suite, argc, argv);

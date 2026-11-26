@@ -66,8 +66,8 @@ class TestHybridProviderIntegration : public Testing::ContextFixture {
         ARIADNE_TESTING_PROVE(other_enclosure.state_space() == ordered);
         ARIADNE_TESTING_EXPECT_EQUAL(other_enclosure.state_bounding_box().dimension(), 2u);
         const ExactBoxType expected = ordered[0] == x
-            ? ExactBoxType({{0.999_x, 1.001_x}, {1.999_x, 2.001_x}})
-            : ExactBoxType({{1.999_x, 2.001_x}, {0.999_x, 1.001_x}});
+            ? ExactBoxType({{0.9990234375_x, 1.0009765625_x}, {1.9990234375_x, 2.0009765625_x}})
+            : ExactBoxType({{1.9990234375_x, 2.0009765625_x}, {0.9990234375_x, 1.0009765625_x}});
         ARIADNE_TESTING_PROVE(definitely(other_enclosure.state_bounding_box().inside(
             expected)));
 
@@ -78,7 +78,7 @@ class TestHybridProviderIntegration : public Testing::ContextFixture {
             ARIADNE_TESTING_EXPECT_EQUAL(final_set.location(), first);
             ARIADNE_TESTING_PROVE(final_set.state_space() == RealSpace({x}));
             ARIADNE_TESTING_PROVE(definitely(final_set.state_bounding_box().inside(
-                ExactBoxType({{0.124_x, 0.126_x}}))));
+                ExactBoxType({{0.1240234375_x, 0.1259765625_x}}))));
         }
 
         const auto stopped = evolver.orbit(constrained, HybridTime(0.0_x, 1), Semantics::UPPER);

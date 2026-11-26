@@ -76,16 +76,18 @@ class HybridDiscreteTimeEvolverConfiguration<ValidatedTag> : public Configuratio
 //! boxes are attached at the current index; each progression introduces
 //! a new independent input box.
 //! LOWER is available only through orbit() for deterministic equation
-//! modes and a certified feasible initial parameter witness. Each mode
-//! may have no events or exactly one URGENT event whose guard is proved
-//! uniformly TRUE (forcing a reset) or FALSE (forcing progression).
-//! The selected reset must target another equation mode, with the same
-//! restrictions checked again at each tick. UNKNOWN guards, permissive
-//! events, multiple competing events and input-bounded inclusions remain
-//! unsupported for LOWER. The validated image propagates a witness
-//! without subdivision or sampling. orbit_with_blocked() and explore()
-//! remain UPPER-only. A blocked UPPER leaf is not an orbit.final()
-//! enclosure: retrieve it through orbit_with_blocked() or explore().
+//! modes and a certified feasible initial parameter witness. For each
+//! positive tick, the common certified planner must produce exactly one
+//! possible branch with a uniformly certified precondition. Both URGENT
+//! and PERMISSIVE events may be present, even multiple outgoing events,
+//! provided no other transition or progression remains possible.
+//! UNKNOWN/competing alternatives, input-bounded inclusions and resets
+//! into inclusion modes remain unsupported for LOWER. Zero horizon
+//! requires no event decision. The deterministic validated image
+//! preserves a witness without subdivision or sampling.
+//! orbit_with_blocked() and explore() remain UPPER-only.
+//! A blocked UPPER leaf is not an orbit.final() enclosure: retrieve it
+//! through orbit_with_blocked() or explore().
 template<>
 class HybridDiscreteTimeEvolver<ValidatedTag>
     : public EvolverInterface<ValidatedTag, DiscreteTimeHybridAutomatonInterface,

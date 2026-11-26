@@ -545,6 +545,105 @@ class TestHybridDiscreteTimeEvolver : public Ariadne::Testing::ContextFixture {
             evolver.orbit(source, Termination(Integer(0), Integer(1)),
                           Semantics::LOWER));
         ARIADNE_TESTING_EXPECT_EQUAL(source.previous_events().size(), 0u);
+        ARIADNE_TESTING_EXPECT_EQUAL(
+            evolver.orbit(source, Termination(Integer(0), Integer(0)),
+                          Semantics::LOWER).final().size(), 1u);
+    }
+
+    Void test_lower_unique_permissive_branch() {
+        const RealVariable x("x");
+        const DiscreteLocation source_mode(1), target_mode(2);
+        const DiscreteEvent event("permissive_choice");
+        DiscreteTimeHybridAutomaton system;
+        system.new_mode(source_mode, DifferenceAlgebraicEquation(
+            List<PrimedRealAssignment>{next(x) = x + 1}));
+        system.new_mode(target_mode, DifferenceAlgebraicEquation(
+            List<PrimedRealAssignment>{next(x) = x + 1}));
+
+        // Explicit invariant FALSE means progression is prohibited,
+        // while guard TRUE forces the reset despite PERMISSIVE kind.
+        system.new_permissive_transition(source_mode, event, target_mode,
+            {next(x) = x + 3}, x >= -1, x <= -1);
+        Evolver jump(system);
+        const auto reset = jump.orbit(initial(source_mode),
+            Termination(Integer(0), Integer(2)), Semantics::LOWER);
+        ARIADNE_TESTING_EXPECT_EQUAL(reset.final().size(), 1u);
+        ARIADNE_TESTING_EXPECT_EQUAL(reset.reach().size(), 2u);
+        const auto& image = reset.reach().front();
+        ARIADNE_TESTING_PROVE(image.location() == target_mode);
+        ARIADNE_TESTING_EXPECT_EQUAL(image.previous_events().size(), 1u);
+        ARIADNE_TESTING_PROVE(image.previous_events()[0u] == event);
+        const auto bounds = reset.final().front().state_bounding_box()[0u];
+        ARIADNE_TESTING_PROVE(bounds.lower_bound().raw().get_d() <= 4.5);
+        ARIADNE_TESTING_PROVE(bounds.upper_bound().raw().get_d() >= 4.5);
+
+        // Guard FALSE with progression invariant TRUE yields only
+        // the deterministic state update, with no false event.
+        DiscreteTimeHybridAutomaton progress;
+        progress.new_mode(source_mode, DifferenceAlgebraicEquation(
+            List<PrimedRealAssignment>{next(x) = x + 1}));
+        progress.new_mode(target_mode, DifferenceAlgebraicEquation(
+            List<PrimedRealAssignment>{next(x) = x}));
+        progress.new_permissive_transition(source_mode, event, target_mode,
+            {next(x) = x + 3}, x >= 2, x <= 2);
+        Evolver no_jump(progress);
+        const auto progressed = no_jump.orbit(initial(source_mode),
+            Termination(Integer(0), Integer(1)), Semantics::LOWER);
+        ARIADNE_TESTING_EXPECT_EQUAL(progressed.final().size(), 1u);
+        ARIADNE_TESTING_PROVE(progressed.final().front().location() == source_mode);
+        ARIADNE_TESTING_EXPECT_EQUAL(progressed.final().front().previous_events().size(), 0u);
+
+        // Neither a certain guard nor a certain invariant can justify
+        // arbitrarily choosing between two possible alternatives.
+        DiscreteTimeHybridAutomaton ambiguous;
+        ambiguous.new_mode(source_mode, DifferenceAlgebraicEquation(
+            List<PrimedRealAssignment>{next(x) = x + 1}));
+        ambiguous.new_mode(target_mode, DifferenceAlgebraicEquation(
+            List<PrimedRealAssignment>{next(x) = x}));
+        ambiguous.new_permissive_transition(source_mode, event, target_mode,
+            {next(x) = x + 3}, x >= -1, x <= 2);
+        Evolver undecided(ambiguous);
+        ARIADNE_TESTING_EXPECT_THROWS(std::invalid_argument,
+            undecided.orbit(initial(source_mode),
+                Termination(Integer(0), Integer(1)), Semantics::LOWER));
+    }
+
+    Void test_lower_unique_branch_across_competing_events() {
+        const RealVariable x("x");
+        const DiscreteLocation source_mode(1), target_mode(2);
+        const DiscreteEvent disabled("disabled"), forced("forced");
+        DiscreteTimeHybridAutomaton system;
+        system.new_mode(source_mode, DifferenceAlgebraicEquation(
+            List<PrimedRealAssignment>{next(x) = x + 1}));
+        system.new_mode(target_mode, DifferenceAlgebraicEquation(
+            List<PrimedRealAssignment>{next(x) = x}));
+        system.new_urgent_transition(source_mode, disabled, target_mode,
+            {next(x) = x + 100}, x >= 2);
+        system.new_urgent_transition(source_mode, forced, target_mode,
+            {next(x) = x + 3}, x >= -1);
+        Evolver evolver(system);
+        const auto lower = evolver.orbit(initial(source_mode),
+            Termination(Integer(0), Integer(1)), Semantics::LOWER);
+        ARIADNE_TESTING_EXPECT_EQUAL(lower.final().size(), 1u);
+        ARIADNE_TESTING_PROVE(lower.final().front().location() == target_mode);
+        ARIADNE_TESTING_EXPECT_EQUAL(lower.final().front().previous_events().size(), 1u);
+        ARIADNE_TESTING_PROVE(lower.final().front().previous_events()[0u] == forced);
+
+        // Two uniformly true urgent guards create two alternatives.
+        // LOWER must not use event enumeration order as priority.
+        DiscreteTimeHybridAutomaton competing;
+        competing.new_mode(source_mode, DifferenceAlgebraicEquation(
+            List<PrimedRealAssignment>{next(x) = x + 1}));
+        competing.new_mode(target_mode, DifferenceAlgebraicEquation(
+            List<PrimedRealAssignment>{next(x) = x}));
+        competing.new_urgent_transition(source_mode, disabled, target_mode,
+            {next(x) = x + 100}, x >= -1);
+        competing.new_urgent_transition(source_mode, forced, target_mode,
+            {next(x) = x + 3}, x >= -1);
+        Evolver not_unique(competing);
+        ARIADNE_TESTING_EXPECT_THROWS(std::invalid_argument,
+            not_unique.orbit(initial(source_mode),
+                Termination(Integer(0), Integer(1)), Semantics::LOWER));
     }
 
     Void test_lower_excludes_unproved_branches() {
@@ -559,9 +658,10 @@ class TestHybridDiscreteTimeEvolver : public Ariadne::Testing::ContextFixture {
         with_event.new_permissive_transition(mode, event, target,
             {next(x) = x + 1}, x >= 0, x <= 2);
         Evolver guarded(with_event);
-        ARIADNE_TESTING_EXPECT_THROWS(std::invalid_argument,
+        // Zero horizon requires an initial witness but no event decision.
+        ARIADNE_TESTING_EXPECT_EQUAL(
             guarded.orbit(initial(mode), Termination(Integer(0), Integer(0)),
-                          Semantics::LOWER));
+                          Semantics::LOWER).final().size(), 1u);
         ARIADNE_TESTING_EXPECT_THROWS(std::invalid_argument,
             guarded.orbit(initial(mode), Termination(Integer(0), Integer(1)),
                           Semantics::LOWER));
@@ -650,6 +750,8 @@ int main(int argc, char** argv) {
     ARIADNE_TESTING_ADD_TEST(TestHybridDiscreteTimeEvolver, test_lower_constrained_point_witness);
     ARIADNE_TESTING_ADD_TEST(TestHybridDiscreteTimeEvolver, test_lower_forced_urgent_jump_and_disabled_progression);
     ARIADNE_TESTING_ADD_TEST(TestHybridDiscreteTimeEvolver, test_lower_rejects_undecided_urgent_guard);
+    ARIADNE_TESTING_ADD_TEST(TestHybridDiscreteTimeEvolver, test_lower_unique_permissive_branch);
+    ARIADNE_TESTING_ADD_TEST(TestHybridDiscreteTimeEvolver, test_lower_unique_branch_across_competing_events);
     ARIADNE_TESTING_ADD_TEST(TestHybridDiscreteTimeEvolver, test_lower_excludes_unproved_branches);
     ARIADNE_TESTING_ADD_TEST(TestHybridDiscreteTimeEvolver, test_rejections);
     return Ariadne::Testing::run_logging_suite(ariadne_test_suite, argc, argv);

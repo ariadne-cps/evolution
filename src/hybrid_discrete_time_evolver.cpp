@@ -29,6 +29,7 @@
 #include "evolution/hybrid_discrete_time_evolver.hpp"
 #include "evolution/hybrid_discrete_time_step_image.hpp"
 #include "evolution/hybrid_discrete_time_predicate_evaluator.hpp"
+#include "evolution/hybrid_discrete_time_step_planner.hpp"
 
 #include <stdexcept>
 #include <utility>
@@ -71,6 +72,36 @@ Bool has_certified_lower_source(const Enclosure& source) {
     });
     const auto point_values = Ariadne::apply(constraint_function, point);
     return definitely(Ariadne::subset(point_values, constraints));
+}
+
+// Reuse the same complete branch planner as validated UPPER, but require a
+// single branch whose precondition is certified for the entire source.
+// Unlike UPPER, UNKNOWN evidence never yields a LOWER witness. In particular
+// we do not impose an arbitrary priority on competing transitions.
+HybridDiscreteTimePlannedBranch unique_certified_lower_branch(
+    const DiscreteTimeHybridAutomatonInterface& automaton,
+    const HybridEnclosure& source, const Integer& index) {
+    if (!automaton.has_mode(source.location()) ||
+        !automaton.has_equation(source.location()))
+        throw std::invalid_argument(
+            "Discrete hybrid LOWER requires a difference equation at each mode");
+    const auto evaluate = [&](DiscreteLocation, DiscreteEvent,
+                              DiscreteTimePredicateRole,
+                              const ContinuousPredicate& predicate) {
+        return HybridDiscreteTimePredicateEvaluator::classify(
+            automaton, source, predicate);
+    };
+    const auto plan = HybridDiscreteTimeStepPlanner::plan(
+        automaton, source.location(), index, evaluate);
+    if (plan.branches.size() != 1u || !plan.branches.front().certain)
+        throw std::invalid_argument(
+            "Discrete hybrid LOWER requires exactly one uniformly certified branch");
+    const auto branch = plan.branches.front();
+    if (branch.kind == HybridDiscreteTimeBranchKind::TRANSITION &&
+        !automaton.has_equation(branch.target))
+        throw std::invalid_argument(
+            "Discrete hybrid LOWER reset must target an equation mode");
+    return branch;
 }
 
 } // namespace
@@ -133,21 +164,14 @@ Orbit<HybridEnclosure> HybridDiscreteTimeEvolver<ValidatedTag>::orbit(
     if (semantics != Semantics::LOWER)
         throw std::invalid_argument("Unknown discrete hybrid evolution semantics");
 
-    // A deterministic equation remains witness-preserving under a
-    // proven forced urgent event. Unlike UPPER, LOWER cannot choose an
-    // UNKNOWN guard or infer existence from a possible branch.
+    // Each actual tick must have exactly one certified admissible branch.
+    // The zero-horizon orbit needs no event decision at all: its already
+    // feasible initial set is itself a valid LOWER witness.
     const DiscreteLocation location = initial.location();
     if (!this->system().has_mode(location) ||
         !this->system().has_equation(location))
         throw std::invalid_argument(
             "Discrete hybrid LOWER requires a difference equation source mode");
-    const auto initial_events = this->system().events(location);
-    if (initial_events.size() > 1u ||
-        (!initial_events.empty() &&
-         this->system().transition_kind(location, *initial_events.begin()) !=
-             DiscreteTimeTransitionKind::URGENT))
-        throw std::invalid_argument(
-            "Discrete hybrid LOWER supports at most one urgent event per mode");
     if (initial.state_space() != this->system().state_space(location))
         throw std::invalid_argument("Discrete hybrid LOWER initial state space mismatch");
     const auto& equation = this->system().equation(location);
@@ -185,44 +209,11 @@ Orbit<HybridEnclosure> HybridDiscreteTimeEvolver<ValidatedTag>::orbit(
     while (index < termination.termination_index()) {
         if (nodes >= this->configuration().maximum_nodes())
             throw std::length_error("Discrete hybrid LOWER evolution exceeds node budget");
-        const DiscreteLocation current_location = current.location();
-        if (!this->system().has_mode(current_location) ||
-            !this->system().has_equation(current_location))
-            throw std::invalid_argument(
-                "Discrete hybrid LOWER cannot enter a non-equation mode");
-        const auto events = this->system().events(current_location);
-        if (events.size() > 1u)
-            throw std::invalid_argument(
-                "Discrete hybrid LOWER does not certify competing events");
-
-        HybridDiscreteTimePlannedBranch step{
-            HybridDiscreteTimeBranchKind::PROGRESSION, current_location,
-            std::nullopt, true};
-        if (!events.empty()) {
-            const DiscreteEvent event = *events.begin();
-            if (this->system().transition_kind(current_location, event) !=
-                DiscreteTimeTransitionKind::URGENT)
-                throw std::invalid_argument(
-                    "Discrete hybrid LOWER does not certify permissive events");
-            const auto evidence = HybridDiscreteTimePredicateEvaluator::classify(
-                this->system(), current,
-                this->system().guard_predicate(current_location, event));
-            if (evidence == DiscreteTimePredicateEvidence::UNKNOWN)
-                throw std::invalid_argument(
-                    "Discrete hybrid LOWER requires a uniformly decided urgent guard");
-            if (evidence == DiscreteTimePredicateEvidence::TRUE) {
-                const DiscreteLocation target = this->system().target(current_location, event);
-                if (!this->system().has_equation(target))
-                    throw std::invalid_argument(
-                        "Discrete hybrid LOWER reset must target an equation mode");
-                step = {HybridDiscreteTimeBranchKind::TRANSITION, target, event, true};
-            } else if (evidence != DiscreteTimePredicateEvidence::FALSE) {
-                throw std::invalid_argument("Invalid discrete hybrid guard evidence");
-            }
-        }
-        // Every selected branch is forced by certified pre-state evidence.
-        // The validated image reuses exactly the same deterministic map
-        // or reset as UPPER, but no unresolved branch is promoted to LOWER.
+        const auto step = unique_certified_lower_branch(
+            this->system(), current, index);
+        // The planner proves this is the only admissible branch and that
+        // its predicate preconditions hold on the whole current enclosure.
+        // A validated deterministic map or reset preserves the witness.
         current = HybridDiscreteTimeStepImage::apply(this->system(), current, step);
         index = index + Integer(1);
         ++nodes;

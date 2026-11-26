@@ -1941,3 +1941,76 @@ The tutorial still contains only
 `#include "ariadne-evolution.hpp"`, with no unsupported
 examples added. v7.03 is accepted only after full CI on the
 exact SHA, not based on prior builds.
+
+## v7.04 — Share certified branch planning between UPPER and LOWER
+
+The v7.03 SHA `9b7ccd2a962ec165c83a70de42b271f335cf9cbf`
+passed all five CI workflows (Ubuntu, macOS, Windows,
+Coverage and Sanitizers). Thus the earlier restricted
+single-URGENT-event LOWER evolution is fully verified.
+
+The previous LOWER path duplicated the UPPER planner's
+branch decisions by handling just one URGENT event manually.
+This created an artificial exclusion for possible models with
+several events or PERMISSIVE events whose alternatives can still
+be proved unambiguously from the complete source enclosure.
+
+The new helper `unique_certified_lower_branch`, in an
+anonymous namespace local to the discrete hybrid evolver,
+delegates all event predicate evidence to the existing
+`HybridDiscreteTimeStepPlanner::plan`, using the existing
+validated `HybridDiscreteTimePredicateEvaluator::classify`.
+At each positive-index tick, LOWER requires:
+- a deterministic difference equation in the current mode;
+- exactly one branch in the complete three-valued planner
+  result, with `branch.certain == true`;
+- a reset target with equation dynamics if that unique branch
+  is a transition.
+
+All of these are sufficient LOWER conditions: a valid
+feasible source witness, proven uniform preconditions, and a
+deterministic map or reset preserve at least one concrete
+trajectory. No priority is introduced, and a branch with merely
+possible/UNKNOWN evidence cannot become a LOWER witness.
+
+The planner already implements all event kinds and combinations:
+- URGENT progression uses the logical complement of its guard.
+- PERMISSIVE progression uses its explicitly declared invariant.
+- Multiple events may coexist when all but one transition are
+  ruled out, and there is no simultaneously possible progression.
+- Competing guards, a simultaneous permissible progression,
+  or an undecided single branch return zero or multiple
+  admissible/certain options and are rejected, never selected
+  according to enumeration order.
+- At zero horizon no event is executed, so only the initial
+  certified feasible set is required; a mode's future
+  undecided guard does not invalidate this zero-tick witness.
+
+New public LOWER tests verify:
+(1) a PERMISSIVE transition with guard TRUE and progression
+invariant FALSE forces a reset, preserving the historical
+event and a two-tick witness `x[2]=4.5`;
+(2) a PERMISSIVE guard FALSE with invariant TRUE forces the
+ordinary progression without recording an event;
+(3) a PERMISSIVE guard and invariant both TRUE leave two
+alternatives, causing conservative rejection;
+(4) two URGENT outgoing events with exactly one TRUE guard
+admit that uniquely forced event and record its provenance;
+(5) two TRUE urgent guards must be rejected as competing
+alternatives; and
+(6) an undecided urgent guard is rejected for a positive
+horizon but admitted for a zero horizon.
+
+The existing constrained-domain witness admission from
+v7.02, hard node budget, equation-only reset targets,
+and source immutability are unchanged. Bounded-input
+inclusions remain excluded from LOWER. `explore` and
+`orbit_with_blocked` remain UPPER-only. The tutorial C++
+is unchanged and continues to include only
+`#include "ariadne-evolution.hpp"`.
+
+The public capability matrix stays **partial** for validated
+hybrid discrete LOWER, now described as `deterministic
+equation modes with a uniquely certified planner branch at
+each tick`. Full v7.04 validation requires the five
+workflow results on the exact new commit, not the v7.03 ones.

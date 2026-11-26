@@ -84,13 +84,16 @@ struct ParameterBoxSearch {
 };
 
 Void enqueue_parameter_halves(
-    const ExactBoxType& box, SizeType depth, std::deque<ParameterBoxSearch>& pending) {
-    // Rotate the starting axis with depth: always splitting the first
-    // nondegenerate parameter can miss a decidable guard on later axes.
-    // This changes only search completeness, not branch certification.
+    const ExactBoxType& box, SizeType depth, std::deque<ParameterBoxSearch>& pending,
+    const List<EnclosureVariableKind>* kinds = nullptr) {
+    // Rotate the starting axis with depth. For an inclusion source,
+    // refine only INITIAL coordinates: every INPUT coordinate, including
+    // its history, retains the complete original input domain.
     const SizeType dimension = box.dimension();
     for (SizeType offset = 0u; offset < dimension; ++offset) {
         const SizeType axis = (depth + offset) % dimension;
+        if (kinds != nullptr && (*kinds)[axis] != EnclosureVariableKind::INITIAL)
+            continue;
         if (!(box[axis].lower_bound().raw() < box[axis].upper_bound().raw()))
             continue;
         const auto children = box.split(axis);
@@ -231,12 +234,12 @@ CertifiedLowerStep certified_lower_step(
             return {source, *branch};
     }
 
-    // Inclusion LOWER must preserve ALL current inputs, not select a
-    // favourable input subbox to resolve an uncertain event.
-    if (inclusion)
-        throw std::invalid_argument(
-            "Discrete hybrid inclusion LOWER cannot certify a unique branch over the full input box");
-
+    // A guard can depend on the initial state while being uniform over
+    // all current and historical inputs. Refine those INITIAL coordinates
+    // if necessary, but never split or constrain an INPUT parameter.
+    // Thus the numerical map still receives the entire input box.
+    const auto* allowable_kinds = inclusion
+        ? &source.continuous_set().variable_kinds() : nullptr;
     std::deque<ParameterBoxSearch> pending{{source.continuous_set().reduced_domain(), 0u}};
     while (!pending.empty()) {
         const ParameterBoxSearch candidate = pending.front();
@@ -248,7 +251,8 @@ CertifiedLowerStep certified_lower_step(
                 return {constrain_lower_source(source, candidate.box), *branch};
         }
         if (candidate.depth < lower_refinement_depth)
-            enqueue_parameter_halves(candidate.box, candidate.depth, pending);
+            enqueue_parameter_halves(candidate.box, candidate.depth, pending,
+                                     allowable_kinds);
     }
     throw std::invalid_argument(
         "Discrete hybrid LOWER could not certify a feasible subbox with one branch");

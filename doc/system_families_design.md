@@ -2581,3 +2581,57 @@ Windows, Coverage, and Sanitizers must all pass on the **exact v7.16
 commit SHA**, including tests and installed tutorial, before acceptance.
 Do not attribute the v7.15 failures solely to this issue until the
 v7.16 test suite has run. Matrix entries are unchanged.
+
+## v7.17 — Hybrid inclusion LOWER state-only guard refinement
+
+**Precondition and unchanged contract.** Both validated UPPER and LOWER
+advance discrete inclusions with the same map over the *whole* input
+box at each integer tick. Independent current and historical INPUT
+parameters and their ranges are retained, along with the input-
+dependent auxiliary functions. Input sampling, midpoint selection,
+equality constraints on inputs and any new numerical map are forbidden.
+
+**Addressed incompleteness.** The v7.15/v7.16 hybrid inclusion LOWER
+path admitted only a single uniformly certain branch on the entire
+source. This rejected state-boundary guard cases that can be certified
+on a strict subbox of the initial state *without narrowing any input*.
+In `enqueue_parameter_halves()` a new optional variable-kind filter
+allows `certified_lower_step()` to subdivide only coordinates tagged
+`EnclosureVariableKind::INITIAL` when the source mode is an inclusion.
+Every `INPUT` coordinate (current or historical), `PARAMETER` and
+other protected kinds are excluded from this refinement. Equation
+sources retain the exact previous axis-rotation behavior with no kind
+filter. Candidate boxes preserve the complete input ranges, and the
+same proof tests as before establish feasible source constraints and
+exactly one certain branch over the *entire* candidate input domain.
+The existing `constrain_lower_source()` only adds constraints on the
+narrowed INITIAL state parameters; no input constraints are added.
+The numerical `HybridDiscreteTimeStepImage::apply` remains unchanged
+and is shared by UPPER and LOWER. This is a bounded sufficient search,
+not a general decision procedure.
+
+**Regression.** Added and registered
+`test_lower_inclusion_refines_state_without_restricting_inputs`:
+an auxiliary-bearing inclusion `a=x+u`, `x'=x+a`, with
+`u in [-1,1]` and an urgent guard `x>=1/2` is initially
+undecidable at its boundary. From initial state x in [1/2,1],
+state-only refinement certifies the reset `x'=x+a+3`, preserves the
+full input domain and contains both witnesses 3.75 and 5.75 for
+x=7/8 and u=-1/+1; event history and source immutability are checked.
+From x in [0,1/2], state-only refinement certifies event-free
+progression, preserves both extreme input choices and contains -0.75
+and 1.25 for x=1/8. Original full-input uncertain auxiliary guard
+rejection, the already registered v7.15 cases, and UPPER tests remain.
+All newly added test-local `const auto` names were checked for
+duplicates across the 20 test methods before publication.
+
+**Scope and acceptance.** Production change only in the hybrid LOWER
+axis-selection helper and call site; one public C++ test method and
+registration, plus this journal. No System, Integration, tutorial,
+UPPER map, scheduling, input policy or mathematical semantics changes.
+The v7.16 result is separately tracked and not inherited by this
+commit. All five workflows (Ubuntu, macOS, Windows, Coverage and
+Sanitizers) must pass on this v7.17 SHA before the new refinement is
+validated. Matrix remains 8/8 approximate, UPPER 6+2 partial,
+LOWER 2+4 partial+2 absent candidates; no cell is upgraded merely
+because bounded refinement works.

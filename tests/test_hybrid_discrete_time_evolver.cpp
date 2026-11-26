@@ -437,6 +437,76 @@ class TestHybridDiscreteTimeEvolver : public Ariadne::Testing::ContextFixture {
         ARIADNE_TESTING_PROVE(lower_bounds.upper_bound().raw().get_d() >= 9.0);
     }
 
+    Void test_lower_inclusion_refines_state_without_restricting_inputs() {
+        const RealVariable x("x"), u("u"), a("a");
+        const DiscreteLocation source_mode(1), target_mode(2);
+        const DiscreteEvent event("state_only_guard");
+        DiscreteTimeHybridAutomaton system;
+        system.new_mode(source_mode, DifferenceAlgebraicInclusion(
+            List<PrimedRealAssignment>{next(x) = x + a},
+            List<RealAssignment>{let(a) = x + u},
+            RealVariablesBox({-1 <= u <= 1})));
+        system.new_mode(target_mode, DifferenceAlgebraicEquation(
+            List<PrimedRealAssignment>{next(x) = x}));
+        system.new_urgent_transition(source_mode, event, target_mode,
+            {next(x) = x + a + 3}, x >= 1 / 2_q);
+        Evolver evolver(system);
+
+        // The guard is undecided only at the state boundary x=1/2.
+        // Refine the INITIAL x-axis, never the independent INPUT u-axis.
+        const HybridEnclosure reset_source(HybridExactBox(
+            source_mode, RealSpace({x}), ExactBoxType({{0.5_x, 1.0_x}})),
+            configuration());
+        const auto reset_orbit = evolver.orbit(
+            reset_source, Termination(Integer(0), Integer(1)), Semantics::LOWER);
+        ARIADNE_TESTING_REQUIRE(reset_orbit.final().size() == 1u);
+        const auto& reset_final = reset_orbit.final().front();
+        ARIADNE_TESTING_PROVE(reset_final.location() == target_mode);
+        ARIADNE_TESTING_REQUIRE(reset_final.previous_events().size() == 1u);
+        ARIADNE_TESTING_PROVE(reset_final.previous_events()[0u] == event);
+        ARIADNE_TESTING_EXPECT_EQUAL(reset_final.continuous_set().number_of_parameters(), 2u);
+        ARIADNE_TESTING_EXPECT_EQUAL(
+            reset_final.continuous_set().variable_kinds()[1u], EnclosureVariableKind::INPUT);
+        ARIADNE_TESTING_REQUIRE(reset_final.number_of_constraints() >= 1u);
+        const auto reset_input = reset_final.continuous_set().parameter_domain()[1u];
+        ARIADNE_TESTING_PROVE(reset_input.lower_bound().raw().get_d() <= -1.0);
+        ARIADNE_TESTING_PROVE(reset_input.upper_bound().raw().get_d() >= 1.0);
+        // With x=7/8 and u=-1 or +1, the same refined reset contains
+        // both 3.75 and 5.75; no input value was selected.
+        const auto reset_bounds = reset_final.state_bounding_box()[0u];
+        ARIADNE_TESTING_PROVE(reset_bounds.lower_bound().raw().get_d() <= 3.75);
+        ARIADNE_TESTING_PROVE(reset_bounds.upper_bound().raw().get_d() >= 5.75);
+        ARIADNE_TESTING_EXPECT_EQUAL(reset_source.number_of_constraints(), 0u);
+        ARIADNE_TESTING_EXPECT_EQUAL(
+            reset_source.continuous_set().number_of_parameters(), 1u);
+
+        // On the other state side, a strictly negative guard certifies
+        // progression for the SAME entire input box at the next tick.
+        const HybridEnclosure progression_source(HybridExactBox(
+            source_mode, RealSpace({x}), ExactBoxType({{0.0_x, 0.5_x}})),
+            configuration());
+        const auto progression_orbit = evolver.orbit(
+            progression_source, Termination(Integer(0), Integer(1)), Semantics::LOWER);
+        ARIADNE_TESTING_REQUIRE(progression_orbit.final().size() == 1u);
+        const auto& progression_final = progression_orbit.final().front();
+        ARIADNE_TESTING_PROVE(progression_final.location() == source_mode);
+        ARIADNE_TESTING_EXPECT_EQUAL(progression_final.previous_events().size(), 0u);
+        ARIADNE_TESTING_EXPECT_EQUAL(
+            progression_final.continuous_set().number_of_parameters(), 3u);
+        ARIADNE_TESTING_REQUIRE(progression_final.number_of_constraints() >= 1u);
+        const auto progression_input =
+            progression_final.continuous_set().parameter_domain()[1u];
+        ARIADNE_TESTING_PROVE(progression_input.lower_bound().raw().get_d() <= -1.0);
+        ARIADNE_TESTING_PROVE(progression_input.upper_bound().raw().get_d() >= 1.0);
+        const auto progression_bounds = progression_final.state_bounding_box()[0u];
+        // At x=1/8 and both extreme inputs, 2*x+u is -3/4 or 5/4.
+        ARIADNE_TESTING_PROVE(progression_bounds.lower_bound().raw().get_d() <= -0.75);
+        ARIADNE_TESTING_PROVE(progression_bounds.upper_bound().raw().get_d() >= 1.25);
+        ARIADNE_TESTING_EXPECT_EQUAL(progression_source.number_of_constraints(), 0u);
+        ARIADNE_TESTING_EXPECT_EQUAL(
+            progression_source.continuous_set().number_of_parameters(), 1u);
+    }
+
     Void test_lower_uniform_auxiliary_guard_over_full_input_box() {
         const RealVariable x("x"), u("u"), a("a");
         const DiscreteLocation source_mode(1), target_mode(2);
@@ -1043,6 +1113,7 @@ int main(int argc, char** argv) {
     ARIADNE_TESTING_ADD_TEST(TestHybridDiscreteTimeEvolver, test_event_free_input_auxiliary_upper_orbit);
     ARIADNE_TESTING_ADD_TEST(TestHybridDiscreteTimeEvolver, test_state_only_event_from_auxiliary_inclusion_upper);
     ARIADNE_TESTING_ADD_TEST(TestHybridDiscreteTimeEvolver, test_public_reset_into_inclusion_with_auxiliary_and_continue);
+    ARIADNE_TESTING_ADD_TEST(TestHybridDiscreteTimeEvolver, test_lower_inclusion_refines_state_without_restricting_inputs);
     ARIADNE_TESTING_ADD_TEST(TestHybridDiscreteTimeEvolver, test_lower_uniform_auxiliary_guard_over_full_input_box);
     ARIADNE_TESTING_ADD_TEST(TestHybridDiscreteTimeEvolver, test_lower_event_free_equation_witness);
     ARIADNE_TESTING_ADD_TEST(TestHybridDiscreteTimeEvolver, test_lower_constrained_point_witness);

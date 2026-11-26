@@ -374,6 +374,11 @@ class TestHybridDiscreteTimeEvolver : public Ariadne::Testing::ContextFixture {
             List<RealAssignment>{let(a) = 2 * x}));
         Evolver evolver(system);
         const auto source = initial(mode);
+        // A nonempty unconstrained ExactBox is a constructive existential
+        // certificate, even though Enclosure::is_empty() may be UNKNOWN.
+        ARIADNE_TESTING_EXPECT_EQUAL(source.continuous_set().number_of_constraints(), 0u);
+        ARIADNE_TESTING_PROVE(
+            definitely(!source.continuous_set().parameter_domain().is_empty()));
 
         // LOWER preserves a feasible initial witness; it is not an
         // INNER inclusion of all states and must never subdivide.

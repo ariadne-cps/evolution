@@ -1782,3 +1782,43 @@ future capabilities are recorded here, never in the tutorial.
 The v7.00 feature is published as an initial implementation, not
 accepted until five functional workflows pass on its exact commit,
 including Debug test runs and the installed Release tutorial.
+
+## v7.01 — Repair validated LOWER initial witness admission
+
+The v7.00 public hybrid discrete LOWER regression failed twice:
+both lower_event_free_equation_witness and rejections raised the
+"requires a provably nonempty initial enclosure" exception
+for a plain unconstrained HybridExactBox with x in [0,1].
+
+Root cause: negating Enclosure::is_empty() is not a valid positive
+existential certificate. The existing emptiness semi-decision may
+return INDETERMINATE even for a nonempty unconstrained exact box.
+An UNKNOWN result is not evidence that a witness is unavailable.
+
+The repaired LOWER gate uses an explicit constructive sufficient
+condition on the reduced exact parameter domain:
+- it must be provably nonempty;
+- with no constraints, any parameter point is an initial witness;
+- with constraints, the validated image of every parameter
+  constraint over the *whole* reduced domain must be provably
+  contained in its declared bound interval.
+
+This rule also accepts some constrained sources when all their
+constraints can be certified throughout a nonempty domain,
+but it does not pretend to be a complete existential feasibility
+solver. Other constrained sources are rejected conservatively
+rather than silently admitted. It preserves the LOWER contract:
+at least one genuine trajectory from the initial source exists.
+
+The has_certified_lower_source helper resides in an anonymous
+namespace in the discrete hybrid evolver implementation.
+The deterministic progression, absolute clock, auxiliary mapping,
+node budget, existing negative tests for event branches and
+inclusions, and installed umbrella-only C++ tutorial remain intact.
+The regression now explicitly checks the original exact-box
+parameter domain and its zero-constraint status.
+
+The v7.00 tests were red on the reported LOWER cases, so the
+fix must be accepted only if all five v7.01 workflows pass
+on its exact commit. The installed tutorial continues to include
+only ariadne-evolution.hpp and has no unsupported examples.

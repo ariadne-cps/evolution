@@ -33,6 +33,29 @@
 #include <utility>
 
 namespace Ariadne {
+namespace {
+
+// This is an existential admission certificate, not the negation of
+// Enclosure::is_empty(): that one-sided predicate can prove emptiness
+// but its indeterminate result cannot establish a LOWER witness.
+//
+// Any nonempty exact parameter domain defines a feasible point when
+// the enclosure has no constraints. With constraints, additionally
+// require a validated proof that every point of the (nonempty)
+// reduced parameter domain satisfies all constraints. This is a
+// conservative sufficient condition, not a complete feasibility solver.
+Bool has_certified_lower_source(const Enclosure& source) {
+    const ExactBoxType domain = source.reduced_domain();
+    if (!definitely(!domain.is_empty()))
+        return false;
+    if (source.number_of_constraints() == 0u)
+        return true;
+
+    const auto values = Ariadne::apply(source.constraint_function(), domain);
+    return definitely(Ariadne::subset(values, source.constraint_bounds()));
+}
+
+} // namespace
 
 HybridDiscreteTimeTerminationCriterion::HybridDiscreteTimeTerminationCriterion(
     Integer initial_index, Integer termination_index)
@@ -110,11 +133,13 @@ Orbit<HybridEnclosure> HybridDiscreteTimeEvolver<ValidatedTag>::orbit(
         initial.auxiliary_space() != equation.auxiliary_space())
         throw std::invalid_argument("Discrete hybrid LOWER initial auxiliary space mismatch");
 
-    // LOWER requires at least one actual initial witness. A source whose
-    // nonemptiness cannot be certified is not silently promoted to LOWER.
-    if (!definitely(!initial.continuous_set().is_empty()))
+    // Enclosure::is_empty() is an emptiness semi-decision and cannot
+    // certify a nonempty source by negation. Admit only a validated
+    // existential witness: a nonempty exact parameter domain, with
+    // all declared constraints provably satisfied on it when present.
+    if (!has_certified_lower_source(initial.continuous_set()))
         throw std::invalid_argument(
-            "Discrete hybrid LOWER requires a provably nonempty initial enclosure");
+            "Discrete hybrid LOWER requires a certified feasible initial parameter domain");
 
     const auto check_index = [](const HybridEnclosure& set, const Integer& index) {
         const Real expected_time(index);

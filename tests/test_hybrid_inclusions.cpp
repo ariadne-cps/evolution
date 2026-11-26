@@ -580,6 +580,69 @@ class TestHybridInclusions : public Testing::ContextFixture {
             invariant.orbit(initial, HybridTime(0.125_x, 1), Semantics::LOWER));
     }
 
+    Void test_lower_inclusion_certified_whole_tube_invariants() {
+        const DiscreteLocation q(1);
+        const RealVariable x("x"), u("u");
+        const DiscreteEvent bound("bound");
+        ContinuousTimeHybridAutomaton system;
+        system.new_mode(q, OrdinaryDifferentialAlgebraicInclusion(
+            {dot(x) = u}, RealVariablesBox({-1 <= u <= 1})));
+        system.new_invariant(q, x <= 0, bound);
+        HybridContinuousTimeEvolver<ValidatedTag> evolver(system);
+        TaylorPicardIntegrator base(step_maximum_error = 1e-6);
+        evolver.set_integrator(base, ZeroApproximation(), ConstantApproximation());
+        evolver.configuration().set_maximum_step_size(0.03125);
+        evolver.configuration().set_enable_reconditioning(false);
+
+        // The WHOLE x=-1 source and its complete input-dependent reach
+        // tube remain strictly inside x<=0 for all times in [0,1/8].
+        const auto safe_source = HybridExactBox(
+            q, RealSpace({x}), ExactBoxType({{-1.0_x, -1.0_x}}));
+        const auto lower = evolver.orbit(
+            safe_source, HybridTime(0.125_x, 1), Semantics::LOWER);
+        ARIADNE_TESTING_REQUIRE(lower.final().size() == 1u);
+        ARIADNE_TESTING_PROVE(lower.reach().size() >= 4u);
+        const auto& final = lower.final()[0u];
+        ARIADNE_TESTING_PROVE(final.location() == q);
+        ARIADNE_TESTING_PROVE(final.previous_events().empty());
+        const auto bounds = cast_exact_box(final.state_bounding_box());
+        ARIADNE_TESTING_PROVE(subset(
+            ExactBoxType({{-1.125_x, -0.875_x}}), bounds));
+        ARIADNE_TESTING_PROVE(subset(
+            cast_exact_interval(final.time_range()),
+            ExactIntervalType(0.125_x, 0.125_x)));
+        const auto& kinds = final.continuous_set().variable_kinds();
+        const auto& parameter_box = final.continuous_set().parameter_domain();
+        SizeType free_input_boxes = 0u;
+        for (SizeType i = 0u; i < kinds.size(); ++i) {
+            if (kinds[i] != EnclosureVariableKind::INPUT)
+                continue;
+            ++free_input_boxes;
+            ARIADNE_TESTING_PROVE(parameter_box[i].lower_bound().raw().get_d() <= -1.0);
+            ARIADNE_TESTING_PROVE(parameter_box[i].upper_bound().raw().get_d() >= 1.0);
+        }
+        ARIADNE_TESTING_PROVE(free_input_boxes >= 4u);
+
+        // Equality at the INITIAL invariant boundary is legal at t=0,
+        // but the full input box can subsequently violate x<=0:
+        // no fabricated LOWER subbox or input choice is permitted.
+        const auto boundary = HybridExactBox(
+            q, RealSpace({x}), ExactBoxType({{0, 0}}));
+        const auto zero = evolver.orbit(
+            boundary, HybridTime(0u, 1), Semantics::LOWER);
+        ARIADNE_TESTING_REQUIRE(zero.final().size() == 1u);
+        ARIADNE_TESTING_EXPECT_THROWS(std::invalid_argument,
+            evolver.orbit(boundary, HybridTime(0.125_x, 1), Semantics::LOWER));
+
+        // This already-invalid WHOLE source is rejected even at
+        // zero horizon: intersecting an outer LOWER enclosure with
+        // the invariant does not establish a reachable witness.
+        const auto invalid = HybridExactBox(
+            q, RealSpace({x}), ExactBoxType({{0.25_x, 0.25_x}}));
+        ARIADNE_TESTING_EXPECT_THROWS(std::invalid_argument,
+            evolver.orbit(invalid, HybridTime(0u, 1), Semantics::LOWER));
+    }
+
     Void test_unsupported_capabilities_fail_explicitly() {
         const DiscreteLocation q(1);
         const RealVariable x("x"), u("u"), t("t"), p("p");
@@ -647,6 +710,7 @@ int main(int argc, char** argv) {
     ARIADNE_TESTING_ADD_TEST(TestHybridInclusions, test_upper_inclusion_permissive_guard_does_not_block_flow);
     ARIADNE_TESTING_ADD_TEST(TestHybridInclusions, test_structured_lower_inclusion_preserves_complete_input_flow);
     ARIADNE_TESTING_ADD_TEST(TestHybridInclusions, test_lower_inclusion_ignores_optional_jump_but_rejects_blockers);
+    ARIADNE_TESTING_ADD_TEST(TestHybridInclusions, test_lower_inclusion_certified_whole_tube_invariants);
     ARIADNE_TESTING_ADD_TEST(TestHybridInclusions, test_unsupported_capabilities_fail_explicitly);
     return Testing::run_logging_suite(ariadne_test_suite, argc, argv);
 }

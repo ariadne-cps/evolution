@@ -3203,3 +3203,73 @@ green on the exact v7.25 SHA before promotion. The canonical
 contract at the beginning of this document is unchanged.
 No changes to the numerical integrator implementation, UPPER
 event processing, other evolvers, System, or tutorials.
+
+## v7.26 — Hybrid inclusion LOWER under certified whole-tube invariants
+
+**Source and legal semantics:** starts from v7.25 `923cce33`.
+The immutable UPPER/LOWER contract at the document beginning
+remains binding. Both semantics use the same actual differential
+inclusion and the same selected structured numerical integrator.
+LOWER encloses a nonempty reached subset, not an INNER image.
+No sampling of inputs or independent LOWER subdivision is allowed.
+
+**Sufficient validity proof:** an ordinary whole-source LOWER
+witness transported by a structured validated inclusion reach
+patch remains reachable in a hybrid mode carrying state
+INVARIANT `g(x,t)<=0` whenever that guard is rigorously true
+on the ENTIRE initial LOWER enclosure and on EVERY full reach
+tube returned by the existing validated integrator. The
+resulting trajectory family cannot leave the legal hybrid
+state region. A mere nonempty intersection of an OUTER tube
+with the invariant is not evidence of a reached LOWER subset:
+that would risk discarding the original reachable witness.
+This extends the existing v7.25 event-free/PERMISSIVE-only
+case strictly by a check over the original sets, and introduces
+no new flow equation, guard priority, integrator, or state
+partition. The already-established hybrid continuous
+invariant convention is `g<=0`.
+
+**Production:** allow EventKind::INVARIANT together with
+PERMISSIVE in inclusion LOWER modes; still reject all
+URGENT, IMPACT and PROGRESS blockers at this stage.
+Immediately after extracting transition predicates in
+`_process_jumped_set`, and crucially BEFORE checking an
+initial/terminal zero horizon or applying any invariant
+restriction, verify that every state invariant has validated
+upper bound <=0 over the ENTIRE source enclosure.
+Otherwise reject with `std::invalid_argument`. In
+`_evolve_inclusion`, construct a full `HybridEnclosure`
+for each already computed structured reach tube, preserving
+time/auxiliary/source arguments, and require each invariant
+bound <=0 throughout each tube. If a bound is unknown or
+positive, reject rather than creating a favourable numeric
+subbox or choosing a special input. For certified whole
+tubes the original common numerical map and
+`publish_outer_step(..., {}, ...)` are unchanged; optional
+jumps may still be ignored, and UPPER continues its
+unmodified outer branch exploration.
+
+**Public regression:** add one registered
+`test_lower_inclusion_certified_whole_tube_invariants` in
+`tests/test_hybrid_inclusions.cpp`. With `x'=u`,
+full `u in [-1,1]`, initial x=-1, invariant x<=0
+and H=1/8, all trajectories stay inside the invariant,
+and LOWER must return one final source-mode enclosure
+covering [-9/8,-7/8]. Test the 4 independent full input
+intervals, unchanged event history and exact final time.
+A boundary initial x=0 at zero horizon remains legal,
+but must reject H=1/8 because positive inputs could
+violate the invariant and no child can be selected.
+Already-invalid x=1/4 is rejected even at horizon
+zero. Existing UPPER invariant tests remain unchanged.
+All 15 test methods are registered and there are no
+duplicate `const auto` declarations in the static
+source-level preflight.
+
+**Status and matrix:** the hybrid continuous inclusion
+LOWER cell remains PARTIAL. The v7.25 five-workflow CI
+was still running when v7.26 was prepared; therefore
+the v7.25 candidate is not presumed valid. v7.26 needs
+its own green Ubuntu, macOS, Windows, Coverage and
+Sanitizers workflows on its EXACT SHA, including Debug
+and tutorial. No capability is promoted on publication.

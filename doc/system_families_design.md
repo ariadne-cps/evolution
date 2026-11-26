@@ -2200,3 +2200,31 @@ still requires confirmation by the precise v7.07 CI
 and, if red, an AddressSanitizer stack trace.
 The tutorial remains unchanged and includes only
 `ariadne-evolution.hpp`.
+
+## v7.08 — Fix compilation of validated constraints for refined parameter boxes
+
+The v7.07 candidate `f46250b8b24fa96af2d7e49c0d7448cc3db8e21e`
+failed compilation at `src/hybrid_discrete_time_evolver.cpp`,
+inside `constrain_lower_source()`. Clang reports that the
+three-argument `ValidatedConstraint` constructor cannot accept
+`FloatDP` lower and upper bounds directly: neither implicit
+`FloatDP -> ValidatedNumber` conversion nor the alternative
+precision-parameter constructor is available. This is a
+**C++ type mismatch**, not a failed mathematical LOWER assertion
+and not a recurrence of the v7.05 runtime SegFault.
+
+The new candidate converts each exact binary floating-point
+endpoint through `Dyadic`, then `ExactNumber`, then
+`ValidatedNumber`, before building the same interval constraint.
+The values of the lower and upper bounds are preserved exactly
+in the dyadic representation; no approximation to `double`
+or deliberate weakening of the constraints is introduced.
+
+Only this source construction and the cumulative design journal
+change. The subbox witness proof, validated predicate evidence,
+original state-function patch domains, constraint propagation,
+existing event history, numerical tests and umbrella-only C++
+tutorial are left intact. In particular the runtime SegFault
+is **not considered fixed** by passing compilation: v7.08
+requires all five CI workflows on its exact commit, including
+the `lower_refines_undecided_urgent_guard` case and sanitizers.

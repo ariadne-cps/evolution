@@ -190,8 +190,12 @@ HybridEnclosure constrain_lower_source(
             continue;
         const auto coordinate =
             EffectiveScalarMultivariateFunction::coordinate(box.dimension(), i);
-        set.new_parameter_constraint(ValidatedConstraint(
-            box[i].lower_bound(), coordinate, box[i].upper_bound()));
+        // FloatDP box endpoints are exact binary values, but are not
+        // implicitly convertible to ValidatedNumber. Convert through an
+        // exact dyadic number before constructing the interval constraint.
+        const ValidatedNumber lower(ExactNumber(Dyadic(box[i].lower_bound())));
+        const ValidatedNumber upper(ExactNumber(Dyadic(box[i].upper_bound())));
+        set.new_parameter_constraint(ValidatedConstraint(lower, coordinate, upper));
     }
     restricted.replace_continuous_set(set);
     return restricted;

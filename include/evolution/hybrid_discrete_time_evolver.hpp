@@ -50,7 +50,7 @@ class HybridDiscreteTimeTerminationCriterion {
     Integer _termination_index;
 };
 
-//! \brief Hard node budget; exhausting it aborts an incomplete UPPER exploration.
+//! \brief Hard node budget for validated UPPER exploration or LOWER progression.
 template<>
 class HybridDiscreteTimeEvolverConfiguration<ValidatedTag> : public ConfigurationInterface {
   public:
@@ -63,8 +63,9 @@ class HybridDiscreteTimeEvolverConfiguration<ValidatedTag> : public Configuratio
     SizeType _maximum_nodes;
 };
 
-//! \brief Public UPPER subset of validated hybrid discrete-time evolution.
-//! \details All possible certified branches consume one tick; uncertain
+//! \brief Validated hybrid discrete-time evolution with UPPER branching
+//! and a strictly limited LOWER deterministic witness path.
+//! \details All possible certified UPPER branches consume one tick; uncertain
 //! predicates retain alternatives. No branch priority, time-zero jump,
 //! implicit merging is imposed. Bounded-input inclusion progressions and
 //! transitions to equation or inclusion modes are supported with or
@@ -74,9 +75,13 @@ class HybridDiscreteTimeEvolverConfiguration<ValidatedTag> : public Configuratio
 //! fresh independent arrival input only after applying the source reset. Full input
 //! boxes are attached at the current index; each progression introduces
 //! a new independent input box.
-//! LOWER is unsupported, even if a branch precondition is certain.
-//! A blocked leaf is not an orbit.final() enclosure: retrieve it via
-//! orbit_with_blocked() or inspect provenance through explore().
+//! LOWER is available only through orbit() for a mode with a
+//! deterministic difference equation, no outgoing events and a
+//! provably nonempty initial enclosure. It propagates a witness-preserving
+//! validated map without subdivision. LOWER does not infer existence of
+//! event branches or input selections; orbit_with_blocked() and explore()
+//! remain UPPER-only. A blocked UPPER leaf is not an orbit.final()
+//! enclosure: retrieve it through orbit_with_blocked() or explore().
 template<>
 class HybridDiscreteTimeEvolver<ValidatedTag>
     : public EvolverInterface<ValidatedTag, DiscreteTimeHybridAutomatonInterface,

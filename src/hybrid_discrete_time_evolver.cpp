@@ -27,6 +27,8 @@
  */
 
 #include "evolution/hybrid_discrete_time_evolver.hpp"
+#include "evolution/hybrid_discrete_time_step_image.hpp"
+
 #include <stdexcept>
 #include <utility>
 
@@ -85,7 +87,69 @@ HybridDiscreteTimeUpperOrbitProjection HybridDiscreteTimeEvolver<ValidatedTag>::
 
 Orbit<HybridEnclosure> HybridDiscreteTimeEvolver<ValidatedTag>::orbit(
     const EnclosureType& initial, const TerminationType& termination, Semantics semantics) const {
-    return this->orbit_with_blocked(initial, termination, semantics).orbit;
+    if (semantics == Semantics::UPPER)
+        return this->orbit_with_blocked(initial, termination, semantics).orbit;
+    if (semantics != Semantics::LOWER)
+        throw std::invalid_argument("Unknown discrete hybrid evolution semantics");
+
+    // A single deterministic mode with no events has exactly one feasible
+    // execution from each nonempty initial state. Its validated image map
+    // is witness-preserving, as in ordinary discrete validated LOWER.
+    // Do not infer a LOWER witness from an UPPER guard candidate: the
+    // event-bearing and bounded-input cases have separate proof obligations.
+    const DiscreteLocation location = initial.location();
+    if (!this->system().has_mode(location) ||
+        !this->system().has_equation(location) ||
+        !this->system().events(location).empty())
+        throw std::invalid_argument(
+            "Discrete hybrid LOWER currently requires an event-free difference equation mode");
+    if (initial.state_space() != this->system().state_space(location))
+        throw std::invalid_argument("Discrete hybrid LOWER initial state space mismatch");
+    const auto& equation = this->system().equation(location);
+    if (initial.auxiliary_space().dimension() != 0u &&
+        initial.auxiliary_space() != equation.auxiliary_space())
+        throw std::invalid_argument("Discrete hybrid LOWER initial auxiliary space mismatch");
+
+    // LOWER requires at least one actual initial witness. A source whose
+    // nonemptiness cannot be certified is not silently promoted to LOWER.
+    if (!definitely(!initial.continuous_set().is_empty()))
+        throw std::invalid_argument(
+            "Discrete hybrid LOWER requires a provably nonempty initial enclosure");
+
+    const auto check_index = [](const HybridEnclosure& set, const Integer& index) {
+        const Real expected_time(index);
+        const UpperIntervalType range = set.time_range();
+        if (!definitely(range.lower_bound() >= expected_time) ||
+            !definitely(range.upper_bound() <= expected_time))
+            throw std::invalid_argument(
+                "Discrete hybrid LOWER enclosure time does not match the absolute index");
+    };
+    check_index(initial, termination.initial_index());
+
+    // At zero horizon, expose the same equation auxiliary mapping as
+    // after progression. This is a view of the current state, not a
+    // new witness or an additional parameter.
+    HybridEnclosure current = initial;
+    current.set_auxiliary(equation.auxiliary_space().variables(),
+                          equation.auxiliary_function());
+    OrbitType orbit(current);
+    Integer index = termination.initial_index();
+    SizeType nodes = 1u;
+    while (index < termination.termination_index()) {
+        if (nodes >= this->configuration().maximum_nodes())
+            throw std::length_error("Discrete hybrid LOWER evolution exceeds node budget");
+        const HybridDiscreteTimePlannedBranch step{
+            HybridDiscreteTimeBranchKind::PROGRESSION, location, std::nullopt, true};
+        current = HybridDiscreteTimeStepImage::apply(this->system(), current, step);
+        index = index + Integer(1);
+        ++nodes;
+        check_index(current, index);
+        orbit.adjoin_reach(current);
+        if (index < termination.termination_index())
+            orbit.adjoin_intermediate(current);
+    }
+    orbit.adjoin_final(current);
+    return orbit;
 }
 
 } // namespace Ariadne

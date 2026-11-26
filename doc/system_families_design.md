@@ -1717,3 +1717,68 @@ adds a stronger regression and a tutorial example, not a
 new numerical backend. Acceptance still requires a new
 five-workflow pass on the exact v6.99 SHA, including
 the installed Release tutorial on each platform.
+
+## v7.00 — Validated LOWER, event-free ordinary equation modes in a discrete hybrid automaton
+
+The v6.99 reference SHA `36af0b60c086673e61d35d92dac5c7845dadf3c1`
+passed all five functional workflows on 26 November 2026:
+Ubuntu, macOS, Windows, Coverage and Sanitizers. The newly added
+auxiliary-dependent guard/reset tutorial also built and ran against the
+installed `ariadne-evolution.hpp` umbrella on supported Release jobs.
+
+This increment adds a deliberately narrow Validated LOWER path to the
+public `HybridDiscreteTimeEvolver<ValidatedTag>::orbit()`:
+
+* The initial location must have deterministic
+  `DifferenceAlgebraicEquation` dynamics and **no outgoing events**.
+  An input-bounded inclusion or an event-bearing source is rejected,
+  even for a zero-tick request, rather than deriving a witness from a
+  potentially spurious UPPER branch.
+* The initial state enclosure must be **provably nonempty**.
+  Undecidable nonemptiness and certified emptiness are rejected.
+  No independent input selection, branch splitting, arbitrary priority,
+  or UPPER-to-LOWER result conversion is used.
+* The caller-provided initial state/auxiliary labels must match the
+  equation. The zero-horizon result also exposes the equation's
+  algebraic auxiliary mapping. The exact initial global time range
+  must equal the supplied integer starting index.
+* At each tick, the existing
+  `HybridDiscreteTimeStepImage::apply` deterministic PROGRESSION
+  branch composes the original state map and advances the validated
+  absolute time exactly once. The initial witness remains feasible
+  along the unique deterministic evolution. The returned
+  `Orbit<HybridEnclosure>` contains its initial enclosure, one
+  reach per tick, intermediate enclosures before the final index,
+  and exactly one horizon-final enclosure.
+* The current `maximum_nodes` limit bounds all generated nodes,
+  including the initial node. Aborting at the limit produces an
+  exception, not a truncated purported LOWER witness.
+  `explore()` and `orbit_with_blocked()` remain UPPER-only.
+
+This follows Ariadne's **witness-preserving** definition of LOWER;
+it does not assert that every point of the returned enclosure is
+reachable (an INNER approximation). In particular, nonlinear
+Taylor enclosures may contain spurious numerical points while still
+preserving one actual trajectory from a proved feasible source.
+
+New public evolver tests include a deterministic equation with
+auxiliary `a=2*x`, 0- and 3-tick horizons, time index,
+algebraic output rebinding, initial-set immutability, absolute-index
+resume, node-budget exhaustion, and a concrete `x[0]=1/2`
+witness reaching `x[3]=3.5`. Rejection tests check an outgoing
+permissive transition, an uncertain-input inclusion (even at zero
+horizon), and a mismatched absolute starting index. The old
+zero-horizon LOWER rejection for a deterministic event-free equation
+is replaced by a positive regression.
+
+The public matrix changes **validated hybrid discrete equation LOWER**
+from absent to **partial (event-free equation modes only)**.
+All hybrid inclusions, guarded branches, resets, and any case lacking
+a proved initial witness remain outside LOWER. UPPER is unchanged.
+The installed C++ tutorial is unchanged and continues to include
+only `ariadne-evolution.hpp` and already implemented examples;
+future capabilities are recorded here, never in the tutorial.
+
+The v7.00 feature is published as an initial implementation, not
+accepted until five functional workflows pass on its exact commit,
+including Debug test runs and the installed Release tutorial.

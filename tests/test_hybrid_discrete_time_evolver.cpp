@@ -365,6 +365,98 @@ class TestHybridDiscreteTimeEvolver : public Ariadne::Testing::ContextFixture {
         ARIADNE_TESTING_EXPECT_EQUAL(source.auxiliary_space().dimension(), 0u);
     }
 
+    Void test_lower_event_free_equation_witness() {
+        const RealVariable x("x"), a("a");
+        const DiscreteLocation mode(1);
+        DiscreteTimeHybridAutomaton system;
+        system.new_mode(mode, DifferenceAlgebraicEquation(
+            List<PrimedRealAssignment>{next(x) = x + 1},
+            List<RealAssignment>{let(a) = 2 * x}));
+        Evolver evolver(system);
+        const auto source = initial(mode);
+
+        // LOWER preserves a feasible initial witness; it is not an
+        // INNER inclusion of all states and must never subdivide.
+        const auto zero = evolver.orbit(
+            source, Termination(Integer(0), Integer(0)), Semantics::LOWER);
+        ARIADNE_TESTING_EXPECT_EQUAL(zero.reach().size(), 0u);
+        ARIADNE_TESTING_EXPECT_EQUAL(zero.final().size(), 1u);
+        ARIADNE_TESTING_EXPECT_EQUAL(zero.initial().auxiliary_space(), RealSpace({a}));
+        ARIADNE_TESTING_EXPECT_EQUAL(source.auxiliary_space().dimension(), 0u);
+
+        const auto lower = evolver.orbit(
+            source, Termination(Integer(0), Integer(3)), Semantics::LOWER);
+        ARIADNE_TESTING_EXPECT_EQUAL(lower.reach().size(), 3u);
+        ARIADNE_TESTING_EXPECT_EQUAL(lower.intermediate().size(), 2u);
+        ARIADNE_TESTING_EXPECT_EQUAL(lower.final().size(), 1u);
+        const auto& final = lower.final().front();
+        ARIADNE_TESTING_PROVE(final.location() == mode);
+        ARIADNE_TESTING_EXPECT_EQUAL(final.auxiliary_space(), RealSpace({a}));
+        ARIADNE_TESTING_EXPECT_EQUAL(final.time_range().lower_bound().raw().get_d(), 3.0);
+        const auto bounds = final.state_bounding_box()[0u];
+        // Initial x[0] in [0,1] and x[n]=x[0]+n: x[0]=1/2 is
+        // a concrete witness with x[3]=3.5.
+        ARIADNE_TESTING_PROVE(bounds.lower_bound().raw().get_d() <= 3.5);
+        ARIADNE_TESTING_PROVE(bounds.upper_bound().raw().get_d() >= 3.5);
+        ARIADNE_TESTING_EXPECT_EQUAL(source.time_range().lower_bound().raw().get_d(), 0.0);
+        ARIADNE_TESTING_EXPECT_EQUAL(source.auxiliary_space().dimension(), 0u);
+
+        // Absolute integer clock is part of the contract on resume.
+        auto resumed = final;
+        const auto resumed_orbit = evolver.orbit(
+            resumed, Termination(Integer(3), Integer(4)), Semantics::LOWER);
+        ARIADNE_TESTING_EXPECT_EQUAL(resumed_orbit.final().size(), 1u);
+        ARIADNE_TESTING_EXPECT_EQUAL(
+            resumed_orbit.final().front().time_range().lower_bound().raw().get_d(), 4.0);
+
+        evolver.configuration().set_maximum_nodes(2u);
+        ARIADNE_TESTING_EXPECT_THROWS(std::length_error,
+            evolver.orbit(source, Termination(Integer(0), Integer(3)), Semantics::LOWER));
+        const auto short_orbit = evolver.orbit(
+            source, Termination(Integer(0), Integer(1)), Semantics::LOWER);
+        ARIADNE_TESTING_EXPECT_EQUAL(short_orbit.final().size(), 1u);
+    }
+
+    Void test_lower_excludes_unproved_branches() {
+        const RealVariable x("x"), u("u");
+        const DiscreteLocation mode(1), target(2);
+        const DiscreteEvent event("conditional_jump");
+        DiscreteTimeHybridAutomaton with_event;
+        with_event.new_mode(mode, DifferenceAlgebraicEquation(
+            List<PrimedRealAssignment>{next(x) = x + 1}));
+        with_event.new_mode(target, DifferenceAlgebraicEquation(
+            List<PrimedRealAssignment>{next(x) = x}));
+        with_event.new_permissive_transition(mode, event, target,
+            {next(x) = x + 1}, x >= 0, x <= 2);
+        Evolver guarded(with_event);
+        ARIADNE_TESTING_EXPECT_THROWS(std::invalid_argument,
+            guarded.orbit(initial(mode), Termination(Integer(0), Integer(0)),
+                          Semantics::LOWER));
+        ARIADNE_TESTING_EXPECT_THROWS(std::invalid_argument,
+            guarded.orbit(initial(mode), Termination(Integer(0), Integer(1)),
+                          Semantics::LOWER));
+
+        DiscreteTimeHybridAutomaton inclusion;
+        inclusion.new_mode(mode, DifferenceAlgebraicInclusion(
+            List<PrimedRealAssignment>{next(x) = x + u},
+            RealVariablesBox({-1 <= u <= 1})));
+        Evolver uncertain(inclusion);
+        ARIADNE_TESTING_EXPECT_THROWS(std::invalid_argument,
+            uncertain.orbit(initial(mode), Termination(Integer(0), Integer(0)),
+                            Semantics::LOWER));
+        ARIADNE_TESTING_EXPECT_THROWS(std::invalid_argument,
+            uncertain.orbit(initial(mode), Termination(Integer(0), Integer(1)),
+                            Semantics::LOWER));
+
+        DiscreteTimeHybridAutomaton deterministic;
+        deterministic.new_mode(mode, DifferenceAlgebraicEquation(
+            List<PrimedRealAssignment>{next(x) = x + 1}));
+        Evolver no_jump(deterministic);
+        ARIADNE_TESTING_EXPECT_THROWS(std::invalid_argument,
+            no_jump.orbit(initial(mode), Termination(Integer(1), Integer(1)),
+                          Semantics::LOWER));
+    }
+
     Void test_rejections() {
         const RealVariable x("x"), u("u");
         const DiscreteLocation mode(1);
@@ -376,8 +468,9 @@ class TestHybridDiscreteTimeEvolver : public Ariadne::Testing::ContextFixture {
             evolver.configuration().set_maximum_nodes(0u));
         ARIADNE_TESTING_EXPECT_THROWS(std::invalid_argument,
             Termination(Integer(2), Integer(1)));
-        ARIADNE_TESTING_EXPECT_THROWS(std::invalid_argument,
-            evolver.orbit(initial(mode), Termination(Integer(0), Integer(0)), Semantics::LOWER));
+        ARIADNE_TESTING_EXPECT_EQUAL(
+            evolver.orbit(initial(mode), Termination(Integer(0), Integer(0)),
+                          Semantics::LOWER).final().size(), 1u);
         ARIADNE_TESTING_EXPECT_THROWS(std::invalid_argument,
             evolver.orbit(initial(mode), Termination(Integer(1), Integer(1)), Semantics::UPPER));
         DiscreteTimeHybridAutomaton inclusion;
@@ -423,6 +516,8 @@ int main(int argc, char** argv) {
     ARIADNE_TESTING_ADD_TEST(TestHybridDiscreteTimeEvolver, test_event_free_input_auxiliary_upper_orbit);
     ARIADNE_TESTING_ADD_TEST(TestHybridDiscreteTimeEvolver, test_state_only_event_from_auxiliary_inclusion_upper);
     ARIADNE_TESTING_ADD_TEST(TestHybridDiscreteTimeEvolver, test_public_reset_into_inclusion_with_auxiliary_and_continue);
+    ARIADNE_TESTING_ADD_TEST(TestHybridDiscreteTimeEvolver, test_lower_event_free_equation_witness);
+    ARIADNE_TESTING_ADD_TEST(TestHybridDiscreteTimeEvolver, test_lower_excludes_unproved_branches);
     ARIADNE_TESTING_ADD_TEST(TestHybridDiscreteTimeEvolver, test_rejections);
     return Ariadne::Testing::run_logging_suite(ariadne_test_suite, argc, argv);
 }

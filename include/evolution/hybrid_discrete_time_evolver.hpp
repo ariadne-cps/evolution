@@ -75,16 +75,17 @@ class HybridDiscreteTimeEvolverConfiguration<ValidatedTag> : public Configuratio
 //! fresh independent arrival input only after applying the source reset. Full input
 //! boxes are attached at the current index; each progression introduces
 //! a new independent input box.
-//! LOWER is available only through orbit() for deterministic equation
-//! modes and a certified feasible initial parameter witness. For each
-//! positive tick, the common certified planner must produce exactly one
-//! possible branch with a uniformly certified precondition. Both URGENT
-//! and PERMISSIVE events may be present, even multiple outgoing events,
-//! provided no other transition or progression remains possible.
-//! UNKNOWN/competing alternatives, input-bounded inclusions and resets
-//! into inclusion modes remain unsupported for LOWER. Zero horizon
-//! requires no event decision. The deterministic validated image
-//! preserves a witness without subdivision or sampling.
+//! LOWER is available through orbit() for equation and bounded-input
+//! inclusion modes. Both semantics use the same validated set-image map;
+//! a full independent input box is preserved at every discrete tick.
+//! The LOWER planner requires exactly one uniformly certain branch and
+//! imposes no event priority. Inclusion sources must certify the branch
+//! over the entire input box, without splitting or sampling inputs.
+//! Equation sources retain the established state-parameter refinement.
+//! A certified transition may target an equation or inclusion mode,
+//! including auxiliary outputs with full fresh arrival inputs.
+//! UNKNOWN or competing inclusion branches are rejected. Zero horizon
+//! needs no event decision; no continuous-time integrator is involved.
 //! orbit_with_blocked() and explore() remain UPPER-only.
 //! A blocked UPPER leaf is not an orbit.final() enclosure: retrieve it
 //! through orbit_with_blocked() or explore().

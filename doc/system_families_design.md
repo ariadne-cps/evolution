@@ -2503,3 +2503,50 @@ no lower-specific point or midpoint is selected.
 Coverage and Sanitizers) green on the precise v7.14 SHA, including
 compilation with warnings as errors. No prior passing workflow can
 stand in for this check. Matrix classification unchanged from v7.13.
+
+## v7.15 — Hybrid discrete inclusion LOWER with whole-input progression and certified events
+
+This version extends validated hybrid-discrete `orbit(..., Semantics::LOWER)`
+to modes governed by bounded-input difference inclusions. **The dynamical
+map and full set of input choices are identical to UPPER**; neither
+input sampling nor midpoint/equality constraints are introduced.
+The shared `HybridDiscreteTimeStepImage::apply` continues to compose
+`f(x[n],u[n])` on the whole parameterized set and appends a fresh
+independent full input box at each tick. For auxiliary outputs, the
+current complete input box is available at zero horizon and after
+resumption; destination input boxes are attached after a reset.
+
+The shared discrete branch planner is retained. An inclusion source
+can advance in LOWER only if the branch is unique and certified over
+the **entire** source and input box. Uncertain or competing event
+branches are rejected, not resolved by choosing a favourable input.
+Existing bounded source-parameter refinement remains available for
+equation modes only, and an equation may now reset into an inclusion
+mode, preserving the target's full arrival input domain.
+
+C++ regressions demonstrate full-input event-free inclusion progression
+for two ticks, with independent inputs, zero synthetic constraints,
+state bounds containing [-2,3], zero-horizon behavior and source
+immutability. A forced equation-to-inclusion reset followed by full
+input progression covers [9,12]. Auxiliary-bearing inclusion progression
+exposes the full input box already at zero horizon, preserves
+`a=x+u[n]` and covers [-3,7] at tick 2, with successful resumption
+and no input-fixing constraints. A forced reset into an auxiliary-
+bearing inclusion followed by progression covers [5,9]. A dedicated
+urgent guard `a>=-2`, true for every possible input, certifies
+`x'=x+a+3` over [2,6] while preserving the full input interval;
+`a>=0`, uncertain across inputs, remains rejected. Previous UPPER
+regressions and equation LOWER checks remain intact.
+
+**Capability matrix candidate:** the discrete hybrid inclusion LOWER
+cell advances from absent to partial (only globally certain branches),
+so LOWER has 2 complete, 4 partial, 2 absent families, subject to CI.
+No general INNER-image claim is made from outer numerical enclosures;
+the semantic restriction on event choice is explicit. No changes to
+System, Integration, UPPER stepping, approximate evolvers, or tutorials.
+
+The base v7.14 Ubuntu and macOS workflows were green when this patch
+was authored; the remaining v7.14 workflows were still in progress.
+The entire v7.15 commit must independently pass Ubuntu, macOS,
+Windows, Coverage and Sanitizers, including Debug and installed
+tutorial, before acceptance.

@@ -157,8 +157,29 @@ class TestHybridDiscreteTimeEvolver : public Ariadne::Testing::ContextFixture {
             orbit.final().front().continuous_set().number_of_parameters(), 3u);
         ARIADNE_TESTING_EXPECT_EQUAL(
             orbit.final().front().time_range().lower_bound().raw().get_d(), 2.0);
-        ARIADNE_TESTING_EXPECT_THROWS(std::invalid_argument,
-            evolver.orbit(initial(mode), Termination(Integer(0), Integer(1)), Semantics::LOWER));
+        const auto lower = evolver.orbit(
+            initial(mode), Termination(Integer(0), Integer(2)), Semantics::LOWER);
+        ARIADNE_TESTING_REQUIRE(lower.final().size() == 1u);
+        ARIADNE_TESTING_EXPECT_EQUAL(lower.reach().size(), 2u);
+        const auto& lf = lower.final().front();
+        ARIADNE_TESTING_EXPECT_EQUAL(lf.continuous_set().number_of_parameters(), 3u);
+        ARIADNE_TESTING_EXPECT_EQUAL(lf.number_of_constraints(), 0u);
+        ARIADNE_TESTING_EXPECT_EQUAL(lf.previous_events().size(), 0u);
+        const auto full_domain = lf.continuous_set().parameter_domain();
+        for (SizeType i = 1u; i != 3u; ++i) {
+            ARIADNE_TESTING_EXPECT_EQUAL(lf.continuous_set().variable_kinds()[i],
+                                         EnclosureVariableKind::INPUT);
+            ARIADNE_TESTING_PROVE(full_domain[i].lower_bound().raw().get_d() <= -1.0);
+            ARIADNE_TESTING_PROVE(full_domain[i].upper_bound().raw().get_d() >= 1.0);
+        }
+        const auto bounds = lf.state_bounding_box()[0u];
+        ARIADNE_TESTING_PROVE(bounds.lower_bound().raw().get_d() <= -2.0);
+        ARIADNE_TESTING_PROVE(bounds.upper_bound().raw().get_d() >= 3.0);
+        const auto zero = evolver.orbit(
+            initial(mode), Termination(Integer(0), Integer(0)), Semantics::LOWER);
+        ARIADNE_TESTING_EXPECT_EQUAL(zero.final().size(), 1u);
+        ARIADNE_TESTING_EXPECT_EQUAL(
+            zero.initial().continuous_set().number_of_parameters(), 1u);
     }
 
     Void test_public_guarded_inclusion_upper_orbit() {
@@ -223,6 +244,19 @@ class TestHybridDiscreteTimeEvolver : public Ariadne::Testing::ContextFixture {
             initial(source), Termination(Integer(0), Integer(2)), Semantics::UPPER);
         ARIADNE_TESTING_EXPECT_EQUAL(orbit.final().size(), 1u);
         ARIADNE_TESTING_PROVE(orbit.final().front().location() == destination);
+
+        const auto lower = evolver.orbit(
+            initial(source), Termination(Integer(0), Integer(2)), Semantics::LOWER);
+        ARIADNE_TESTING_REQUIRE(lower.final().size() == 1u);
+        const auto& lf = lower.final().front();
+        ARIADNE_TESTING_PROVE(lf.location() == destination);
+        ARIADNE_TESTING_EXPECT_EQUAL(lf.continuous_set().number_of_parameters(), 2u);
+        ARIADNE_TESTING_EXPECT_EQUAL(lf.number_of_constraints(), 0u);
+        ARIADNE_TESTING_REQUIRE(lf.previous_events().size() == 1u);
+        ARIADNE_TESTING_PROVE(lf.previous_events()[0u] == jump);
+        const auto bounds = lf.state_bounding_box()[0u];
+        ARIADNE_TESTING_PROVE(bounds.lower_bound().raw().get_d() <= 9.0);
+        ARIADNE_TESTING_PROVE(bounds.upper_bound().raw().get_d() >= 12.0);
     }
 
     Void test_event_free_input_auxiliary_upper_orbit() {
@@ -260,6 +294,30 @@ class TestHybridDiscreteTimeEvolver : public Ariadne::Testing::ContextFixture {
         ARIADNE_TESTING_EXPECT_EQUAL(continued.final().size(), 1u);
         ARIADNE_TESTING_EXPECT_EQUAL(continued.final().front().continuous_set().number_of_parameters(), 5u);
         ARIADNE_TESTING_EXPECT_EQUAL(continued.final().front().auxiliary_space(), RealSpace({a}));
+
+        const auto lower_zero = evolver.orbit(source,
+            Termination(Integer(0), Integer(0)), Semantics::LOWER);
+        ARIADNE_TESTING_EXPECT_EQUAL(lower_zero.initial().auxiliary_space(), RealSpace({a}));
+        ARIADNE_TESTING_EXPECT_EQUAL(
+            lower_zero.initial().continuous_set().number_of_parameters(), 2u);
+        ARIADNE_TESTING_EXPECT_EQUAL(lower_zero.initial().number_of_constraints(), 0u);
+        const auto lower = evolver.orbit(source,
+            Termination(Integer(0), Integer(2)), Semantics::LOWER);
+        ARIADNE_TESTING_REQUIRE(lower.final().size() == 1u);
+        const auto& lf = lower.final().front();
+        ARIADNE_TESTING_EXPECT_EQUAL(lf.continuous_set().number_of_parameters(), 4u);
+        ARIADNE_TESTING_EXPECT_EQUAL(lf.auxiliary_space(), RealSpace({a}));
+        ARIADNE_TESTING_EXPECT_EQUAL(lf.number_of_constraints(), 0u);
+        const auto bounds = lf.state_bounding_box()[0u];
+        ARIADNE_TESTING_PROVE(bounds.lower_bound().raw().get_d() <= -3.0);
+        ARIADNE_TESTING_PROVE(bounds.upper_bound().raw().get_d() >= 7.0);
+        const auto resumed = evolver.orbit(lf,
+            Termination(Integer(2), Integer(3)), Semantics::LOWER);
+        ARIADNE_TESTING_REQUIRE(resumed.final().size() == 1u);
+        ARIADNE_TESTING_EXPECT_EQUAL(
+            resumed.final().front().continuous_set().number_of_parameters(), 5u);
+        ARIADNE_TESTING_EXPECT_EQUAL(resumed.final().front().number_of_constraints(), 0u);
+        ARIADNE_TESTING_EXPECT_EQUAL(source.auxiliary_space().dimension(), 0u);
     }
 
     Void test_state_only_event_from_auxiliary_inclusion_upper() {
@@ -363,6 +421,70 @@ class TestHybridDiscreteTimeEvolver : public Ariadne::Testing::ContextFixture {
         ARIADNE_TESTING_EXPECT_EQUAL(result.final().size(), 1u);
         ARIADNE_TESTING_EXPECT_EQUAL(source.continuous_set().number_of_parameters(), 1u);
         ARIADNE_TESTING_EXPECT_EQUAL(source.auxiliary_space().dimension(), 0u);
+
+        const auto lower = evolver.orbit(source,
+            Termination(Integer(0), Integer(2)), Semantics::LOWER);
+        ARIADNE_TESTING_REQUIRE(lower.final().size() == 1u);
+        const auto& lf = lower.final().front();
+        ARIADNE_TESTING_PROVE(lf.location() == target_mode);
+        ARIADNE_TESTING_EXPECT_EQUAL(lf.auxiliary_space(), RealSpace({a}));
+        ARIADNE_TESTING_EXPECT_EQUAL(lf.continuous_set().number_of_parameters(), 3u);
+        ARIADNE_TESTING_EXPECT_EQUAL(lf.number_of_constraints(), 0u);
+        ARIADNE_TESTING_REQUIRE(lf.previous_events().size() == 1u);
+        ARIADNE_TESTING_PROVE(lf.previous_events()[0u] == jump);
+        const auto bounds = lf.state_bounding_box()[0u];
+        ARIADNE_TESTING_PROVE(bounds.lower_bound().raw().get_d() <= 5.0);
+        ARIADNE_TESTING_PROVE(bounds.upper_bound().raw().get_d() >= 9.0);
+    }
+
+    Void test_lower_uniform_auxiliary_guard_over_full_input_box() {
+        const RealVariable x("x"), u("u"), a("a");
+        const DiscreteLocation source_mode(1), target_mode(2);
+        const DiscreteEvent event("uniform_auxiliary_guard");
+        DiscreteTimeHybridAutomaton system;
+        system.new_mode(source_mode, DifferenceAlgebraicInclusion(
+            List<PrimedRealAssignment>{next(x) = x + a},
+            List<RealAssignment>{let(a) = x + u},
+            RealVariablesBox({-1 <= u <= 1})));
+        system.new_mode(target_mode, DifferenceAlgebraicEquation(
+            List<PrimedRealAssignment>{next(x) = x}));
+        system.new_urgent_transition(source_mode, event, target_mode,
+            {next(x) = x + a + 3}, a >= -2);
+        Evolver evolver(system);
+        const auto source = initial(source_mode);
+        const auto lower = evolver.orbit(
+            source, Termination(Integer(0), Integer(1)), Semantics::LOWER);
+        ARIADNE_TESTING_REQUIRE(lower.final().size() == 1u);
+        const auto& lf = lower.final().front();
+        ARIADNE_TESTING_PROVE(lf.location() == target_mode);
+        ARIADNE_TESTING_EXPECT_EQUAL(lf.continuous_set().number_of_parameters(), 2u);
+        ARIADNE_TESTING_EXPECT_EQUAL(lf.number_of_constraints(), 0u);
+        ARIADNE_TESTING_REQUIRE(lf.previous_events().size() == 1u);
+        ARIADNE_TESTING_PROVE(lf.previous_events()[0u] == event);
+        const auto domain = lf.continuous_set().parameter_domain();
+        ARIADNE_TESTING_PROVE(domain[1u].lower_bound().raw().get_d() <= -1.0);
+        ARIADNE_TESTING_PROVE(domain[1u].upper_bound().raw().get_d() >= 1.0);
+        const auto bounds = lf.state_bounding_box()[0u];
+        // Correlated reset x'=x+a+3 = 2*x+u+3, over [2,6].
+        ARIADNE_TESTING_PROVE(bounds.lower_bound().raw().get_d() <= 2.0);
+        ARIADNE_TESTING_PROVE(bounds.upper_bound().raw().get_d() >= 6.0);
+        ARIADNE_TESTING_EXPECT_EQUAL(source.auxiliary_space().dimension(), 0u);
+        ARIADNE_TESTING_EXPECT_EQUAL(source.continuous_set().number_of_parameters(), 1u);
+
+        DiscreteTimeHybridAutomaton ambiguous;
+        ambiguous.new_mode(source_mode, DifferenceAlgebraicInclusion(
+            List<PrimedRealAssignment>{next(x) = x + a},
+            List<RealAssignment>{let(a) = x + u},
+            RealVariablesBox({-1 <= u <= 1})));
+        ambiguous.new_mode(target_mode, DifferenceAlgebraicEquation(
+            List<PrimedRealAssignment>{next(x) = x}));
+        ambiguous.new_urgent_transition(source_mode, event, target_mode,
+            {next(x) = x + a + 3}, a >= 0);
+        Evolver undecided(ambiguous);
+        // A varying guard is not a licence to sample u or prefer a branch.
+        ARIADNE_TESTING_EXPECT_THROWS(std::invalid_argument,
+            undecided.orbit(source, Termination(Integer(0), Integer(1)),
+                            Semantics::LOWER));
     }
 
     Void test_lower_event_free_equation_witness() {
@@ -842,13 +964,16 @@ class TestHybridDiscreteTimeEvolver : public Ariadne::Testing::ContextFixture {
         inclusion.new_mode(mode, DifferenceAlgebraicInclusion(
             List<PrimedRealAssignment>{next(x) = x + u},
             RealVariablesBox({-1 <= u <= 1})));
-        Evolver uncertain(inclusion);
-        ARIADNE_TESTING_EXPECT_THROWS(std::invalid_argument,
-            uncertain.orbit(initial(mode), Termination(Integer(0), Integer(0)),
-                            Semantics::LOWER));
-        ARIADNE_TESTING_EXPECT_THROWS(std::invalid_argument,
-            uncertain.orbit(initial(mode), Termination(Integer(0), Integer(1)),
-                            Semantics::LOWER));
+        Evolver inclusion_evolver(inclusion);
+        ARIADNE_TESTING_EXPECT_EQUAL(
+            inclusion_evolver.orbit(initial(mode), Termination(Integer(0), Integer(0)),
+                                   Semantics::LOWER).final().size(), 1u);
+        const auto lower = inclusion_evolver.orbit(
+            initial(mode), Termination(Integer(0), Integer(1)), Semantics::LOWER);
+        ARIADNE_TESTING_REQUIRE(lower.final().size() == 1u);
+        ARIADNE_TESTING_EXPECT_EQUAL(
+            lower.final().front().continuous_set().number_of_parameters(), 2u);
+        ARIADNE_TESTING_EXPECT_EQUAL(lower.final().front().number_of_constraints(), 0u);
 
         DiscreteTimeHybridAutomaton deterministic;
         deterministic.new_mode(mode, DifferenceAlgebraicEquation(
@@ -918,6 +1043,7 @@ int main(int argc, char** argv) {
     ARIADNE_TESTING_ADD_TEST(TestHybridDiscreteTimeEvolver, test_event_free_input_auxiliary_upper_orbit);
     ARIADNE_TESTING_ADD_TEST(TestHybridDiscreteTimeEvolver, test_state_only_event_from_auxiliary_inclusion_upper);
     ARIADNE_TESTING_ADD_TEST(TestHybridDiscreteTimeEvolver, test_public_reset_into_inclusion_with_auxiliary_and_continue);
+    ARIADNE_TESTING_ADD_TEST(TestHybridDiscreteTimeEvolver, test_lower_uniform_auxiliary_guard_over_full_input_box);
     ARIADNE_TESTING_ADD_TEST(TestHybridDiscreteTimeEvolver, test_lower_event_free_equation_witness);
     ARIADNE_TESTING_ADD_TEST(TestHybridDiscreteTimeEvolver, test_lower_constrained_point_witness);
     ARIADNE_TESTING_ADD_TEST(TestHybridDiscreteTimeEvolver, test_lower_forced_urgent_jump_and_disabled_progression);

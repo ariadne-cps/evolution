@@ -31,6 +31,7 @@
 #include "evolution/hybrid_discrete_time_predicate_evaluator.hpp"
 #include "evolution/hybrid_discrete_time_step_planner.hpp"
 #include "hybrid_discrete_time_predicate_function.hpp"
+#include "hybrid_discrete_time_inclusion_capability.hpp"
 
 #include <deque>
 #include <optional>
@@ -122,9 +123,10 @@ std::optional<HybridDiscreteTimePlannedBranch> unique_certified_lower_branch(
     const DiscreteTimeHybridAutomatonInterface& automaton,
     const HybridEnclosure& source, const Integer& index) {
     if (!automaton.has_mode(source.location()) ||
-        !automaton.has_equation(source.location()))
+        (!automaton.has_equation(source.location()) &&
+         !automaton.has_inclusion(source.location())))
         throw std::invalid_argument(
-            "Discrete hybrid LOWER requires a difference equation at each mode");
+            "Discrete hybrid LOWER requires an equation or bounded-input inclusion mode");
     const auto evaluate = [&](DiscreteLocation, DiscreteEvent,
                               DiscreteTimePredicateRole,
                               const ContinuousPredicate& predicate) {
@@ -137,7 +139,8 @@ std::optional<HybridDiscreteTimePlannedBranch> unique_certified_lower_branch(
         return std::nullopt;
     const auto branch = plan.branches.front();
     if (branch.kind == HybridDiscreteTimeBranchKind::TRANSITION &&
-        !automaton.has_equation(branch.target))
+        !automaton.has_equation(branch.target) &&
+        !automaton.has_inclusion(branch.target))
         return std::nullopt;
     return branch;
 }
@@ -175,7 +178,8 @@ std::optional<HybridDiscreteTimePlannedBranch> unique_lower_branch_on_box(
         return std::nullopt;
     const auto branch = plan.branches.front();
     if (branch.kind == HybridDiscreteTimeBranchKind::TRANSITION &&
-        !automaton.has_equation(branch.target))
+        !automaton.has_equation(branch.target) &&
+        !automaton.has_inclusion(branch.target))
         return std::nullopt;
     return branch;
 }
@@ -215,16 +219,23 @@ struct CertifiedLowerStep {
 CertifiedLowerStep certified_lower_step(
     const DiscreteTimeHybridAutomatonInterface& automaton,
     const HybridEnclosure& source, const Integer& index) {
+    const Bool inclusion = automaton.has_inclusion(source.location());
     if (!automaton.has_mode(source.location()) ||
-        !automaton.has_equation(source.location()))
+        (!automaton.has_equation(source.location()) && !inclusion))
         throw std::invalid_argument(
-            "Discrete hybrid LOWER requires an equation at each mode");
+            "Discrete hybrid LOWER requires a supported equation or inclusion mode");
 
     if (has_certified_lower_source(source.continuous_set())) {
         const auto branch = unique_certified_lower_branch(automaton, source, index);
         if (branch)
             return {source, *branch};
     }
+
+    // Inclusion LOWER must preserve ALL current inputs, not select a
+    // favourable input subbox to resolve an uncertain event.
+    if (inclusion)
+        throw std::invalid_argument(
+            "Discrete hybrid inclusion LOWER cannot certify a unique branch over the full input box");
 
     std::deque<ParameterBoxSearch> pending{{source.continuous_set().reduced_domain(), 0u}};
     while (!pending.empty()) {
@@ -303,27 +314,33 @@ Orbit<HybridEnclosure> HybridDiscreteTimeEvolver<ValidatedTag>::orbit(
     if (semantics != Semantics::LOWER)
         throw std::invalid_argument("Unknown discrete hybrid evolution semantics");
 
-    // Each actual tick must have exactly one certified admissible branch.
-    // The zero-horizon orbit needs no event decision at all: its already
-    // feasible initial set is itself a valid LOWER witness.
+    // Both semantics use the same numerical step map and entire
+    // inclusion input box. Only discrete branch certification differs.
     const DiscreteLocation location = initial.location();
+    const Bool equation_source = this->system().has_equation(location);
+    const Bool inclusion_source = this->system().has_inclusion(location);
     if (!this->system().has_mode(location) ||
-        !this->system().has_equation(location))
+        (!equation_source && !inclusion_source))
         throw std::invalid_argument(
-            "Discrete hybrid LOWER requires a difference equation source mode");
+            "Discrete hybrid LOWER requires an equation or bounded-input inclusion source");
     if (initial.state_space() != this->system().state_space(location))
         throw std::invalid_argument("Discrete hybrid LOWER initial state space mismatch");
-    const auto& equation = this->system().equation(location);
-    if (initial.auxiliary_space().dimension() != 0u &&
-        initial.auxiliary_space() != equation.auxiliary_space())
-        throw std::invalid_argument("Discrete hybrid LOWER initial auxiliary space mismatch");
 
-    // At positive horizon, feasibility is certified with the first
-    // branch subbox. At zero horizon search for one feasible parameter
-    // without deciding any guard. UNKNOWN on a broad source is not
-    // proof that all narrower feasible witnesses are absent.
+    HybridEnclosure current = initial;
+    if (equation_source) {
+        const auto& equation = this->system().equation(location);
+        if (initial.auxiliary_space().dimension() != 0u &&
+            initial.auxiliary_space() != equation.auxiliary_space())
+            throw std::invalid_argument("Discrete hybrid LOWER initial auxiliary space mismatch");
+        current.set_auxiliary(equation.auxiliary_space().variables(),
+                              equation.auxiliary_function());
+    } else {
+        // The current full input box is already required by a(x,u[n])
+        // at zero horizon and when certifying auxiliary guards.
+        current = EvolutionDetail::prepare_discrete_inclusion_source(this->system(), initial);
+    }
     if (termination.initial_index() == termination.termination_index() &&
-        !has_refined_lower_witness(initial.continuous_set()))
+        !has_refined_lower_witness(current.continuous_set()))
         throw std::invalid_argument(
             "Discrete hybrid LOWER requires a certified feasible initial parameter witness");
 
@@ -337,12 +354,6 @@ Orbit<HybridEnclosure> HybridDiscreteTimeEvolver<ValidatedTag>::orbit(
     };
     check_index(initial, termination.initial_index());
 
-    // At zero horizon, expose the same equation auxiliary mapping as
-    // after progression. This is a view of the current state, not a
-    // new witness or an additional parameter.
-    HybridEnclosure current = initial;
-    current.set_auxiliary(equation.auxiliary_space().variables(),
-                          equation.auxiliary_function());
     OrbitType orbit(current);
     Integer index = termination.initial_index();
     SizeType nodes = 1u;
@@ -350,10 +361,9 @@ Orbit<HybridEnclosure> HybridDiscreteTimeEvolver<ValidatedTag>::orbit(
         if (nodes >= this->configuration().maximum_nodes())
             throw std::length_error("Discrete hybrid LOWER evolution exceeds node budget");
         const auto certified = certified_lower_step(this->system(), current, index);
-        // The planner proves one uniformly certified branch on a feasible
-        // source subbox; the same subbox is used for the numerical image.
-        // Earlier Orbit enclosures can remain broader: this path certifies
-        // the existence of a consistent trajectory, not an INNER image.
+        // The one-tick map is the same as UPPER. Inclusion sources
+        // retain their full input box; equations retain their existing
+        // state-parameter guard refinement. No input is sampled.
         current = HybridDiscreteTimeStepImage::apply(
             this->system(), certified.source, certified.branch);
         index = index + Integer(1);

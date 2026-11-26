@@ -582,9 +582,15 @@ class TestHybridDiscreteTimeEvolver : public Ariadne::Testing::ContextFixture {
             constrained, Termination(Integer(0), Integer(1)), Semantics::LOWER);
         ARIADNE_TESTING_EXPECT_EQUAL(feasible.final().size(), 1u);
         ARIADNE_TESTING_PROVE(feasible.final().front().location() == target_mode);
+        // Preserve the original x>=3/4 constraint and add the certified
+        // parameter-subbox constraint; do not replace the initial predicate.
         ARIADNE_TESTING_EXPECT_EQUAL(
-            feasible.final().front().number_of_constraints(), 1u);
+            feasible.final().front().number_of_constraints(), 2u);
         ARIADNE_TESTING_EXPECT_EQUAL(constrained.number_of_constraints(), 1u);
+        const auto feasible_box = feasible.final().front().state_bounding_box();
+        ARIADNE_TESTING_REQUIRE(feasible_box.dimension() == 1u);
+        ARIADNE_TESTING_PROVE(feasible_box[0u].lower_bound().raw().get_d() <= 3.875);
+        ARIADNE_TESTING_PROVE(feasible_box[0u].upper_bound().raw().get_d() >= 3.875);
 
         // A boundary-only initial source has no strictly true or false
         // guard on any nonempty subdivision. The bounded proof search

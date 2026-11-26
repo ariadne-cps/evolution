@@ -30,6 +30,7 @@
 #include "evolution/hybrid_discrete_time_step_image.hpp"
 #include "evolution/hybrid_discrete_time_predicate_evaluator.hpp"
 #include "evolution/hybrid_discrete_time_step_planner.hpp"
+#include "hybrid_discrete_time_predicate_function.hpp"
 
 #include <deque>
 #include <optional>
@@ -48,32 +49,65 @@ namespace {
 // reduced domain or one explicit point in it. Both checks use validated
 // ranges: an UNKNOWN constraint result never becomes a LOWER witness.
 // This is a sufficient test, not a general existential solver.
-Bool has_certified_lower_source(const Enclosure& source) {
-    const ExactBoxType domain = source.reduced_domain();
-    if (!definitely(!domain.is_empty()))
+Bool has_certified_lower_source_on_box(
+    const Enclosure& source, const ExactBoxType& box) {
+    if (!definitely(!box.is_empty()) ||
+        !definitely(Ariadne::subset(box, source.reduced_domain())))
         return false;
     if (source.number_of_constraints() == 0u)
         return true;
 
-    const auto constraint_function = source.constraint_function();
-    const ExactBoxType constraints = source.constraint_bounds();
-    const auto range = Ariadne::apply(constraint_function, domain);
-    if (definitely(Ariadne::subset(range, constraints)))
+    const auto function = source.constraint_function();
+    const ExactBoxType bounds = source.constraint_bounds();
+    if (definitely(Ariadne::subset(Ariadne::apply(function, box), bounds)))
         return true;
-
-    // A bounded box has an exactly representable midpoint. Proving that
-    // every constraint contains its validated value at this singleton
-    // proves the existence of at least one feasible initial parameter.
-    // Preserve the original constrained enclosure for the actual orbit:
-    // the witness certificate must not weaken or delete its constraints.
-    if (!definitely(domain.is_bounded()))
+    if (!definitely(box.is_bounded()))
         return false;
-    const auto centre = domain.midpoint();
-    const ExactBoxType point(domain.dimension(), [&](SizeType i) {
-        return ExactIntervalType(centre[i]);
+
+    const auto midpoint = box.midpoint();
+    const ExactBoxType point(box.dimension(), [&](SizeType i) {
+        return ExactIntervalType(midpoint[i]);
     });
-    const auto point_values = Ariadne::apply(constraint_function, point);
-    return definitely(Ariadne::subset(point_values, constraints));
+    return definitely(Ariadne::subset(Ariadne::apply(function, point), bounds));
+}
+
+Bool has_certified_lower_source(const Enclosure& source) {
+    return has_certified_lower_source_on_box(source, source.reduced_domain());
+}
+
+constexpr SizeType lower_refinement_depth = 4u;
+
+struct ParameterBoxSearch {
+    ExactBoxType box;
+    SizeType depth;
+};
+
+Void enqueue_parameter_halves(
+    const ExactBoxType& box, SizeType depth, std::deque<ParameterBoxSearch>& pending) {
+    // Split an exact parameter axis without modifying a Taylor function patch.
+    for (SizeType axis = 0u; axis < box.dimension(); ++axis) {
+        if (!(box[axis].lower_bound().raw() < box[axis].upper_bound().raw()))
+            continue;
+        const auto children = box.split(axis);
+        if (!same(children.first, box) && definitely(!children.first.is_empty()))
+            pending.push_back({children.first, depth + 1u});
+        if (!same(children.second, box) && definitely(!children.second.is_empty()))
+            pending.push_back({children.second, depth + 1u});
+        return;
+    }
+}
+
+Bool has_refined_lower_witness(const Enclosure& source) {
+    std::deque<ParameterBoxSearch> pending{{source.reduced_domain(), 0u}};
+    while (!pending.empty()) {
+        const ParameterBoxSearch candidate = pending.front();
+        pending.pop_front();
+        if (has_certified_lower_source_on_box(source, candidate.box))
+            return true;
+        if (candidate.depth < lower_refinement_depth)
+            enqueue_parameter_halves(candidate.box, candidate.depth, pending);
+    }
+    return false;
 }
 
 // Reuse the same complete branch planner as validated UPPER, but require a
@@ -104,11 +138,67 @@ std::optional<HybridDiscreteTimePlannedBranch> unique_certified_lower_branch(
     return branch;
 }
 
-// A whole-enclosure guard may be UNKNOWN even though a provably
-// feasible subbox has one uniformly decided branch. Searching such
-// subboxes is a validated existential refinement, not input sampling.
-// Never return a branch unless BOTH the source witness and the unique
-// branch preconditions have been certified on the same subbox.
+// Certify a predicate on an exact parameter subbox using the original
+// validated state patch. Boundary/undecided evidence stays UNKNOWN.
+DiscreteTimePredicateEvidence classify_on_box(
+    const DiscreteTimeHybridAutomatonInterface& automaton,
+    const HybridEnclosure& source, const ContinuousPredicate& predicate,
+    const ExactBoxType& box) {
+    const auto indicator =
+        EvolutionDetail::discrete_source_indicator(automaton, source, predicate);
+    const auto args = source.continuous_set().argument_function(
+        indicator.arguments, 0u);
+    const auto range = Ariadne::apply(compose(indicator.function, args), box);
+    if (definitely(range.lower_bound() > 0))
+        return DiscreteTimePredicateEvidence::TRUE;
+    if (definitely(range.upper_bound() < 0))
+        return DiscreteTimePredicateEvidence::FALSE;
+    return DiscreteTimePredicateEvidence::UNKNOWN;
+}
+
+std::optional<HybridDiscreteTimePlannedBranch> unique_lower_branch_on_box(
+    const DiscreteTimeHybridAutomatonInterface& automaton,
+    const HybridEnclosure& source, const Integer& index,
+    const ExactBoxType& box) {
+    const auto evaluate = [&](DiscreteLocation, DiscreteEvent,
+                              DiscreteTimePredicateRole,
+                              const ContinuousPredicate& predicate) {
+        return classify_on_box(automaton, source, predicate, box);
+    };
+    const auto plan = HybridDiscreteTimeStepPlanner::plan(
+        automaton, source.location(), index, evaluate);
+    if (plan.branches.size() != 1u || !plan.branches.front().certain)
+        return std::nullopt;
+    const auto branch = plan.branches.front();
+    if (branch.kind == HybridDiscreteTimeBranchKind::TRANSITION &&
+        !automaton.has_equation(branch.target))
+        return std::nullopt;
+    return branch;
+}
+
+// A certified exact subbox becomes parameter constraints on a COPY of
+// the source, not a restriction of the function-patch domain. The latter
+// produced a reproducible crash on a refined reset in v7.05/v7.06.
+// Composition preserves all existing and newly added constraints.
+HybridEnclosure constrain_lower_source(
+    const HybridEnclosure& source, const ExactBoxType& box) {
+    HybridEnclosure restricted = source;
+    Enclosure set = source.continuous_set();
+    const auto domain = set.domain();
+    for (SizeType i = 0u; i < box.dimension(); ++i) {
+        if (same(box[i], domain[i]))
+            continue;
+        const auto coordinate =
+            EffectiveScalarMultivariateFunction::coordinate(box.dimension(), i);
+        set.new_parameter_constraint(ValidatedConstraint(
+            box[i].lower_bound(), coordinate, box[i].upper_bound()));
+    }
+    restricted.replace_continuous_set(set);
+    return restricted;
+}
+
+// Both a parameter witness and the unique branch are certified on the
+// SAME subbox; the ensuing reset retains that box as parameter constraints.
 struct CertifiedLowerStep {
     HybridEnclosure source;
     HybridDiscreteTimePlannedBranch branch;
@@ -117,32 +207,29 @@ struct CertifiedLowerStep {
 CertifiedLowerStep certified_lower_step(
     const DiscreteTimeHybridAutomatonInterface& automaton,
     const HybridEnclosure& source, const Integer& index) {
-    constexpr SizeType maximum_refinement_depth = 4u;
-    std::deque<std::pair<HybridEnclosure, SizeType>> pending;
-    pending.emplace_back(source, 0u);
+    if (!automaton.has_mode(source.location()) ||
+        !automaton.has_equation(source.location()))
+        throw std::invalid_argument(
+            "Discrete hybrid LOWER requires an equation at each mode");
 
+    if (has_certified_lower_source(source.continuous_set())) {
+        const auto branch = unique_certified_lower_branch(automaton, source, index);
+        if (branch)
+            return {source, *branch};
+    }
+
+    std::deque<ParameterBoxSearch> pending{{source.continuous_set().reduced_domain(), 0u}};
     while (!pending.empty()) {
-        auto candidate = std::move(pending.front());
+        const ParameterBoxSearch candidate = pending.front();
         pending.pop_front();
-        if (has_certified_lower_source(candidate.first.continuous_set())) {
-            const auto branch = unique_certified_lower_branch(
-                automaton, candidate.first, index);
+        if (has_certified_lower_source_on_box(source.continuous_set(), candidate.box)) {
+            const auto branch = unique_lower_branch_on_box(
+                automaton, source, index, candidate.box);
             if (branch)
-                return {std::move(candidate.first), *branch};
+                return {constrain_lower_source(source, candidate.box), *branch};
         }
-        // Failure to prove feasibility on a broad source is NOT a
-        // proof of infeasibility: a descendant can carry a verified
-        // interior witness even if the parent's midpoint is excluded.
-        if (candidate.second >= maximum_refinement_depth ||
-            definitely(candidate.first.continuous_set().reduced_domain().is_empty()))
-            continue;
-
-        const auto children = candidate.first.split();
-        for (const HybridEnclosure& child : children) {
-            if (!same(child.parameter_domain(), candidate.first.parameter_domain()) &&
-                definitely(!child.parameter_domain().is_empty()))
-                pending.emplace_back(child, candidate.second + 1u);
-        }
+        if (candidate.depth < lower_refinement_depth)
+            enqueue_parameter_halves(candidate.box, candidate.depth, pending);
     }
     throw std::invalid_argument(
         "Discrete hybrid LOWER could not certify a feasible subbox with one branch");
@@ -223,13 +310,14 @@ Orbit<HybridEnclosure> HybridDiscreteTimeEvolver<ValidatedTag>::orbit(
         initial.auxiliary_space() != equation.auxiliary_space())
         throw std::invalid_argument("Discrete hybrid LOWER initial auxiliary space mismatch");
 
-    // Enclosure::is_empty() is an emptiness semi-decision and cannot
-    // certify a nonempty source by negation. Admit only a validated
-    // existential witness: a nonempty exact parameter domain, with
-    // all declared constraints provably satisfied on it when present.
-    if (!has_certified_lower_source(initial.continuous_set()))
+    // At positive horizon, feasibility is certified with the first
+    // branch subbox. At zero horizon search for one feasible parameter
+    // without deciding any guard. UNKNOWN on a broad source is not
+    // proof that all narrower feasible witnesses are absent.
+    if (termination.initial_index() == termination.termination_index() &&
+        !has_refined_lower_witness(initial.continuous_set()))
         throw std::invalid_argument(
-            "Discrete hybrid LOWER requires a certified feasible initial parameter domain");
+            "Discrete hybrid LOWER requires a certified feasible initial parameter witness");
 
     const auto check_index = [](const HybridEnclosure& set, const Integer& index) {
         const Real expected_time(index);

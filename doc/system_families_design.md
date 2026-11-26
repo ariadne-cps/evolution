@@ -2143,3 +2143,60 @@ persists, inspect the new last-check position and the
 sanitizer stack trace before changing production logic
 or expected numerical values. The installed tutorial
 continues to include only `ariadne-evolution.hpp`.
+
+## v7.07 — Candidate SegFault repair via exact-subbox certificates without patch restriction
+
+Both v7.05 `29c4efc5` and v7.06 `00c0a142` fail the
+`lower_refines_undecided_urgent_guard` test with SegFault
+after breadcrumb 13.4 (event-history identity). The testing
+runtime publishes that breadcrumb at the **start** of an
+assertion, so the fault occurs before the next assertion begins,
+but its exact stack frame is not determined by the breadcrumb.
+
+The v7.06 global alteration of
+`HybridEnclosure::state_bounding_box()` did not fix the
+crash and is reverted exactly to the implementation that
+passed v7.04. We neither remove the failing assertion nor
+weaken numerical correctness.
+
+The v7.07 candidate avoids `HybridEnclosure::split()` and
+`HybridEnclosure::restrict()` in LOWER witness refinement.
+Those operations restrict and re-create validated state,
+time, dwell-time and constraint function patches, which
+are suspected of becoming invalid on a subsequent reset.
+
+Instead search a bounded tree of **exact parameter subboxes**
+(maximum four bisection levels) without restricting any
+validated function patch. For each candidate, certify
+existence via `has_certified_lower_source_on_box()`, using
+the original constraints on that box; classify guards and
+invariants with the shared planner by interval-validating
+their indicators on the SAME box. Any unresolved predicate
+remains UNKNOWN; only a single possible, uniformly certain
+branch can be selected. The selected box is then imposed
+upon a fresh copy of the original enclosure as
+parameter-space interval constraints on each narrowed
+coordinate; the validated state/auxiliary maps keep their
+original domain, and the reset composes those maps while
+preserving all original and new constraints. No numerical
+sampling or event priority is introduced.
+
+The initial zero-horizon existence test uses the same
+bounded exact-subbox search, without deciding events.
+An inability to prove feasibility of a parent box does
+not imply its children are empty. Unresolved searches
+raise an exception rather than fabricate LOWER trajectories.
+
+The crash test continues to require correct event history,
+mode, state dimension, reduced domain, public bounding
+box and witness `x[0]=7/8 -> x[1]=31/8`. The constrained
+variant now requires **both** original `x>=3/4` and the
+selected exact parameter-subbox constraint to survive
+the reset, as well as the same numerical witness.
+The boundary singleton remains a conservative rejection.
+
+This is a **candidate** repair; the actual crash cause
+still requires confirmation by the precise v7.07 CI
+and, if red, an AddressSanitizer stack trace.
+The tutorial remains unchanged and includes only
+`ariadne-evolution.hpp`.

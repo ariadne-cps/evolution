@@ -3082,3 +3082,53 @@ The immutable rule at document start is unchanged. All
 five CI workflows must pass on THIS exact SHA before
 acceptance: Ubuntu, macOS, Windows, Coverage, Sanitizers.
 The v7.22 CI has not been inherited.
+
+## v7.24 — Correct the ordinary dynamics contract regression for structured inclusion LOWER
+
+**Observed CI failure on v7.23** `3a546bfa`: in
+`test_ordinary_dynamics_contract`, case
+`inclusion_consumer_rejects_unsupported_arguments`, the old shared
+assertion at line 104 expected that *both* explicit-time and
+trajectory-constant-parameter inclusions throw on
+`orbit(..., Semantics::LOWER)`. Ubuntu Clang 16 Debug (x86 and arm)
+and macOS AppleClang Debug failed with “no exception thrown”.
+The v7.23 capability extension intentionally made LOWER available
+for a selected, structured continuous inclusion integrator, including
+**explicit time**; the old negative assertion was not audited and
+is therefore a **stale test expectation**, not evidence of a
+production kernel defect. The second case, a physical
+trajectory-constant parameter, is STILL intentionally rejected by
+the evolver and must retain its negative coverage.
+
+**Exact test correction, without weakening coverage:** keep the
+existing independent model/interface dimensionality checks for
+both variants. For `x'=t+u`, `u in [-1,1]`, source `x(0)=0`,
+horizon `H=1/16`, verify that selected structured integration
+under LOWER returns one final enclosure and a nonempty reach,
+preserves at least one free input parameter and zero synthetic
+constraints, and rigorously contains the analytical endpoint
+interval `[-H+H^2/2, H+H^2/2]=[-31/512,33/512]`.
+Also check that its zero-horizon LOWER orbit is valid. For
+`x'=p+u` with `p in [0,1]`, retain mandatory
+`std::invalid_argument` checks for LOWER at both positive
+and zero horizon, since physical parameter LOWER is not yet
+supported. The existing static type assertions, equation
+negative cases and interval-function capability checks
+remain unchanged. No production code is modified.
+
+**Mathematical contract:** this is a test update matching the
+already established *structured* selected integration capability;
+it changes neither the model's dynamics nor the immutable
+UPPER/LOWER definitions at the top of the document.
+Validated numerical enclosures are outer under BOTH semantics;
+LOWER represents a genuinely reachable nonempty subset, not a
+geometric inner set. No input sampling or independent
+enclosure splitting is introduced.
+
+**Verification:** the prior v7.23 was CI-red in Debug. The
+corrected v7.24 must pass ALL five workflows (Ubuntu, macOS,
+Windows, Coverage, Sanitizers), including Debug tests,
+on its own exact SHA before claiming validated support for
+continuous inclusion LOWER. The capability matrix is still
+2 LOWER complete + 5 partial candidates + 1 absent, and
+must not be promoted solely by publishing this change.

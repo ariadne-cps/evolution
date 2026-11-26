@@ -100,9 +100,42 @@ class TestOrdinaryDynamicsContract : public Ariadne::Testing::ContextFixture {
             ARIADNE_TESTING_EXPECT_EQUAL(inclusion.function().argument_size(), 3u);
             ContinuousTimeEvolver<ValidatedTag> evolver(inclusion, integrator, ZeroApproximation(), ConstantApproximation());
             ARIADNE_TESTING_EXPECT_EQUAL(evolver.system().dimension(), 1u);
-            ARIADNE_TESTING_EXPECT_THROWS(std::invalid_argument,
-                                          evolver.orbit(RealVariablesBox({x == 0}), Real(0.0625_x), Semantics::LOWER));
         }
+
+        // The selected STRUCTURED integrator now supports timed
+        // inclusion LOWER: same physical field and all admissible inputs.
+        // x'=t+u, x(0)=0, u in [-1,1], H=1/16 has the exact image
+        // [-H+H^2/2, H+H^2/2]=[-31/512,33/512].
+        ContinuousTimeEvolver<ValidatedTag> timed_evolver(
+            timed, integrator, ZeroApproximation(), ConstantApproximation());
+        timed_evolver.configuration().set_maximum_step_size(0.0625);
+        timed_evolver.configuration().set_enable_reconditioning(false);
+        const auto timed_lower = timed_evolver.orbit(
+            RealVariablesBox({x == 0}), Real(0.0625_x), Semantics::LOWER);
+        ARIADNE_TESTING_REQUIRE(timed_lower.final().size() == 1u);
+        ARIADNE_TESTING_REQUIRE(timed_lower.reach().size() > 0u);
+        const auto& timed_final = timed_lower.final()[0u];
+        ARIADNE_TESTING_EXPECT_EQUAL(timed_final.state_dimension(), 1u);
+        ARIADNE_TESTING_PROVE(timed_final.number_of_parameters() >= 2u);
+        ARIADNE_TESTING_EXPECT_EQUAL(timed_final.number_of_constraints(), 0u);
+        const auto timed_box = cast_exact_box(timed_final.euclidean_set().bounding_box());
+        ARIADNE_TESTING_PROVE(subset(ExactBoxType({
+            {-0.060546875_x, 0.064453125_x}
+        }), timed_box));
+        const auto timed_zero = timed_evolver.orbit(
+            RealVariablesBox({x == 0}), Real(0), Semantics::LOWER);
+        ARIADNE_TESTING_EXPECT_EQUAL(timed_zero.final().size(), 1u);
+
+        // Trajectory-CONSTANT physical parameters remain unsupported
+        // by LOWER; neither positive nor zero horizon may accept them.
+        ContinuousTimeEvolver<ValidatedTag> parameterised_evolver(
+            parameterised, integrator, ZeroApproximation(), ConstantApproximation());
+        ARIADNE_TESTING_EXPECT_THROWS(std::invalid_argument,
+            parameterised_evolver.orbit(
+                RealVariablesBox({x == 0}), Real(0.0625_x), Semantics::LOWER));
+        ARIADNE_TESTING_EXPECT_THROWS(std::invalid_argument,
+            parameterised_evolver.orbit(
+                RealVariablesBox({x == 0}), Real(0), Semantics::LOWER));
     }
 
     Void test_interval_inclusion_is_not_treated_as_an_input_function() {

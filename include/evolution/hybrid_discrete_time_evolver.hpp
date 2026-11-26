@@ -78,14 +78,17 @@ class HybridDiscreteTimeEvolverConfiguration<ValidatedTag> : public Configuratio
 //! LOWER is available through orbit() for equation and bounded-input
 //! inclusion modes. Both semantics use the same validated set-image map;
 //! a full independent input box is preserved at every discrete tick.
-//! The LOWER planner requires exactly one uniformly certain branch and
-//! imposes no event priority. Inclusion sources must certify the branch
-//! over the entire input box, without splitting or sampling inputs.
-//! Equation sources retain the established state-parameter refinement.
-//! A certified transition may target an equation or inclusion mode,
-//! including auxiliary outputs with full fresh arrival inputs.
-//! UNKNOWN or competing inclusion branches are rejected. Zero horizon
-//! needs no event decision; no continuous-time integrator is involved.
+//! LOWER never splits an outer enclosure into independently published
+//! children, since its reachable subset could be lost. This follows
+//! the existing hybrid-continuous LOWER contract. The current limited
+//! planner accepts one uniformly admissible branch on the entire
+//! enclosure, without priority between events; this is a sufficient
+//! implemented condition, not the definition of LOWER. All equation
+//! and inclusion modes apply the exact same set-valued map as UPPER,
+//! keeping full input boxes and auxiliary correlations. A reset may
+//! target equation or inclusion modes, with full fresh arrival inputs.
+//! Unresolved/competing branches are rejected without independent
+//! witness selection; zero horizon needs no event decision.
 //! orbit_with_blocked() and explore() remain UPPER-only.
 //! A blocked UPPER leaf is not an orbit.final() enclosure: retrieve it
 //! through orbit_with_blocked() or explore().

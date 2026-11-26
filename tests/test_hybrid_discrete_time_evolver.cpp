@@ -437,7 +437,7 @@ class TestHybridDiscreteTimeEvolver : public Ariadne::Testing::ContextFixture {
         ARIADNE_TESTING_PROVE(lower_bounds.upper_bound().raw().get_d() >= 9.0);
     }
 
-    Void test_lower_inclusion_refines_state_without_restricting_inputs() {
+    Void test_lower_inclusion_preserves_full_input_without_splitting() {
         const RealVariable x("x"), u("u"), a("a");
         const DiscreteLocation source_mode(1), target_mode(2);
         const DiscreteEvent event("state_only_guard");
@@ -452,10 +452,24 @@ class TestHybridDiscreteTimeEvolver : public Ariadne::Testing::ContextFixture {
             {next(x) = x + a + 3}, x >= 1 / 2_q);
         Evolver evolver(system);
 
-        // The guard is undecided only at the state boundary x=1/2.
-        // Refine the INITIAL x-axis, never the independent INPUT u-axis.
-        const HybridEnclosure reset_source(HybridExactBox(
+        // Guard-boundary sources cannot be split to publish one
+        // independently claimed LOWER witness.
+        const HybridEnclosure undecided_reset(HybridExactBox(
             source_mode, RealSpace({x}), ExactBoxType({{0.5_x, 1.0_x}})),
+            configuration());
+        ARIADNE_TESTING_EXPECT_THROWS(std::invalid_argument,
+            evolver.orbit(undecided_reset, Termination(Integer(0), Integer(1)),
+                          Semantics::LOWER));
+        const HybridEnclosure undecided_progression(HybridExactBox(
+            source_mode, RealSpace({x}), ExactBoxType({{0.0_x, 0.5_x}})),
+            configuration());
+        ARIADNE_TESTING_EXPECT_THROWS(std::invalid_argument,
+            evolver.orbit(undecided_progression, Termination(Integer(0), Integer(1)),
+                          Semantics::LOWER));
+        // Caller-supplied uniformly guard-true/false whole sources
+        // still preserve every input value and the unchanged map.
+        const HybridEnclosure reset_source(HybridExactBox(
+            source_mode, RealSpace({x}), ExactBoxType({{0.75_x, 1.0_x}})),
             configuration());
         const auto reset_orbit = evolver.orbit(
             reset_source, Termination(Integer(0), Integer(1)), Semantics::LOWER);
@@ -467,7 +481,7 @@ class TestHybridDiscreteTimeEvolver : public Ariadne::Testing::ContextFixture {
         ARIADNE_TESTING_EXPECT_EQUAL(reset_final.continuous_set().number_of_parameters(), 2u);
         ARIADNE_TESTING_EXPECT_EQUAL(
             reset_final.continuous_set().variable_kinds()[1u], EnclosureVariableKind::INPUT);
-        ARIADNE_TESTING_REQUIRE(reset_final.number_of_constraints() >= 1u);
+        ARIADNE_TESTING_EXPECT_EQUAL(reset_final.number_of_constraints(), 0u);
         const auto reset_input = reset_final.continuous_set().parameter_domain()[1u];
         ARIADNE_TESTING_PROVE(reset_input.lower_bound().raw().get_d() <= -1.0);
         ARIADNE_TESTING_PROVE(reset_input.upper_bound().raw().get_d() >= 1.0);
@@ -483,7 +497,7 @@ class TestHybridDiscreteTimeEvolver : public Ariadne::Testing::ContextFixture {
         // On the other state side, a strictly negative guard certifies
         // progression for the SAME entire input box at the next tick.
         const HybridEnclosure progression_source(HybridExactBox(
-            source_mode, RealSpace({x}), ExactBoxType({{0.0_x, 0.5_x}})),
+            source_mode, RealSpace({x}), ExactBoxType({{0.0_x, 0.25_x}})),
             configuration());
         const auto progression_orbit = evolver.orbit(
             progression_source, Termination(Integer(0), Integer(1)), Semantics::LOWER);
@@ -493,7 +507,7 @@ class TestHybridDiscreteTimeEvolver : public Ariadne::Testing::ContextFixture {
         ARIADNE_TESTING_EXPECT_EQUAL(progression_final.previous_events().size(), 0u);
         ARIADNE_TESTING_EXPECT_EQUAL(
             progression_final.continuous_set().number_of_parameters(), 3u);
-        ARIADNE_TESTING_REQUIRE(progression_final.number_of_constraints() >= 1u);
+        ARIADNE_TESTING_EXPECT_EQUAL(progression_final.number_of_constraints(), 0u);
         const auto progression_input =
             progression_final.continuous_set().parameter_domain()[1u];
         ARIADNE_TESTING_PROVE(progression_input.lower_bound().raw().get_d() <= -1.0);
@@ -718,7 +732,7 @@ class TestHybridDiscreteTimeEvolver : public Ariadne::Testing::ContextFixture {
         ARIADNE_TESTING_PROVE(step_bounds.upper_bound().raw().get_d() >= 1.5);
     }
 
-    Void test_lower_refines_undecided_urgent_guard() {
+    Void test_lower_rejects_unaggregated_guard_splitting() {
         const RealVariable x("x");
         const DiscreteLocation source_mode(1), target_mode(2);
         const DiscreteEvent event("undecided");
@@ -732,42 +746,29 @@ class TestHybridDiscreteTimeEvolver : public Ariadne::Testing::ContextFixture {
         Evolver evolver(system);
         const auto source = initial(source_mode);
 
-        // On the whole [0,1] source, BOTH progression and reset admit
-        // strictly certified subboxes. LOWER may return either witness:
-        // it must not be tested as if transitions had priority.
-        const auto unrestricted = evolver.orbit(
-            source, Termination(Integer(0), Integer(1)), Semantics::LOWER);
-        ARIADNE_TESTING_REQUIRE(unrestricted.final().size() == 1u);
-        const auto& selected = unrestricted.final().front();
-        ARIADNE_TESTING_REQUIRE(
-            selected.location() == source_mode || selected.location() == target_mode);
-        ARIADNE_TESTING_REQUIRE(selected.number_of_constraints() >= 1u);
-        if (selected.location() == target_mode) {
-            ARIADNE_TESTING_REQUIRE(selected.previous_events().size() == 1u);
-            ARIADNE_TESTING_PROVE(selected.previous_events()[0u] == event);
-        } else {
-            ARIADNE_TESTING_EXPECT_EQUAL(selected.previous_events().size(), 0u);
-        }
+        // An ambiguous whole source cannot be replaced by an
+        // independently selected child of its outer LOWER enclosure.
+        ARIADNE_TESTING_EXPECT_THROWS(std::invalid_argument,
+            evolver.orbit(source, Termination(Integer(0), Integer(1)),
+                          Semantics::LOWER));
 
-        // Restrict only the *input test source* to the guard-positive
-        // side, including its undecided boundary. A strict interior box
-        // [3/4,1] can certify the reset with witness x[0]=7/8.
+        // The caller provides a uniformly guard-positive source,
+        // with reachable reset witness x[0]=7/8. No split is made.
         const HybridEnclosure reset_source(HybridExactBox(
-            source_mode, RealSpace({x}), ExactBoxType({{0.5_x, 1.0_x}})),
+            source_mode, RealSpace({x}), ExactBoxType({{0.75_x, 1.0_x}})),
             configuration());
         const auto lower = evolver.orbit(
             reset_source, Termination(Integer(0), Integer(1)), Semantics::LOWER);
         ARIADNE_TESTING_EXPECT_EQUAL(lower.final().size(), 1u);
         ARIADNE_TESTING_PROVE(lower.final().front().location() == target_mode);
         ARIADNE_TESTING_EXPECT_EQUAL(lower.final().front().previous_events().size(), 1u);
-        // Keep independent event-name and event-identity checks: unlike the
-        // unrestricted case, this one-sided source must certify a reset.
+        // Verify the forced reset by both event-name and identity checks.
         const auto& reset_final = lower.final().front();
         const auto& recorded_events = reset_final.previous_events();
         ARIADNE_TESTING_REQUIRE(recorded_events.size() == 1u);
         ARIADNE_TESTING_REQUIRE(recorded_events[0u].name() == event.name());
         ARIADNE_TESTING_PROVE(lower.final().front().previous_events()[0u] == event);
-        // An existentially refined LOWER branch must still own a
+        // The complete LOWER reset branch must still own a
         // one-dimensional validated reset map and a nonempty parameter
         // domain. Do not bypass its public bounding_box() operation.
         ARIADNE_TESTING_REQUIRE(reset_final.state_dimension() == 1u);
@@ -788,11 +789,11 @@ class TestHybridDiscreteTimeEvolver : public Ariadne::Testing::ContextFixture {
             evolver.orbit(source, Termination(Integer(0), Integer(0)),
                           Semantics::LOWER).final().size(), 1u);
 
-        // The guard-negative side is likewise undecided on its boundary,
-        // but refinement must preserve an event-free progression witness
+        // The caller-supplied guard-negative source preserves
+        // the event-free progression witness
         // x[0]=1/8 -> x[1]=9/8.
         const HybridEnclosure progression_source(HybridExactBox(
-            source_mode, RealSpace({x}), ExactBoxType({{0.0_x, 0.5_x}})),
+            source_mode, RealSpace({x}), ExactBoxType({{0.0_x, 0.25_x}})),
             configuration());
         const auto progression = evolver.orbit(
             progression_source, Termination(Integer(0), Integer(1)), Semantics::LOWER);
@@ -800,7 +801,7 @@ class TestHybridDiscreteTimeEvolver : public Ariadne::Testing::ContextFixture {
         const auto& progression_final = progression.final().front();
         ARIADNE_TESTING_PROVE(progression_final.location() == source_mode);
         ARIADNE_TESTING_EXPECT_EQUAL(progression_final.previous_events().size(), 0u);
-        ARIADNE_TESTING_REQUIRE(progression_final.number_of_constraints() >= 1u);
+        ARIADNE_TESTING_EXPECT_EQUAL(progression_final.number_of_constraints(), 0u);
         const auto progression_box = progression_final.state_bounding_box();
         ARIADNE_TESTING_REQUIRE(progression_box.dimension() == 1u);
         ARIADNE_TESTING_PROVE(
@@ -809,10 +810,9 @@ class TestHybridDiscreteTimeEvolver : public Ariadne::Testing::ContextFixture {
             progression_box[0u].upper_bound().raw().get_d() >= 1.125);
         ARIADNE_TESTING_EXPECT_EQUAL(progression_source.number_of_constraints(), 0u);
 
-        // Constrained initial sources may have no certified midpoint
-        // on the full domain; refinement must not confuse that with
-        // a proof of infeasibility.
-        auto constrained = source;
+        // Keep the caller's constraint unchanged; do not add a
+        // synthetic subbox restriction to resolve the event.
+        auto constrained = reset_source;
         Enclosure restricted = constrained.continuous_set();
         const auto coordinate = EffectiveScalarMultivariateFunction::coordinate(1u, 0u);
         restricted.new_positive_state_constraint(coordinate - Real(3 / 4_q));
@@ -821,19 +821,17 @@ class TestHybridDiscreteTimeEvolver : public Ariadne::Testing::ContextFixture {
             constrained, Termination(Integer(0), Integer(1)), Semantics::LOWER);
         ARIADNE_TESTING_EXPECT_EQUAL(feasible.final().size(), 1u);
         ARIADNE_TESTING_PROVE(feasible.final().front().location() == target_mode);
-        // Preserve the original x>=3/4 constraint and add the certified
-        // parameter-subbox constraint; do not replace the initial predicate.
+        // Only the caller's original x>=3/4 constraint survives.
         ARIADNE_TESTING_EXPECT_EQUAL(
-            feasible.final().front().number_of_constraints(), 2u);
+            feasible.final().front().number_of_constraints(), 1u);
         ARIADNE_TESTING_EXPECT_EQUAL(constrained.number_of_constraints(), 1u);
         const auto feasible_box = feasible.final().front().state_bounding_box();
         ARIADNE_TESTING_REQUIRE(feasible_box.dimension() == 1u);
         ARIADNE_TESTING_PROVE(feasible_box[0u].lower_bound().raw().get_d() <= 3.875);
         ARIADNE_TESTING_PROVE(feasible_box[0u].upper_bound().raw().get_d() >= 3.875);
 
-        // A boundary-only initial source has no strictly true or false
-        // guard on any nonempty subdivision. The bounded proof search
-        // must reject this case rather than fabricate a witness branch.
+        // A guard-boundary singleton cannot be treated as a
+        // uniformly decided transition without inventing evidence.
         const HybridEnclosure boundary(HybridExactBox(
             source_mode, RealSpace({x}),
             ExactBoxType({{0.5_x, 0.5_x}})), configuration());
@@ -842,7 +840,7 @@ class TestHybridDiscreteTimeEvolver : public Ariadne::Testing::ContextFixture {
                           Semantics::LOWER));
     }
 
-    Void test_lower_refines_nonleading_guard_parameter() {
+    Void test_lower_preserves_unsplit_multidimensional_source() {
         const RealVariable x("x"), y("y");
         const DiscreteLocation source_mode(1), target_mode(2);
         const DiscreteEvent event("guard_on_y");
@@ -855,13 +853,18 @@ class TestHybridDiscreteTimeEvolver : public Ariadne::Testing::ContextFixture {
             {next(x) = x + 3, next(y) = y}, y >= 1 / 2_q);
         Evolver evolver(system);
 
-        // x is the first nondegenerate parameter, but only y decides
-        // the guard. The full y interval touches the uncertain boundary.
-        // Rotating the split axis must find the interior reset witness
-        // (x,y)=(1/2,7/8) -> (7/2,7/8), without prioritising the event.
+        // A second coordinate with an undecided guard cannot be
+        // isolated as an independent LOWER child.
+        const HybridEnclosure ambiguous(HybridExactBox(
+            source_mode, RealSpace({x, y}),
+            ExactBoxType({{0.0_x, 1.0_x}, {0.0_x, 1.0_x}})), configuration());
+        ARIADNE_TESTING_EXPECT_THROWS(std::invalid_argument,
+            evolver.orbit(ambiguous, Termination(Integer(0), Integer(1)),
+                          Semantics::LOWER));
+        // Uniformly decided whole sources remain supported.
         const HybridEnclosure reset_source(HybridExactBox(
             source_mode, RealSpace({x, y}),
-            ExactBoxType({{0.0_x, 1.0_x}, {0.5_x, 1.0_x}})), configuration());
+            ExactBoxType({{0.0_x, 1.0_x}, {0.75_x, 1.0_x}})), configuration());
         const auto reset_orbit = evolver.orbit(
             reset_source, Termination(Integer(0), Integer(1)), Semantics::LOWER);
         ARIADNE_TESTING_REQUIRE(reset_orbit.final().size() == 1u);
@@ -869,7 +872,7 @@ class TestHybridDiscreteTimeEvolver : public Ariadne::Testing::ContextFixture {
         ARIADNE_TESTING_PROVE(reset_final.location() == target_mode);
         ARIADNE_TESTING_REQUIRE(reset_final.previous_events().size() == 1u);
         ARIADNE_TESTING_PROVE(reset_final.previous_events()[0u] == event);
-        ARIADNE_TESTING_REQUIRE(reset_final.number_of_constraints() >= 1u);
+        ARIADNE_TESTING_EXPECT_EQUAL(reset_final.number_of_constraints(), 0u);
         ARIADNE_TESTING_EXPECT_EQUAL(reset_final.state_dimension(), 2u);
         ARIADNE_TESTING_EXPECT_EQUAL(
             reset_final.time_range().lower_bound().raw().get_d(), 1.0);
@@ -886,14 +889,14 @@ class TestHybridDiscreteTimeEvolver : public Ariadne::Testing::ContextFixture {
         // (x,y)=(1/2,1/8) -> (3/2,1/8), with no recorded event.
         const HybridEnclosure progression_source(HybridExactBox(
             source_mode, RealSpace({x, y}),
-            ExactBoxType({{0.0_x, 1.0_x}, {0.0_x, 0.5_x}})), configuration());
+            ExactBoxType({{0.0_x, 1.0_x}, {0.0_x, 0.25_x}})), configuration());
         const auto progression_orbit = evolver.orbit(
             progression_source, Termination(Integer(0), Integer(1)), Semantics::LOWER);
         ARIADNE_TESTING_REQUIRE(progression_orbit.final().size() == 1u);
         const auto& progression_final = progression_orbit.final().front();
         ARIADNE_TESTING_PROVE(progression_final.location() == source_mode);
         ARIADNE_TESTING_EXPECT_EQUAL(progression_final.previous_events().size(), 0u);
-        ARIADNE_TESTING_REQUIRE(progression_final.number_of_constraints() >= 1u);
+        ARIADNE_TESTING_EXPECT_EQUAL(progression_final.number_of_constraints(), 0u);
         ARIADNE_TESTING_EXPECT_EQUAL(
             progression_final.time_range().lower_bound().raw().get_d(), 1.0);
         const auto progression_bounds = progression_final.state_bounding_box();
@@ -1113,13 +1116,13 @@ int main(int argc, char** argv) {
     ARIADNE_TESTING_ADD_TEST(TestHybridDiscreteTimeEvolver, test_event_free_input_auxiliary_upper_orbit);
     ARIADNE_TESTING_ADD_TEST(TestHybridDiscreteTimeEvolver, test_state_only_event_from_auxiliary_inclusion_upper);
     ARIADNE_TESTING_ADD_TEST(TestHybridDiscreteTimeEvolver, test_public_reset_into_inclusion_with_auxiliary_and_continue);
-    ARIADNE_TESTING_ADD_TEST(TestHybridDiscreteTimeEvolver, test_lower_inclusion_refines_state_without_restricting_inputs);
+    ARIADNE_TESTING_ADD_TEST(TestHybridDiscreteTimeEvolver, test_lower_inclusion_preserves_full_input_without_splitting);
     ARIADNE_TESTING_ADD_TEST(TestHybridDiscreteTimeEvolver, test_lower_uniform_auxiliary_guard_over_full_input_box);
     ARIADNE_TESTING_ADD_TEST(TestHybridDiscreteTimeEvolver, test_lower_event_free_equation_witness);
     ARIADNE_TESTING_ADD_TEST(TestHybridDiscreteTimeEvolver, test_lower_constrained_point_witness);
     ARIADNE_TESTING_ADD_TEST(TestHybridDiscreteTimeEvolver, test_lower_forced_urgent_jump_and_disabled_progression);
-    ARIADNE_TESTING_ADD_TEST(TestHybridDiscreteTimeEvolver, test_lower_refines_undecided_urgent_guard);
-    ARIADNE_TESTING_ADD_TEST(TestHybridDiscreteTimeEvolver, test_lower_refines_nonleading_guard_parameter);
+    ARIADNE_TESTING_ADD_TEST(TestHybridDiscreteTimeEvolver, test_lower_rejects_unaggregated_guard_splitting);
+    ARIADNE_TESTING_ADD_TEST(TestHybridDiscreteTimeEvolver, test_lower_preserves_unsplit_multidimensional_source);
     ARIADNE_TESTING_ADD_TEST(TestHybridDiscreteTimeEvolver, test_lower_unique_permissive_branch);
     ARIADNE_TESTING_ADD_TEST(TestHybridDiscreteTimeEvolver, test_lower_unique_branch_across_competing_events);
     ARIADNE_TESTING_ADD_TEST(TestHybridDiscreteTimeEvolver, test_lower_excludes_unproved_branches);

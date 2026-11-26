@@ -2778,3 +2778,60 @@ section is superseded as a design recommendation, but retained for
 traceability. The earlier v6.53 witness audit remains consistent with
 the lower-vs-inner distinction but must not be taken to authorize
 arbitrary slicing of a later outer LOWER enclosure.
+
+## v7.19 — Preserve LOWER reachable subsets by removing independent hybrid subbox selection
+
+**Binding mathematical contract:** the canonical contract at the top
+of this document governs every result. UPPER is a rigorous outer
+enclosure of a superset of R; LOWER is a rigorous outer enclosure of
+a nonempty subset of R, not an INNER approximation. A LOWER enclosure
+must preserve at least one actually reachable point of the represented
+subset. All temporal families apply the original dynamics.
+
+**Confirmed error:** the v7.17 public hybrid regression
+`public_guarded_inclusion_upper_orbit` failed because LOWER started
+returning a selected state-refined child on an uncertain event rather
+than rejecting the unresolved full-source branch. Child selection
+had originated in v7.05 for equations and was extended to inclusions
+in v7.17. From S_L nonempty and S_L subset E, splitting E into
+two pieces does not prove the arbitrarily chosen child meets S_L.
+This violates the established hybrid continuous LOWER principle.
+The original negative regression is deliberately kept, not rewritten
+to excuse independently selected subboxes.
+
+**Production change:** eliminate the finite-depth subbox work queue,
+axis splitting, per-box guard classification, synthetic source
+parameter-box constraints and `CertifiedLowerStep` substitute source.
+Both equation and inclusion LOWER now apply the SAME shared
+`HybridDiscreteTimeStepImage::apply` numerical map as UPPER to the
+ORIGINAL, UNSPLIT current enclosure, retaining complete independent
+input boxes and source constraints. The initial source-feasibility
+sufficient gate is checked once, not replaced by a per-tick search.
+The shared branch planner must find one uniformly certain admissible
+event/progression branch on the whole source. This is a conservative
+SUFFICIENT supported transition policy, not the definition of LOWER
+or a new physical dynamics. Event-free progression uses the normal
+one-tick map without special event certification, while unresolved
+branches are conservatively rejected.
+
+**Semantic regression:** all 20 public test methods remain registered.
+The existing uncertain-guard negative assertion remains unchanged.
+Three formerly split-oriented tests now require rejection of an
+ambiguous whole or boundary-inclusive initial enclosure, while
+retaining positive mandatory checks for both reset and progression
+on entire caller-provided guard-true/guard-false source boxes in
+one and two dimensions. Auxiliaries, event identity/history, clock,
+public image geometry, state constraints and initial-source
+immutability remain under test. The inclusion case still checks
+both extreme values of every relevant full [-1,1] INPUT interval:
+no sampling, no midpoint equality, no invented subbox constraints.
+Static preflight checked registration and duplicate const-auto
+names, but is not a substitute for C++ compilation.
+
+**Scope/status:** only hybrid LOWER orchestration, its public header,
+public hybrid tests and this historical journal entry changed.
+The top-of-document non-negotiable semantics are unmodified.
+UPPER, System, Integration and numerical step-image code are untouched.
+This is a candidate until the Ubuntu, macOS, Windows, Coverage and
+Sanitizers workflows pass on this exact v7.19 commit. The capability
+matrix does not advance on an unvalidated candidate.

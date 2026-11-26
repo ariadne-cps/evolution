@@ -33,7 +33,6 @@
 #include "hybrid_discrete_time_predicate_function.hpp"
 #include "hybrid_discrete_time_inclusion_capability.hpp"
 
-#include <deque>
 #include <optional>
 #include <stdexcept>
 #include <utility>
@@ -76,47 +75,8 @@ Bool has_certified_lower_source(const Enclosure& source) {
     return has_certified_lower_source_on_box(source, source.reduced_domain());
 }
 
-constexpr SizeType lower_refinement_depth = 4u;
-
-struct ParameterBoxSearch {
-    ExactBoxType box;
-    SizeType depth;
-};
-
-Void enqueue_parameter_halves(
-    const ExactBoxType& box, SizeType depth, std::deque<ParameterBoxSearch>& pending,
-    const List<EnclosureVariableKind>* kinds = nullptr) {
-    // Rotate the starting axis with depth. For an inclusion source,
-    // refine only INITIAL coordinates: every INPUT coordinate, including
-    // its history, retains the complete original input domain.
-    const SizeType dimension = box.dimension();
-    for (SizeType offset = 0u; offset < dimension; ++offset) {
-        const SizeType axis = (depth + offset) % dimension;
-        if (kinds != nullptr && (*kinds)[axis] != EnclosureVariableKind::INITIAL)
-            continue;
-        if (!(box[axis].lower_bound().raw() < box[axis].upper_bound().raw()))
-            continue;
-        const auto children = box.split(axis);
-        if (!same(children.first, box) && definitely(!children.first.is_empty()))
-            pending.push_back({children.first, depth + 1u});
-        if (!same(children.second, box) && definitely(!children.second.is_empty()))
-            pending.push_back({children.second, depth + 1u});
-        return;
-    }
-}
-
-Bool has_refined_lower_witness(const Enclosure& source) {
-    std::deque<ParameterBoxSearch> pending{{source.reduced_domain(), 0u}};
-    while (!pending.empty()) {
-        const ParameterBoxSearch candidate = pending.front();
-        pending.pop_front();
-        if (has_certified_lower_source_on_box(source, candidate.box))
-            return true;
-        if (candidate.depth < lower_refinement_depth)
-            enqueue_parameter_halves(candidate.box, candidate.depth, pending);
-    }
-    return false;
-}
+// LOWER may not independently select a parameter child of a
+// witness-bearing outer enclosure, in line with hybrid continuous LOWER.
 
 // Reuse the same complete branch planner as validated UPPER, but require a
 // single branch whose precondition is certified for the entire source.
@@ -148,114 +108,17 @@ std::optional<HybridDiscreteTimePlannedBranch> unique_certified_lower_branch(
     return branch;
 }
 
-// Certify a predicate on an exact parameter subbox using the original
-// validated state patch. Boundary/undecided evidence stays UNKNOWN.
-DiscreteTimePredicateEvidence classify_on_box(
-    const DiscreteTimeHybridAutomatonInterface& automaton,
-    const HybridEnclosure& source, const ContinuousPredicate& predicate,
-    const ExactBoxType& box) {
-    const auto indicator =
-        EvolutionDetail::discrete_source_indicator(automaton, source, predicate);
-    const auto args = source.continuous_set().argument_function(
-        indicator.arguments, 0u);
-    const auto range = Ariadne::apply(compose(indicator.function, args), box);
-    if (definitely(range.lower_bound() > 0))
-        return DiscreteTimePredicateEvidence::TRUE;
-    if (definitely(range.upper_bound() < 0))
-        return DiscreteTimePredicateEvidence::FALSE;
-    return DiscreteTimePredicateEvidence::UNKNOWN;
-}
-
-std::optional<HybridDiscreteTimePlannedBranch> unique_lower_branch_on_box(
-    const DiscreteTimeHybridAutomatonInterface& automaton,
-    const HybridEnclosure& source, const Integer& index,
-    const ExactBoxType& box) {
-    const auto evaluate = [&](DiscreteLocation, DiscreteEvent,
-                              DiscreteTimePredicateRole,
-                              const ContinuousPredicate& predicate) {
-        return classify_on_box(automaton, source, predicate, box);
-    };
-    const auto plan = HybridDiscreteTimeStepPlanner::plan(
-        automaton, source.location(), index, evaluate);
-    if (plan.branches.size() != 1u || !plan.branches.front().certain)
-        return std::nullopt;
-    const auto branch = plan.branches.front();
-    if (branch.kind == HybridDiscreteTimeBranchKind::TRANSITION &&
-        !automaton.has_equation(branch.target) &&
-        !automaton.has_inclusion(branch.target))
-        return std::nullopt;
-    return branch;
-}
-
-// A certified exact subbox becomes parameter constraints on a COPY of
-// the source, not a restriction of the function-patch domain. The latter
-// produced a reproducible crash on a refined reset in v7.05/v7.06.
-// Composition preserves all existing and newly added constraints.
-HybridEnclosure constrain_lower_source(
-    const HybridEnclosure& source, const ExactBoxType& box) {
-    HybridEnclosure restricted = source;
-    Enclosure set = source.continuous_set();
-    const auto domain = set.domain();
-    for (SizeType i = 0u; i < box.dimension(); ++i) {
-        if (same(box[i], domain[i]))
-            continue;
-        const auto coordinate =
-            EffectiveScalarMultivariateFunction::coordinate(box.dimension(), i);
-        // FloatDP box endpoints are exact binary values, but are not
-        // implicitly convertible to ValidatedNumber. Convert through an
-        // exact dyadic number before constructing the interval constraint.
-        const ValidatedNumber lower(ExactNumber(Dyadic(box[i].lower_bound())));
-        const ValidatedNumber upper(ExactNumber(Dyadic(box[i].upper_bound())));
-        set.new_parameter_constraint(ValidatedConstraint(lower, coordinate, upper));
-    }
-    restricted.replace_continuous_set(set);
-    return restricted;
-}
-
-// Both a parameter witness and the unique branch are certified on the
-// SAME subbox; the ensuing reset retains that box as parameter constraints.
-struct CertifiedLowerStep {
-    HybridEnclosure source;
-    HybridDiscreteTimePlannedBranch branch;
-};
-
-CertifiedLowerStep certified_lower_step(
+// The common numerical map is unchanged: only hybrid branch
+// admissibility is checked on the original unsplit enclosure.
+// A uniformly certain branch is sufficient, not the definition of LOWER.
+HybridDiscreteTimePlannedBranch certified_lower_step(
     const DiscreteTimeHybridAutomatonInterface& automaton,
     const HybridEnclosure& source, const Integer& index) {
-    const Bool inclusion = automaton.has_inclusion(source.location());
-    if (!automaton.has_mode(source.location()) ||
-        (!automaton.has_equation(source.location()) && !inclusion))
+    const auto branch = unique_certified_lower_branch(automaton, source, index);
+    if (!branch)
         throw std::invalid_argument(
-            "Discrete hybrid LOWER requires a supported equation or inclusion mode");
-
-    if (has_certified_lower_source(source.continuous_set())) {
-        const auto branch = unique_certified_lower_branch(automaton, source, index);
-        if (branch)
-            return {source, *branch};
-    }
-
-    // A guard can depend on the initial state while being uniform over
-    // all current and historical inputs. Refine those INITIAL coordinates
-    // if necessary, but never split or constrain an INPUT parameter.
-    // Thus the numerical map still receives the entire input box.
-    const auto* allowable_kinds = inclusion
-        ? &source.continuous_set().variable_kinds() : nullptr;
-    std::deque<ParameterBoxSearch> pending{{source.continuous_set().reduced_domain(), 0u}};
-    while (!pending.empty()) {
-        const ParameterBoxSearch candidate = pending.front();
-        pending.pop_front();
-        if (has_certified_lower_source_on_box(source.continuous_set(), candidate.box)) {
-            const auto branch = unique_lower_branch_on_box(
-                automaton, source, index, candidate.box);
-            if (branch)
-                return {constrain_lower_source(source, candidate.box), *branch};
-        }
-        if (candidate.depth < lower_refinement_depth)
-            enqueue_parameter_halves(candidate.box, candidate.depth, pending,
-                                     allowable_kinds);
-    }
-    throw std::invalid_argument(
-        "Discrete hybrid LOWER could not certify a feasible subbox with one branch");
+            "Discrete hybrid LOWER cannot choose a branch on the whole enclosure");
+    return *branch;
 }
 
 } // namespace
@@ -343,10 +206,10 @@ Orbit<HybridEnclosure> HybridDiscreteTimeEvolver<ValidatedTag>::orbit(
         // at zero horizon and when certifying auxiliary guards.
         current = EvolutionDetail::prepare_discrete_inclusion_source(this->system(), initial);
     }
-    if (termination.initial_index() == termination.termination_index() &&
-        !has_refined_lower_witness(current.continuous_set()))
+    // Prove nonempty source once; no repeated witness selection in time.
+    if (!has_certified_lower_source(current.continuous_set()))
         throw std::invalid_argument(
-            "Discrete hybrid LOWER requires a certified feasible initial parameter witness");
+            "Discrete hybrid LOWER requires a certified feasible initial source");
 
     const auto check_index = [](const HybridEnclosure& set, const Integer& index) {
         const Real expected_time(index);
@@ -364,12 +227,10 @@ Orbit<HybridEnclosure> HybridDiscreteTimeEvolver<ValidatedTag>::orbit(
     while (index < termination.termination_index()) {
         if (nodes >= this->configuration().maximum_nodes())
             throw std::length_error("Discrete hybrid LOWER evolution exceeds node budget");
-        const auto certified = certified_lower_step(this->system(), current, index);
-        // The one-tick map is the same as UPPER. Inclusion sources
-        // retain their full input box; equations retain their existing
-        // state-parameter guard refinement. No input is sampled.
+        const auto branch = certified_lower_step(this->system(), current, index);
+        // Advance the SAME original, unsplit set-valued image as UPPER.
         current = HybridDiscreteTimeStepImage::apply(
-            this->system(), certified.source, certified.branch);
+            this->system(), current, branch);
         index = index + Integer(1);
         ++nodes;
         check_index(current, index);

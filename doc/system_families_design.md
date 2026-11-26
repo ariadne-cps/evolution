@@ -2335,3 +2335,54 @@ algorithm.
 all pass on the precise v7.11 SHA, including Debug and the installed
 C++ tutorial. This is a candidate implementation, not a CI-validated
 claim.
+
+## v7.12 — Existential validated LOWER for ordinary discrete bounded-input inclusions
+
+**Base:** v7.11 `52461a8f`, whose Ubuntu, macOS, Windows, Coverage and
+Sanitizers workflows all completed successfully on the exact SHA.
+
+The native `DiscreteTimeInclusionEvolver::orbit(..., Semantics::LOWER)`
+previously rejected every request, including zero horizon. This checkpoint
+adds a **strictly existential**, validated witness path for ordinary discrete
+bounded-input inclusions. It is *not* a general INNER set approximation:
+a validated enclosure can be an outer numerical representation, while the
+path is justified by constructive existence of an actual initial state
+and a sequence of admissible exact input choices.
+
+Admission requires a nonempty exact reduced initial parameter box and either
+no constraints, validation of every constraint over the entire box, or a
+validated feasible midpoint. UNKNOWN constraint feasibility is rejected,
+not promoted to a witness. Every nonempty bounded input box is handled by
+introducing a fresh independent INPUT parameter at each integer tick and
+constraining that parameter to the exact dyadic midpoint of its declared
+interval. The equality constraint is preserved alongside all original
+state constraints and previous input-history choices; the validated map
+and symbolic auxiliary functions remain composed over these correlated
+parameters. The arrival input u[n+1] is bound independently of u[n].
+For auxiliary-bearing dynamics, the current input is introduced and bound
+already at zero horizon, and the arrival input is bound after progression.
+Initially auxiliary-bearing resume enclosures are rejected for LOWER:
+unknown preexisting input constraints need a separate feasibility proof.
+UPPER keeps full-box universal propagation and its existing subdivision
+setting without changes.
+
+The C++ public tests retain all previous UPPER assertions. They establish
+LOWER for two independent input channels with x[0]=1, exact midpoint
+choices (u,v)=(2,1) per tick, and a two-tick witness x[2]=7; they
+also retain an initial x>=1/4 constraint and witness x[2]=13/2.
+A separate input-dependent auxiliary test certifies x[0]=0,
+u[0]=u[1]=u[2]=2, x[1]=2, x[2]=6 and arrival auxiliary
+a[2]=8. Both verify parameter/constraint counts, input independence,
+source immutability and public bounding boxes. Former blanket LOWER
+rejections are replaced by positive admission checks while **keeping**
+negative tests for an infeasible constrained source and an unsupported
+auxiliary-bearing resume. No runtime has yet been asserted to pass these
+new tests.
+
+**Capability matrix effect:** ordinary discrete inclusion / Validated LOWER
+moves from *absent* to *partial*. It remains a sufficient existential
+certificate only, not a complete constraint solver or an inner enclosure.
+All other matrix cells are unchanged. No changes to System, Integration,
+hybrid dynamics, tutorial, or approximate simulation. The new SHA must pass
+all five standard workflows (Ubuntu, macOS, Windows, Coverage, Sanitizers),
+including Debug and installed tutorial; no prior run counts for acceptance.

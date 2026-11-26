@@ -204,7 +204,11 @@ Void HybridEnclosure::set_time_function(const ValidatedScalarMultivariateFunctio
 
 UpperBoxType
     HybridEnclosure::state_bounding_box() const {
-    return cast_exact_box(this->_set.state_set().bounding_box());
+    // Evaluate the already-owned validated state patch on the reduced
+    // parameter domain. This is exactly the outer-image computation of
+    // state_set().bounding_box(), without constructing a temporary
+    // ValidatedConstrainedImageSet and duplicating its constraint models.
+    return Ariadne::apply(this->_set.state_function(), this->_set.reduced_domain());
 }
 
 UpperIntervalType

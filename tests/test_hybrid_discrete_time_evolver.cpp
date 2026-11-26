@@ -550,7 +550,18 @@ class TestHybridDiscreteTimeEvolver : public Ariadne::Testing::ContextFixture {
         ARIADNE_TESTING_PROVE(lower.final().front().location() == target_mode);
         ARIADNE_TESTING_EXPECT_EQUAL(lower.final().front().previous_events().size(), 1u);
         ARIADNE_TESTING_PROVE(lower.final().front().previous_events()[0u] == event);
-        const auto bounds = lower.final().front().state_bounding_box()[0u];
+        const auto& reset_final = lower.final().front();
+        // An existentially refined LOWER branch must still own a
+        // one-dimensional validated reset map and a nonempty parameter
+        // domain. Do not bypass its public bounding_box() operation.
+        ARIADNE_TESTING_REQUIRE(reset_final.state_dimension() == 1u);
+        ARIADNE_TESTING_REQUIRE(
+            reset_final.continuous_set().state_function().result_size() == 1u);
+        ARIADNE_TESTING_REQUIRE(
+            definitely(!reset_final.continuous_set().reduced_domain().is_empty()));
+        const auto reset_box = reset_final.state_bounding_box();
+        ARIADNE_TESTING_REQUIRE(reset_box.dimension() == 1u);
+        const auto bounds = reset_box[0u];
         ARIADNE_TESTING_PROVE(bounds.lower_bound().raw().get_d() <= 3.875);
         ARIADNE_TESTING_PROVE(bounds.upper_bound().raw().get_d() >= 3.875);
         ARIADNE_TESTING_EXPECT_EQUAL(source.previous_events().size(), 0u);

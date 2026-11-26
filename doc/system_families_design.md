@@ -2084,3 +2084,62 @@ added; the installed C++ tutorial retains exclusively
 `#include "ariadne-evolution.hpp"` and implemented patterns.
 All five workflows must pass on the v7.05 SHA before
 claiming this capability is validated.
+
+## v7.06 — Diagnose a post-reset refined LOWER bounding-box SegFault
+
+The v7.05 SHA `29c4efc5a4052e1470513365a652df6e1d7fad9a`
+is **red** on Ubuntu and macOS Debug tests, Coverage, and
+AddressSanitizer. The reported regression:
+`test_hybrid_discrete_time_evolver`, case
+`lower_refines_undecided_urgent_guard` (13/17), segfaulted
+after check 13.4 verifying the event identity. The next
+statement computes the reset successor's state bounding box.
+This is a **runtime crash**, not an expected numerical mismatch.
+The v7.04 SHA `e97155f849cf7f200edb37000e1e61e7b4ca4a2a`
+has completed all five CI workflows successfully, so the
+regression is isolated to the v7.05 addition or a newly
+exercised downstream operation.
+
+The working hypothesis is that the temporary
+`ValidatedConstrainedImageSet` built by
+`HybridEnclosure::state_bounding_box()` interacts badly
+with a function patch and parameter domain restricted by
+`HybridEnclosure::split()`. The exact failure point within
+that statement is *not proven* from the last-check indicator,
+which only records the most recently completed assertion.
+
+The v7.06 candidate eliminates this extra temporary object:
+`state_bounding_box()` now evaluates the already-owned
+`Enclosure::state_function()` directly over
+`Enclosure::reduced_domain()`, returning its validated
+interval range. This is mathematically and numerically
+the same outer-image computation performed by the
+former `state_set().bounding_box()`: the latter constructs
+`ValidatedConstrainedImageSet(domain, state_function,
+constraints)` with its initial reduced domain equal to the
+enclosure's domain, whereas the enclosure's reduced domain
+can be more precise. In fact the new calculation is at
+least as precise and never ignores reduced-domain constraints.
+No guard, reset, planner, witness search, or tutorial
+semantics are changed.
+
+To prevent hiding the original regression, the failing
+test *still executes the public state_bounding_box()* on
+the refined reset successor and verifies that its interval
+covers the concrete witness x[0]=7/8, x[1]=31/8.
+Before indexing, the test now requires one state component,
+a one-dimensional state function, a nonempty reduced
+parameter domain, and a one-dimensional resulting box.
+These checks distinguish malformed-image failures from
+errors during bounding-box computation and prevent
+out-of-range indexing from masking the source of failure.
+All other original numerical and event-provenance
+assertions remain enabled.
+
+The v7.06 change is a **candidate fix**, not a verified
+root cause or a passing regression until its five
+workflows finish on the exact new SHA. If the failure
+persists, inspect the new last-check position and the
+sanitizer stack trace before changing production logic
+or expected numerical values. The installed tutorial
+continues to include only `ariadne-evolution.hpp`.

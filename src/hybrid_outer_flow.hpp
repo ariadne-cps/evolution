@@ -33,6 +33,27 @@
 
 namespace Ariadne::EvolutionDetail {
 struct AppliedIntegrationStep;
+/** @brief Sufficient whole-enclosure certificate for an uninterrupted LOWER flow.
+ *  Invariants require g<=0; URGENT/PROGRESS/IMPACT require g<0.
+ *  Optional PERMISSIVE resets never block the no-jump behavior.
+ */
+bool lower_flow_predicate_certified(const HybridEnclosure&, const TransitionData&);
+
+/** @brief Apply the common LOWER flow certificate to every complete reach tube. */
+bool lower_flow_step_certified(
+    const HybridEnclosure&, const AppliedIntegrationStep&, const Map<DiscreteEvent, TransitionData>&);
+
+/** @brief Append all certified PERMISSIVE endpoint resets, retaining no-jump outputs.
+ *  The caller must first certify the entire uninterrupted flow prefix.
+ *  Only FULL_SOURCE endpoint guards and whole-image target invariants admit
+ *  a reset, and all endpoint times must lie within the final horizon.
+ *  No source/target restriction selects a reached subset; every reset copies
+ *  the complete endpoint. The shared continuous prefix is credited once.
+ */
+Void publish_lower_permissive_endpoint_resets(
+    const ContinuousTimeHybridAutomatonInterface&, const HybridEnclosure&, const Enclosure& evolved,
+    const Map<DiscreteEvent, TransitionData>&, const Real& final_time, HybridEvolutionStepResult&);
+
 /** @brief Publish a LOWER URGENT crossing only with universal certificates.
  *  Requires one complete structured tube, a strictly inactive source guard,
  *  a nonnegative whole endpoint guard, an endpoint entirely within the
@@ -46,15 +67,18 @@ bool try_publish_lower_urgent_crossing(
     const Map<DiscreteEvent, TransitionData>&, const Real& final_time, double processed_time,
     HybridEvolutionStepResult&);
 
-/** @brief Common UPPER guard filtering/publication for ordinary outer steps.
+/** @brief Common outer time filtering/publication for ordinary numerical steps.
+ *  LOWER callers certify the flow independently and pass no transition
+ *  candidates; certified optional resets are appended separately.
  *  Equation and inclusion producers retain their own numerical contracts.
  */
 HybridEvolutionStepResult publish_outer_step(const HybridEnclosure&, const AppliedIntegrationStep&,
                                              const Map<DiscreteEvent, TransitionData>&, const Real& final_time, double processed_time);
 
-/** @brief Admit state invariants, PROGRESS blockers and conservative
- *  URGENT/PERMISSIVE/IMPACT candidates under UPPER only. Neither first entry nor impact direction is
- *  certified for arbitrary measurable inputs.
+/** @brief Admit event kinds handled by the outer-flow bridge.
+ *  UPPER may produce conservative candidates. LOWER requires independent
+ *  flow/reset certificates; event-kind admission alone proves no crossing
+ *  or impact direction for arbitrary measurable inputs.
  */
 Void validate_outer_event_kinds(const ContinuousTimeHybridAutomatonInterface&, DiscreteLocation);
 

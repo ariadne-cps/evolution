@@ -37,6 +37,78 @@
 
 namespace Ariadne::EvolutionDetail {
 
+// This is the SAME hybrid event policy used by the UPPER flow, applied
+// as a sufficient whole-enclosure condition for LOWER uninterrupted
+// progression. Guard intersections of outer LOWER enclosures cannot
+// be used to pick a favourable source subset or to invent a reset.
+bool lower_flow_predicate_certified(
+    const HybridEnclosure& enclosure, const TransitionData& transition) {
+    if (transition.event_kind == EventKind::PERMISSIVE)
+        return true; // An optional jump never blocks uninterrupted flow.
+    const auto bounds = enclosure.range_of(
+        transition.guard_function, transition.source_arguments);
+    if (transition.event_kind == EventKind::INVARIANT)
+        return definitely(bounds.upper_bound() <= 0);
+    if (transition_policy(transition.event_kind).blocks_flow)
+        return definitely(bounds.upper_bound() < 0);
+    return false;
+}
+
+bool lower_flow_step_certified(
+    const HybridEnclosure& initial, const AppliedIntegrationStep& applied,
+    const Map<DiscreteEvent, TransitionData>& transitions) {
+    for (const auto& continuous: applied.reach) {
+        HybridEnclosure tube = initial;
+        tube.replace_continuous_set(continuous);
+        for (const auto& entry: transitions)
+            if (!lower_flow_predicate_certified(tube, entry.second))
+                return false;
+    }
+    return true;
+}
+
+Void publish_lower_permissive_endpoint_resets(
+    const ContinuousTimeHybridAutomatonInterface& system,
+    const HybridEnclosure& initial, const Enclosure& evolved,
+    const Map<DiscreteEvent, TransitionData>& transitions,
+    const Real& final_time, HybridEvolutionStepResult& result) {
+    // The caller has already certified the entire uninterrupted prefix.
+    // An endpoint reset is optional and cannot replace the no-jump branch.
+    HybridEnclosure endpoint = initial;
+    endpoint.replace_continuous_set(evolved);
+    if (!definitely(endpoint.time_range().upper_bound() <= final_time))
+        return;
+    bool published = false;
+    for (const auto& entry: transitions) {
+        const auto& transition = entry.second;
+        if (transition.event_kind != EventKind::PERMISSIVE ||
+            classify_initial_guard(endpoint, transition) != HybridInitialGuardActivation::FULL_SOURCE)
+            continue;
+        HybridEnclosure reset = endpoint;
+        apply_transition_reset(reset, transition);
+        bool target_valid = true;
+        for (const auto& target_entry: outer_flow_transitions(system, transition.target)) {
+            const auto& predicate = target_entry.second;
+            if (predicate.event_kind == EventKind::INVARIANT &&
+                !lower_flow_predicate_certified(reset, predicate)) {
+                target_valid = false;
+                break;
+            }
+        }
+        // A necessary target-invariant restriction of an outer image
+        // cannot prove that the actually reached subset survives it.
+        if (!target_valid)
+            continue;
+        result.record_reach(endpoint);
+        result.record_intermediate(reset);
+        result.transition_to(reset, transition.event, transition.event_kind);
+        published = true;
+    }
+    if (published)
+        result.stop_reason = HybridEvolutionStopReason::NONE;
+    // continuous_evolution_time belongs to the shared prefix, counted once.
+}
+
 bool try_publish_lower_urgent_crossing(
     const HybridEnclosure& initial, const AppliedIntegrationStep& applied,
     const Map<DiscreteEvent, TransitionData>& transitions,
@@ -117,8 +189,7 @@ Void validate_outer_event_kinds(const ContinuousTimeHybridAutomatonInterface& sy
             kind != EventKind::URGENT && kind != EventKind::PERMISSIVE &&
             kind != EventKind::IMPACT)
             throw std::invalid_argument(
-                "Hybrid UPPER outer flow supports state invariants, PROGRESS blockers and "
-                "conservative URGENT/PERMISSIVE/IMPACT jumps");
+                "Hybrid outer-flow bridge supports INVARIANT, PROGRESS, URGENT, PERMISSIVE and IMPACT events");
     }
 }
 

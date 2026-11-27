@@ -3791,3 +3791,93 @@ macOS, Windows, Coverage, Sanitizers and Format all succeeded on exact SHA
 until its own five functional workflows succeed. No whole family cell is
 promoted; numerical kernels, free input domains, physical dynamics and
 the canonical contract remain unchanged.
+
+## v7.34 — Certified PERMISSIVE endpoint resets beside uninterrupted LOWER flow
+
+**Proof recorded before implementation.** Keep the physical dynamics
+`x'=f(x,t,p,u)`, constant interval parameters p, every admissible input
+function u and the complete original outer LOWER enclosure E carrying
+nonempty reached S. Whole-tube invariants and strictly inactive
+URGENT/PROGRESS/IMPACT blockers prove legal uninterrupted evolution,
+including a nonempty actual endpoint subset S_h inside E_h. If a
+PERMISSIVE guard is FULL_SOURCE (strictly positive) over all of E_h,
+the original reset r is enabled on all of S_h. Require the whole endpoint
+time range within the final horizon and every target invariant on the
+whole reset image r(E_h). Then r(S_h) is nonempty, reached and enclosed
+by that image. Publish this branch in addition to the no-jump behavior.
+An unknown guard or target invariant yields no optional reset and never
+removes the certified no-jump branch.
+
+The configured numerical endpoint is an admissible PERMISSIVE event
+time, not an input sampling policy. Independent full input domains,+persistent parameter maps, state/time/auxiliary correlations and source
+constraints survive. Each reset copies the same complete endpoint; no
+event priority, source child, target-invariant slice or chained same-step
+reset is selected. The shared continuous prefix is credited once.
+
+**Separate common handlers.** Move the unchanged uninterrupted-flow
+predicate to `lower_flow_predicate_certified` in the private outer-flow
+module and centralize its application to every whole reach tube in
+`lower_flow_step_certified`. Initial inclusion checks and both ordinary
+outer numerical producers now use the common policy. Preserve the
+existing failure distinction: unsupported inclusion flow throws, while
+the clocked/parameterized equation path reports no continuation.
+
+After the no-jump result is assembled, the independent
+`publish_lower_permissive_endpoint_resets` handler appends all endpoint
+resets certified by the shared initial-guard classifier. It validates
+target invariants over the complete reset image before publication,
+without restricting the image to a favorable target subset. It retains
+the no-jump contributions and continuous progress credit, and clears a
+terminal stop reason if reset successors are added at the closed horizon.
+The URGENT crossing handler stays distinct because its certified jump
+replaces ordinary source continuation. UPPER and integration kernels
+remain unchanged.
+
+**Regressions.** Four additional public methods bring
+`test_hybrid_inclusions` to 26 registered methods. Tests cover both flat
+and tree backends, ordinary outer equation and structured inclusion
+producers, autonomous fields, explicit time and constant interval
+parameters. At one step's closed horizon, two certain PERMISSIVE guards
+must produce both reset destinations plus the no-jump source final.
+Analytic full-input bounds, original parameter domains/kinds, reset
+images, auxiliary values, source immutability, time and event provenance
+are checked. The original v7.33 path fails the new three-branch check
+because it publishes only the no-jump branch; the negative cases already
+pass before implementation.
+
+Additional controls retain the no-jump result with an unknown endpoint
+guard or unknown/violated target invariant; a reset at a late endpoint
+cannot be inferred from an uncertain arrival-time enclosure beyond the
+requested horizon. A later optional endpoint reset does not license
+flow through an earlier PROGRESS blocker. A two-step regression checks
+continued source flow and resets at successive endpoints, including
+target continuation to the final horizon, independent input-history
+counts, dwell times and one event per reset branch. All earlier tests,
+including URGENT endpoint and horizon regressions, remain enabled.
+
+**Capability boundary.** This extends the existing partial hybrid LOWER
+support only when the entire prefix and endpoint reset are certified.
+It does not add arbitrary within-step PERMISSIVE localization, IMPACT
+direction, or independent input/source selection. No whole matrix cell
+is promoted. All five functional workflows must pass on the exact new
+SHA before acceptance. The canonical opening contract, deferred Python
+tutorial parity and separate paving decoupling remain unchanged.
+
+**Verification and next priority (27 November 2026).** The original
+three-branch regression failed on v7.33 and all four new public methods
+now pass. The final Debug build with warnings as errors, all 49 CTest
+entries including Python, installation, both installed tutorials,
+apply-format and check-format passed. The seven producer forms include
+joint state/time/parameter endpoint guards and correlated target outputs.
+All 26 inclusion test methods remain registered. Ubuntu, macOS, Windows,
+Coverage, Sanitizers and Format all succeeded for v7.33 exact SHA
+`01eae7f98bd611d442f57cf64459adee37ad860e`; this does not substitute for
+the new v7.34 five-workflow gate.
+
+At the user's request, after completing this LOWER increment the next
+development priority is closing validated UPPER support. Audit the two
+remaining partial native inclusion cells (hybrid discrete and hybrid
+continuous), distinguish stale capability descriptions from real gaps,
+retain architectural tests and add precise coverage regressions before
+promoting a cell. General LOWER completion and final Python tutorial
+parity are deferred while this UPPER priority is addressed.

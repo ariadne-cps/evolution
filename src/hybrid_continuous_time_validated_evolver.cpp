@@ -176,23 +176,6 @@ Bool is_blocking(EventKind evk) { return EvolutionDetail::transition_policy(evk)
 
 Bool is_activating(EventKind evk) { return EvolutionDetail::transition_policy(evk).activates_reset; }
 
-// This is the SAME hybrid event policy used by the UPPER flow, applied
-// as a sufficient whole-enclosure condition for LOWER uninterrupted
-// progression. Guard intersections of outer LOWER enclosures cannot
-// be used to pick a favourable source subset or to invent a reset.
-bool lower_inclusion_flow_predicate_certified(
-    const HybridEnclosure& enclosure, const TransitionData& transition) {
-    if (transition.event_kind == EventKind::PERMISSIVE)
-        return true; // An optional jump never blocks uninterrupted flow.
-    const auto bounds = enclosure.range_of(
-        transition.guard_function, transition.source_arguments);
-    if (transition.event_kind == EventKind::INVARIANT)
-        return definitely(bounds.upper_bound() <= 0);
-    if (EvolutionDetail::transition_policy(transition.event_kind).blocks_flow)
-        return definitely(bounds.upper_bound() < 0);
-    return false;
-}
-
 // Certify the original witness-bearing source before any restriction.
 // A FULL_SOURCE URGENT or PERMISSIVE reset is independent of permission
 // to progress. IMPACT still requires direction evidence, while uncertain
@@ -211,7 +194,7 @@ Void validate_lower_inclusion_initial_continuation(
     }
     for (const auto& entry: transitions) {
         const auto& predicate = entry.second;
-        if (lower_inclusion_flow_predicate_certified(initial_set, predicate))
+        if (EvolutionDetail::lower_flow_predicate_certified(initial_set, predicate))
             continue;
         if (predicate.event_kind == EventKind::URGENT &&
             EvolutionDetail::classify_initial_guard(initial_set, predicate) ==
@@ -1011,26 +994,15 @@ Void HybridContinuousTimeEvolverBase<ValidatedTag>::_evolve_inclusion(
         if (EvolutionDetail::try_publish_lower_urgent_crossing(
                 initial, applied, transitions, final_time, processed_time, result))
             return;
-        // The existing validated reach patches cover ALL admissible
-        // inputs and the whole source. Invariants must hold over the
-        // complete tube; URGENT/PROGRESS/IMPACT guards must remain
-        // strictly inactive over the complete tube. Neither UPPER
-        // guard intersections nor a selected input subbox can prove
-        // that a LOWER witness has a legal uninterrupted continuation.
-        for (const auto& tube: applied.reach) {
-            HybridEnclosure whole_tube = initial;
-            whole_tube.replace_continuous_set(tube);
-            for (const auto& entry: transitions) {
-                if (!lower_inclusion_flow_predicate_certified(
-                        whole_tube, entry.second))
-                    throw std::invalid_argument(
-                        "Hybrid inclusion LOWER invariant/blocker is not certified throughout the reach tube");
-            }
-        }
-        // PERMISSIVE jumps may be ignored during uninterrupted flow;
-        // the same validated map is retained with no outer-only jumps.
+        if (!EvolutionDetail::lower_flow_step_certified(initial, applied, transitions))
+            throw std::invalid_argument(
+                "Hybrid inclusion LOWER invariant/blocker is not certified throughout the reach tube");
+        // Preserve the no-jump branch and append only independently
+        // certified optional resets of the complete endpoint.
         result = EvolutionDetail::publish_outer_step(
             initial, applied, {}, final_time, processed_time);
+        EvolutionDetail::publish_lower_permissive_endpoint_resets(
+            this->system(), initial, applied.evolved, transitions, final_time, result);
     } else {
         result = EvolutionDetail::publish_outer_step(
             initial, applied, transitions, final_time, processed_time);
@@ -1056,31 +1028,17 @@ Void HybridContinuousTimeEvolverBase<ValidatedTag>::_evolve_outer_equation(
                 initial, applied, transitions, final_time,
                 std::min(numerical.step.time_step().get_d(), remaining.get_d()), result))
             return;
-        // All blocking predicates must be safe on the entire certified
-        // state/time/parameter tube. Otherwise neither restricting the
-        // UPPER tube nor selecting a possible jump preserves a witness.
-        for (const auto& tube: applied.reach) {
-            HybridEnclosure reach = initial;
-            reach.replace_continuous_set(tube);
-            for (const auto& entry: transitions) {
-                const auto& transition = entry.second;
-                if (!EvolutionDetail::transition_policy(transition.event_kind).blocks_flow)
-                    continue;
-                const auto range = reach.range_of(transition.guard_function, transition.source_arguments);
-                const bool safe = transition.event_kind == EventKind::INVARIANT
-                                    ? definitely(range.upper_bound() <= 0)
-                                    : definitely(range.upper_bound() < 0);
-                if (!safe) {
-                    result.stop_reason = HybridEvolutionStopReason::NO_CONTINUATION;
-                    return;
-                }
-            }
+        if (!EvolutionDetail::lower_flow_step_certified(initial, applied, transitions)) {
+            result.stop_reason = HybridEvolutionStopReason::NO_CONTINUATION;
+            return;
         }
         // A fully admissible unbranched tube carries the same reachable
-        // witness. Optional PERMISSIVE jumps can be ignored; UPPER
-        // candidate intersections must not be emitted as LOWER jumps.
+        // subset. PERMISSIVE endpoint resets need their own whole-source
+        // guard and target certificates; UPPER candidates are not reused.
         result = EvolutionDetail::publish_outer_step(initial, applied, {}, final_time,
                                                      std::min(numerical.step.time_step().get_d(), remaining.get_d()));
+        EvolutionDetail::publish_lower_permissive_endpoint_resets(
+            this->system(), initial, applied.evolved, transitions, final_time, result);
         return;
     }
     result = EvolutionDetail::publish_outer_step(initial, applied, transitions, final_time,

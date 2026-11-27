@@ -204,13 +204,15 @@ class TestConstantParameterMaps : public Testing::ContextFixture {
             TaylorPicardIntegrator integrator(step_maximum_error = 1e-7);
             ContinuousTimeEvolver<ValidatedTag> evolver(equation, integrator);
             evolver.configuration().set_maximum_step_size(0.03125);
-            auto current = LabelledEnclosure(initial, RealSpace({x}));
-            for (Nat step = 1u; step != 3u; ++step) {
-                const auto orbit = evolver.orbit(current, Real(0.125_x), Semantics::UPPER);
-                ARIADNE_TESTING_REQUIRE(orbit.final().size() == 1u);
-                current = orbit.final()[0u];
-                const auto residual = current.state_function()[0u] - current.constant_parameter_function(1u).get(0u) * (Real(step) / 8);
-                ARIADNE_TESTING_PROVE(subset(cast_exact_interval(residual.range()), ExactIntervalType(-0x1p-26_x, 0x1p-26_x)));
+            for (Semantics semantics: {Semantics::UPPER, Semantics::LOWER}) {
+                auto current = LabelledEnclosure(initial, RealSpace({x}));
+                for (Nat step = 1u; step != 3u; ++step) {
+                    const auto orbit = evolver.orbit(current, Real(0.125_x), semantics);
+                    ARIADNE_TESTING_REQUIRE(orbit.final().size() == 1u);
+                    current = orbit.final()[0u];
+                    const auto residual = current.state_function()[0u] - current.constant_parameter_function(1u).get(0u) * (Real(step) / 8);
+                    ARIADNE_TESTING_PROVE(subset(cast_exact_interval(residual.range()), ExactIntervalType(-0x1p-26_x, 0x1p-26_x)));
+                }
             }
         }
     }
@@ -303,7 +305,9 @@ class TestConstantParameterMaps : public Testing::ContextFixture {
         parameter_only.set_auxiliary_mapping(EffectiveVectorMultivariateFunction(0u, EuclideanDomain(1u)));
         const LabelledEnclosure labelled(parameter_only, RealSpace({x}));
         ARIADNE_TESTING_EXPECT_THROWS(std::invalid_argument, ContinuousTimeEvolver<ValidatedTag>(different, integrator).orbit(labelled, Real(0), Semantics::UPPER));
+        ARIADNE_TESTING_EXPECT_THROWS(std::invalid_argument, ContinuousTimeEvolver<ValidatedTag>(different, integrator).orbit(labelled, Real(0), Semantics::LOWER));
         ARIADNE_TESTING_EXPECT_THROWS(std::invalid_argument, ContinuousTimeEvolver<ValidatedTag>(narrower, integrator).orbit(labelled, Real(0), Semantics::UPPER));
+        ARIADNE_TESTING_EXPECT_THROWS(std::invalid_argument, ContinuousTimeEvolver<ValidatedTag>(narrower, integrator).orbit(labelled, Real(0), Semantics::LOWER));
     }
 };
 

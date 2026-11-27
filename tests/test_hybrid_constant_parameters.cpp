@@ -469,14 +469,139 @@ class TestHybridConstantParameters : public Testing::ContextFixture {
                         evolver.set_integrator(FirstOrderMultifunctionIntegrator());
                     else
                         evolver.set_integrator(TaylorPicardIntegrator(step_maximum_error = 1e-7), ZeroApproximation(), ConstantApproximation());
-                    const auto orbit = evolver.orbit(seed, HybridTime(0.125_x, 1), Semantics::UPPER);
+                    for (Semantics semantics: {Semantics::UPPER, Semantics::LOWER}) {
+                        if (boxes && semantics == Semantics::LOWER) {
+                            ARIADNE_TESTING_EXPECT_THROWS(std::invalid_argument,
+                                                          evolver.orbit(seed, HybridTime(0u, 1), semantics));
+                            ARIADNE_TESTING_EXPECT_THROWS(std::invalid_argument,
+                                                          evolver.orbit(seed, HybridTime(0.125_x, 1), semantics));
+                            continue;
+                        }
+                        const auto held = evolver.orbit(seed, HybridTime(0u, 1), semantics);
+                        ARIADNE_TESTING_REQUIRE(held.final().size() == 1u);
+                        ARIADNE_TESTING_EXPECT_EQUAL(held.final()[0u].number_of_parameters(), seed.number_of_parameters());
+                        const auto orbit = evolver.orbit(seed, HybridTime(0.125_x, 1), semantics);
+                        ARIADNE_TESTING_REQUIRE(orbit.final().size() == 1u);
+                        const auto& final = orbit.final()[0u];
+                        binding(final);
+                        const ExactIntervalType expected = timed ? ExactIntervalType(0.2421875_x, 0.3984375_x) : ExactIntervalType(0.234375_x, 0.390625_x);
+                        ARIADNE_TESTING_PROVE(subset(expected, cast_exact_interval(final.state_function()[0u].range())));
+                    }
+                }
+    }
+    void test_lower_inclusion_parameter_guards_cover_the_whole_tube() {
+        const RealVariablesBox inputs({Real(-0.125_x) <= u <= Real(0.125_x)}), parameters({2 <= p <= 3});
+        for (bool timed: {false, true})
+            for (bool tree: {false, true})
+                for (bool crossing: {false, true}) {
+                    ContinuousTimeHybridAutomaton system;
+                    const RealExpression clock = timed ? RealExpression(t) : RealExpression(0);
+                    system.new_mode(source, OrdinaryDifferentialAlgebraicInclusion(
+                                                {dot(x) = p + u + clock}, inputs, parameters,
+                                                timed ? std::optional<RealVariable>(t) : std::nullopt));
+                    system.new_invariant(source, x <= p, DiscreteEvent("bound"));
+                    system.new_guard(source, DiscreteEvent("progress"),
+                                     crossing ? x >= p / 32 : x >= p, EventKind::PROGRESS);
+                    HybridContinuousTimeEvolver<ValidatedTag> evolver(system);
+                    configure(evolver, tree);
+                    evolver.set_integrator(TaylorPicardIntegrator(step_maximum_error = 1e-7),
+                                           ZeroApproximation(), ConstantApproximation());
+                    evolver.configuration().set_maximum_step_size(0.0078125);
+                    const auto seed = initial(evolver);
+                    // The blocker is strictly inactive over the entire initial
+                    // physical domain, so the closed zero horizon is legal.
+                    const auto held = evolver.orbit(seed, HybridTime(0u, 1), Semantics::LOWER);
+                    ARIADNE_TESTING_REQUIRE(held.final().size() == 1u);
+                    if (crossing) {
+                        ARIADNE_TESTING_EXPECT_THROWS(std::invalid_argument,
+                                                      evolver.orbit(seed, HybridTime(0.125_x, 1), Semantics::LOWER));
+                        continue;
+                    }
+                    const auto orbit = evolver.orbit(seed, HybridTime(0.125_x, 1), Semantics::LOWER);
                     ARIADNE_TESTING_REQUIRE(orbit.final().size() == 1u);
                     const auto& final = orbit.final()[0u];
                     binding(final);
-                    const ExactIntervalType expected = timed ? ExactIntervalType(0.2421875_x, 0.3984375_x) : ExactIntervalType(0.234375_x, 0.390625_x);
-                    ARIADNE_TESTING_PROVE(subset(expected, cast_exact_interval(final.state_function()[0u].range())));
+                    ARIADNE_TESTING_PROVE(final.previous_events().empty());
+                    const auto physical = final.continuous_set().constant_parameter_function(1u).get(0u);
+                    const Real duration(0.125_x);
+                    const auto residual = final.state_function()[0u] - physical * duration -
+                                          (timed ? duration * duration / 2 : Real(0));
+                    ARIADNE_TESTING_PROVE(subset(ExactIntervalType(-0.015625_x, 0.015625_x),
+                                                 cast_exact_interval(residual.range())));
+                    ARIADNE_TESTING_PROVE(subset(cast_exact_interval(residual.range()),
+                                                 ExactIntervalType(-0.0166015625_x, 0.0166015625_x)));
+                    ARIADNE_TESTING_EXPECT_EQUAL(final.location(), source);
                 }
     }
+
+    void test_lower_inclusion_parameterized_reset_and_continuation() {
+        const RealVariablesBox inputs({Real(-0.125_x) <= u <= Real(0.125_x)}), parameters({2 <= p <= 3});
+        const DiscreteEvent jump("jump"), progress("progress");
+        for (EventKind kind: {EventKind::URGENT, EventKind::PERMISSIVE})
+            for (bool tree: {false, true})
+                for (bool certain: {false, true}) {
+                    ContinuousTimeHybridAutomaton system;
+                    system.new_mode(source, OrdinaryDifferentialAlgebraicInclusion(
+                                                {dot(x) = p + u + t}, inputs, parameters, t));
+                    system.new_mode(target, OrdinaryDifferentialAlgebraicInclusion(
+                                                {dot(x) = p + u + t}, inputs, parameters, t));
+                    system.new_invariant(source, x <= p + t + 1, DiscreteEvent("bound"));
+                    system.new_guard(source, progress, p + t >= 0, EventKind::PROGRESS);
+                    system.new_transition(source, jump, target, {next(x) = x + 2 * p},
+                                          certain ? p + t >= 1 : p >= Real(2.5_x), kind);
+                    HybridContinuousTimeEvolver<ValidatedTag> evolver(system);
+                    configure(evolver, tree);
+                    evolver.set_integrator(TaylorPicardIntegrator(step_maximum_error = 1e-7),
+                                           ZeroApproximation(), ConstantApproximation());
+                    evolver.configuration().set_maximum_step_size(0.0078125);
+                    evolver.configuration().set_enable_reconditioning(false);
+                    auto seed = initial(evolver);
+                    seed.set_time_function(evolver.function_factory().create_constant(seed.parameter_domain(), Real(2)));
+                    const auto source_domain = seed.continuous_set().parameter_domain();
+                    if (!certain) {
+                        // An UNKNOWN physical-parameter guard cannot select
+                        // a reachable parameter subbox to bypass PROGRESS.
+                        ARIADNE_TESTING_EXPECT_THROWS(std::invalid_argument,
+                                                      evolver.orbit(seed, HybridTime(2.125_x, 2), Semantics::LOWER));
+                        continue;
+                    }
+                    const auto orbit = evolver.orbit(seed, HybridTime(2.125_x, 2), Semantics::LOWER);
+                    ARIADNE_TESTING_REQUIRE(orbit.final().size() == 1u);
+                    const auto& final = orbit.final()[0u];
+                    ARIADNE_TESTING_EXPECT_EQUAL(final.location(), target);
+                    ARIADNE_TESTING_REQUIRE(final.previous_events().size() == 1u);
+                    ARIADNE_TESTING_EXPECT_EQUAL(final.previous_events()[0u], jump);
+                    binding(final);
+                    ARIADNE_TESTING_PROVE(subset(cast_exact_interval(final.time_range()), ExactIntervalType(2.125_x, 2.125_x)));
+                    const auto physical = final.continuous_set().constant_parameter_function(1u).get(0u);
+                    const Real duration(0.125_x);
+                    const auto input_displacement = final.state_function()[0u] - physical * (2 + duration) -
+                                                    2 * duration - duration * duration / 2;
+                    ARIADNE_TESTING_PROVE(subset(ExactIntervalType(-0.015625_x, 0.015625_x),
+                                                 cast_exact_interval(input_displacement.range())));
+                    ARIADNE_TESTING_PROVE(subset(cast_exact_interval(input_displacement.range()),
+                                                 ExactIntervalType(-0.0166015625_x, 0.0166015625_x)));
+                    SizeType physical_axes = 0u, input_axes = 0u;
+                    const auto& continuous = final.continuous_set();
+                    for (SizeType i = 0u; i != continuous.number_of_parameters(); ++i) {
+                        if (continuous.variable_kinds()[i] == EnclosureVariableKind::PARAMETER)
+                            ++physical_axes;
+                        if (continuous.variable_kinds()[i] != EnclosureVariableKind::INPUT)
+                            continue;
+                        ++input_axes;
+                        ARIADNE_TESTING_PROVE(continuous.parameter_domain()[i].lower_bound().raw().get_d() <= -0.125);
+                        ARIADNE_TESTING_PROVE(continuous.parameter_domain()[i].upper_bound().raw().get_d() >= 0.125);
+                    }
+                    ARIADNE_TESTING_EXPECT_EQUAL(physical_axes, 1u);
+                    ARIADNE_TESTING_PROVE(input_axes >= 16u);
+                    ARIADNE_TESTING_EXPECT_EQUAL(seed.continuous_set().parameter_domain(), source_domain);
+                    ARIADNE_TESTING_PROVE(subset(cast_exact_interval(seed.time_range()), ExactIntervalType(2, 2)));
+                    ARIADNE_TESTING_PROVE(subset(cast_exact_box(seed.state_bounding_box()), ExactBoxType({
+                                                                                                {0, 0}
+                    })));
+                }
+    }
+
     void test_immediate_parameter_guard_reset_and_auxiliary() {
         for (auto kind: {EventKind::URGENT, EventKind::PERMISSIVE})
             for (bool tree: {false, true}) {
@@ -631,6 +756,8 @@ int main(int argc, char** argv) {
     ARIADNE_TESTING_ADD_TEST(TestHybridConstantParameters, test_lower_guard_depending_on_clock_and_parameter);
     ARIADNE_TESTING_ADD_TEST(TestHybridConstantParameters, test_lower_urgent_at_closed_step_endpoint);
     ARIADNE_TESTING_ADD_TEST(TestHybridConstantParameters, test_inclusion_flow_and_method_gates);
+    ARIADNE_TESTING_ADD_TEST(TestHybridConstantParameters, test_lower_inclusion_parameter_guards_cover_the_whole_tube);
+    ARIADNE_TESTING_ADD_TEST(TestHybridConstantParameters, test_lower_inclusion_parameterized_reset_and_continuation);
     ARIADNE_TESTING_ADD_TEST(TestHybridConstantParameters, test_immediate_parameter_guard_reset_and_auxiliary);
     ARIADNE_TESTING_ADD_TEST(TestHybridConstantParameters, test_timed_parameter_guard_and_reset);
     ARIADNE_TESTING_ADD_TEST(TestHybridConstantParameters, test_target_binding_and_parameter_free_intermediate_mode);

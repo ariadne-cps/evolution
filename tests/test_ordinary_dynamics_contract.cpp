@@ -73,10 +73,24 @@ class TestOrdinaryDynamicsContract : public Ariadne::Testing::ContextFixture {
             {dot(x) = t - x}, RealVariablesBox{}, t, {let(output) = t + x});
         ContinuousTimeEvolver<ValidatedTag> timed_output(timed_auxiliary, integrator);
         ARIADNE_TESTING_PROVE(timed_output.system().has_explicit_time());
-        ContinuousTimeEvolver<ValidatedTag> parameterised_evolver(parameterised, integrator);
+        // Resolve the analytic residual below more tightly than the broad
+        // capability checks, which use a 1e-5 local integration tolerance.
+        ContinuousTimeEvolver<ValidatedTag> parameterised_evolver(
+            parameterised, TaylorPicardIntegrator(step_maximum_error = 1e-7));
         ARIADNE_TESTING_EXPECT_EQUAL(parameterised_evolver.system().parameter_space().dimension(), 1u);
-        ARIADNE_TESTING_EXPECT_THROWS(std::invalid_argument,
-                                      parameterised_evolver.orbit(RealVariablesBox({x == 0}), Real(0.125_x), Semantics::LOWER));
+        parameterised_evolver.configuration().set_maximum_step_size(0.03125);
+        const auto parameterised_lower = parameterised_evolver.orbit(
+            RealVariablesBox({x == 0}), Real(0.125_x), Semantics::LOWER);
+        ARIADNE_TESTING_REQUIRE(parameterised_lower.final().size() == 1u);
+        const auto& parameterised_final = parameterised_lower.final()[0u];
+        const auto physical = parameterised_final.constant_parameter_function(1u).get(0u);
+        ARIADNE_TESTING_PROVE(subset(ExactIntervalType(0, 1), cast_exact_interval(physical.range())));
+        // x'=p-x from x(0)=0 has x(H)=p*(1-exp(-H)) for the same p.
+        const auto gain = 1 - exp(FloatDPBounds(-0.125_x, dp));
+        const auto residual = parameterised_final.state_function()[0u] - physical * gain;
+        ARIADNE_TESTING_NOTE(residual.range());
+        ARIADNE_TESTING_PROVE(subset(cast_exact_interval(residual.range()),
+                                     ExactIntervalType(-0x1p-16_x, 0x1p-16_x)));
         const OrdinaryDifferentialAlgebraicEquation parameterised_auxiliary(
             {dot(x) = p - x}, RealVariablesBox({0 <= p <= 1}), std::nullopt, {let(output) = p + x});
         ContinuousTimeEvolver<ValidatedTag> parameterised_output(parameterised_auxiliary, integrator);
@@ -127,16 +141,43 @@ class TestOrdinaryDynamicsContract : public Ariadne::Testing::ContextFixture {
             RealVariablesBox({x == 0}), Real(0), Semantics::LOWER);
         ARIADNE_TESTING_EXPECT_EQUAL(timed_zero.final().size(), 1u);
 
-        // Trajectory-CONSTANT physical parameters remain unsupported
-        // by LOWER; neither positive nor zero horizon may accept them.
+        // A constant physical p remains correlated with the state while
+        // independent complete input boxes are added at each actual step.
         ContinuousTimeEvolver<ValidatedTag> parameterised_evolver(
             parameterised, integrator, ZeroApproximation(), ConstantApproximation());
+        parameterised_evolver.configuration().set_maximum_step_size(0.03125);
+        const auto parameterised_lower = parameterised_evolver.orbit(
+            RealVariablesBox({x == 0}), Real(0.0625_x), Semantics::LOWER);
+        ARIADNE_TESTING_REQUIRE(parameterised_lower.final().size() == 1u);
+        const auto& parameterised_final = parameterised_lower.final()[0u];
+        ARIADNE_TESTING_EXPECT_EQUAL(parameterised_final.constant_parameter_count(), 1u);
+        // The one retained constraint is the declared physical p-domain,
+        // rather than an artificial equality on a free input coordinate.
+        ARIADNE_TESTING_EXPECT_EQUAL(parameterised_final.number_of_constraints(), 1u);
+        ARIADNE_TESTING_EXPECT_EQUAL(parameterised_final.constraint_bounds(), ExactBoxType({
+                                                                                  {0, 1}
+        }));
+        const auto parameter_constraint = parameterised_final.constraint_function()[0u] -
+                                          parameterised_final.constant_parameter_function(1u).get(0u);
+        ARIADNE_TESTING_PROVE(subset(cast_exact_interval(parameter_constraint.range()),
+                                     ExactIntervalType(-0x1p-40_x, 0x1p-40_x)));
+        ARIADNE_TESTING_PROVE(subset(ExactBoxType({
+                                         {-0.0625_x, 0.125_x}
+        }),
+                                     cast_exact_box(parameterised_final.state_function().range())));
+        ARIADNE_TESTING_PROVE(subset(cast_exact_box(parameterised_final.state_function().range()),
+                                     ExactBoxType({
+                                         {-0.0703125_x, 0.1328125_x}
+        })));
+        const auto parameterised_zero = parameterised_evolver.orbit(
+            RealVariablesBox({x == 0}), Real(0), Semantics::LOWER);
+        ARIADNE_TESTING_REQUIRE(parameterised_zero.final().size() == 1u);
+        ARIADNE_TESTING_EXPECT_EQUAL(parameterised_zero.final()[0u].constant_parameter_count(), 1u);
+        ContinuousTimeEvolver<ValidatedTag> boxes(parameterised, FirstOrderMultifunctionIntegrator());
         ARIADNE_TESTING_EXPECT_THROWS(std::invalid_argument,
-                                      parameterised_evolver.orbit(
-                                          RealVariablesBox({x == 0}), Real(0.0625_x), Semantics::LOWER));
+                                      boxes.orbit(RealVariablesBox({x == 0}), Real(0.0625_x), Semantics::LOWER));
         ARIADNE_TESTING_EXPECT_THROWS(std::invalid_argument,
-                                      parameterised_evolver.orbit(
-                                          RealVariablesBox({x == 0}), Real(0), Semantics::LOWER));
+                                      boxes.orbit(RealVariablesBox({x == 0}), Real(0), Semantics::LOWER));
     }
 
     Void test_interval_inclusion_is_not_treated_as_an_input_function() {

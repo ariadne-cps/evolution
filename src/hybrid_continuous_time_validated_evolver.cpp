@@ -406,9 +406,10 @@ Void HybridContinuousTimeEvolverBase<ValidatedTag>::_validate_mode(DiscreteLocat
             if (!this->_inclusion_integrator_ptr)
                 throw std::invalid_argument(
                     "Hybrid inclusion LOWER requires the structured selected-input integrator");
-            if (parameterized)
-                throw std::invalid_argument(
-                    "Hybrid inclusion LOWER does not yet support trajectory-constant physical parameters");
+            // The shared structured step composes the existing physical
+            // parameter map, retaining its fixed value across steps and
+            // resets. Parameter binding and target compatibility are
+            // checked by the common mode/reset preparation.
             // In addition to optional jumps and whole-tube invariants,
             // an URGENT/PROGRESS/IMPACT blocker can be safely ignored
             // only where its guard is CERTAINLY inactive on the whole

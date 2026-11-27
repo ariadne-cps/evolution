@@ -70,40 +70,40 @@ class TestConstantParameterAuxiliaries : public Testing::ContextFixture {
                 {let(a) = x + 2 * p + 3 * r + clock, let(b) = p - r});
             ContinuousTimeEvolver<ValidatedTag> evolver(equation, integrator);
             evolver.configuration().set_maximum_step_size(0.03125);
-            ARIADNE_TESTING_EXPECT_THROWS(std::invalid_argument, evolver.orbit(RealVariablesBox({x == 0}), h, Semantics::LOWER));
-            for (Nat initial_kind = 0u; initial_kind != 3u; ++initial_kind) {
-                const Real origin(initial_kind == 2u ? 2 : 0);
-                const auto result = [&] {
-                    if (initial_kind == 0u)
-                        return evolver.orbit(RealVariablesBox({x == 0}), h, Semantics::UPPER);
-                    if (initial_kind == 1u)
-                        return evolver.orbit(RealExpressionBoundedConstraintSet({0 <= x <= 0}, {}), h, Semantics::UPPER);
-                    auto initial = evolver.enclosure(ExactBoxType({
-                        {0, 0}
-                    }));
-                    initial.set_time_function(integrator.function_factory().create_constant(initial.parameter_domain(), origin));
-                    return evolver.orbit(initial, h, Semantics::UPPER);
-                }();
-                ARIADNE_TESTING_REQUIRE(result.final().size() > 0u);
-                for (const auto& final: result.final()) {
-                    check_auxiliary(final, equation, timed);
-                    const auto parameters = final.constant_parameter_function(2u);
-                    auto expected = (parameters[equation.parameter_space()[p]] - parameters[equation.parameter_space()[r]]) * h;
-                    if (timed)
-                        expected = expected + origin * h + h * h / 2;
-                    ARIADNE_TESTING_PROVE(subset(cast_exact_interval((final.state_function()[0u] - expected).range()), ExactIntervalType(-0x1p-28_x, 0x1p-28_x)));
-                    for (const auto& reach: result.reach())
-                        check_auxiliary(reach, equation, timed);
-                    auto conditioned = final;
-                    conditioned.adjoin_parameters(ExactBoxType(10u, ExactIntervalType(-1, 1)), EnclosureVariableKind::INPUT);
-                    conditioned.recondition();
-                    ARIADNE_TESTING_PROVE(conditioned.number_of_parameters() < final.number_of_parameters() + 10u);
-                    check_auxiliary(conditioned, equation, timed);
-                    const auto split = conditioned.split();
-                    check_auxiliary(split.first, equation, timed);
-                    check_auxiliary(split.second, equation, timed);
+            for (Semantics semantics: {Semantics::UPPER, Semantics::LOWER})
+                for (Nat initial_kind = 0u; initial_kind != 3u; ++initial_kind) {
+                    const Real origin(initial_kind == 2u ? 2 : 0);
+                    const auto result = [&] {
+                        if (initial_kind == 0u)
+                            return evolver.orbit(RealVariablesBox({x == 0}), h, semantics);
+                        if (initial_kind == 1u)
+                            return evolver.orbit(RealExpressionBoundedConstraintSet({0 <= x <= 0}, {}), h, semantics);
+                        auto initial = evolver.enclosure(ExactBoxType({
+                            {0, 0}
+                        }));
+                        initial.set_time_function(integrator.function_factory().create_constant(initial.parameter_domain(), origin));
+                        return evolver.orbit(initial, h, semantics);
+                    }();
+                    ARIADNE_TESTING_REQUIRE(result.final().size() > 0u);
+                    for (const auto& final: result.final()) {
+                        check_auxiliary(final, equation, timed);
+                        const auto parameters = final.constant_parameter_function(2u);
+                        auto expected = (parameters[equation.parameter_space()[p]] - parameters[equation.parameter_space()[r]]) * h;
+                        if (timed)
+                            expected = expected + origin * h + h * h / 2;
+                        ARIADNE_TESTING_PROVE(subset(cast_exact_interval((final.state_function()[0u] - expected).range()), ExactIntervalType(-0x1p-28_x, 0x1p-28_x)));
+                        for (const auto& reach: result.reach())
+                            check_auxiliary(reach, equation, timed);
+                        auto conditioned = final;
+                        conditioned.adjoin_parameters(ExactBoxType(10u, ExactIntervalType(-1, 1)), EnclosureVariableKind::INPUT);
+                        conditioned.recondition();
+                        ARIADNE_TESTING_PROVE(conditioned.number_of_parameters() < final.number_of_parameters() + 10u);
+                        check_auxiliary(conditioned, equation, timed);
+                        const auto split = conditioned.split();
+                        check_auxiliary(split.first, equation, timed);
+                        check_auxiliary(split.second, equation, timed);
+                    }
                 }
-            }
         }
     }
 

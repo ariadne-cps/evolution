@@ -116,8 +116,12 @@ def test_ordinary_equation_consumers():
     parameterised_orbit = parameterised_evolver.orbit(initial, a.Real(1)/16, a.Semantics.UPPER)
     assert parameterised_orbit.final().size() > 0
     assert parameterised_orbit.reach().size() >= 2
-    with unittest.TestCase().assertRaises(ValueError):
-        parameterised_evolver.orbit(initial, a.Real(1)/16, a.Semantics.LOWER)
+    parameterised_lower = parameterised_evolver.orbit(initial, a.Real(1)/16, a.Semantics.LOWER)
+    assert parameterised_lower.final().size() == 1
+    assert parameterised_lower.final()[0].state_set().dimension() == 1
+    assert parameterised_lower.reach().size() >= 2
+    resumed = parameterised_evolver.orbit(parameterised_lower.final()[0], a.Real(1)/16, a.Semantics.LOWER)
+    assert resumed.final().size() == 1
     timed_evolver = a.ContinuousTimeEvolver[a.ApproximateTag](timed)
     timed_evolver.configuration().set_step_size(0.03125)
     timed_evolver.orbit(initial, a.Real(1)/16)
@@ -144,8 +148,16 @@ def test_common_inclusion_consumers():
         assert result.final().size() > 0
         assert result.final()[0].state_set().dimension() == 1
         assert result.reach().size() >= 2
-        with unittest.TestCase().assertRaises(ValueError):
-            evolver.orbit(initial, a.Real(1)/16, a.Semantics.LOWER)
+        if evolver is boxes:
+            with unittest.TestCase().assertRaises(ValueError):
+                evolver.orbit(initial, a.Real(1)/16, a.Semantics.LOWER)
+        else:
+            lower = evolver.orbit(initial, a.Real(1)/16, a.Semantics.LOWER)
+            assert lower.final().size() == 1
+            assert lower.final()[0].state_set().dimension() == 1
+            assert lower.reach().size() >= 2
+            held = evolver.orbit(lower.final()[0], a.Real(0), a.Semantics.LOWER)
+            assert held.final().size() == 1
 
 
 if __name__ == "__main__":

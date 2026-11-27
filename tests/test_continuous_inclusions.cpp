@@ -27,6 +27,7 @@
  */
 
 #include <memory>
+#include <optional>
 #include <sstream>
 
 #include "evolution/continuous_time_evolver.hpp"
@@ -164,27 +165,29 @@ class TestContinuousInclusions : public Ariadne::Testing::ContextFixture {
         // retain the same analytical endpoint and tight outer tolerance.
         evolver.configuration().set_maximum_step_size(0.0078125);
         evolver.configuration().set_enable_reconditioning(false);
-        const auto result = evolver.orbit(RealVariablesBox({x == 0}), Real(0.09375_x), Semantics::UPPER);
-        const auto& final = result.final()[0u];
-        ARIADNE_TESTING_EXPECT_EQUAL(final.state_dimension(), 1u);
-        ARIADNE_TESTING_EXPECT_EQUAL(final.number_of_parameters(), 14u);
-        const auto box = cast_exact_box(final.euclidean_set().bounding_box());
-        ARIADNE_TESTING_NOTE(box);
-        ARIADNE_TESTING_NOTE(final.state_function());
-        ARIADNE_TESTING_PROVE(subset(ExactBoxType({
-                                         {0.00439453125_x, 0.03955078125_x}
-        }),
-                                     box));
-        ARIADNE_TESTING_PROVE(subset(box, ExactBoxType({
-                                              {0.00390625_x, 0.0400390625_x}
-        })));
-        Vector<FloatDPBounds> low(14u, FloatDPBounds(0, dp));
-        Vector<FloatDPBounds> high = low;
-        low[1u] = FloatDPBounds(0.125_x, dp);
-        high[1u] = FloatDPBounds(0.25_x, dp);
-        const auto delta = final.state_function()(high) - final.state_function()(low);
-        ARIADNE_TESTING_PROVE(refines(FloatDPBounds(0.01171875_x, dp), delta[0u]));
-        ARIADNE_TESTING_PROVE(refines(FloatDPBounds(0.09375_x, dp), final.time_function()(low)));
+        for (Semantics semantics: {Semantics::UPPER, Semantics::LOWER}) {
+            const auto result = evolver.orbit(RealVariablesBox({x == 0}), Real(0.09375_x), semantics);
+            const auto& final = result.final()[0u];
+            ARIADNE_TESTING_EXPECT_EQUAL(final.state_dimension(), 1u);
+            ARIADNE_TESTING_EXPECT_EQUAL(final.number_of_parameters(), 14u);
+            const auto box = cast_exact_box(final.euclidean_set().bounding_box());
+            ARIADNE_TESTING_NOTE(box);
+            ARIADNE_TESTING_NOTE(final.state_function());
+            ARIADNE_TESTING_PROVE(subset(ExactBoxType({
+                                             {0.00439453125_x, 0.03955078125_x}
+            }),
+                                         box));
+            ARIADNE_TESTING_PROVE(subset(box, ExactBoxType({
+                                                  {0.00390625_x, 0.0400390625_x}
+            })));
+            Vector<FloatDPBounds> low(14u, FloatDPBounds(0, dp));
+            Vector<FloatDPBounds> high = low;
+            low[1u] = FloatDPBounds(0.125_x, dp);
+            high[1u] = FloatDPBounds(0.25_x, dp);
+            const auto delta = final.state_function()(high) - final.state_function()(low);
+            ARIADNE_TESTING_PROVE(refines(FloatDPBounds(0.01171875_x, dp), delta[0u]));
+            ARIADNE_TESTING_PROVE(refines(FloatDPBounds(0.09375_x, dp), final.time_function()(low)));
+        }
     }
 
     Void test_autonomous_parameters_keep_the_declared_state() {
@@ -195,19 +198,94 @@ class TestContinuousInclusions : public Ariadne::Testing::ContextFixture {
         ContinuousTimeEvolver<ValidatedTag> evolver(system, integrator, ZeroApproximation(), ConstantApproximation());
         evolver.configuration().set_maximum_step_size(0.0078125);
         evolver.configuration().set_enable_reconditioning(false);
-        const auto result = evolver.orbit(RealVariablesBox({x == 0}), Real(0.09375_x), Semantics::UPPER);
-        ARIADNE_TESTING_PROVE(!evolver.system().has_explicit_time());
-        ARIADNE_TESTING_EXPECT_EQUAL(result.final()[0u].state_dimension(), 1u);
-        const auto box = cast_exact_box(result.final().bounding_box().euclidean_set());
-        ARIADNE_TESTING_NOTE(box);
-        ARIADNE_TESTING_NOTE(result.final()[0u].state_function());
-        ARIADNE_TESTING_PROVE(subset(ExactBoxType({
-                                         {-0.140625_x, 0.140625_x}
-        }),
-                                     box));
-        ARIADNE_TESTING_PROVE(subset(box, ExactBoxType({
-                                              {-0.1416015625_x, 0.1416015625_x}
-        })));
+        for (Semantics semantics: {Semantics::UPPER, Semantics::LOWER}) {
+            const auto result = evolver.orbit(RealVariablesBox({x == 0}), Real(0.09375_x), semantics);
+            ARIADNE_TESTING_PROVE(!evolver.system().has_explicit_time());
+            ARIADNE_TESTING_EXPECT_EQUAL(result.final()[0u].state_dimension(), 1u);
+            const auto box = cast_exact_box(result.final().bounding_box().euclidean_set());
+            ARIADNE_TESTING_NOTE(box);
+            ARIADNE_TESTING_NOTE(result.final()[0u].state_function());
+            ARIADNE_TESTING_PROVE(subset(ExactBoxType({
+                                             {-0.140625_x, 0.140625_x}
+            }),
+                                         box));
+            ARIADNE_TESTING_PROVE(subset(box, ExactBoxType({
+                                                  {-0.1416015625_x, 0.1416015625_x}
+            })));
+        }
+    }
+
+    Void test_lower_constant_parameters_and_switching_inputs_survive_resume() {
+        const RealVariable x("x"), y("y"), p("p"), u("u");
+        const TimeVariable t;
+        TaylorPicardIntegrator integrator(step_maximum_error = 1e-7);
+        for (bool timed: {false, true}) {
+            const RealExpression clock = timed ? RealExpression(t) : RealExpression(0);
+            const OrdinaryDifferentialAlgebraicInclusion system(
+                {dot(x) = p + clock + u, dot(y) = x}, RealVariablesBox({-1 <= u <= 1}),
+                RealVariablesBox({2 <= p <= 3}),
+                timed ? std::optional<RealVariable>(t) : std::nullopt);
+            ContinuousTimeEvolver<ValidatedTag> evolver(
+                system, integrator, ConstantApproximation(), ConstantApproximation());
+            evolver.configuration().set_maximum_step_size(0.0625);
+            evolver.configuration().set_enable_reconditioning(false);
+            auto current = evolver.enclosure(ExactBoxType({
+                {0, 0},
+                {0, 0}
+            }));
+            current.set_time_function(integrator.function_factory().create_constant(
+                current.parameter_domain(), Real(timed ? 2 : 0)));
+            for (Nat period = 1u; period != 3u; ++period) {
+                const auto source_domain = current.parameter_domain();
+                const auto source_box = cast_exact_box(current.state_function().range());
+                const auto result = evolver.orbit(current, Real(0.125_x), Semantics::LOWER);
+                ARIADNE_TESTING_REQUIRE(result.final().size() == 1u);
+                ARIADNE_TESTING_EXPECT_EQUAL(current.parameter_domain(), source_domain);
+                ARIADNE_TESTING_EXPECT_EQUAL(cast_exact_box(current.state_function().range()), source_box);
+                current = result.final()[0u];
+                ARIADNE_TESTING_EXPECT_EQUAL(current.state_dimension(), 2u);
+                ARIADNE_TESTING_EXPECT_EQUAL(current.constant_parameter_space(), RealSpace({p}));
+                ARIADNE_TESTING_EXPECT_EQUAL(current.constant_parameter_count(), 1u);
+                ARIADNE_TESTING_EXPECT_EQUAL(current.number_of_parameters(), 3u + 2u * period);
+                ARIADNE_TESTING_PROVE(subset(ExactIntervalType(2, 3),
+                                             cast_exact_interval(current.constant_parameter_function(1u).get(0u).range())));
+                SizeType inputs = 0u, physical_parameters = 0u;
+                for (SizeType i = 0u; i != current.number_of_parameters(); ++i) {
+                    if (current.variable_kinds()[i] == EnclosureVariableKind::PARAMETER)
+                        ++physical_parameters;
+                    if (current.variable_kinds()[i] != EnclosureVariableKind::INPUT)
+                        continue;
+                    ++inputs;
+                    ARIADNE_TESTING_PROVE(current.parameter_domain()[i].lower_bound().raw().get_d() <= -1.0);
+                    ARIADNE_TESTING_PROVE(current.parameter_domain()[i].upper_bound().raw().get_d() >= 1.0);
+                }
+                ARIADNE_TESTING_EXPECT_EQUAL(physical_parameters, 1u);
+                ARIADNE_TESTING_EXPECT_EQUAL(inputs, 2u * period);
+                const FloatDPBounds duration(period == 1u ? 0.125_x : 0.25_x, dp);
+                const FloatDPBounds origin(timed ? 2 : 0, dp);
+                const FloatDPBounds input_area(period == 1u ? 0.00390625_x : 0.0078125_x, dp);
+                // The same p persists in every step, while each pair of input
+                // axes takes +1 then -1. Freezing either input or resampling p
+                // would lose this analytic state/history correlation.
+                for (int physical: {2, 3}) {
+                    Vector<FloatDPBounds> point(current.number_of_parameters(), FloatDPBounds(0, dp));
+                    point[2u] = FloatDPBounds(physical, dp);
+                    for (SizeType i = 3u; i != point.size(); ++i)
+                        point[i] = FloatDPBounds(i % 2u == 1u ? 1 : -1, dp);
+                    const auto values = current.state_function()(point);
+                    const auto drift = FloatDPBounds(physical, dp) + origin;
+                    const auto expected_x = drift * duration + (timed ? duration * duration / 2 : FloatDPBounds(0, dp));
+                    const auto expected_y = drift * duration * duration / 2 + input_area +
+                                            (timed ? duration * duration * duration / 6 : FloatDPBounds(0, dp));
+                    ARIADNE_TESTING_PROVE(refines(expected_x, values[0u]));
+                    ARIADNE_TESTING_PROVE(refines(expected_y, values[1u]));
+                    ARIADNE_TESTING_PROVE(refines(origin + duration, current.time_function()(point)));
+                }
+                const auto held = evolver.orbit(current, Real(0), Semantics::LOWER);
+                ARIADNE_TESTING_REQUIRE(held.final().size() == 1u);
+                ARIADNE_TESTING_EXPECT_EQUAL(held.final()[0u].number_of_parameters(), current.number_of_parameters());
+            }
+        }
     }
 
     Void test_first_order_box_paths_and_zero_free_inputs() {
@@ -414,6 +492,7 @@ int main(int argc, char** argv) {
     ARIADNE_TESTING_ADD_TEST(TestContinuousInclusions, test_uniform_initial_error_is_preserved_without_reconditioning);
     ARIADNE_TESTING_ADD_TEST(TestContinuousInclusions, test_timed_constant_parameters_survive_input_choices);
     ARIADNE_TESTING_ADD_TEST(TestContinuousInclusions, test_autonomous_parameters_keep_the_declared_state);
+    ARIADNE_TESTING_ADD_TEST(TestContinuousInclusions, test_lower_constant_parameters_and_switching_inputs_survive_resume);
     ARIADNE_TESTING_ADD_TEST(TestContinuousInclusions, test_first_order_box_paths_and_zero_free_inputs);
     ARIADNE_TESTING_ADD_TEST(TestContinuousInclusions, test_structured_lower_inclusion_preserves_switching_inputs);
     ARIADNE_TESTING_ADD_TEST(TestContinuousInclusions, test_lower_preserves_unsplit_initial_enclosure);

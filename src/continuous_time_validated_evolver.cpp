@@ -232,9 +232,9 @@ auto ContinuousTimeEvolver<ValidatedTag>::orbit(const EnclosureType& initial_set
             throw std::invalid_argument("Continuous evolution cannot resume physical parameters outside its declared domain");
     }
     if (this->system().parameter_space().dimension() != 0u) {
-        if (semantics == Semantics::LOWER) {
-            throw std::invalid_argument("Parameterised continuous evolution currently requires UPPER semantics");
-        }
+        // Both semantics transport the same bound physical parameters.
+        // Bind the complete declared tuple once; resumed maps and their
+        // state/time correlations retain the existing coordinates.
         if (!initial.has_constant_parameter_binding())
             initial.adjoin_constant_parameters(this->system().parameter_space(), this->system().constant_parameter_domain());
     }

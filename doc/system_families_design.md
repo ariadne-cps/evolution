@@ -3595,3 +3595,114 @@ inputs follow an explicit approximation/sampling policy. UPPER/LOWER are
 validated semantics and do not apply to those trajectories. General
 implicit DAEs/DAIs and final Python tutorial/binding parity are not
 implied by this matrix. Paving decoupling stays outside this work.
+
+## v7.32 — Persistent physical parameters in continuous validated LOWER
+
+**Proof recorded before implementation.** The physical dynamics remain
+`x'=f(x,t,p,u)`, with the same trajectory-constant tuple `p` in its full
+declared domain P and every admissible input function u. Let the complete
+outer LOWER source E carry a nonempty reached subset S. An existing named
+physical-parameter binding is retained; an unbound initial source is
+extended by all of the nonempty P using the same preparation as UPPER.
+The structured integration step encloses the original physical flow for
+the entire source and full input domains. Its argument map composes the
+original correlated state and constant-parameter functions, so p keeps
+the same value along each trajectory, across steps and resumed orbits.
+Fresh input coordinates remain independent of the persistent physical
+coordinates. The exact flow image of S (paired with P when initially
+unbound) is nonempty, reached and enclosed by the numerical image of E.
+The same argument covers equation auxiliary functions and pre-bound
+parameter maps whose uniform uncertainty has persistent coordinates.
+No source subdivision, input sampling, new feasibility gate or change
+to the physical dynamics is required.
+
+For hybrid modes, every original whole-source/whole-tube invariant and
+blocking-event condition remains mandatory. A full-source certified
+initial reset transports the same correlated physical tuple; the common
+mode preparation checks compatibility with the destination declaration.
+Thus allowing parameters does not license uncertain guard intersections,
+IMPACT resets without direction or general inclusion crossings.
+
+**Small implementation change.** Remove the blanket parameter/LOWER
+rejection in ordinary continuous orbit preparation, covering equations
+and structured inclusions, and the corresponding rejection in hybrid
+inclusion mode validation. Reuse all integration, clock lifting,
+parameter binding, auxiliary composition and reset kernels unchanged.
+Existing parameter name/order/domain checks and preconditioning
+exclusions remain. Box-only inclusion methods stay UPPER-only.
+
+**Regressions, retaining original UPPER assertions.**
+
+- Run the existing ordinary parameter/auxiliary analytic checks under
+  both semantics, with two physical parameters, autonomous/explicit-time
+  fields, all three initial-set entry forms and nonzero clock origin.
+  Existing static coordinate/reconditioning checks remain enabled.
+- Run the existing timed and autonomous inclusion extremal bounds,
+  input-axis counts and physical-parameter sensitivity under LOWER too.
+- New two-state ordinary inclusion regression integrates
+  `x'=p+u+t, y'=x` (also without t), `p in [2,3]`, `u in [-1,1]`.
+  Two resumed periods retain one physical axis and four independent full
+  input axes, including a +1/-1 switching trajectory at both physical
+  parameter endpoints. Analytic x/y/time values, zero-horizon resume and
+  source immutability are checked. No internal time state is exposed.
+- Extend the persistent-parameter rounding-error regression to LOWER
+  over successive orbits, and retain explicit name/domain mismatch
+  rejection for LOWER as well as UPPER.
+- Extend hybrid inclusion method gates over both semantics and both
+  backends, with/without explicit time and physical parameters. Structured
+  LOWER works at zero/positive horizons; box-only LOWER still throws.
+- New hybrid whole-tube regression checks invariants and PROGRESS guards
+  depending on p, with/without explicit time and in flat/tree backends.
+  An inactive blocker permits the full-input numerical image; a possible
+  later crossing is rejected while its legal zero horizon is retained.
+- New hybrid reset/continuation regression checks both URGENT and
+  PERMISSIVE with joint parameter/time guards, active PROGRESS, a reset
+  `x+=2p`, and a parameterized inclusion destination. It retains the
+  original tuple, full independent input domains, event provenance,
+  nonzero absolute time and tight correlated numerical bounds. A guard
+  uncertain over p is rejected without selecting a parameter subbox.
+
+The expanded existing tests fail against v7.31 with the two expected
+parameter/LOWER admission exceptions; this is a deliberate capability
+extension. No architectural test is weakened to conceal a failure.
+
+### Support checkpoint after v7.32 (candidate until its exact CI passes)
+
+Only the following parameter limits in the v7.31 matrix change:
+
+| Validated evolver / family | UPPER | LOWER with physical parameters |
+| --- | --- | --- |
+| Ordinary continuous equation / explicit ODAE | Existing support unchanged | Added: autonomous and explicit time, persistent named tuples and correlated auxiliary outputs |
+| Ordinary continuous structured inclusion / explicit ODAI | Existing support unchanged | Added: autonomous and explicit time, complete input domains and persistent tuples across resume |
+| Hybrid continuous structured inclusion / explicit ODAI | Existing partial support unchanged | Added within the existing certified-flow/reset subset, including parameter/time predicates and compatible inclusion targets |
+
+Continuous inclusion LOWER remains partial: the box-only method is not
+promoted, and general hybrid crossing/contact reasoning remains open.
+Hybrid equation LOWER, both discrete families and Approximate are
+unchanged. The conservative family-level counts stay Approximate 8
+complete, UPPER 6 complete + 2 partial, LOWER 2 complete + 6 partial.
+This extension must pass Ubuntu, macOS, Windows, Coverage and Sanitizers
+on the exact new SHA before its parameter capability is accepted.
+The immutable opening contract, deferred Python tutorial parity and
+separate paving decoupling remain unchanged.
+
+**Architectural-test migration and verification.** The first full run
+identified two stale capability expectations: the ordinary-dynamics C++
+contract and Python consumer test still required parameterized LOWER to
+throw. Replace those obsolete rejections with positive semantic checks,
+retaining the original unsupported box/preconditioning cases. The C++
+equation check validates `x(H)=p*(1-exp(-H))`; the inclusion check retains
+the complete `[-1/16,1/8]` image at H=1/16. It checks that the only source
+constraint is the original physical domain `0<=p<=1`, rather than an
+input-selection equality. Python verifies successful structured LOWER,
+resume/zero-horizon calls and the box-only rejection through the existing
+bindings. No new bindings or tutorial features are introduced here.
+
+On 27 November 2026 the final local Debug build with warnings as errors,
+all 49 CTest entries including Python, installation, both installed
+tutorials, apply-format and check-format passed. The six original focused
+suites passed too. No submodule source/gitlink, numerical integration
+kernel, UPPER behavior or canonical semantic contract is changed.
+All five v7.31 functional workflows now succeeded on exact SHA
+`87da52ae630e49981fa39b89a5aa66cafe9520b0`; its separate Codecov threshold
+checks failed. Those results do not replace v7.32's own exact-SHA gate.

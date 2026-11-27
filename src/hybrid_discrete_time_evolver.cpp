@@ -23,7 +23,7 @@
  */
 
 /** @file src/hybrid_discrete_time_evolver.cpp
- *  @brief Public deterministic discrete hybrid UPPER evolver.
+ *  @brief Public validated discrete hybrid equation/inclusion evolver.
  */
 
 #include "evolution/hybrid_discrete_time_evolver.hpp"

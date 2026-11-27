@@ -67,7 +67,9 @@ const typename DiscreteTimeEvolver<ValidatedTag>::FunctionFactoryType DiscreteTi
 }
 
 typename DiscreteTimeEvolver<ValidatedTag>::EnclosureType DiscreteTimeEvolver<ValidatedTag>::enclosure(const ExactBoxType& box) const {
-    return EnclosureType(box, this->system().state_space(), EnclosureConfiguration(this->function_factory()));
+    EnclosureType result(box, this->system().state_space(), EnclosureConfiguration(this->function_factory()));
+    result.set_auxiliary(this->system().auxiliary_space(), this->system().auxiliary_function());
+    return result;
 }
 
 Orbit<DiscreteTimeEvolver<ValidatedTag>::EnclosureType>
@@ -83,13 +85,19 @@ Orbit<DiscreteTimeEvolver<ValidatedTag>::EnclosureType>
         orbit(const EnclosureType& initial_set,
               const TerminationType& termination,
               Semantics semantics) const {
-    ARIADNE_PRECONDITION(this->system().state_auxiliary_space() == initial_set.state_auxiliary_space())
-    Orbit<EnclosureType> orbit(initial_set);
+    ARIADNE_PRECONDITION(this->system().state_space() == initial_set.state_space())
+    ARIADNE_PRECONDITION(initial_set.auxiliary_space().size() == 0u ||
+                         this->system().auxiliary_space() == initial_set.auxiliary_space())
+    // Outputs are the declared correlated map of the current state, including
+    // at zero horizon and when resuming a caller-provided state enclosure.
+    EnclosureType prepared = initial_set;
+    prepared.set_auxiliary(this->system().auxiliary_space(), this->system().auxiliary_function());
+    Orbit<EnclosureType> orbit(prepared);
     EnclosureListType final;
     EnclosureListType reachable;
     EnclosureListType intermediate;
     this->_evolution(final, reachable, intermediate,
-                     initial_set, termination, semantics);
+                     prepared, termination, semantics);
     orbit.adjoin_intermediate(intermediate);
     orbit.adjoin_reach(reachable);
     orbit.adjoin_final(final);

@@ -64,7 +64,15 @@ HybridDiscreteTimeUpperExploration HybridDiscreteTimeUpperScheduler::evolve(
     HybridEnclosure prepared = initial;
     if (automaton.has_inclusion(initial.location()))
         prepared = EvolutionDetail::prepare_discrete_inclusion_source(automaton, initial);
-    else if (!automaton.has_equation(initial.location()))
+    else if (automaton.has_equation(initial.location())) {
+        const auto& equation = automaton.equation(initial.location());
+        if (initial.auxiliary_space().dimension() != 0u &&
+            initial.auxiliary_space() != equation.auxiliary_space())
+            throw std::invalid_argument("Discrete hybrid initial auxiliary space mismatch");
+        // Match inclusion/continuous preparation before publishing the root,
+        // rather than waiting for the first numerical image to attach outputs.
+        prepared.set_auxiliary(equation.auxiliary_space().variables(), equation.auxiliary_function());
+    } else
         throw std::invalid_argument("Discrete hybrid initial mode has unsupported dynamics");
     check_time_index(prepared, initial_index);
 

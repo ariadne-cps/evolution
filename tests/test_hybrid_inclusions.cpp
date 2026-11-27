@@ -1437,6 +1437,140 @@ class TestHybridInclusions : public Testing::ContextFixture {
         }
     }
 
+    Void test_upper_competing_inclusion_events_cover_clock_parameters_and_targets() {
+        const DiscreteLocation source(1), first_target(2), second_target(3), optional_target(4);
+        const RealVariable x("x"), u("u"), w("w"), p("p"), output("output");
+        const TimeVariable t;
+        const DiscreteEvent first("first"), second("second"), optional("optional");
+        const RealVariablesBox parameters({1 <= p <= 2});
+        ContinuousTimeHybridAutomaton system;
+        system.new_mode(source, OrdinaryDifferentialAlgebraicInclusion(
+                                    {dot(x) = p + t + u}, RealVariablesBox({Real(-0.125_x) <= u <= Real(0.125_x)}), parameters, t));
+        system.new_mode(first_target, OrdinaryDifferentialAlgebraicEquation(
+                                          {dot(x) = 0}, parameters, t, {let(output) = x - p}));
+        system.new_mode(second_target, OrdinaryDifferentialAlgebraicInclusion(
+                                           {dot(x) = w}, RealVariablesBox({Real(-0.0625_x) <= w <= Real(0.0625_x)}), parameters, t));
+        system.new_mode(optional_target, OrdinaryDifferentialAlgebraicEquation(
+                                             {dot(x) = 0}, parameters, t));
+        system.new_transition(source, first, first_target, {next(x) = x + p},
+                              x >= p / 64, EventKind::URGENT);
+        system.new_transition(source, second, second_target, {next(x) = x + 2 * p},
+                              x >= Real(0.0234375_x), EventKind::URGENT);
+        system.new_transition(source, optional, optional_target, {next(x) = x - p},
+                              x >= Real(0.0078125_x), EventKind::PERMISSIVE);
+        system.new_invariant(source, x <= p / 8, DiscreteEvent("source_bound"));
+        for (const auto& target: {first_target, second_target, optional_target})
+            system.new_invariant(target, p <= 2, DiscreteEvent("parameter_bound"));
+        for (bool boxes: {false, true})
+            for (bool tree: {false, true}) {
+                HybridContinuousTimeEvolver<ValidatedTag> evolver(system);
+                if (boxes)
+                    evolver.set_integrator(FirstOrderMultifunctionIntegrator());
+                else
+                    evolver.set_integrator(TaylorPicardIntegrator(step_maximum_error = 1e-7),
+                                           ConstantApproximation(), ConstantApproximation());
+                evolver.configuration().set_maximum_step_size(0.015625);
+                if (tree)
+                    evolver.set_evolution_backend_factory(TreeHybridEvolutionBackendFactory());
+                auto initial = evolver.enclosure(HybridExactBox(source, RealSpace({
+                                                                            x
+                }),
+                                                                ExactBoxType({{0, 0}})));
+                initial.set_time_function(evolver.function_factory().create_constant(initial.parameter_domain(), Real(2)));
+                const auto source_domain = initial.continuous_set().parameter_domain();
+                const auto orbit = evolver.orbit(initial, HybridTime(2.125_x, 2), Semantics::UPPER);
+                std::optional<ExactIntervalType> first_states, second_states, optional_states;
+                for (const auto& final: orbit.final()) {
+                    ARIADNE_TESTING_EXPECT_EQUAL(final.state_dimension(), 1u);
+                    ARIADNE_TESTING_REQUIRE(final.previous_events().size() == 1u);
+                    ARIADNE_TESTING_PROVE(subset(cast_exact_interval(final.time_range()), ExactIntervalType(2.125_x, 2.125_x)));
+                    ARIADNE_TESTING_EXPECT_EQUAL(final.continuous_set().constant_parameter_space(), RealSpace({p}));
+                    ARIADNE_TESTING_EXPECT_EQUAL(final.continuous_set().constant_parameter_domain(), ExactBoxType({
+                                                                                                         {1, 2}
+                    }));
+                    const auto state = cast_exact_interval(final.state_bounding_box()[0u]);
+                    if (final.location() == first_target) {
+                        ARIADNE_TESTING_EXPECT_EQUAL(final.previous_events()[0u], first);
+                        first_states = first_states ? hull(*first_states, state) : state;
+                        const auto physical = final.continuous_set().constant_parameter_function(1u).get(0u);
+                        const auto residual = final.auxiliary_function()[0u] - final.state_function()[0u] + physical;
+                        ARIADNE_TESTING_PROVE(subset(cast_exact_interval(residual.range()), ExactIntervalType(-0.015625_x, 0.015625_x)));
+                    } else if (final.location() == second_target) {
+                        ARIADNE_TESTING_EXPECT_EQUAL(final.previous_events()[0u], second);
+                        second_states = second_states ? hull(*second_states, state) : state;
+                    } else {
+                        ARIADNE_TESTING_EXPECT_EQUAL(final.location(), optional_target);
+                        ARIADNE_TESTING_EXPECT_EQUAL(final.previous_events()[0u], optional);
+                        optional_states = optional_states ? hull(*optional_states, state) : state;
+                    }
+                }
+                ARIADNE_TESTING_REQUIRE(first_states.has_value() && second_states.has_value() && optional_states.has_value());
+                // u=0 reaches the first urgent boundary first for p=1,
+                // and the second boundary first for p=2. The optional
+                // guard is reached before either, for both parameter values.
+                ARIADNE_TESTING_PROVE(subset(ExactIntervalType(1.015625_x, 1.015625_x), *first_states));
+                ARIADNE_TESTING_PROVE(subset(ExactIntervalType(4.0234375_x, 4.0234375_x), *second_states));
+                ARIADNE_TESTING_PROVE(subset(ExactIntervalType(-1.9921875_x, -0.9921875_x), *optional_states));
+                ARIADNE_TESTING_EXPECT_EQUAL(initial.continuous_set().parameter_domain(), source_domain);
+                ARIADNE_TESTING_PROVE(initial.previous_events().empty());
+            }
+    }
+
+    Void test_upper_interval_taylor_events_cover_urgent_and_optional_branches() {
+        const DiscreteLocation source(1), urgent_target(2), optional_target(3);
+        const RealVariable x("x"), w("w");
+        const DiscreteEvent urgent("urgent"), optional("optional");
+        const ExactBoxType domain({
+            {-1, 1}
+        });
+        const auto field = ValidatedIntervalTaylorFunctionModel<FloatDP>::constant(
+            domain, FloatDPUpperInterval(0.875_x, 1.125_x, dp), ThresholdSweeper<FloatDP>(dp, 1e-10));
+        ContinuousTimeHybridAutomaton system;
+        system.new_mode(source, OrdinaryDifferentialAlgebraicInclusion(RealSpace({x}),
+                                                                       ValidatedVectorIntervalTaylorFunctionModel<FloatDP>({field})));
+        system.new_mode(urgent_target, OrdinaryDifferentialAlgebraicEquation({dot(x) = 0}));
+        system.new_mode(optional_target, OrdinaryDifferentialAlgebraicInclusion(
+                                             {dot(x) = w}, RealVariablesBox({Real(-0.0625_x) <= w <= Real(0.0625_x)})));
+        system.new_transition(source, urgent, urgent_target, {next(x) = x + 1},
+                              x >= Real(0.015625_x), EventKind::URGENT);
+        system.new_transition(source, optional, optional_target, {next(x) = x - 1},
+                              x >= Real(0.0078125_x), EventKind::PERMISSIVE);
+        for (bool boxes: {false, true})
+            for (bool tree: {false, true}) {
+                HybridContinuousTimeEvolver<ValidatedTag> evolver(system);
+                if (boxes)
+                    evolver.set_integrator(FirstOrderMultifunctionIntegrator());
+                else
+                    evolver.set_integrator(TaylorPicardIntegrator(step_maximum_error = 1e-7),
+                                           ConstantApproximation(), ConstantApproximation());
+                evolver.configuration().set_maximum_step_size(0.03125);
+                if (tree)
+                    evolver.set_evolution_backend_factory(TreeHybridEvolutionBackendFactory());
+                const auto orbit = evolver.orbit(HybridExactBox(source, RealSpace({
+                                                                            x
+                }),
+                                                                ExactBoxType({{0, 0}})),
+                                                 HybridTime(0.125_x, 2), Semantics::UPPER);
+                std::optional<ExactIntervalType> urgent_states, optional_states;
+                for (const auto& final: orbit.final()) {
+                    ARIADNE_TESTING_REQUIRE(final.previous_events().size() == 1u);
+                    ARIADNE_TESTING_PROVE(subset(cast_exact_interval(final.time_range()), ExactIntervalType(0.125_x, 0.125_x)));
+                    const auto state = cast_exact_interval(final.state_bounding_box()[0u]);
+                    if (final.location() == urgent_target) {
+                        ARIADNE_TESTING_EXPECT_EQUAL(final.previous_events()[0u], urgent);
+                        urgent_states = urgent_states ? hull(*urgent_states, state) : state;
+                    } else {
+                        ARIADNE_TESTING_EXPECT_EQUAL(final.location(), optional_target);
+                        ARIADNE_TESTING_EXPECT_EQUAL(final.previous_events()[0u], optional);
+                        optional_states = optional_states ? hull(*optional_states, state) : state;
+                    }
+                }
+                ARIADNE_TESTING_REQUIRE(urgent_states.has_value() && optional_states.has_value());
+                ARIADNE_TESTING_PROVE(subset(ExactIntervalType(1.015625_x, 1.015625_x), *urgent_states));
+                ARIADNE_TESTING_PROVE(subset(ExactIntervalType(-0.9921875_x, -0.9921875_x), *optional_states));
+            }
+    }
+
     Void test_unsupported_capabilities_fail_explicitly() {
         const DiscreteLocation q(1);
         const RealVariable x("x"), u("u"), t("t"), p("p");
@@ -1516,6 +1650,8 @@ int main(int argc, char** argv) {
     ARIADNE_TESTING_ADD_TEST(TestHybridInclusions, test_lower_permissive_endpoint_requires_guard_and_target_certificates);
     ARIADNE_TESTING_ADD_TEST(TestHybridInclusions, test_lower_permissive_endpoint_respects_prefix_and_horizon);
     ARIADNE_TESTING_ADD_TEST(TestHybridInclusions, test_lower_permissive_endpoint_resets_preserve_later_continuations);
+    ARIADNE_TESTING_ADD_TEST(TestHybridInclusions, test_upper_competing_inclusion_events_cover_clock_parameters_and_targets);
+    ARIADNE_TESTING_ADD_TEST(TestHybridInclusions, test_upper_interval_taylor_events_cover_urgent_and_optional_branches);
     ARIADNE_TESTING_ADD_TEST(TestHybridInclusions, test_unsupported_capabilities_fail_explicitly);
     return Testing::run_logging_suite(ariadne_test_suite, argc, argv);
 }

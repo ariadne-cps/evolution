@@ -23,7 +23,7 @@
  */
 
 /** @file evolution/hybrid_discrete_time_evolver.hpp
- *  @brief Validated UPPER evolution of deterministic discrete hybrid automata.
+ *  @brief Validated evolution of native equation/inclusion discrete hybrid automata.
  */
 
 #ifndef ARIADNE_HYBRID_DISCRETE_TIME_EVOLVER_HPP
@@ -67,7 +67,7 @@ class HybridDiscreteTimeEvolverConfiguration<ValidatedTag> : public Configuratio
 };
 
 //! \brief Validated hybrid discrete-time evolution with UPPER branching
-//! and a strictly limited LOWER deterministic witness path.
+//! and certified whole-source LOWER continuations.
 //! \details All possible certified UPPER branches consume one tick; uncertain
 //! predicates retain alternatives. No branch priority, time-zero jump,
 //! implicit merging is imposed. Bounded-input inclusion progressions and

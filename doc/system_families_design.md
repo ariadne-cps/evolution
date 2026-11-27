@@ -3881,3 +3881,121 @@ continuous), distinguish stale capability descriptions from real gaps,
 retain architectural tests and add precise coverage regressions before
 promoting a cell. General LOWER completion and final Python tutorial
 parity are deferred while this UPPER priority is addressed.
+
+## v7.35 — Complete native UPPER coverage audit and discrete initial outputs
+
+**Priority and scope.** After v7.34's certified LOWER endpoint resets,
+the requested priority is closing the two remaining native UPPER cells:
+hybrid discrete inclusion and hybrid continuous inclusion. The audited
+models are the native explicit update/auxiliary equations, full bounded
+input inclusions and declared continuous interval-Taylor fields. This
+does not introduce general implicit DAE/DAI solving, a symbolic discrete
+clock or discrete named trajectory-constant parameter declarations.
+Continuous explicit time and trajectory-constant interval parameters
+retain their existing native contracts. Numerical success requires a
+valid configured solver/model combination and its validity domain.
+In particular, the structured inclusion path requires a free numerical
+input when using an input-function representation; choose the box method
+otherwise. Preconditioned integration is not supported for inclusion
+approximations or time/parameter-dependent hybrid fields. These explicit
+configuration limits remain errors, not missing event branches.
+
+**Coverage proof recorded before implementation.** Preserve the opening
+contract `R subset S_U subset E_U` for the complete requested finite
+time/index and jump horizon. For discrete evolution, prepare the full
+current input box and its correlated algebraic outputs. Retain every
+possibly enabled transition and every possibly admissible progression;
+UNKNOWN never discards a branch. Each branch copies the same source,
+restricts only necessary closed pre-state predicates, and applies the
+original update/reset. Introduce independent full destination inputs
+only after this image. Induction on the integer index and complete
+breadth-first fan-out covers every real branch, with parent/event
+provenance retained. Project every horizon leaf; keep blocked leaves
+separate. Node exhaustion throws and cannot publish an incomplete UPPER.
+
+For continuous evolution, each validated numerical tube and endpoint
+encloses the complete original flow family. Every real uninterrupted
+pre-event point satisfies the source invariants and inactive blockers,
+so their necessary closed restrictions retain it. Every actual first
+URGENT/IMPACT contact belongs to the retained boundary; every legal
+PERMISSIVE jump belongs to the retained guard-active tube slice.
+Enumerating every possible candidate and applying the original
+correlated reset therefore covers all actual alternatives. Spurious
+contacts are permitted by UPPER; first-entry or crossing-direction
+certainty is not required to retain an outer candidate. Initial events,
+closed horizon restriction, compatible constant-parameter bindings and
+both backend fan-out policies preserve the induction. The documented
+HybridTime stopping rule remains reaching either the time or jump bound.
+Numerical/resource failure aborts instead of returning partial coverage.
+
+**Audit result and concrete correction.** The historical partial labels
+for the two inclusion cells outlived the removal of their capability
+gates (v6.97 and later). The present declared-model event/target paths
+already implement the UPPER policy above. Their composed regressions
+pass without changing event geometry, integration or physical dynamics.
+One genuine initial-output gap was found in the discrete equation paths:
+ordinary state-only seeds were rejected when the equation declared
+auxiliaries, while hybrid zero-horizon roots omitted those outputs.
+New tests reproduce both failures on the previous implementation.
+
+The ordinary discrete enclosure factory and orbit entry now compose
+the declared auxiliary map with the entire initial state. The hybrid
+discrete UPPER scheduler does the same before publishing its root,
+including zero horizon and resumed enclosures. Work on copies, retain
+state-space validation and reject incompatible nonempty output labels.
+This is a validated outer image of the declared algebraic outputs, not
+a constraint selecting favorable initial states. The ordinary shared
+entry also prepares LOWER outputs, without changing its propagation or
+event policy. Correct stale deterministic-only and not-yet-public
+descriptions of the hybrid discrete scheduler/evolver.
+
+**Composed regressions.** Five new registered methods bring the ordinary
+discrete suite to 6 methods, hybrid discrete to 22 and hybrid inclusion
+to 28. The discrete inclusion regression follows two ticks through
+correlated auxiliary guards and competing URGENT/PERMISSIVE resets into
+inclusion targets: all nine nodes and five distinct horizon branches,
+analytic full-input state maps/bounds, fresh full arrival inputs,
+auxiliary residuals, time/dwell/event/parent provenance, orbit projection,
+source immutability and hard node overflow. Initial-output tests cover
+factory, raw enclosure and constrained-set entry, zero horizon, resume,
+correlated values and incompatible labels in ordinary/hybrid equations.
+
+Continuous regressions retain competing URGENT and optional PERMISSIVE
+destinations with explicit time, constant interval parameters, source
+and target invariants, correlated target outputs, and equation/inclusion
+targets. A separate interval-Taylor-field regression retains urgent and
+optional destinations. Both run structured/box methods and flat/tree
+backends, verify analytic reached examples, absolute horizon and event
+provenance. These examples guard the structural coverage proof; they do
+not replace it with sampling. All earlier architectural tests, closed
+horizon and IMPACT/tangency/competing-blocker tests remain mandatory.
+
+**Current support checkpoint and acceptance gate.** All eight native
+approximate paths remain implemented. For validated UPPER the candidate
+matrix below closes the two historical partial cells only after Ubuntu,
+macOS, Windows, Coverage and Sanitizers all succeed on this exact new
+commit. Until then retain the accepted 6 complete + 2 partial count.
+Validated LOWER remains 2 complete + 6 partial; no LOWER cell is promoted.
+All template evolvers below use ValidatedTag unless stated otherwise.
+
+| Native family | Public validated evolver | UPPER after exact-SHA acceptance | LOWER |
+| --- | --- | --- | --- |
+| Ordinary discrete equation | DiscreteTimeEvolver | Implemented | Implemented |
+| Ordinary discrete bounded-input inclusion | DiscreteTimeInclusionEvolver (not a template) | Implemented | Partial: whole-input map, independent history and correlated outputs |
+| Ordinary continuous equation / explicit ODAE | ContinuousTimeEvolver | Implemented, including time/constant interval parameters | Implemented, including time/constant interval parameters |
+| Ordinary continuous inclusion / explicit ODAI | ContinuousTimeEvolver | Implemented, structured and box methods | Partial: structured method, full inputs, time/constant interval parameters |
+| Hybrid discrete equation modes | HybridDiscreteTimeEvolver | Implemented | Partial: certified whole-source progression/reset alternatives |
+| Hybrid discrete bounded-input inclusion modes | HybridDiscreteTimeEvolver | Implemented: full branching, auxiliary guards/resets and equation/inclusion targets | Partial: full-input maps and certified whole-source alternatives |
+| Hybrid continuous equation modes / explicit ODAE | HybridContinuousTimeEvolver | Implemented, including time/constant interval parameters | Partial: certified flow, immediate/endpoint resets and supported crossings |
+| Hybrid continuous inclusion modes / explicit ODAI | HybridContinuousTimeEvolver | Implemented: both methods, time/constant interval parameters, all native event/contact candidates and targets | Partial: structured certified flow, immediate/endpoint resets and supported URGENT crossings; general crossings/IMPACT remain open |
+
+**Validation checkpoint (27 November 2026).** The five new methods and
+existing impact suite pass after the initial-output correction. The
+complete Debug/warnings-as-errors build, all 49 CTest entries including
+Python, installation, installed C++/Python tutorials and
+apply-format/check-format passed locally. The five exact-SHA functional
+workflows are required before matrix acceptance. The preceding v7.34 is accepted:
+Ubuntu, macOS, Windows, Coverage, Sanitizers and Format all succeeded on
+`53e21a32e249cf1d825afb864918d56d7b329759`. The canonical opening section
+is unchanged. General LOWER completion and final Python tutorial parity
+stay deferred during UPPER closure; paving remains out of scope.

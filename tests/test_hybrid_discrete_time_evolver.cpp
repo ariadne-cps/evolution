@@ -1358,6 +1358,132 @@ class TestHybridDiscreteTimeEvolver : public Ariadne::Testing::ContextFixture {
                                                     Semantics::LOWER));
     }
 
+    Void test_upper_competing_auxiliary_inclusions_cover_the_complete_tree() {
+        const RealVariable x("x"), a("a"), u("u"), v("v"), w("w");
+        const DiscreteLocation source_mode(1), urgent_mode(2), optional_mode(3);
+        const DiscreteEvent urgent("urgent"), optional("optional");
+        DiscreteTimeHybridAutomaton system;
+        system.new_mode(source_mode, DifferenceAlgebraicInclusion(
+                                         List<PrimedRealAssignment>{next(x) = x + a},
+                                         List<RealAssignment>{let(a) = x + u}, RealVariablesBox({-1 <= u <= 1})));
+        system.new_mode(urgent_mode, DifferenceAlgebraicInclusion(
+                                         List<PrimedRealAssignment>{next(x) = x + a},
+                                         List<RealAssignment>{let(a) = x + v}, RealVariablesBox({-1 <= v <= 1})));
+        system.new_mode(optional_mode, DifferenceAlgebraicInclusion(
+                                           List<PrimedRealAssignment>{next(x) = x + a},
+                                           List<RealAssignment>{let(a) = x + w}, RealVariablesBox({-1 <= w <= 1})));
+        system.new_urgent_transition(source_mode, urgent, urgent_mode,
+                                     {next(x) = a + 2}, a >= 0);
+        system.new_permissive_transition(source_mode, optional, optional_mode,
+                                         {next(x) = 2 * a - 3}, a <= 1 / 2_q, a <= 1);
+        Evolver evolver(system);
+        const auto source = initial(source_mode);
+        const auto source_domain = source.continuous_set().parameter_domain();
+        const auto zero = evolver.orbit(source, Termination(Integer(0), Integer(0)), Semantics::UPPER);
+        ARIADNE_TESTING_REQUIRE(zero.final().size() == 1u);
+        ARIADNE_TESTING_EXPECT_EQUAL(zero.final()[0u].continuous_set().number_of_parameters(), 2u);
+        const auto history = evolver.explore(source, Termination(Integer(0), Integer(2)), Semantics::UPPER);
+        ARIADNE_TESTING_EXPECT_EQUAL(history.nodes.size(), 9u);
+        ARIADNE_TESTING_REQUIRE(history.terminals.size() == 5u);
+        bool seen[5] = {false, false, false, false, false};
+        for (const auto& terminal: history.terminals) {
+            ARIADNE_TESTING_EXPECT_EQUAL(terminal.kind, HybridDiscreteTimeUpperTerminalKind::HORIZON);
+            const auto& node = history.nodes[terminal.node_index];
+            const auto& final = node.enclosure;
+            ARIADNE_TESTING_REQUIRE(node.parent.has_value());
+            ARIADNE_TESTING_REQUIRE(node.incoming_branch.has_value());
+            ARIADNE_TESTING_PROVE(*node.parent < terminal.node_index);
+            ARIADNE_TESTING_EXPECT_EQUAL(node.index, Integer(2));
+            ARIADNE_TESTING_PROVE(subset(cast_exact_interval(final.time_range()), ExactIntervalType(2, 2)));
+            const auto& continuous = final.continuous_set();
+            ARIADNE_TESTING_REQUIRE(continuous.number_of_parameters() == 4u);
+            const auto& domain = continuous.parameter_domain();
+            const auto factory = continuous.configuration().function_factory();
+            const auto x0 = factory.create_coordinate(domain, 0u);
+            const auto input0 = factory.create_coordinate(domain, 1u);
+            const auto input1 = factory.create_coordinate(domain, 2u);
+            const auto current_input = factory.create_coordinate(domain, 3u);
+            SizeType input_count = 0u;
+            for (const auto kind: continuous.variable_kinds())
+                if (kind == EnclosureVariableKind::INPUT)
+                    ++input_count;
+            ARIADNE_TESTING_EXPECT_EQUAL(input_count, 3u);
+            ARIADNE_TESTING_PROVE(subset(ExactIntervalType(-1, 1), domain[3u]));
+            const auto auxiliary_residual = final.auxiliary_function()[0u] - final.state_function()[0u] - current_input;
+            ARIADNE_TESTING_PROVE(subset(cast_exact_interval(auxiliary_residual.range()), ExactIntervalType(-0x1p-24_x, 0x1p-24_x)));
+            auto expected = 0 * x0;
+            ExactIntervalType extrema(0, 0);
+            SizeType slot = 0u;
+            if (final.location() == source_mode) {
+                expected = 4 * x0 + 2 * input0 + input1;
+                extrema = ExactIntervalType(-3, 1);
+                ARIADNE_TESTING_PROVE(final.previous_events().empty());
+            } else {
+                ARIADNE_TESTING_REQUIRE(final.previous_events().size() == 1u);
+                const bool late_reset = node.incoming_branch->kind == HybridDiscreteTimeBranchKind::TRANSITION;
+                if (final.location() == urgent_mode) {
+                    slot = late_reset ? 2u : 1u;
+                    expected = late_reset ? 2 * x0 + input0 + input1 + 2 : 2 * x0 + 2 * input0 + input1 + 4;
+                    extrema = late_reset ? ExactIntervalType(2, 4) : ExactIntervalType(3, 9);
+                    ARIADNE_TESTING_EXPECT_EQUAL(final.previous_events()[0u], urgent);
+                } else {
+                    ARIADNE_TESTING_EXPECT_EQUAL(final.location(), optional_mode);
+                    slot = late_reset ? 4u : 3u;
+                    expected = late_reset ? 4 * x0 + 2 * input0 + 2 * input1 - 3 : 4 * x0 + 4 * input0 + input1 - 6;
+                    extrema = late_reset ? ExactIntervalType(-7, -2) : ExactIntervalType(-11, -3);
+                    ARIADNE_TESTING_EXPECT_EQUAL(final.previous_events()[0u], optional);
+                }
+                ARIADNE_TESTING_PROVE(subset(cast_exact_interval(final.dwell_time_range()),
+                                             late_reset ? ExactIntervalType(0, 0) : ExactIntervalType(1, 1)));
+            }
+            seen[slot] = true;
+            const auto residual = final.state_function()[0u] - expected;
+            ARIADNE_TESTING_PROVE(subset(cast_exact_interval(residual.range()), ExactIntervalType(-0x1p-24_x, 0x1p-24_x)));
+            ARIADNE_TESTING_PROVE(subset(extrema, cast_exact_interval(final.state_bounding_box()[0u])));
+        }
+        for (bool branch: seen)
+            ARIADNE_TESTING_PROVE(branch);
+        const auto projected = evolver.orbit_with_blocked(source, Termination(Integer(0), Integer(2)), Semantics::UPPER);
+        ARIADNE_TESTING_EXPECT_EQUAL(projected.orbit.final().size(), 5u);
+        ARIADNE_TESTING_EXPECT_EQUAL(projected.orbit.reach().size(), 8u);
+        ARIADNE_TESTING_EXPECT_EQUAL(projected.orbit.intermediate().size(), 3u);
+        ARIADNE_TESTING_EXPECT_EQUAL(projected.blocked.size(), 0u);
+        evolver.configuration().set_maximum_nodes(8u);
+        ARIADNE_TESTING_EXPECT_THROWS(std::length_error,
+                                      evolver.explore(source, Termination(Integer(0), Integer(2)), Semantics::UPPER));
+        ARIADNE_TESTING_EXPECT_EQUAL(source.continuous_set().parameter_domain(), source_domain);
+        ARIADNE_TESTING_EXPECT_EQUAL(source.auxiliary_space().dimension(), 0u);
+    }
+
+    Void test_upper_equation_auxiliaries_are_prepared_at_initial_index() {
+        const RealVariable x("x"), a("a"), other("other");
+        const DiscreteLocation mode(1);
+        DiscreteTimeHybridAutomaton system;
+        system.new_mode(mode, DifferenceAlgebraicEquation(
+                                  List<PrimedRealAssignment>{next(x) = x / 2}, List<RealAssignment>{let(a) = 3 * x}));
+        Evolver evolver(system);
+        const auto source = initial(mode);
+        const auto zero = evolver.orbit(source, Termination(Integer(0), Integer(0)), Semantics::UPPER);
+        ARIADNE_TESTING_REQUIRE(zero.final().size() == 1u);
+        ARIADNE_TESTING_REQUIRE(zero.final()[0u].auxiliary_space() == RealSpace({a}));
+        ARIADNE_TESTING_EXPECT_EQUAL(zero.initial().auxiliary_space(), RealSpace({a}));
+        const auto first = evolver.orbit(source, Termination(Integer(0), Integer(1)), Semantics::UPPER);
+        ARIADNE_TESTING_REQUIRE(first.final().size() == 1u);
+        const auto resumed = evolver.orbit(first.final()[0u], Termination(Integer(1), Integer(2)), Semantics::UPPER);
+        ARIADNE_TESTING_REQUIRE(resumed.final().size() == 1u);
+        for (const auto& final: {zero.final()[0u], first.final()[0u], resumed.final()[0u]}) {
+            ARIADNE_TESTING_EXPECT_EQUAL(final.auxiliary_space(), RealSpace({a}));
+            const auto residual = final.auxiliary_function()[0u] - 3 * final.state_function()[0u];
+            ARIADNE_TESTING_PROVE(subset(cast_exact_interval(residual.range()), ExactIntervalType(-0x1p-24_x, 0x1p-24_x)));
+        }
+        ARIADNE_TESTING_PROVE(subset(ExactIntervalType(0, 0.25_x), cast_exact_interval(resumed.final()[0u].state_bounding_box()[0u])));
+        auto incompatible = source;
+        incompatible.set_auxiliary(RealSpace({other}).variables(), system.equation(mode).auxiliary_function());
+        ARIADNE_TESTING_EXPECT_THROWS(std::invalid_argument,
+                                      evolver.orbit(incompatible, Termination(Integer(0), Integer(0)), Semantics::UPPER));
+        ARIADNE_TESTING_EXPECT_EQUAL(source.auxiliary_space().dimension(), 0u);
+    }
+
     Void test_rejections() {
         const RealVariable x("x"), u("u");
         const DiscreteLocation mode(1);
@@ -1430,6 +1556,8 @@ int main(int argc, char** argv) {
     ARIADNE_TESTING_ADD_TEST(TestHybridDiscreteTimeEvolver, test_lower_unique_permissive_branch);
     ARIADNE_TESTING_ADD_TEST(TestHybridDiscreteTimeEvolver, test_lower_unique_branch_across_competing_events);
     ARIADNE_TESTING_ADD_TEST(TestHybridDiscreteTimeEvolver, test_lower_excludes_unproved_branches);
+    ARIADNE_TESTING_ADD_TEST(TestHybridDiscreteTimeEvolver, test_upper_competing_auxiliary_inclusions_cover_the_complete_tree);
+    ARIADNE_TESTING_ADD_TEST(TestHybridDiscreteTimeEvolver, test_upper_equation_auxiliaries_are_prepared_at_initial_index);
     ARIADNE_TESTING_ADD_TEST(TestHybridDiscreteTimeEvolver, test_rejections);
     return Ariadne::Testing::run_logging_suite(ariadne_test_suite, argc, argv);
 }

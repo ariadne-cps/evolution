@@ -182,6 +182,45 @@ class TestDiscreteTimeEvolver : public Ariadne::Testing::ContextFixture {
         ARIADNE_TESTING_PROVE(bounds.upper_bound().raw().get_d() >= 1.375);
     }
 
+    Void test_upper_initial_auxiliary_outputs_and_resume() {
+        const RealVariable x("x"), a("a"), other("other");
+        const DifferenceAlgebraicEquation equation(
+            List<PrimedRealAssignment>{next(x) = x / 2}, List<RealAssignment>{let(a) = 3 * x});
+        DiscreteTimeEvolver<ValidatedTag> evolver(equation);
+        const ExactBoxType box({
+            {0, 1}
+        });
+        for (Nat entry: {0u, 1u, 2u}) {
+            const auto source = entry == 0u ? evolver.enclosure(box)
+                                            : LabelledEnclosure(box, RealSpace({x}), EnclosureConfiguration(evolver.function_factory()));
+            const auto source_domain = source.parameter_domain();
+            const auto zero = entry == 2u
+                                ? evolver.orbit(RealExpressionBoundedConstraintSet({0 <= x <= 1}, {}), Integer(0), Semantics::UPPER)
+                                : evolver.orbit(source, Integer(0), Semantics::UPPER);
+            ARIADNE_TESTING_REQUIRE(zero.final().size() == 1u);
+            ARIADNE_TESTING_EXPECT_EQUAL(zero.initial().auxiliary_space(), RealSpace({a}));
+            ARIADNE_TESTING_REQUIRE(zero.final()[0u].auxiliary_space() == RealSpace({a}));
+            const auto first = evolver.orbit(zero.final()[0u], Integer(1), Semantics::UPPER);
+            ARIADNE_TESTING_REQUIRE(first.final().size() == 1u);
+            const auto resumed = evolver.orbit(first.final()[0u], Integer(1), Semantics::UPPER);
+            ARIADNE_TESTING_REQUIRE(resumed.final().size() == 1u);
+            for (const auto& final: {zero.final()[0u], first.final()[0u], resumed.final()[0u]}) {
+                ARIADNE_TESTING_EXPECT_EQUAL(final.auxiliary_space(), RealSpace({a}));
+                ARIADNE_TESTING_EXPECT_EQUAL(final.state_dimension(), 1u);
+                const auto residual = final.auxiliary_function()[0u] - 3 * final.state_function()[0u];
+                ARIADNE_TESTING_PROVE(subset(cast_exact_interval(residual.range()), ExactIntervalType(-0x1p-24_x, 0x1p-24_x)));
+            }
+            ARIADNE_TESTING_PROVE(subset(ExactBoxType({
+                                             {0, 0.25_x}
+            }),
+                                         cast_exact_box(resumed.final()[0u].state_function().range())));
+            ARIADNE_TESTING_EXPECT_EQUAL(source.parameter_domain(), source_domain);
+        }
+        auto incompatible = LabelledEnclosure(box, RealSpace({x}), EnclosureConfiguration(evolver.function_factory()));
+        incompatible.set_auxiliary(RealSpace({other}), equation.auxiliary_function());
+        ARIADNE_TESTING_EXPECT_EXCEPTION(evolver.orbit(incompatible, Integer(0), Semantics::UPPER));
+    }
+
     Void test_evolve() {
         typedef DoublePrecision PR;
         DoublePrecision pr;
@@ -280,6 +319,7 @@ int main(int argc, const char* argv[]) {
     ARIADNE_TESTING_ADD_TEST(TestDiscreteTimeEvolver, test_stopping_policies);
     ARIADNE_TESTING_ADD_TEST(TestDiscreteTimeEvolver, test_lower_witness_and_upper_subdivision);
     ARIADNE_TESTING_ADD_TEST(TestDiscreteTimeEvolver, test_lower_constrained_source_matches_continuous_admission);
+    ARIADNE_TESTING_ADD_TEST(TestDiscreteTimeEvolver, test_upper_initial_auxiliary_outputs_and_resume);
     ARIADNE_TESTING_ADD_TEST(TestDiscreteTimeEvolver, test_evolve);
     ARIADNE_TESTING_ADD_TEST(TestDiscreteTimeEvolver, test_subdivide);
     return Ariadne::Testing::run_logging_suite(ariadne_test_suite, argc, argv);

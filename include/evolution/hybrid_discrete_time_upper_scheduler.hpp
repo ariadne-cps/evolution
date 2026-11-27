@@ -23,7 +23,7 @@
  */
 
 /** @file evolution/hybrid_discrete_time_upper_scheduler.hpp
- *  @brief Finite-horizon UPPER exploration for deterministic hybrid discrete dynamics.
+ *  @brief Finite-horizon UPPER exploration for native discrete hybrid dynamics.
  */
 
 #ifndef ARIADNE_HYBRID_DISCRETE_TIME_UPPER_SCHEDULER_HPP
@@ -82,19 +82,20 @@ struct HybridDiscreteTimeUpperOrbitProjection {
     ListSet<HybridEnclosure> blocked;
 };
 
-//! \brief Explore all possible deterministic hybrid successors up to an index.
+//! \brief Explore all possible equation/inclusion hybrid successors up to an index.
 //! \details Each branch consumes one tick. Uncertain guard and invariant
 //! evidence always retains every possibly admissible successor. The complete
-//! source enclosure is imaged separately for each branch (UPPER semantics).
+//! source is copied independently for each branch and restricted only by
+//! necessary closed pre-state conditions (UPPER semantics).
 //! No zero-time transitions, implicit event priorities, or LOWER claims.
 //!
 //! The initial enclosure's entire certified time range must be the singleton
 //! initial_index; a range merely containing that index is insufficient.
 //! The same invariant is checked for all generated nodes.
-//! Unsupported difference inclusions throw rather
-//! than being sampled. A hard maximum_nodes budget aborts with an exception
+//! Bounded-input inclusions preserve independent current/arrival input boxes
+//! and correlated auxiliary outputs. A hard maximum_nodes budget aborts with an exception
 //! instead of dropping branches or returning an incomplete exploration.
-//! This is a single-purpose scheduler, not yet a public Evolver specialization.
+//! This scheduling layer is consumed by HybridDiscreteTimeEvolver<ValidatedTag>.
 class HybridDiscreteTimeUpperScheduler {
   public:
     static HybridDiscreteTimeUpperExploration evolve(

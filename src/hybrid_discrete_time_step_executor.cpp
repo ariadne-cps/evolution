@@ -23,7 +23,7 @@
  */
 
 /** @file src/hybrid_discrete_time_step_executor.cpp
- *  @brief One-tick deterministic hybrid UPPER fan-out with event provenance.
+ *  @brief One-tick validated hybrid UPPER fan-out with event provenance.
  */
 
 #include "evolution/hybrid_discrete_time_step_executor.hpp"

@@ -23,7 +23,7 @@
  */
 
 /** @file evolution/discrete_time_inclusion_evolver.hpp
- *  @brief Validated UPPER evolution of ordinary bounded-input difference inclusions.
+ *  @brief Validated UPPER and LOWER evolution of ordinary bounded-input difference inclusions.
  */
 
 #ifndef ARIADNE_DISCRETE_TIME_INCLUSION_EVOLVER_HPP
@@ -47,9 +47,11 @@ namespace Ariadne {
  *  auxiliary outputs a[n]=g(x[n],u[n]) use the current full input box,
  *  and progression installs a fresh independent full box u[n+1].
  *  UPPER may subdivide the enclosure while LOWER applies the discrete
- *  map directly, as with ordinary difference equations. The numerical
- *  enclosure representation and preserved parameter constraints are
- *  the same; no continuous-time integration is involved.
+ *  map directly, as with ordinary difference equations. LOWER may stop
+ *  an oversized branch when its explicit premature-termination option
+ *  is enabled, but never publishes independently split children. The
+ *  numerical enclosure representation and preserved parameter constraints
+ *  are the same; no continuous-time integration is involved.
  *
  *  This class is separate from the equation-only DiscreteTimeEvolver<ValidatedTag>
  *  to preserve that class's existing strongly typed SystemType contract.

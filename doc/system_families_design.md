@@ -4087,3 +4087,74 @@ and are repeated before publication. The preceding native UPPER closure
 is accepted on `0ba539b4fef1896e766f499e2df19154fd149133`, with all five
 functional workflows and Format green. This new numerical capability
 still requires its own exact-SHA functional acceptance in both modules.
+
+## v7.37 — Complete ordinary discrete inclusion LOWER audit
+
+**Proof recorded before capability promotion.** Let the initial ordinary
+enclosure E contain a nonempty reached subset S under the same initial-source
+nonemptiness contract used by the implemented ordinary discrete equation and
+continuous equation LOWER APIs. Let U be the model's declared nonempty bounded
+input box. At one tick, the actual inclusion image
+`R' = { f(x,u) | x in S, u in U }` is nonempty. The validated composition of
+the unchanged model update with the enclosure state map and a fresh complete
+input coordinate encloses every such value, hence in particular produces
+`nonempty S' subset R' subset E'`. Repeating the argument proves the LOWER
+contract at every finite integer horizon. It does not require an INNER image,
+an input sample, a midpoint or a semantics-specific numerical map.
+
+Every input coordinate remains independent at its tick. Original source
+constraints, state/input correlations and previous input-history axes are
+retained by composition. For explicit outputs `a[n]=g(x[n],u[n])`, the current
+complete input box is installed before the output map and is reused when a
+LOWER enclosure is resumed; progression installs a fresh full `u[n+1]` only
+after consuming `u[n]`. Zero horizon prepares the same current-output binding.
+UPPER-only subdivision is never used by LOWER, so no child is independently
+promoted from an outer witness-bearing enclosure.
+
+**Audit result.** The whole-input implementation accepted at v7.14 already
+implements this induction for both public entry forms and through the generic
+validated interface. The historical *partial* label was conservative rather
+than evidence of an unresolved numerical or semantic branch. There is no
+continuous integrator, transition handler, satisfiability search or event
+choice in this family. The only public configuration asymmetry found by this
+audit was that the shared `enable_premature_termination` option was exposed but
+ignored. LOWER now stops an oversized branch when that option is enabled,
+using Ariadne logging; when disabled it continues unsplit. Stopping publishes
+no false final enclosure and therefore preserves the LOWER contract.
+
+**Regressions.** The ordinary discrete inclusion suite adds a sixth registered
+method. A nonlinear `x[n+1]=x[n]^2+u[n]` case enters through a constrained
+`RealExpressionBoundedConstraintSet`, advances under LOWER, resumes through
+the generic `EvolverInterface`, and retains two source constraints plus three
+fresh complete input axes. The exact admissible trajectory `x[0]=1/2` and
+`u[0]=u[1]=u[2]=0` yields `x[3]=1/256`, which must remain in the final validated
+enclosure. The auxiliary resume regression now resumes the LOWER zero-horizon
+result itself. A separate check enables the size limit and requires an empty
+final/reach/intermediate result rather than an ignored setting or a fabricated
+child. Existing whole-box extreme, multidimensional input, correlation,
+source-immutability, zero-horizon, copy and UPPER subdivision checks remain.
+
+**Capability effect and boundary.** After exact-SHA acceptance, ordinary
+discrete bounded-input inclusion / Validated LOWER moves from partial to
+implemented. LOWER becomes **3 complete + 5 partial** native families. This
+claim covers the declared explicit bounded-input difference inclusion model
+and the common assumption that the caller supplies a nonempty initial reached
+source. It does not add an implicit algebraic constraint solver, INNER
+approximation, input policy, hybrid event certificate, paving operation or
+Python tutorial work. No System or Integration change is required.
+
+The base v7.36 commits are accepted: Integration
+`406a50d3f819b1341dda443714ee8d7654bc1359` and Evolution
+`821c812283994e3c29b9927fff8eb37503a2894f` passed Ubuntu, macOS, Windows,
+Coverage, Sanitizers and Format on those exact SHAs. This v7.37 promotion is a
+candidate until the complete local warnings-as-errors build, all tests,
+installation, installed tutorials, apply-format/check-format and all five
+functional workflows plus Format pass on its own exact commit. The canonical
+opening contract is unchanged.
+
+**Local verification checkpoint (27 November 2026).** The complete Debug
+build with warnings as errors, all 49 CTest entries including Python,
+installation, installed C++ and Python tutorials, apply-format and check-format
+passed. The six inclusion methods include the new constrained nonlinear LOWER
+entry/resume and size-stop cases. Publication and exact-SHA CI acceptance are
+still required before changing the accepted matrix count.

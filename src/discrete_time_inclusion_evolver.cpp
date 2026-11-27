@@ -34,6 +34,7 @@
 #include "function/function.hpp"
 #include "function/functional.hpp"
 #include "function/taylor_function.decl.hpp"
+#include "logging/logging.hpp"
 #include "utility/tuple.hpp"
 
 namespace Ariadne {
@@ -117,6 +118,7 @@ DiscreteTimeInclusionEvolver::OrbitType
     ListSet<EnclosureType> final_sets, reach_sets, intermediate_sets;
     List<Pair<TimeType, EnclosureType>> working;
     working.push_back(make_pair(TimeType(0), seed));
+    LOGGING_SCOPE_CREATE;
 
     while (!working.empty()) {
         const auto current = working.back();
@@ -135,6 +137,14 @@ DiscreteTimeInclusionEvolver::OrbitType
             const auto pieces = source.split();
             working.push_back(make_pair(tick, pieces.first));
             working.push_back(make_pair(tick, pieces.second));
+            continue;
+        }
+        if (semantics == Semantics::LOWER &&
+            _configuration->enable_premature_termination() &&
+            decide(radius > _configuration->maximum_enclosure_radius())) {
+            LOGGING_PRINTLN_AT(1, "Terminating ordinary discrete inclusion LOWER evolution at tick "
+                                      << tick << " because the enclosure radius " << radius
+                                      << " exceeds " << _configuration->maximum_enclosure_radius());
             continue;
         }
 

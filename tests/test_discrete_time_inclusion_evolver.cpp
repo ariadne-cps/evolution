@@ -23,7 +23,7 @@
  */
 
 /** @file tests/test_discrete_time_inclusion_evolver.cpp
- *  @brief Witness-independent UPPER propagation of independent input boxes.
+ *  @brief Validated UPPER and LOWER propagation of independent input boxes.
  */
 
 #include <memory>
@@ -179,6 +179,13 @@ class TestDiscreteTimeInclusionEvolver : public Ariadne::Testing::ContextFixture
         ARIADNE_TESTING_EXPECT_EQUAL(
             lower.final()[0u].euclidean_set().number_of_constraints(), 0u);
         ARIADNE_TESTING_EXPECT_EQUAL(initial.number_of_parameters(), 1u);
+
+        evolver.configuration().set_enable_premature_termination(true);
+        const auto stopped = evolver.orbit(initial, Integer(1), Semantics::LOWER);
+        ARIADNE_TESTING_EXPECT_EQUAL(stopped.final().size(), 0u);
+        ARIADNE_TESTING_EXPECT_EQUAL(stopped.reach().size(), 0u);
+        ARIADNE_TESTING_EXPECT_EQUAL(stopped.intermediate().size(), 0u);
+        evolver.configuration().set_enable_premature_termination(false);
     }
 
     Void test_input_dependent_auxiliary_and_fresh_tick_inputs() {
@@ -313,11 +320,52 @@ class TestDiscreteTimeInclusionEvolver : public Ariadne::Testing::ContextFixture
         // Reuse the current-input binding on a resumed LOWER enclosure,
         // rather than imposing an unrelated no-resume limitation.
         const auto resumed = supported.orbit(
-            zero.final()[0u], Integer(1), Semantics::LOWER);
+            lower_auxiliary_zero.final()[0u], Integer(1), Semantics::LOWER);
         ARIADNE_TESTING_EXPECT_EQUAL(resumed.final().size(), 1u);
         ARIADNE_TESTING_EXPECT_EQUAL(resumed.final()[0u].number_of_parameters(), 3u);
         ARIADNE_TESTING_EXPECT_EQUAL(
             resumed.final()[0u].euclidean_set().number_of_constraints(), 0u);
+    }
+
+    Void test_lower_public_entries_and_constrained_source() {
+        const RealVariable x("x"), u("u");
+        const DifferenceAlgebraicInclusion inclusion(
+            List<PrimedRealAssignment>{next(x) = x * x + u},
+            RealVariablesBox({-1 <= u <= 1}));
+        DiscreteTimeInclusionEvolver evolver(inclusion);
+
+        const RealExpressionBoundedConstraintSet constrained(
+            {0 <= x <= 1}, {x >= 1 / 4_q, x <= 1 / 2_q});
+        const auto lower = evolver.orbit(constrained, Integer(2), Semantics::LOWER);
+        ARIADNE_TESTING_REQUIRE(lower.final().size() == 1u);
+        ARIADNE_TESTING_EXPECT_EQUAL(lower.reach().size(), 2u);
+        ARIADNE_TESTING_EXPECT_EQUAL(lower.intermediate().size(), 2u);
+        ARIADNE_TESTING_EXPECT_EQUAL(lower.final()[0u].number_of_parameters(), 3u);
+        ARIADNE_TESTING_EXPECT_EQUAL(
+            lower.final()[0u].euclidean_set().number_of_constraints(), 2u);
+        for (SizeType i = 1u; i != 3u; ++i) {
+            ARIADNE_TESTING_EXPECT_EQUAL(lower.final()[0u].variable_kinds()[i],
+                                         EnclosureVariableKind::INPUT);
+            ARIADNE_TESTING_PROVE(subset(lower.final()[0u].parameter_domain()[i],
+                                         inclusion.inputs()[0u]));
+        }
+
+        // The generic validated interface exposes the same LOWER contract.
+        const DiscreteTimeInclusionEvolver::Interface& generic = evolver;
+        const auto continued = generic.orbit(lower.final()[0u], Integer(1),
+                                             Semantics::LOWER);
+        ARIADNE_TESTING_REQUIRE(continued.final().size() == 1u);
+        ARIADNE_TESTING_EXPECT_EQUAL(continued.final()[0u].number_of_parameters(), 4u);
+        ARIADNE_TESTING_EXPECT_EQUAL(
+            continued.final()[0u].euclidean_set().number_of_constraints(), 2u);
+        ARIADNE_TESTING_EXPECT_EQUAL(continued.final()[0u].variable_kinds()[3u],
+                                     EnclosureVariableKind::INPUT);
+
+        // x[0]=1/2 and u[0]=u[1]=u[2]=0 is an exact admissible trajectory.
+        // Its x[3]=1/256 witness must remain inside the propagated enclosure.
+        const auto bounds = continued.final()[0u].euclidean_set().bounding_box()[0u];
+        ARIADNE_TESTING_PROVE(bounds.lower_bound().raw().get_d() <= 1.0 / 256.0);
+        ARIADNE_TESTING_PROVE(bounds.upper_bound().raw().get_d() >= 1.0 / 256.0);
     }
 };
 
@@ -328,5 +376,6 @@ int main(int argc, const char* argv[]) {
     ARIADNE_TESTING_ADD_TEST(TestDiscreteTimeInclusionEvolver, test_upper_subdivision_keeps_all_successors);
     ARIADNE_TESTING_ADD_TEST(TestDiscreteTimeInclusionEvolver, test_input_dependent_auxiliary_and_fresh_tick_inputs);
     ARIADNE_TESTING_ADD_TEST(TestDiscreteTimeInclusionEvolver, test_rejection_is_explicit_even_at_zero_horizon);
+    ARIADNE_TESTING_ADD_TEST(TestDiscreteTimeInclusionEvolver, test_lower_public_entries_and_constrained_source);
     return Ariadne::Testing::run_logging_suite(ariadne_test_suite, argc, argv);
 }

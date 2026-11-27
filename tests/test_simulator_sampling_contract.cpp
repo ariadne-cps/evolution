@@ -26,9 +26,8 @@
  *  @brief Verify sampling cardinality, ordering, and domain membership.
  */
 
-#include "simulator_sampling.hpp"
-
 #include "logging/test_runner.hpp"
+#include "simulator_sampling.hpp"
 #include "symbolic/space.hpp"
 
 #include "ariadne-testing.hpp"
@@ -43,7 +42,10 @@ class TestSimulatorSamplingContract : public Testing::ContextFixture {
     Void test_continuous_counts_and_membership() {
         const RealVariable x("x"), y("y"), missing("missing");
         const RealSpace space({x, y});
-        const UpperBoxType domain({{0, 1}, {-2, 2}});
+        const UpperBoxType domain({
+            { 0, 1},
+            {-2, 2}
+        });
 
         const auto defaults = EvolutionDetail::sample_vector_field_initial_points(
             domain, space, SamplingCounts{});
@@ -51,7 +53,10 @@ class TestSimulatorSamplingContract : public Testing::ContextFixture {
         ARIADNE_TESTING_EXPECT_EQUAL(defaults.at(0)[0].raw().get_d(), 0.5);
 
         const auto samples = EvolutionDetail::sample_vector_field_initial_points(
-            domain, space, SamplingCounts{{x, 3u}, {y, 2u}});
+            domain, space, SamplingCounts{
+                               {x, 3u},
+                               {y, 2u}
+        });
         ARIADNE_TESTING_EXPECT_EQUAL(samples.size(), 6u);
         for (SizeType i = 0u; i < samples.size(); ++i) {
             const auto& point = samples.at(i);
@@ -65,19 +70,29 @@ class TestSimulatorSamplingContract : public Testing::ContextFixture {
         }
         ARIADNE_TESTING_EXPECT_EXCEPTION(
             EvolutionDetail::sample_vector_field_initial_points(
-                domain, space, SamplingCounts{{missing, 2u}}));
+                domain, space, SamplingCounts{
+                                   {missing, 2u}
+        }));
         ARIADNE_TESTING_EXPECT_EXCEPTION(
             EvolutionDetail::sample_vector_field_initial_points(
-                domain, space, SamplingCounts{{x, 0u}}));
+                domain, space, SamplingCounts{
+                                   {x, 0u}
+        }));
     }
 
     Void test_hybrid_counts_and_flat_coordinate() {
         const RealVariable x("x"), y("y");
         const RealSpace space({x, y});
         const DiscreteLocation loc(1);
-        const UpperBoxType domain({{0, 1}, {1, 2}});
+        const UpperBoxType domain({
+            {0, 1},
+            {1, 2}
+        });
         const auto samples = EvolutionDetail::sample_hybrid_initial_points(
-            domain, loc, space, SamplingCounts{{x, 3u}, {y, 2u}});
+            domain, loc, space, SamplingCounts{
+                                    {x, 3u},
+                                    {y, 2u}
+        });
         ARIADNE_TESTING_EXPECT_EQUAL(samples.size(), 6u);
         for (SizeType i = 0u; i < samples.size(); ++i) {
             const auto& point = samples[i];
@@ -88,15 +103,27 @@ class TestSimulatorSamplingContract : public Testing::ContextFixture {
             ARIADNE_TESTING_PROVE(xv >= 0.0 && xv <= 1.0);
             ARIADNE_TESTING_PROVE(yv >= 1.0 && yv <= 2.0);
         }
-        const UpperBoxType flat({{0, 0}, {1, 2}});
+        const UpperBoxType flat({
+            {0, 0},
+            {1, 2}
+        });
         const auto flat_points = EvolutionDetail::sample_hybrid_initial_points(
-            flat, loc, space, SamplingCounts{{x, 5u}, {y, 2u}});
+            flat, loc, space, SamplingCounts{
+                                  {x, 5u},
+                                  {y, 2u}
+        });
         ARIADNE_TESTING_EXPECT_EQUAL(flat_points.size(), 2u);
         for (SizeType i = 0u; i < flat_points.size(); ++i)
             ARIADNE_TESTING_EXPECT_EQUAL(flat_points[i].point()[0].raw().get_d(), 0.0);
-        const UpperBoxType singleton({{0, 0}, {2, 2}});
+        const UpperBoxType singleton({
+            {0, 0},
+            {2, 2}
+        });
         const auto one = EvolutionDetail::sample_hybrid_initial_points(
-            singleton, loc, space, SamplingCounts{{x, 5u}, {y, 2u}});
+            singleton, loc, space, SamplingCounts{
+                                       {x, 5u},
+                                       {y, 2u}
+        });
         ARIADNE_TESTING_EXPECT_EQUAL(one.size(), 1u);
         ARIADNE_TESTING_EXPECT_EQUAL(one[0].point()[1].raw().get_d(), 2.0);
     }

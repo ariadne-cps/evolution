@@ -28,8 +28,6 @@
 
 #include "evolution/hybrid_simulator.hpp"
 
-#include "simulator_sampling.hpp"
-
 #include "algebra/algebra.hpp"
 #include "evolution/hybrid_orbit.hpp"
 #include "evolution/hybrid_time.hpp"
@@ -37,10 +35,11 @@
 #include "function/function.hpp"
 #include "function/functional.hpp"
 #include "function/taylor_model.hpp"
-#include "hybrid/hybrid_set.hpp"
 #include "hybrid/hybrid_bounded_constraint_set.hpp"
+#include "hybrid/hybrid_set.hpp"
 #include "integration/runge_kutta_integrator.hpp"
 #include "logging/logging.hpp"
+#include "simulator_sampling.hpp"
 #include "symbolic/assignment.hpp"
 #include "symbolic/space.hpp"
 #include "symbolic/valuation.hpp"

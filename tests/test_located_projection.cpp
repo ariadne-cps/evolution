@@ -58,13 +58,13 @@ class TestLocatedProjection : public Ariadne::Testing::ContextFixture {
         const Located<int> value(q, 37);
         Nat visited = 0u;
         with_projected_location(value, space, x, y,
-            [&](const Projection2d& projection, const int& selected) {
-                ARIADNE_TESTING_EXPECT_EQUAL(projection.n, 2u);
-                ARIADNE_TESTING_EXPECT_EQUAL(projection.i, 1u);
-                ARIADNE_TESTING_EXPECT_EQUAL(projection.j, 0u);
-                ARIADNE_TESTING_EXPECT_EQUAL(selected, 37);
-                ++visited;
-            });
+                                [&](const Projection2d& projection, const int& selected) {
+                                    ARIADNE_TESTING_EXPECT_EQUAL(projection.n, 2u);
+                                    ARIADNE_TESTING_EXPECT_EQUAL(projection.i, 1u);
+                                    ARIADNE_TESTING_EXPECT_EQUAL(projection.j, 0u);
+                                    ARIADNE_TESTING_EXPECT_EQUAL(selected, 37);
+                                    ++visited;
+                                });
         ARIADNE_TESTING_EXPECT_EQUAL(visited, 1u);
         ARIADNE_TESTING_PROVE(value.location() == q);
     }
@@ -74,13 +74,16 @@ class TestLocatedProjection : public Ariadne::Testing::ContextFixture {
         const RealVariable x("x"), y("y");
         const RealSpace variable_order({y, x});
         const Located<ExactBoxType> located(
-            location, ExactBoxType({{-2, -1}, {3, 5}}));
+            location, ExactBoxType({
+                          {-2, -1},
+                          { 3,  5}
+        }));
 
         ProjectedBoxCanvas canvas;
         with_projected_location(located, variable_order, x, y,
-            [&](const Projection2d& projection, const ExactBoxType& continuous_box) {
-                Ariadne::draw(canvas, projection, continuous_box);
-            });
+                                [&](const Projection2d& projection, const ExactBoxType& continuous_box) {
+                                    Ariadne::draw(canvas, projection, continuous_box);
+                                });
         ARIADNE_TESTING_EXPECT_EQUAL(canvas.boundaries, 1u);
         ARIADNE_TESTING_EXPECT_EQUAL(canvas.last_boundary.size(), 4u);
         ARIADNE_TESTING_EXPECT_EQUAL(canvas.last_boundary[0u], Point2d(3.0, -2.0));
@@ -98,26 +101,35 @@ class TestLocatedProjection : public Ariadne::Testing::ContextFixture {
         Hybrid<ExactBoxType> family(
             HybridSpace(spaces),
             [](const DiscreteLocation&, const RealSpace&) {
-                return ExactBoxType({{0, 0}, {0, 0}});
+                return ExactBoxType({
+                    {0, 0},
+                    {0, 0}
+                });
             });
-        family[first] = ExactBoxType({{-2, -1}, {3, 5}});
-        family[second] = ExactBoxType({{-9, -8}, {-7, -6}});
+        family[first] = ExactBoxType({
+            {-2, -1},
+            { 3,  5}
+        });
+        family[second] = ExactBoxType({
+            {-9, -8},
+            {-7, -6}
+        });
         const Hybrid<ExactBoxType>& selected_family = family;
 
         ProjectedBoxCanvas first_canvas;
         with_projected_location(selected_family, first, x, y,
-            [&](const Projection2d& projection, const ExactBoxType& continuous_box) {
-                Ariadne::draw(first_canvas, projection, continuous_box);
-            });
+                                [&](const Projection2d& projection, const ExactBoxType& continuous_box) {
+                                    Ariadne::draw(first_canvas, projection, continuous_box);
+                                });
         ARIADNE_TESTING_EXPECT_EQUAL(first_canvas.boundaries, 1u);
         ARIADNE_TESTING_EXPECT_EQUAL(first_canvas.last_boundary[0u], Point2d(3.0, -2.0));
         ARIADNE_TESTING_EXPECT_EQUAL(first_canvas.last_boundary[2u], Point2d(5.0, -1.0));
 
         ProjectedBoxCanvas second_canvas;
         with_projected_location(selected_family, second, x, y,
-            [&](const Projection2d& projection, const ExactBoxType& continuous_box) {
-                Ariadne::draw(second_canvas, projection, continuous_box);
-            });
+                                [&](const Projection2d& projection, const ExactBoxType& continuous_box) {
+                                    Ariadne::draw(second_canvas, projection, continuous_box);
+                                });
         ARIADNE_TESTING_EXPECT_EQUAL(second_canvas.boundaries, 1u);
         ARIADNE_TESTING_EXPECT_EQUAL(second_canvas.last_boundary[0u], Point2d(-9.0, -7.0));
         ARIADNE_TESTING_EXPECT_EQUAL(second_canvas.last_boundary[2u], Point2d(-8.0, -6.0));
@@ -132,10 +144,10 @@ class TestLocatedProjection : public Ariadne::Testing::ContextFixture {
         spaces.new_location(second, RealSpace({x, y}));
         Nat constructed = 0u;
         Hybrid<int> family(HybridSpace(spaces),
-            [&](const DiscreteLocation&, const RealSpace& space) {
-                ++constructed;
-                return static_cast<int>(space.dimension());
-            });
+                           [&](const DiscreteLocation&, const RealSpace& space) {
+                               ++constructed;
+                               return static_cast<int>(space.dimension());
+                           });
         ARIADNE_TESTING_PROVE(not family.has_value(first));
         ARIADNE_TESTING_PROVE(not family.has_value(second));
         family[first] = 41;
@@ -144,26 +156,26 @@ class TestLocatedProjection : public Ariadne::Testing::ContextFixture {
 
         Nat visited = 0u;
         with_projected_location(selected, first, x, y,
-            [&](const Projection2d& projection, const int& value) {
-                ARIADNE_TESTING_EXPECT_EQUAL(projection.n, 2u);
-                ARIADNE_TESTING_EXPECT_EQUAL(projection.i, 1u);
-                ARIADNE_TESTING_EXPECT_EQUAL(projection.j, 0u);
-                ARIADNE_TESTING_EXPECT_EQUAL(value, 41);
-                ++visited;
-            });
+                                [&](const Projection2d& projection, const int& value) {
+                                    ARIADNE_TESTING_EXPECT_EQUAL(projection.n, 2u);
+                                    ARIADNE_TESTING_EXPECT_EQUAL(projection.i, 1u);
+                                    ARIADNE_TESTING_EXPECT_EQUAL(projection.j, 0u);
+                                    ARIADNE_TESTING_EXPECT_EQUAL(value, 41);
+                                    ++visited;
+                                });
         with_projected_location(selected, first, RealSpace({x, y}), x, y,
-            [&](const Projection2d& projection, const int& value) {
-                ARIADNE_TESTING_EXPECT_EQUAL(projection.i, 0u);
-                ARIADNE_TESTING_EXPECT_EQUAL(projection.j, 1u);
-                ARIADNE_TESTING_EXPECT_EQUAL(value, 41);
-                ++visited;
-            });
+                                [&](const Projection2d& projection, const int& value) {
+                                    ARIADNE_TESTING_EXPECT_EQUAL(projection.i, 0u);
+                                    ARIADNE_TESTING_EXPECT_EQUAL(projection.j, 1u);
+                                    ARIADNE_TESTING_EXPECT_EQUAL(value, 41);
+                                    ++visited;
+                                });
         ARIADNE_TESTING_EXPECT_EQUAL(visited, 2u);
         ARIADNE_TESTING_PROVE(not selected.has_value(second));
         ARIADNE_TESTING_EXPECT_EQUAL(constructed, 1u);
         ARIADNE_TESTING_EXPECT_EXCEPTION(
             with_projected_location(selected, second, x, y,
-                [&](const Projection2d&, const int&) {}));
+                                    [&](const Projection2d&, const int&) {}));
     }
 };
 

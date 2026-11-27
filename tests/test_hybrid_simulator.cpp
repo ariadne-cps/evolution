@@ -154,7 +154,10 @@ class TestHybridSimulator : public Ariadne::Testing::ContextFixture {
     Void test_box_sampling() {
         auto system = flow_system();
         HybridSimulator simulator(system);
-        simulator.configuration().set_sampling_counts(SamplingCounts{{x, 2u}, {y, 3u}});
+        simulator.configuration().set_sampling_counts(SamplingCounts{
+            {x, 2u},
+            {y, 3u}
+        });
         HybridUpperBox box(q, RealSpace({
                                   x, y
         }),

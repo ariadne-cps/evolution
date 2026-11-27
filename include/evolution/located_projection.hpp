@@ -54,11 +54,11 @@ Void with_projected_location(const Hybrid<T>& family, const DiscreteLocation& lo
                              const RealVariable& x, const RealVariable& y,
                              Visitor&& visitor) {
     with_location(family, location, space,
-        [&](const RealSpace& selected, const T& value) {
-            const Projection2d projection(selected.dimension(),
-                                          selected.index(x), selected.index(y));
-            visitor(projection, value);
-        });
+                  [&](const RealSpace& selected, const T& value) {
+                      const Projection2d projection(selected.dimension(),
+                                                    selected.index(x), selected.index(y));
+                      visitor(projection, value);
+                  });
 }
 
 // Use the location-dependent RealSpace stored by the hybrid family.
@@ -67,11 +67,11 @@ Void with_projected_location(const Hybrid<T>& family, const DiscreteLocation& lo
                              const RealVariable& x, const RealVariable& y,
                              Visitor&& visitor) {
     with_location(family, location,
-        [&](const RealSpace& selected, const T& value) {
-            const Projection2d projection(selected.dimension(),
-                                          selected.index(x), selected.index(y));
-            visitor(projection, value);
-        });
+                  [&](const RealSpace& selected, const T& value) {
+                      const Projection2d projection(selected.dimension(),
+                                                    selected.index(x), selected.index(y));
+                      visitor(projection, value);
+                  });
 }
 
 } // namespace Ariadne

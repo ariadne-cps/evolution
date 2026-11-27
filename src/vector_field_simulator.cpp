@@ -28,8 +28,6 @@
 
 #include "evolution/vector_field_simulator.hpp"
 
-#include "simulator_sampling.hpp"
-
 #include "algebra/algebra.hpp"
 #include "evolution/orbit.hpp"
 #include "function/formula.hpp"
@@ -37,6 +35,7 @@
 #include "function/functional.hpp"
 #include "function/taylor_model.hpp"
 #include "integration/runge_kutta_integrator.hpp"
+#include "simulator_sampling.hpp"
 #include "symbolic/assignment.hpp"
 #include "symbolic/space.hpp"
 #include "symbolic/valuation.hpp"

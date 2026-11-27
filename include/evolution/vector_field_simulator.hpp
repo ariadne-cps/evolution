@@ -29,11 +29,11 @@
 #ifndef ARIADNE_VECTOR_FIELD_SIMULATOR_HPP
 #define ARIADNE_VECTOR_FIELD_SIMULATOR_HPP
 
-#include "evolution/configuration_interface.hpp"
-#include "evolution/sampling_counts.hpp"
-
 #include <utility>
+
+#include "evolution/configuration_interface.hpp"
 #include "evolution/orbit.hpp"
+#include "evolution/sampling_counts.hpp"
 #include "geometry/point.hpp"
 #include "logging/logging.hpp"
 #include "numeric/float.decl.hpp"

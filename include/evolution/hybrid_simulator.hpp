@@ -29,10 +29,10 @@
 #ifndef ARIADNE_HYBRID_SIMULATOR_HPP
 #define ARIADNE_HYBRID_SIMULATOR_HPP
 
+#include <utility>
+
 #include "evolution/configuration_interface.hpp"
 #include "evolution/sampling_counts.hpp"
-
-#include <utility>
 #include "hybrid/hybrid_set.hpp"
 #include "logging/logging.hpp"
 #include "numeric/numeric.hpp"

@@ -104,7 +104,9 @@ class TestVectorFieldSimulator : public Ariadne::Testing::ContextFixture {
         ARIADNE_TESTING_PROVE(config.sampling_counts().empty());
         config.set_sampling_counts(SamplingCounts{});
         ARIADNE_TESTING_PROVE(config.sampling_counts().empty());
-        config.set_sampling_counts(SamplingCounts{{x, 2u}});
+        config.set_sampling_counts(SamplingCounts{
+            {x, 2u}
+        });
         const auto& configured = simulator;
         ARIADNE_TESTING_EXPECT_EQUAL(configured.configuration().sampling_counts().size(), 1u);
         UpperBoxType box({
@@ -113,7 +115,9 @@ class TestVectorFieldSimulator : public Ariadne::Testing::ContextFixture {
         });
         auto divided = simulator.orbit(box, Real(0));
         ARIADNE_TESTING_EXPECT_EQUAL(divided.curves().size(), 2u);
-        config.set_sampling_counts(SamplingCounts{{unknown, 2u}});
+        config.set_sampling_counts(SamplingCounts{
+            {unknown, 2u}
+        });
         ARIADNE_TESTING_EXPECT_EXCEPTION(simulator.orbit(box, Real(0)));
         config.clear_sampling_counts();
         auto sampled = simulator.orbit(box, Real(0));

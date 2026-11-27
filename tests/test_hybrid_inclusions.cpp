@@ -27,6 +27,7 @@
  */
 
 #include <memory>
+#include <optional>
 
 #include "evolution/hybrid_continuous_time_evolver.hpp"
 #include "evolution/hybrid_evolution_tree.hpp"
@@ -1001,6 +1002,195 @@ class TestHybridInclusions : public Testing::ContextFixture {
         }
     }
 
+    Void test_lower_inclusion_certified_urgent_crossing() {
+        const DiscreteLocation source(1), target(2);
+        const RealVariable x("x"), u("u"), p("p");
+        const TimeVariable t;
+        const DiscreteEvent jump("crossing");
+        for (Nat form: {0u, 1u, 2u, 3u, 4u}) {
+            const bool timed = form == 1u || form >= 3u;
+            const bool parameterized = form >= 2u;
+            const bool joint_guard = form == 4u;
+            const RealExpression drift = parameterized ? RealExpression(p) : RealExpression(1);
+            const RealExpression clock = timed ? RealExpression(t) : RealExpression(0);
+            const RealVariablesBox parameters = parameterized ? RealVariablesBox({1 <= p <= 2}) : RealVariablesBox();
+            ContinuousTimeHybridAutomaton system;
+            system.new_mode(source, OrdinaryDifferentialAlgebraicInclusion(
+                                        {dot(x) = drift + clock + u}, RealVariablesBox({Real(-0.125_x) <= u <= Real(0.125_x)}),
+                                        parameters, timed ? std::optional<RealVariable>(t) : std::nullopt));
+            system.new_mode(target, OrdinaryDifferentialAlgebraicEquation(
+                                        {dot(x) = 0}, parameters, timed ? std::optional<RealVariable>(t) : std::nullopt));
+            system.new_invariant(source, x <= 1, DiscreteEvent("bound"));
+            system.new_transition(source, jump, target, {next(x) = x + 1},
+                                  joint_guard ? x + t >= p / 64 : x >= Real(0.015625_x), EventKind::URGENT);
+            for (bool tree: {false, true}) {
+                HybridContinuousTimeEvolver<ValidatedTag> evolver(system);
+                evolver.set_integrator(TaylorPicardIntegrator(step_maximum_error = 1e-7),
+                                       ConstantApproximation(), ConstantApproximation());
+                evolver.configuration().set_maximum_step_size(0.03125);
+                evolver.configuration().set_enable_reconditioning(false);
+                if (tree)
+                    evolver.set_evolution_backend_factory(TreeHybridEvolutionBackendFactory());
+                const auto initial = evolver.enclosure(HybridExactBox(
+                    source, RealSpace({
+                                x
+                }),
+                    ExactBoxType({{form == 0u ? -0.00390625_x : 0.0_x, 0}})));
+                const auto source_domain = initial.continuous_set().parameter_domain();
+                const auto source_box = cast_exact_box(initial.state_bounding_box());
+                const auto orbit = evolver.orbit(initial, HybridTime(0.125_x, 1), Semantics::LOWER);
+                ARIADNE_TESTING_REQUIRE(orbit.final().size() == 1u);
+                const auto& final = orbit.final()[0u];
+                ARIADNE_TESTING_EXPECT_EQUAL(final.location(), target);
+                ARIADNE_TESTING_REQUIRE(final.previous_events().size() == 1u);
+                ARIADNE_TESTING_EXPECT_EQUAL(final.previous_events()[0u], jump);
+                ARIADNE_TESTING_EXPECT_EQUAL(final.state_dimension(), 1u);
+                // For the joint guard, p=1+1/256,u=0 has first contact
+                // at t=1/128, x=t+t^2. Every actual source trajectory
+                // is nevertheless certified, with full p and u domains.
+                const ExactIntervalType witness = joint_guard
+                                                    ? ExactIntervalType(1.00787353515625_x, 1.00787353515625_x)
+                                                    : ExactIntervalType(1.015625_x, 1.015625_x);
+                ARIADNE_TESTING_PROVE(subset(witness, cast_exact_interval(final.state_bounding_box()[0u])));
+                ARIADNE_TESTING_PROVE(subset(cast_exact_interval(final.time_range()), ExactIntervalType(0, 0.03125_x)));
+                if (joint_guard)
+                    ARIADNE_TESTING_PROVE(subset(ExactIntervalType(0.0078125_x, 0.0078125_x),
+                                                 cast_exact_interval(final.time_range())));
+                if (parameterized) {
+                    ARIADNE_TESTING_EXPECT_EQUAL(final.continuous_set().constant_parameter_space(), RealSpace({p}));
+                    ARIADNE_TESTING_PROVE(subset(ExactIntervalType(1, 2),
+                                                 cast_exact_interval(final.continuous_set().constant_parameter_function(1u).get(0u).range())));
+                }
+                SizeType input_axes = 0u;
+                const auto& continuous = final.continuous_set();
+                for (SizeType i = 0u; i != continuous.number_of_parameters(); ++i) {
+                    if (continuous.variable_kinds()[i] != EnclosureVariableKind::INPUT)
+                        continue;
+                    ++input_axes;
+                    ARIADNE_TESTING_PROVE(continuous.parameter_domain()[i].lower_bound().raw().get_d() <= -0.125);
+                    ARIADNE_TESTING_PROVE(continuous.parameter_domain()[i].upper_bound().raw().get_d() >= 0.125);
+                }
+                ARIADNE_TESTING_PROVE(input_axes > 0u);
+                ARIADNE_TESTING_EXPECT_EQUAL(initial.continuous_set().parameter_domain(), source_domain);
+                ARIADNE_TESTING_EXPECT_EQUAL(cast_exact_box(initial.state_bounding_box()), source_box);
+                ARIADNE_TESTING_PROVE(initial.previous_events().empty());
+            }
+        }
+    }
+
+    Void test_lower_inclusion_crossing_requires_universal_certificates() {
+        const DiscreteLocation source(1), target(2), alternate(3);
+        const RealVariable x("x"), u("u");
+        const DiscreteEvent jump("crossing"), other("other");
+        for (bool tree: {false, true}) {
+            for (EventKind competitor: {EventKind::URGENT, EventKind::PROGRESS,
+                                        EventKind::INVARIANT, EventKind::IMPACT}) {
+                ContinuousTimeHybridAutomaton system;
+                system.new_mode(source, OrdinaryDifferentialAlgebraicInclusion(
+                                            {dot(x) = 1 + u}, RealVariablesBox({Real(-0.125_x) <= u <= Real(0.125_x)})));
+                system.new_mode(target, OrdinaryDifferentialAlgebraicEquation({dot(x) = 0}));
+                system.new_mode(alternate, OrdinaryDifferentialAlgebraicEquation({dot(x) = 0}));
+                system.new_transition(source, jump, target, {next(x) = x + 1},
+                                      x >= Real(0.015625_x), EventKind::URGENT);
+                if (competitor == EventKind::INVARIANT)
+                    system.new_invariant(source, x <= Real(0.0078125_x), other);
+                else if (competitor == EventKind::PROGRESS)
+                    system.new_guard(source, other, x >= Real(0.0078125_x), competitor);
+                else
+                    system.new_transition(source, other, alternate, {next(x) = x + 2},
+                                          x >= Real(0.0078125_x), competitor);
+                HybridContinuousTimeEvolver<ValidatedTag> evolver(system);
+                evolver.set_integrator(TaylorPicardIntegrator(step_maximum_error = 1e-7),
+                                       ConstantApproximation(), ConstantApproximation());
+                evolver.configuration().set_maximum_step_size(0.03125);
+                if (tree)
+                    evolver.set_evolution_backend_factory(TreeHybridEvolutionBackendFactory());
+                const auto initial = HybridExactBox(source, RealSpace({
+                                                                x
+                }),
+                                                    ExactBoxType({{0, 0}}));
+                ARIADNE_TESTING_EXPECT_THROWS(std::invalid_argument,
+                                              evolver.orbit(initial, HybridTime(0.125_x, 1), Semantics::LOWER));
+            }
+            // Some inputs cross while others remain negative: an outer
+            // candidate cannot establish a whole-source/input certificate.
+            ContinuousTimeHybridAutomaton uncertain;
+            uncertain.new_mode(source, OrdinaryDifferentialAlgebraicInclusion(
+                                           {dot(x) = u}, RealVariablesBox({-1 <= u <= 1})));
+            uncertain.new_mode(target, OrdinaryDifferentialAlgebraicEquation({dot(x) = 0}));
+            uncertain.new_transition(source, jump, target, {next(x) = x + 1},
+                                     x >= Real(0.015625_x), EventKind::URGENT);
+            HybridContinuousTimeEvolver<ValidatedTag> evolver(uncertain);
+            evolver.set_integrator(TaylorPicardIntegrator(step_maximum_error = 1e-7),
+                                   ConstantApproximation(), ConstantApproximation());
+            evolver.configuration().set_maximum_step_size(0.03125);
+            if (tree)
+                evolver.set_evolution_backend_factory(TreeHybridEvolutionBackendFactory());
+            ARIADNE_TESTING_EXPECT_THROWS(std::invalid_argument,
+                                          evolver.orbit(HybridExactBox(source, RealSpace({
+                                                                                   x
+            }),
+                                                                       ExactBoxType({{0, 0}})),
+                                                        HybridTime(0.125_x, 1), Semantics::LOWER));
+        }
+    }
+
+    Void test_lower_urgent_crossing_respects_uncertain_arrival_horizon() {
+        const DiscreteLocation source(1), target(2);
+        const RealVariable x("x"), u("u");
+        const TimeVariable t;
+        const DiscreteEvent jump("crossing");
+        for (bool inclusion: {false, true})
+            for (bool tree: {false, true}) {
+                ContinuousTimeHybridAutomaton system;
+                if (inclusion)
+                    system.new_mode(source, OrdinaryDifferentialAlgebraicInclusion(
+                                                {dot(x) = 1 + u}, RealVariablesBox({Real(-0.125_x) <= u <= Real(0.125_x)}),
+                                                RealVariablesBox(), t));
+                else
+                    system.new_mode(source, OrdinaryDifferentialAlgebraicEquation(
+                                                {dot(x) = 1}, RealVariablesBox(), t));
+                system.new_mode(target, OrdinaryDifferentialAlgebraicEquation(
+                                            {dot(x) = 0}, RealVariablesBox(), t));
+                system.new_transition(source, jump, target, {next(x) = x + 1},
+                                      x >= Real(0.03125_x), EventKind::URGENT);
+                HybridContinuousTimeEvolver<ValidatedTag> evolver(system);
+                TaylorPicardIntegrator base(step_maximum_error = 1e-7);
+                if (inclusion)
+                    evolver.set_integrator(base, ConstantApproximation(), ConstantApproximation());
+                else
+                    evolver.set_integrator(base);
+                evolver.configuration().set_maximum_step_size(0.0625);
+                if (tree)
+                    evolver.set_evolution_backend_factory(TreeHybridEvolutionBackendFactory());
+                auto initial = evolver.enclosure(HybridExactBox(source, RealSpace({
+                                                                            x
+                }),
+                                                                ExactBoxType({{0, 0}})));
+                // A genuine LOWER subset may live only at the late end of
+                // this outer time range. Do not select early outer times.
+                initial.set_time_function(evolver.function_factory().create_constant(
+                                              initial.parameter_domain(), Real(0.03125_x)) +
+                                          FloatDPBounds(-0.03125_x, 0.0_x, dp));
+                if (inclusion) {
+                    ARIADNE_TESTING_EXPECT_THROWS(std::invalid_argument,
+                                                  evolver.orbit(initial, HybridTime(0.046875_x, 1), Semantics::LOWER));
+                } else {
+                    const auto uncertified = evolver.orbit(initial, HybridTime(0.046875_x, 1), Semantics::LOWER);
+                    ARIADNE_TESTING_EXPECT_EQUAL(uncertified.final().size(), 0u);
+                }
+                // Uncertain arrival is supported when the complete step
+                // endpoint, hence every first contact, is within the horizon.
+                const auto certified = evolver.orbit(initial, HybridTime(0.125_x, 1), Semantics::LOWER);
+                ARIADNE_TESTING_REQUIRE(certified.final().size() == 1u);
+                ARIADNE_TESTING_EXPECT_EQUAL(certified.final()[0u].location(), target);
+                ARIADNE_TESTING_REQUIRE(certified.final()[0u].previous_events().size() == 1u);
+                ARIADNE_TESTING_EXPECT_EQUAL(certified.final()[0u].previous_events()[0u], jump);
+                ARIADNE_TESTING_PROVE(subset(cast_exact_interval(certified.final()[0u].time_range()),
+                                             ExactIntervalType(0, 0.125_x)));
+            }
+    }
+
     Void test_unsupported_capabilities_fail_explicitly() {
         const DiscreteLocation q(1);
         const RealVariable x("x"), u("u"), t("t"), p("p");
@@ -1073,6 +1263,9 @@ int main(int argc, char** argv) {
     ARIADNE_TESTING_ADD_TEST(TestHybridInclusions, test_lower_inclusion_full_source_urgent_reset_without_flow);
     ARIADNE_TESTING_ADD_TEST(TestHybridInclusions, test_lower_inclusion_certified_reset_beside_uncertain_progress);
     ARIADNE_TESTING_ADD_TEST(TestHybridInclusions, test_lower_inclusion_permissive_reset_requires_whole_source_certificates);
+    ARIADNE_TESTING_ADD_TEST(TestHybridInclusions, test_lower_inclusion_certified_urgent_crossing);
+    ARIADNE_TESTING_ADD_TEST(TestHybridInclusions, test_lower_inclusion_crossing_requires_universal_certificates);
+    ARIADNE_TESTING_ADD_TEST(TestHybridInclusions, test_lower_urgent_crossing_respects_uncertain_arrival_horizon);
     ARIADNE_TESTING_ADD_TEST(TestHybridInclusions, test_unsupported_capabilities_fail_explicitly);
     return Testing::run_logging_suite(ariadne_test_suite, argc, argv);
 }

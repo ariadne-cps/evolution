@@ -23,7 +23,7 @@
  */
 
 /** @file src/hybrid_outer_flow.cpp
- *  @brief Conservative UPPER hybrid flow and transition handling.
+ *  @brief Validated hybrid outer flow and certified transition publication.
  */
 
 #include "hybrid_outer_flow.hpp"
@@ -36,6 +36,79 @@
 #include "system/continuous_time_hybrid_automaton_interface.hpp"
 
 namespace Ariadne::EvolutionDetail {
+
+bool try_publish_lower_urgent_crossing(
+    const HybridEnclosure& initial, const AppliedIntegrationStep& applied,
+    const Map<DiscreteEvent, TransitionData>& transitions,
+    const Real& final_time, double processed_time, HybridEvolutionStepResult& result) {
+    // A single certified tube gives a constructive LOWER first-crossing
+    // witness for an URGENT transition without solving for an exact
+    // crossing time. A real trajectory starts strictly before the guard,
+    // and its hypothetical uninterrupted endpoint is strictly beyond it.
+    // Continuity gives a first zero; excluding every other blocker on
+    // the *whole tube* makes that first zero an admissible hybrid jump.
+    // The guard-equality slice of the tube contains this real witness,
+    // even though it need not be an INNER set.
+    if (applied.reach.size() == 1u && !transitions.empty()) {
+        HybridEnclosure tube = initial;
+        tube.replace_continuous_set(applied.reach[0u]);
+        HybridEnclosure endpoint = initial;
+        endpoint.replace_continuous_set(applied.evolved);
+        // With uncertain arrival times a step bounded from the earliest
+        // source time can end after the requested horizon for the actual
+        // LOWER subset. Do not pick earlier outer times as witnesses.
+        if (!definitely(endpoint.time_range().upper_bound() <= final_time))
+            return false;
+        for (const auto& entry: transitions) {
+            const auto& crossing = entry.second;
+            if (crossing.event_kind != EventKind::URGENT)
+                continue;
+            const auto at_start = initial.range_of(crossing.guard_function, crossing.source_arguments);
+            const auto at_finish = endpoint.range_of(crossing.guard_function, crossing.source_arguments);
+            // A certified nonnegative endpoint also guarantees a real
+            // first zero (possibly at the step endpoint) by continuity.
+            // Strict positivity would unnecessarily exclude closed
+            // boundary contacts where the guard is exactly zero.
+            if (!definitely(at_start.upper_bound() < 0) ||
+                !definitely(at_finish.lower_bound() >= 0))
+                continue;
+            bool no_competing_blocker = true;
+            for (const auto& other_entry: transitions) {
+                if (other_entry.first == entry.first)
+                    continue;
+                const auto& other = other_entry.second;
+                if (!transition_policy(other.event_kind).blocks_flow)
+                    continue;
+                const auto range = tube.range_of(other.guard_function, other.source_arguments);
+                const bool safe = other.event_kind == EventKind::INVARIANT
+                                    ? definitely(range.upper_bound() <= 0)
+                                    : definitely(range.upper_bound() < 0);
+                if (!safe) {
+                    no_competing_blocker = false;
+                    break;
+                }
+            }
+            if (!no_competing_blocker)
+                continue;
+
+            HybridEnclosure witnessed_crossing = tube;
+            witnessed_crossing.new_guard(crossing.event,
+                                         crossing.guard_function,
+                                         crossing.source_arguments);
+            if (definitely(witnessed_crossing.is_empty()))
+                continue;
+            result.record_reach(witnessed_crossing);
+            apply_transition_reset(witnessed_crossing, crossing);
+            result.record_intermediate(witnessed_crossing);
+            result.transition_to(witnessed_crossing, crossing.event, crossing.event_kind);
+            // One certified integration step furnished this crossing.
+            // The precise first-entry time is deliberately not guessed.
+            result.continuous_evolution_time = processed_time;
+            return true;
+        }
+    }
+    return false;
+}
 
 Void validate_outer_event_kinds(const ContinuousTimeHybridAutomatonInterface& system, DiscreteLocation location) {
     for (const auto& event: system.events(location)) {

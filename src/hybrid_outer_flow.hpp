@@ -23,7 +23,7 @@
  */
 
 /** @file src/hybrid_outer_flow.hpp
- *  @brief Conservative UPPER hybrid flow and transition handling.
+ *  @brief Validated hybrid outer flow and certified transition publication.
  */
 
 #ifndef ARIADNE_EVOLUTION_HYBRID_OUTER_FLOW_HPP
@@ -33,6 +33,19 @@
 
 namespace Ariadne::EvolutionDetail {
 struct AppliedIntegrationStep;
+/** @brief Publish a LOWER URGENT crossing only with universal certificates.
+ *  Requires one complete structured tube, a strictly inactive source guard,
+ *  a nonnegative whole endpoint guard, an endpoint entirely within the
+ *  final horizon and exclusion of every competing blocker over the tube.
+ *  The common reset retains the nonempty
+ *  reached first-crossing subset, including with measurable inputs.
+ *  False leaves result unchanged; IMPACT direction is not inferred.
+ */
+bool try_publish_lower_urgent_crossing(
+    const HybridEnclosure&, const AppliedIntegrationStep&,
+    const Map<DiscreteEvent, TransitionData>&, const Real& final_time, double processed_time,
+    HybridEvolutionStepResult&);
+
 /** @brief Common UPPER guard filtering/publication for ordinary outer steps.
  *  Equation and inclusion producers retain their own numerical contracts.
  */

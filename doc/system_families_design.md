@@ -3706,3 +3706,88 @@ kernel, UPPER behavior or canonical semantic contract is changed.
 All five v7.31 functional workflows now succeeded on exact SHA
 `87da52ae630e49981fa39b89a5aa66cafe9520b0`; its separate Codecov threshold
 checks failed. Those results do not replace v7.32's own exact-SHA gate.
+
+## v7.33 — Shared certified URGENT crossings for structured inclusions
+
+**Proof recorded before changing the evolver.** Keep the original
+`x'=f(x,t,p,u)`, every admissible input function, persistent p, and the
+complete outer LOWER source E carrying a nonempty reached S. One complete
+validated reach tube and its endpoint enclosure cover the uninterrupted
+physical trajectories of that entire source/input family. If a continuous
+URGENT guard g is strictly negative over E and nonnegative over the entire
+endpoint, continuity gives a first zero within the step for each actual
+trajectory represented by S. The complete endpoint time must also be
+certified at or before the requested final horizon. Every invariant must hold on the whole tube,
+and every other blocking guard must be strictly inactive on that tube.
+This makes the first zero a legal hybrid reset point. The equality slice
+`g=0` of the complete numerical tube contains the nonempty genuinely
+reached crossing subset, and the common reset encloses its image.
+
+This is the existing sufficient equation proof. It neither samples nor
+freezes u, selects a source child, orders competing events, nor assumes
+monotonicity or a Lie-derivative sign. Reach and endpoint approximations
+can differ numerically; both must cover the entire original input family.
+If any required certificate is unknown, no LOWER crossing is published.
+Multiple reach tubes and IMPACT direction are outside this extension.
+
+**Common handler.** Extract the existing clocked/parameterized equation
+crossing proof and reset publication into
+`EvolutionDetail::try_publish_lower_urgent_crossing` in the private common
+hybrid outer-flow module. Equation orchestration calls the same handler;
+structured inclusion orchestration tries it before requiring an entirely
+uninterrupted tube. The numerical step, input approximation configuration,
+UPPER path and initial source policy remain. Uncertified inclusion flows
+retain their existing rejection behavior.
+This separates crossing certification from integration and publication
+without duplicating an equation/inclusion event engine. A failed attempt
+publishes nothing; it never falls back to a possible UPPER jump.
+
+**Public regression.** Three additional methods bring
+`test_hybrid_inclusions` to 22 registered methods. The positive regression
+uses `x'=1+u` or `x'=p+t+u`, `u in [-1/8,1/8]`, with/without explicit
+time and `p in [1,2]`, under flat and tree backends. It requires an actual
+URGENT boundary reset `x^+=x+1`, one event, the target mode, a time within
+the certifying step, complete input/physical domains and an immutable
+source. A joint guard `x+t>=p/64` retains the analytically reached witness
+`p=1+1/256, u=0, t=1/128, x^+=1+t+t^2`; this is a test witness, not a
+production sampling policy. The original code rejects the new positive
+case with the expected whole-tube blocker exception.
+
+Negative regressions retain rejection when the full endpoint fails to
+prove a crossing (`x'=u`, `u in [-1,1]`), or another URGENT, PROGRESS,
+INVARIANT or IMPACT condition cannot be excluded on the whole tube.
+No competing event is prioritized. Existing equation crossings,
+closed-endpoint contacts, inclusion tangencies, initial resets and
+architectural tests remain enabled. General inclusion crossings and
+IMPACT contacts are still partial; no whole matrix cell is promoted.
+Acceptance requires all five functional workflows on the exact new SHA,
+including the existing installed tutorials. The canonical opening
+contract and deferred Python tutorial parity remain unchanged.
+
+**Horizon audit and regression.** A certificate within a numerical step
+is insufficient when source arrival times are uncertain: the step is
+bounded from the earliest source time, while the actual LOWER subset
+could arrive later and first cross beyond the requested horizon. The
+shared handler now requires the whole endpoint absolute-time range to
+lie within the final horizon before publishing a crossing. This is a
+sufficient horizon certificate, not selection of early source times.
+The new regression exercises both equations and inclusions, flat/tree,
+with an outer arrival-time range [0,1/32], crossing x=1/32 and a short
+horizon 3/64. It fails against the prior equation publication (one final
+was returned without the necessary universal horizon proof). A larger
+horizon 1/8 admits the same uncertain arrival source. Existing equation
+closed-endpoint regression coverage is retained. This is a production
+certificate omission exposed by a new test, not a reason to weaken an
+existing expectation or redefine LOWER.
+
+**Verification checkpoint (27 November 2026).** The final Debug build with
+warnings as errors, all 49 CTest entries including Python, installation,
+both installed tutorials, apply-format and check-format passed. All
+22 inclusion methods remain registered. Existing equation crossings and
+closed-endpoint tests pass after extraction and horizon certification.
+The v7.32 parameter support is now accepted in its stated scope: Ubuntu,
+macOS, Windows, Coverage, Sanitizers and Format all succeeded on exact SHA
+`0201d8442a69e24ad4532635423587329a852f97`. v7.33 remains a new candidate
+until its own five functional workflows succeed. No whole family cell is
+promoted; numerical kernels, free input domains, physical dynamics and
+the canonical contract remain unchanged.

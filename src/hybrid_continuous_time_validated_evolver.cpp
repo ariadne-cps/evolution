@@ -354,7 +354,6 @@ Void HybridContinuousTimeEvolverBase<ValidatedTag>::set_integrator(const FirstOr
 }
 
 Void HybridContinuousTimeEvolverBase<ValidatedTag>::_validate_mode(DiscreteLocation location, Semantics semantics) const {
-    const bool timed = this->system().time_variable(location).has_value();
     const bool parameterized = EvolutionDetail::hybrid_parameter_space(this->system(), location).dimension() != 0u;
 
     // A deterministic, event-free equation transports an existing reachable
@@ -365,13 +364,7 @@ Void HybridContinuousTimeEvolverBase<ValidatedTag>::_validate_mode(DiscreteLocat
     // Clocked/parameterized LOWER may take only full-source immediate
     // resets and continuous steps proven free of blocking events.
     // A possibly active UPPER guard is not a witnessed LOWER jump.
-    if (timed) {
-        if (dynamic_cast<const PreconditionedGradedTaylorSeriesIntegrator*>(this->_integrator_ptr.get()) != nullptr)
-            throw std::invalid_argument("Timed hybrid evolution does not support preconditioning");
-    }
     if (parameterized) {
-        if (dynamic_cast<const PreconditionedGradedTaylorSeriesIntegrator*>(this->_integrator_ptr.get()) != nullptr)
-            throw std::invalid_argument("Parameterized hybrid evolution does not support preconditioning");
         EvolutionDetail::validate_outer_event_kinds(this->system(), location);
     }
     if (const auto* inclusion = this->system().inclusion(location)) {

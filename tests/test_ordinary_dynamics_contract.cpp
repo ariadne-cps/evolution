@@ -96,8 +96,27 @@ class TestOrdinaryDynamicsContract : public Ariadne::Testing::ContextFixture {
         ContinuousTimeEvolver<ValidatedTag> parameterised_output(parameterised_auxiliary, integrator);
         ARIADNE_TESTING_EXPECT_EQUAL(parameterised_output.system().auxiliary_space(), RealSpace({output}));
         PreconditionedGradedTaylorSeriesIntegrator preconditioned(step_maximum_error = 1e-5);
-        ARIADNE_TESTING_EXPECT_THROWS(std::invalid_argument,
-                                      ContinuousTimeEvolver<ValidatedTag>(parameterised, preconditioned));
+        for (const auto& equation: {timed, parameterised, parameterised_auxiliary}) {
+            ContinuousTimeEvolver<ValidatedTag> consumer(equation, preconditioned);
+            consumer.configuration().set_maximum_step_size(0.03125);
+            for (auto semantics: {Semantics::UPPER, Semantics::LOWER}) {
+                const auto orbit = consumer.orbit(RealVariablesBox({x == 0}), Real(0.125_x), semantics);
+                ARIADNE_TESTING_REQUIRE(orbit.final().size() == 1u);
+                const auto& final = orbit.final()[0u];
+                ARIADNE_TESTING_EXPECT_EQUAL(final.state_dimension(), 1u);
+                ARIADNE_TESTING_EXPECT_EQUAL(final.auxiliary_space(), equation.auxiliary_space());
+                const FloatDPBounds horizon(0.125_x, dp);
+                const auto preconditioned_gain = 1 - exp(-horizon);
+                if (equation.parameter_space().dimension() != 0u) {
+                    const auto physical_parameter = final.constant_parameter_function(1u).get(0u);
+                    const auto analytic_residual = final.state_function()[0u] - physical_parameter * preconditioned_gain;
+                    ARIADNE_TESTING_PROVE(subset(cast_exact_interval(analytic_residual.range()), ExactIntervalType(-0x1p-16_x, 0x1p-16_x)));
+                } else {
+                    const auto analytic_residual = final.state_function()[0u] - (horizon - preconditioned_gain);
+                    ARIADNE_TESTING_PROVE(subset(cast_exact_interval(analytic_residual.range()), ExactIntervalType(-0x1p-16_x, 0x1p-16_x)));
+                }
+            }
+        }
         ContinuousTimeEvolver<ApproximateTag> approximate_timed_continuous_evolver(timed);
         ARIADNE_TESTING_PROVE(approximate_timed_continuous_evolver.configuration().step_size().raw().get_d() > 0);
         ARIADNE_TESTING_EXPECT_THROWS(std::invalid_argument, (void)ContinuousTimeEvolver<ApproximateTag>(parameterised));

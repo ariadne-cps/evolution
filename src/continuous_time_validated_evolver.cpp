@@ -154,10 +154,6 @@ Dyadic limit_step_to_remaining_time(const Dyadic& configured, const Dyadic& rema
 ContinuousTimeEvolver<ValidatedTag>::ContinuousTimeEvolver(const OrdinaryDifferentialAlgebraicEquation& system, const IntegratorInterface& i)
     : _system(new SystemType(system)), _integrator(i.clone()),
       _function_factory(dynamic_cast<const IntegratorBase&>(i).function_factory()), _configuration(new ConfigurationType()) {
-    if ((system.has_explicit_time() || system.parameter_space().dimension() != 0u) &&
-        dynamic_cast<const PreconditionedGradedTaylorSeriesIntegrator*>(&i) != nullptr) {
-        throw std::invalid_argument("Preconditioned continuous evolution does not yet support explicit time or constant parameters");
-    }
 }
 
 ContinuousTimeEvolver<ValidatedTag>::ContinuousTimeEvolver(const OrdinaryDifferentialAlgebraicInclusion& system,

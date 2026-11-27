@@ -107,7 +107,16 @@ class TestHybridConstantParameters : public Testing::ContextFixture {
                 zero(lower_final.auxiliary_function()[0u] - lower_final.state_function()[0u] -
                      physical - (timed ? lower_final.time_function() : 0 * lower_final.time_function()));
                 evolver.set_integrator(PreconditionedGradedTaylorSeriesIntegrator(step_maximum_error = 1e-6));
-                ARIADNE_TESTING_EXPECT_THROWS(std::invalid_argument, evolver.orbit(initial(evolver), HybridTime(0u, 1), Semantics::UPPER));
+                for (auto semantics: {Semantics::UPPER, Semantics::LOWER}) {
+                    const auto preconditioned = evolver.orbit(initial(evolver), HybridTime(0.125_x, 1), semantics);
+                    ARIADNE_TESTING_REQUIRE(preconditioned.final().size() == 1u);
+                    const auto& final = preconditioned.final()[0u];
+                    binding(final);
+                    const auto held_parameter = final.continuous_set().constant_parameter_function(1u).get(0u);
+                    zero(final.state_function()[0u] - held_parameter * Real(0.125_x) - (timed ? Real(0.0078125_x) : Real(0)));
+                    zero(final.auxiliary_function()[0u] - final.state_function()[0u] - held_parameter -
+                         (timed ? final.time_function() : 0 * final.time_function()));
+                }
             }
     }
     void test_lower_timed_equation_without_parameters() {

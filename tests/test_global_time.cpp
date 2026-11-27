@@ -50,8 +50,7 @@ class TestGlobalTime : public Testing::ContextFixture {
     const RealVariable x{"x"}, a{"a"}, u{"u"};
     const TimeVariable t;
 
-    void test_clock_conditioning_retains_correlated_arrival_and_auxiliary() {
-        TaylorPicardIntegrator integrator(step_maximum_error = 1e-7);
+    void check_clock_conditioning_retains_correlated_arrival_and_auxiliary(const IntegratorBase& integrator) {
         const auto factory = integrator.function_factory();
         Enclosure initial(ExactBoxType({
                               {-0.0625_x, 0.0625_x}
@@ -94,6 +93,15 @@ class TestGlobalTime : public Testing::ContextFixture {
         for (const auto& final: orbit.final()) {
             const auto exact = labelled.state_function()[0u] + labelled.time_function() * Real(0.125_x) + Real(0.0078125_x);
             ARIADNE_TESTING_PROVE(subset(cast_exact_interval((final.state_function()[0u] - exact).range()), ExactIntervalType(-0x1p-28_x, 0x1p-28_x)));
+        }
+    }
+
+    void test_clock_conditioning_retains_correlated_arrival_and_auxiliary() {
+        check_clock_conditioning_retains_correlated_arrival_and_auxiliary(TaylorPicardIntegrator(step_maximum_error = 1e-7));
+        for (auto mode: {TaylorSeriesPreconditioning::IDENTITY, TaylorSeriesPreconditioning::QR}) {
+            PreconditionedGradedTaylorSeriesIntegrator preconditioned(step_maximum_error = 1e-7);
+            preconditioned.set_preconditioning(mode);
+            check_clock_conditioning_retains_correlated_arrival_and_auxiliary(preconditioned);
         }
     }
 

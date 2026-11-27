@@ -3999,3 +3999,91 @@ Ubuntu, macOS, Windows, Coverage, Sanitizers and Format all succeeded on
 `53e21a32e249cf1d825afb864918d56d7b329759`. The canonical opening section
 is unchanged. General LOWER completion and final Python tutorial parity
 stay deferred during UPPER closure; paving remains out of scope.
+
+## v7.36 — Integration owns preconditioning with external time and constant parameters
+
+**Proof recorded before implementation.** Retain the physical dynamics
+`x'=f(x,t,p)`, original initial state map x(s), external clock t0(s), and
+the same trajectory-constant interval tuple p(s). For an invertible affine
+state frame `x=c+A*y`, integrate `y'=A^-1*f(c+A*y,t,p)`. Only state
+coordinates change; time and fixed parameters retain their own axes.
+The transformed field is a composition of the original numerical function
+and an affine function, preserving its rigorous derivatives. Flow bounds
+and accepted errors refer to physical state coordinates. The complete
+physical family is retained for UPPER; a nonempty reached LOWER subset is
+transported by the same dynamics. This is a numerical capability common
+to both semantics, not a different event policy or a LOWER-specific gap.
+
+**Integration implementation.** PreconditionedGradedTaylorSeriesIntegrator
+now overrides the native `flow_step(field, state_domain, time_interval,
+parameter_domain, bound)` overload for f(x,t,p) and f(x,p). It returns the
+existing physical model layout [initial state, absolute time, parameters].
+It no longer inherits the unpreconditioned implementation for this call.
+Singleton state axes do not require a fallback to an ordinary integrator.
+The final physical composition must also meet the configured error bound.
+
+A new carried `step(field, state, initial_time_map, parameter_map,
+suggest(h))` accepts correlated clock and constant-parameter maps over
+the original enclosure parameter domain. Within the numerical step use
+elapsed time tau and fixed conditioning [t0,p], then compose all maps
+jointly with the same y(s). No new physical parameter tuple is selected
+or introduced at the next step. Endpoint-first composition and the
+returned final_state preserve the local representation. A parameter slice
+used to choose the next invertible QR frame only chooses coordinates;
+the entire parameter-dependent endpoint remains in the propagated map.
+Exactly stationary physical components retain their original maps.
+Adaptive accuracy failure is bounded and raises an exception instead of
+halving an exact dyadic indefinitely below a physical rounding floor.
+The existing autonomous QR/Gronwall implementation remains unchanged;
+the new parameterised path uses the validated graded-series certificate
+in transformed coordinates, for both IDENTITY and QR frames.
+
+**Evolution consumers.** Remove the blanket time/constant-parameter
+rejections for ordinary and hybrid equation evolvers. Their existing
+generic numerical bridge now dispatches to the new Integration overload
+and composes its physical state/time/parameter arguments. No additional
+user state, derivative-one clock, event algorithm or input-selection
+policy is introduced. Integration's direct carried-map API is separately
+tested; this change does not migrate all evolver queues to a new opaque
+solver-state protocol. The separate preconditioned inclusion-input
+approximation adapter restriction is unchanged and is not claimed closed.
+
+**Tests and portability correction.** Four additional methods in
+test_preconditioned_integrator cover native autonomous parameters,
+time-only and combined fields, nonzero origins, whole polynomial
+residuals plus exact analytic point witnesses, singleton state axes,
+nonpolynomial sine fields, correlated repeated steps, persistent
+parameter maps, exact stationary outputs, polymorphic/common-adapter
+continuation, invalid map/dimension/duration and physical error rejection.
+All 13 C++ Integration suites passed locally. Initial CI on Integration
+`cb82008aaa9f1788ba8c298e01acfb6cbb85a960` passed macOS, Windows and
+Format; Linux exposed decimal tolerance literals incorrectly marked
+exact. Replace them with strictly tighter exact dyadic bounds 2^-24 and
+2^-20, preserving every test expectation and the production algorithm.
+No numerical source change is needed for that portability correction.
+
+Evolution replaces the former preconditioning rejection checks with
+positive equation propagation and auxiliary checks, including analytic
+solutions, both semantics and flat/tree hybrid backends. The existing
+correlated arrival-time and auxiliary regression now runs with Picard,
+preconditioned IDENTITY and QR. All previous architectural tests remain.
+Final verification requires the complete warnings-as-errors builds,
+Integration and Evolution tests (including Python), installation and
+installed tutorials, then apply-format/check-format before each commit.
+Require all five functional workflows on the exact published candidate
+SHAs before accepting this capability. LOWER family counts do not change.
+The opening canonical contract and all earlier journal entries are
+preserved; deferred tutorial parity and paving decoupling remain outside
+this increment. Future user-facing matrices show only detailed LOWER.
+
+**Local verification checkpoint (27 November 2026).** Integration's
+implementation is `cb82008aaa9f1788ba8c298e01acfb6cbb85a960`; the exact
+dyadic test correction and new Evolution pin are
+`406a50d3f819b1341dda443714ee8d7654bc1359`. A clean Integration Debug build
+with warnings as errors passed all 14 CTest entries including Python.
+The clean Evolution build passed all 49 entries, installation and both
+installed tutorials. apply-format and check-format passed in both modules
+and are repeated before publication. The preceding native UPPER closure
+is accepted on `0ba539b4fef1896e766f499e2df19154fd149133`, with all five
+functional workflows and Format green. This new numerical capability
+still requires its own exact-SHA functional acceptance in both modules.

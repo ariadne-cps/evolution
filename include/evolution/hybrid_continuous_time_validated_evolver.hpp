@@ -164,6 +164,8 @@ class HybridContinuousTimeEvolverBase<ValidatedTag>
     //! \brief Select one reach and one endpoint method for inclusion modes.
     Void set_integrator(const IntegratorBase&, const InputApproximation& reach, const InputApproximation& evolve);
     //! \brief Explicitly select outer box certificates for inclusion modes.
+    //! Hybrid LOWER remains unavailable with this method until event,
+    //! invariant and crossing certificates have been audited for boxes.
     Void set_integrator(const FirstOrderMultifunctionIntegrator&);
     //! \brief Set the class which integrates the continuous dynamics.
     Void set_solver(const EquationSolverInterface& solver);

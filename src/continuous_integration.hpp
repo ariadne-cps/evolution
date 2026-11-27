@@ -82,7 +82,8 @@ enum class IntegrationStepCoordinates { STATE,
 
 /** @brief Whether uncorrelated outer boxes may replace unavailable certificates. */
 enum class IntegrationStepRepresentation { REQUIRE_STRUCTURED,
-                                           ALLOW_BOX_ENCLOSURES };
+                                           ALLOW_BOX_UPPER_ENCLOSURES,
+                                           ALLOW_BOX_LOWER_ENCLOSURES };
 
 /** @brief Each reach patch retains its time interval and uncertainty domain.
  *  The endpoint is the independent evolve certificate. A box component is an
@@ -97,8 +98,10 @@ struct AppliedIntegrationStep {
 /** @brief Apply a validated step without mutating the source enclosure.
  *  Preserves available structure, constraints, outputs, time and fixed parameters.
  *  New input coordinates are appended independently for reach and endpoint.
- *  Unavailable maps require explicit ALLOW_BOX_ENCLOSURES and UPPER semantics.
- *  Structured LOWER application still requires a solver guarantee from the caller.
+ *  Unavailable maps require an explicit permission matching the requested
+ *  semantics. LOWER permission means that the caller has proved the certified
+ *  boxes enclose the continuation of a known nonempty reached subset; replacing
+ *  its correlations by independent ERROR axes only enlarges that enclosure.
  */
 AppliedIntegrationStep apply_integration_step(
     const Enclosure& initial, const ValidatedIntegrationStep& step,

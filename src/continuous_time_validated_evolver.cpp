@@ -213,12 +213,6 @@ auto ContinuousTimeEvolver<ValidatedTag>::orbit(const EnclosureType& initial_set
     if (this->system().inclusion() != nullptr) {
         if (semantics != Semantics::UPPER && semantics != Semantics::LOWER)
             throw std::invalid_argument("Unknown continuous inclusion semantics");
-        // LOWER needs a correlation-preserving validated endpoint map.
-        // The first-order integrator returns independent outer boxes,
-        // which cannot be used as LOWER continuation certificates.
-        if (semantics == Semantics::LOWER && !this->_inclusion_integrator)
-            throw std::invalid_argument(
-                "Continuous inclusion LOWER requires the structured selected-input integrator");
     }
     EnclosureType initial = initial_set;
     if (initial.has_constant_parameter_binding()) {
@@ -398,16 +392,17 @@ Void ContinuousTimeEvolver<ValidatedTag>::
             return {this->_inclusion_step(current_set, current_time, maximum_step_size), join(current_set.state_function(), parameters)};
         }();
         step_size = numerical.step.time_step();
-        // Each continuous LOWER tick must carry an actual structured
-        // trajectory-to-parameter map; an independent box cannot
-        // certify continuation of the same reachable subset.
-        if (semantics == Semantics::LOWER &&
-            (!numerical.step.has_reach_models() || !numerical.step.has_evolve_model()))
-            throw std::invalid_argument(
-                "Continuous inclusion LOWER requires structured reach and endpoint models");
+        // A validated first-order box encloses all continuations from the
+        // current enclosure, hence also those of its nonempty reached LOWER
+        // subset. Independent ERROR coordinates enlarge only the numerical
+        // enclosure and preserve that subset across subsequent steps.
+        const auto representation = this->_box_integrator == nullptr
+                                      ? EvolutionDetail::IntegrationStepRepresentation::REQUIRE_STRUCTURED
+                                      : (semantics == Semantics::LOWER
+                                             ? EvolutionDetail::IntegrationStepRepresentation::ALLOW_BOX_LOWER_ENCLOSURES
+                                             : EvolutionDetail::IntegrationStepRepresentation::ALLOW_BOX_UPPER_ENCLOSURES);
         applied = EvolutionDetail::apply_integration_step(current_set, numerical.step, numerical.arguments, semantics,
-                                                          this->_box_integrator != nullptr ? EvolutionDetail::IntegrationStepRepresentation::ALLOW_BOX_ENCLOSURES
-                                                                                           : EvolutionDetail::IntegrationStepRepresentation::REQUIRE_STRUCTURED);
+                                                          representation);
     } else {
         const FunctionType dynamic = EvolutionDetail::prepare_equation_field(this->system().equation()->function(), this->system().dimension(), this->system().has_explicit_time(), this->system().parameter_space().dimension());
         const SizeType parameter_count = _system->parameter_space().dimension();

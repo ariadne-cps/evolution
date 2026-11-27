@@ -304,15 +304,36 @@ class TestContinuousInclusions : public Ariadne::Testing::ContextFixture {
         ARIADNE_TESTING_PROVE(subset(box, ExactBoxType({
                                               {0.0_x, 0.044921875_x}
         })));
+        const auto lower = evolver.orbit(RealVariablesBox({x == 0}), Real(0.09375_x), Semantics::LOWER);
+        ARIADNE_TESTING_REQUIRE(lower.final().size() == 1u);
+        ARIADNE_TESTING_EXPECT_EQUAL(lower.reach().size(), 2u);
+        const auto& lower_final = lower.final()[0u];
+        const auto lower_box = cast_exact_box(lower_final.bounding_box().euclidean_set());
+        ARIADNE_TESTING_PROVE(subset(ExactBoxType({
+                                         {0.00439453125_x, 0.00439453125_x}
+        }),
+                                     lower_box));
+        ARIADNE_TESTING_EXPECT_EQUAL(lower_final.constant_parameter_space(), RealSpace({p}));
+        ARIADNE_TESTING_EXPECT_EQUAL(lower_final.constant_parameter_count(), 1u);
+        SizeType error_count = 0u;
+        for (const auto kind: lower_final.variable_kinds()) {
+            if (kind == EnclosureVariableKind::ERROR)
+                ++error_count;
+        }
+        ARIADNE_TESTING_EXPECT_EQUAL(error_count, 2u);
+        const auto resumed = evolver.orbit(lower_final, Real(0.03125_x), Semantics::LOWER);
+        ARIADNE_TESTING_REQUIRE(resumed.final().size() == 1u);
+        ARIADNE_TESTING_EXPECT_EQUAL(resumed.final()[0u].constant_parameter_count(), 1u);
+        const auto held = evolver.orbit(lower_final, Real(0), Semantics::LOWER);
+        ARIADNE_TESTING_REQUIRE(held.final().size() == 1u);
+        ARIADNE_TESTING_EXPECT_EQUAL(held.final()[0u].number_of_parameters(), lower_final.number_of_parameters());
         const OrdinaryDifferentialAlgebraicInclusion deterministic({dot(x) = 1}, RealVariablesBox{});
         ContinuousTimeEvolver<ValidatedTag> deterministic_evolver(deterministic, integrator);
-        const auto deterministic_result = deterministic_evolver.orbit(RealVariablesBox({x == 0}), Real(0.0625_x), Semantics::UPPER);
+        const auto deterministic_result = deterministic_evolver.orbit(RealVariablesBox({x == 0}), Real(0.0625_x), Semantics::LOWER);
         ARIADNE_TESTING_PROVE(subset(ExactBoxType({
                                          {0.0625_x, 0.0625_x}
         }),
                                      cast_exact_box(deterministic_result.final().bounding_box().euclidean_set())));
-        ARIADNE_TESTING_EXPECT_THROWS(std::invalid_argument,
-                                      evolver.orbit(RealVariablesBox({x == 0}), Real(0u), Semantics::LOWER));
     }
 
     Void test_structured_lower_inclusion_preserves_switching_inputs() {
@@ -379,10 +400,17 @@ class TestContinuousInclusions : public Ariadne::Testing::ContextFixture {
 
         const FirstOrderMultifunctionIntegrator box_integrator;
         ContinuousTimeEvolver<ValidatedTag> boxes(system, box_integrator);
-        ARIADNE_TESTING_EXPECT_THROWS(std::invalid_argument,
-                                      boxes.orbit(RealVariablesBox({x == 0}), Real(0.125_x), Semantics::LOWER));
-        ARIADNE_TESTING_EXPECT_THROWS(std::invalid_argument,
-                                      boxes.orbit(RealVariablesBox({x == 0}), Real(0), Semantics::LOWER));
+        boxes.configuration().set_maximum_step_size(0.0625);
+        const auto box_lower = boxes.orbit(RealVariablesBox({x == 0}), Real(0.125_x), Semantics::LOWER);
+        ARIADNE_TESTING_REQUIRE(box_lower.final().size() == 1u);
+        ARIADNE_TESTING_EXPECT_EQUAL(box_lower.reach().size(), 2u);
+        ARIADNE_TESTING_PROVE(subset(ExactBoxType({
+                                         {0.125_x, 0.125_x}
+        }),
+                                     cast_exact_box(box_lower.final()[0u].bounding_box().euclidean_set())));
+        const auto box_zero = boxes.orbit(RealVariablesBox({x == 0}), Real(0), Semantics::LOWER);
+        ARIADNE_TESTING_REQUIRE(box_zero.final().size() == 1u);
+        ARIADNE_TESTING_EXPECT_EQUAL(box_zero.final()[0u].number_of_parameters(), 1u);
     }
 
     Void test_pointwise_interval_field_and_domain_rejection() {
@@ -406,6 +434,12 @@ class TestContinuousInclusions : public Ariadne::Testing::ContextFixture {
         ARIADNE_TESTING_PROVE(subset(box, ExactBoxType({
                                               {-0.0947265625_x, 0.0947265625_x}
         })));
+        const auto lower = evolver.orbit(RealVariablesBox({x == 0}), Real(0.09375_x), Semantics::LOWER);
+        ARIADNE_TESTING_REQUIRE(lower.final().size() == 1u);
+        ARIADNE_TESTING_PROVE(subset(ExactBoxType({
+                                         {-0.09375_x, 0.09375_x}
+        }),
+                                     cast_exact_box(lower.final()[0u].bounding_box().euclidean_set())));
         ARIADNE_TESTING_EXPECT_THROWS(std::invalid_argument,
                                       evolver.orbit(RealVariablesBox({x == 2}), Real(0.03125_x), Semantics::UPPER));
         TaylorPicardIntegrator base(step_maximum_error = 1e-6);

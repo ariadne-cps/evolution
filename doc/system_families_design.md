@@ -4158,3 +4158,64 @@ installation, installed C++ and Python tutorials, apply-format and check-format
 passed. The six inclusion methods include the new constrained nonlinear LOWER
 entry/resume and size-stop cases. Publication and exact-SHA CI acceptance are
 still required before changing the accepted matrix count.
+
+## v7.38 — Complete ordinary continuous inclusion LOWER box audit
+
+**Proof recorded before implementation.** Let an ordinary continuous LOWER
+enclosure `E` contain a nonempty actually reached subset `S` at the start of a
+step. A validated first-order multifunction step returns a reach box `B_R`
+enclosing the complete flow tube from `E` for the full declared input and
+constant-parameter domains, and an endpoint box `B_E` enclosing every endpoint
+at the certified step duration. In particular, the actual continuations of
+the nonempty subset `S` lie in these boxes. Selecting those continuations as
+`S_R` and `S_E` gives `nonempty S_R subset R and S_R subset B_R`, and
+`nonempty S_E subset R and S_E subset B_E`. This is precisely the canonical
+LOWER contract; neither box is claimed to be an INNER approximation.
+
+Replacing a correlated state map by independent ERROR coordinates enlarges
+only the numerical enclosure. Every actual continued state has a coordinate
+value in the certified box, while the original feasible source coordinates,
+constraints, absolute-time map and trajectory-constant physical parameter
+binding remain present. On the next step the solver encloses all trajectories
+from the enlarged box, hence also the continuation of `S_E`. Induction proves
+finite multi-step continuation. The same reasoning covers a reach box whose
+state is independent of its local-time coordinate: it still contains every
+actual state/time pair in the certified tube. No input midpoint, sample,
+subbox, artificial equality or second dynamics is introduced.
+
+**Representation policy.** A missing structured map is never accepted by
+default. The integration-to-enclosure bridge will distinguish an explicit
+UPPER-box permission from an explicit LOWER-box permission and require an
+exact match with the requested semantics. The ordinary inclusion evolver may
+issue either permission after selecting its first-order validated box solver.
+The hybrid inclusion evolver remains deliberately restricted to structured
+LOWER certificates: its existing entry and per-step gates reject box-only
+LOWER before the shared bridge, because event, invariant and crossing
+certificates require a separate audit. This increment therefore cannot
+silently promote a hybrid cell.
+
+**Required regressions and acceptance.** Direct bridge tests cover explicit
+policy mismatch rejection, LOWER box application, two-step continuation,
+ERROR-coordinate provenance, retained constraints, absolute time and fixed
+parameters. Ordinary evolver tests cover autonomous, explicit-time,
+constant-parameter, zero-input and interval-valued fields at positive and zero
+horizons, plus LOWER resume and an exact analytic trajectory contained in the
+final outer box. Existing structured LOWER and all UPPER paths remain. After
+the complete local warnings-as-errors build, all tests, installation,
+installed tutorials and apply-format/check-format pass, the exact published
+SHA must pass Ubuntu, macOS, Windows, Coverage, Sanitizers and Format before
+ordinary continuous inclusion / explicit ODAI LOWER moves from partial to
+implemented. That acceptance would make LOWER **4 complete + 4 partial**;
+the four hybrid families remain partial. Python tutorial parity and paving
+work remain outside this increment.
+
+**Local verification checkpoint (27 November 2026).** The changed production
+units and regression suites compile in the Debug warnings-as-errors build. All
+49 CTest entries pass locally; nine unrelated tests were initially terminated
+by transient host resource pressure and all nine passed together on immediate
+rerun. The new ordinary box LOWER cases, direct bridge policy checks and both
+hybrid non-regression suites pass. Installation to a fresh prefix, the installed
+C++ tutorial build/run and the installed Python tutorial run also pass.
+apply-format/check-format are required immediately before publication, followed
+by exact-SHA Ubuntu, macOS, Windows, Coverage, Sanitizers and Format acceptance.
+The matrix remains 3 complete + 5 partial until that external gate succeeds.

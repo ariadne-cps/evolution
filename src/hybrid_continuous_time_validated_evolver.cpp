@@ -376,9 +376,10 @@ Void HybridContinuousTimeEvolverBase<ValidatedTag>::_validate_mode(DiscreteLocat
         if (this->_inclusion_integrator_ptr && inclusion->has_input_function() && inclusion->number_of_inputs() == 0u)
             throw std::invalid_argument("The selected hybrid inclusion method requires free numerical inputs");
         if (semantics == Semantics::LOWER) {
-            // A structured map carries the same reachable subset through
-            // each interval of actual input functions. Box-only outer
-            // certificates cannot preserve that correlation across steps.
+            // Hybrid LOWER currently requires structured maps and tubes for
+            // its invariant, event and crossing certificates. Ordinary
+            // event-free box continuation is sound, but does not by itself
+            // certify these separate hybrid decisions.
             if (!this->_inclusion_integrator_ptr)
                 throw std::invalid_argument(
                     "Hybrid inclusion LOWER requires the structured selected-input integrator");
@@ -980,7 +981,7 @@ Void HybridContinuousTimeEvolverBase<ValidatedTag>::_evolve_inclusion(
         throw std::invalid_argument(
             "Hybrid inclusion LOWER requires structured reach and endpoint models");
     const auto applied = EvolutionDetail::apply_integration_step(source, step, numerical.arguments, semantics,
-                                                                 this->_box_integrator_ptr ? EvolutionDetail::IntegrationStepRepresentation::ALLOW_BOX_ENCLOSURES
+                                                                 this->_box_integrator_ptr ? EvolutionDetail::IntegrationStepRepresentation::ALLOW_BOX_UPPER_ENCLOSURES
                                                                                            : EvolutionDetail::IntegrationStepRepresentation::REQUIRE_STRUCTURED);
     const double processed_time = std::min(step.time_step().get_d(), remaining.get_d());
     if (semantics == Semantics::LOWER) {

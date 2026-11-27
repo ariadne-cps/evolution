@@ -526,8 +526,9 @@ class TestHybridInclusions : public Testing::ContextFixture {
         ARIADNE_TESTING_PROVE(full_inputs >= 4u);
         ARIADNE_TESTING_EXPECT_EQUAL(initial.continuous_set().number_of_parameters(), 1u);
 
-        // A box-only method is an UPPER numerical outer certificate,
-        // not a structured continuation of the same reachable subset.
+        // A box-only method has not yet been audited for the hybrid LOWER
+        // invariant, event and crossing certificates, so it remains rejected
+        // independently of ordinary event-free box continuation.
         HybridContinuousTimeEvolver<ValidatedTag> box_evolver(system);
         box_evolver.set_integrator(FirstOrderMultifunctionIntegrator());
         const auto zero = HybridTime(0u, 1);

@@ -257,8 +257,8 @@ class TestHybridInclusionImpacts : public Testing::ContextFixture {
                 }
                 // At t=0, g=y-x^2=-1/256 is strictly negative.
                 // The structured method may retain the WHOLE initial
-                // LOWER source. A box-only outer integrator still
-                // cannot provide a correlated LOWER continuation.
+                // LOWER source. A box-only outer integrator is not yet
+                // authorised for hybrid event and crossing certificates.
                 if (boxes) {
                     ARIADNE_TESTING_EXPECT_THROWS(std::invalid_argument,
                                                   evolver.orbit(initial, HybridTime(0u, 1), Semantics::LOWER));

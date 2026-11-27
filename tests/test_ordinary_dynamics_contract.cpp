@@ -193,10 +193,22 @@ class TestOrdinaryDynamicsContract : public Ariadne::Testing::ContextFixture {
         ARIADNE_TESTING_REQUIRE(parameterised_zero.final().size() == 1u);
         ARIADNE_TESTING_EXPECT_EQUAL(parameterised_zero.final()[0u].constant_parameter_count(), 1u);
         ContinuousTimeEvolver<ValidatedTag> boxes(parameterised, FirstOrderMultifunctionIntegrator());
-        ARIADNE_TESTING_EXPECT_THROWS(std::invalid_argument,
-                                      boxes.orbit(RealVariablesBox({x == 0}), Real(0.0625_x), Semantics::LOWER));
-        ARIADNE_TESTING_EXPECT_THROWS(std::invalid_argument,
-                                      boxes.orbit(RealVariablesBox({x == 0}), Real(0), Semantics::LOWER));
+        boxes.configuration().set_maximum_step_size(0.03125);
+        const auto boxed_lower = boxes.orbit(
+            RealVariablesBox({x == 0}), Real(0.0625_x), Semantics::LOWER);
+        ARIADNE_TESTING_REQUIRE(boxed_lower.final().size() == 1u);
+        ARIADNE_TESTING_EXPECT_EQUAL(boxed_lower.reach().size(), 2u);
+        const auto& boxed_final = boxed_lower.final()[0u];
+        ARIADNE_TESTING_EXPECT_EQUAL(boxed_final.constant_parameter_space(), RealSpace({p}));
+        ARIADNE_TESTING_EXPECT_EQUAL(boxed_final.constant_parameter_count(), 1u);
+        ARIADNE_TESTING_PROVE(subset(ExactBoxType({
+                                         {0.0_x, 0.0_x}
+        }),
+                                     cast_exact_box(boxed_final.bounding_box().euclidean_set())));
+        const auto boxed_zero = boxes.orbit(
+            RealVariablesBox({x == 0}), Real(0), Semantics::LOWER);
+        ARIADNE_TESTING_REQUIRE(boxed_zero.final().size() == 1u);
+        ARIADNE_TESTING_EXPECT_EQUAL(boxed_zero.final()[0u].constant_parameter_count(), 1u);
     }
 
     Void test_interval_inclusion_is_not_treated_as_an_input_function() {

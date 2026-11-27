@@ -37,11 +37,13 @@ coordinates with different domains.
 
 Structured certificates are required by default. Missing reach or endpoint
 maps can use the corresponding certified box only with the explicit
-`ALLOW_BOX_ENCLOSURES` policy under `Semantics::UPPER`. These are outer Cartesian
-enclosures with independent uncertainty coordinates; the result records the
-loss of structure. Any available structured component is retained. Box
-application preserves the original feasible parameter coordinates and time
-maps, and never claims an inner reachability or correlated trajectory model.
+`ALLOW_BOX_UPPER_ENCLOSURES` or `ALLOW_BOX_LOWER_ENCLOSURES` policy matching the
+requested semantics. These are outer Cartesian enclosures with independent
+uncertainty coordinates; the result records the loss of structure. LOWER box
+permission is issued only where the caller has proved that the box retains a
+nonempty actual continuation. Any available structured component is retained.
+Box application preserves the original feasible parameter coordinates and
+time maps, and never claims an inner reachability or correlated trajectory model.
 The ordinary equation paths continue to require structured certificates.
 Equations and inclusions now share `ContinuousTimeEvolver<ValidatedTag>`, `LabelledEnclosure`
 and the same workload, time, subdivision and reconditioning loop. The separate
@@ -176,8 +178,11 @@ The input-approximation remainder is separate from the underlying ODE solver's
 Taylor error: reduce the maximum step when tighter inclusion bounds are needed.
 
 Selecting `ContinuousTimeEvolver<ValidatedTag>(inclusion, FirstOrderMultifunctionIntegrator())`
-explicitly requests outer box certificates. This path also supports structured
-ODAI declarations without free inputs. Interval-Taylor inclusions retain
+explicitly requests outer box certificates for either validated semantics.
+Under LOWER, the boxes remain outer numerical enclosures of a nonempty actual
+continuation; they are not INNER approximations or sampled-input trajectories.
+This path also supports structured ODAI declarations without free inputs.
+Interval-Taylor inclusions retain
 pointwise, time-varying coefficient semantics and remain inside the declared
 model domain. High-order integration requires a compatible numerical field
 provider with free input coordinates; interval coefficients can supply these

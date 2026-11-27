@@ -102,14 +102,14 @@ class TestContinuousIntegration : public Ariadne::Testing::ContextFixture {
         const ValidatedIntegrationStep boxed_endpoint(h, bound, bound, {}, {second, first}, std::nullopt,
                                                       StepSizeType(2u), 1u, true);
         const auto mixed = apply_integration_step(source, boxed_endpoint, IntegrationStepCoordinates::PARAMETERS,
-                                                  Semantics::UPPER, IntegrationStepRepresentation::ALLOW_BOX_ENCLOSURES);
+                                                  Semantics::UPPER, IntegrationStepRepresentation::ALLOW_BOX_UPPER_ENCLOSURES);
         ARIADNE_TESTING_PROVE(mixed.used_box_enclosure);
         ARIADNE_TESTING_EXPECT_EQUAL(mixed.reach.size(), 2u);
         ARIADNE_TESTING_EXPECT_EQUAL(mixed.reach[0u].parameter_domain(), applied.reach[0u].parameter_domain());
         ARIADNE_TESTING_EXPECT_EQUAL(mixed.evolved.variable_kinds()[1u], EnclosureVariableKind::ERROR);
         const ValidatedIntegrationStep boxed_reach(h, bound, bound, {}, {}, endpoint, StepSizeType(2u));
         const auto other = apply_integration_step(source, boxed_reach, IntegrationStepCoordinates::PARAMETERS,
-                                                  Semantics::UPPER, IntegrationStepRepresentation::ALLOW_BOX_ENCLOSURES);
+                                                  Semantics::UPPER, IntegrationStepRepresentation::ALLOW_BOX_UPPER_ENCLOSURES);
         ARIADNE_TESTING_EXPECT_EQUAL(other.evolved.parameter_domain(), endpoint_domain);
         ARIADNE_TESTING_EXPECT_EQUAL(other.evolved.variable_kinds()[1u], EnclosureVariableKind::INPUT);
         ARIADNE_TESTING_PROVE(refines(FloatDPBounds(0.125_x, dp), other.evolved.state_function()(endpoint_point)[0u]));
@@ -129,10 +129,10 @@ class TestContinuousIntegration : public Ariadne::Testing::ContextFixture {
         const StepSizeType h1(0.03125_x), h2(0.015625_x);
         const auto first = solver.step(ValidatedIntegrationRequest(field, initial, h1, bound));
         const auto first_applied = apply_integration_step(source, first, IntegrationStepCoordinates::STATE,
-                                                          Semantics::UPPER, IntegrationStepRepresentation::ALLOW_BOX_ENCLOSURES);
+                                                          Semantics::LOWER, IntegrationStepRepresentation::ALLOW_BOX_LOWER_ENCLOSURES);
         const auto second = solver.step(ValidatedIntegrationRequest(field, first, h2, bound));
         const auto applied = apply_integration_step(first_applied.evolved, second, IntegrationStepCoordinates::STATE,
-                                                    Semantics::UPPER, IntegrationStepRepresentation::ALLOW_BOX_ENCLOSURES);
+                                                    Semantics::LOWER, IntegrationStepRepresentation::ALLOW_BOX_LOWER_ENCLOSURES);
         ARIADNE_TESTING_PROVE(first_applied.used_box_enclosure && applied.used_box_enclosure);
         ARIADNE_TESTING_EXPECT_EQUAL(applied.evolved.state_dimension(), 1u);
         ARIADNE_TESTING_EXPECT_EQUAL(applied.evolved.number_of_parameters(), 3u);
@@ -144,8 +144,14 @@ class TestContinuousIntegration : public Ariadne::Testing::ContextFixture {
         ARIADNE_TESTING_PROVE(subset(final, ExactBoxType({
                                                 {-0.1728515625_x, 0.1728515625_x}
         })));
+        ARIADNE_TESTING_PROVE(subset(ExactBoxType({
+                                         {0.046875_x, 0.046875_x}
+        }),
+                                     final));
         const Vector<FloatDPBounds> point({FloatDPBounds(0, dp), FloatDPBounds(0, dp), FloatDPBounds(0, dp)});
         ARIADNE_TESTING_PROVE(refines(FloatDPBounds(0.046875_x, dp), applied.evolved.time_function()(point)));
+        ARIADNE_TESTING_EXPECT_EQUAL(first_applied.evolved.variable_kinds()[1u], EnclosureVariableKind::ERROR);
+        ARIADNE_TESTING_EXPECT_EQUAL(applied.evolved.variable_kinds()[2u], EnclosureVariableKind::ERROR);
         ARIADNE_TESTING_PROVE(!second.has_evolve_model());
         ARIADNE_TESTING_PROVE(!second.has_reach_models());
         ARIADNE_TESTING_EXPECT_EQUAL(source.number_of_parameters(), 1u);
@@ -200,8 +206,8 @@ class TestContinuousIntegration : public Ariadne::Testing::ContextFixture {
         });
         const ValidatedIntegrationStep step(h, bound, bound, {}, {}, std::nullopt,
                                             StepSizeType(0u), std::nullopt, true, parameters);
-        const auto applied = apply_integration_step(source, step, arguments, Semantics::UPPER,
-                                                    IntegrationStepRepresentation::ALLOW_BOX_ENCLOSURES);
+        const auto applied = apply_integration_step(source, step, arguments, Semantics::LOWER,
+                                                    IntegrationStepRepresentation::ALLOW_BOX_LOWER_ENCLOSURES);
         ARIADNE_TESTING_EXPECT_EQUAL(applied.evolved.variable_kinds()[1u], EnclosureVariableKind::PARAMETER);
         ARIADNE_TESTING_EXPECT_EQUAL(applied.evolved.variable_kinds()[2u], EnclosureVariableKind::ERROR);
         ARIADNE_TESTING_EXPECT_EQUAL(applied.evolved.parameter_domain()[1u], parameters[0u]);
@@ -209,7 +215,7 @@ class TestContinuousIntegration : public Ariadne::Testing::ContextFixture {
         ARIADNE_TESTING_EXPECT_EQUAL(applied.reach[0u].number_of_constraints(), 1u);
         ARIADNE_TESTING_EXPECT_THROWS(std::invalid_argument,
                                       apply_integration_step(source, step, IntegrationStepCoordinates::PARAMETERS, Semantics::UPPER,
-                                                             IntegrationStepRepresentation::ALLOW_BOX_ENCLOSURES));
+                                                             IntegrationStepRepresentation::ALLOW_BOX_UPPER_ENCLOSURES));
     }
 
     Void test_local_step_preserves_correlations_and_absolute_time() {
@@ -270,7 +276,14 @@ class TestContinuousIntegration : public Ariadne::Testing::ContextFixture {
                                       apply_integration_step(source, box_only, IntegrationStepCoordinates::STATE, Semantics::UPPER));
         ARIADNE_TESTING_EXPECT_THROWS(std::invalid_argument,
                                       apply_integration_step(source, box_only, IntegrationStepCoordinates::STATE, Semantics::LOWER,
-                                                             IntegrationStepRepresentation::ALLOW_BOX_ENCLOSURES));
+                                                             IntegrationStepRepresentation::ALLOW_BOX_UPPER_ENCLOSURES));
+        ARIADNE_TESTING_EXPECT_THROWS(std::invalid_argument,
+                                      apply_integration_step(source, box_only, IntegrationStepCoordinates::STATE, Semantics::UPPER,
+                                                             IntegrationStepRepresentation::ALLOW_BOX_LOWER_ENCLOSURES));
+        const auto lower = apply_integration_step(source, box_only, IntegrationStepCoordinates::STATE, Semantics::LOWER,
+                                                  IntegrationStepRepresentation::ALLOW_BOX_LOWER_ENCLOSURES);
+        ARIADNE_TESTING_PROVE(lower.used_box_enclosure);
+        ARIADNE_TESTING_EXPECT_EQUAL(lower.evolved.variable_kinds()[1u], EnclosureVariableKind::ERROR);
         ARIADNE_TESTING_EXPECT_EQUAL(source.parameter_domain(), domain);
     }
 

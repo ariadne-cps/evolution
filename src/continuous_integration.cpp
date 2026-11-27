@@ -251,7 +251,8 @@ Enclosure apply_box(const Enclosure& initial, const UpperBoxType& box,
                     const StepSizeType& duration, bool reach) {
     // A Cartesian outer box retains no state/input correlation. Keep the
     // original feasible parameters and add independent ERROR coordinates;
-    // do not present these axes as a numerical trajectory certificate.
+    // these axes are an outer enclosure rather than a correlated trajectory
+    // model, but may retain a caller-certified nonempty reached subset.
     if (!definitely(box.is_bounded())) {
         throw std::invalid_argument("A compact enclosure cannot represent an unbounded box certificate");
     }
@@ -288,9 +289,14 @@ AppliedIntegrationStep apply_step(const Enclosure& initial, const ValidatedInteg
     }
     const bool boxes = !step.has_reach_models() || !step.has_evolve_model();
     if (boxes) {
-        if (representation != IntegrationStepRepresentation::ALLOW_BOX_ENCLOSURES || semantics != Semantics::UPPER) {
-            throw std::invalid_argument("Box certificates require explicit permission for outer UPPER enclosures");
-        }
+        const bool allowed =
+            (semantics == Semantics::UPPER &&
+             representation == IntegrationStepRepresentation::ALLOW_BOX_UPPER_ENCLOSURES) ||
+            (semantics == Semantics::LOWER &&
+             representation == IntegrationStepRepresentation::ALLOW_BOX_LOWER_ENCLOSURES);
+        if (!allowed)
+            throw std::invalid_argument(
+                "Box certificates require explicit permission matching the evolution semantics");
         if (step.constant_parameter_domain().dimension() != 0u) {
             if (argument_map == nullptr) {
                 throw std::invalid_argument("Box certificates with fixed parameters require an explicit argument map");

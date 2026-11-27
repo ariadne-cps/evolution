@@ -34,7 +34,6 @@
 #include "function/taylor_model.hpp"
 #include "labelled/figure.hpp"
 #include "logging/test_runner.hpp"
-#include "paving/paver.hpp"
 #include "set/list_set.hpp"
 
 #include "ariadne-testing.hpp"

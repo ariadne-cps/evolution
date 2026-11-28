@@ -131,7 +131,6 @@ def test_ordinary_equation_consumers():
 
 
 def test_common_inclusion_consumers():
-    import unittest
     x, t, p, u = (a.RealVariable(name) for name in ("x", "t", "p", "u"))
     system = a.OrdinaryDifferentialAlgebraicInclusion(
         [a.dot(x) << (t + p + u)], a.RealVariablesBox({u: (-1, 1)}),
@@ -148,16 +147,14 @@ def test_common_inclusion_consumers():
         assert result.final().size() > 0
         assert result.final()[0].state_set().dimension() == 1
         assert result.reach().size() >= 2
-        if evolver is boxes:
-            with unittest.TestCase().assertRaises(ValueError):
-                evolver.orbit(initial, a.Real(1)/16, a.Semantics.LOWER)
-        else:
-            lower = evolver.orbit(initial, a.Real(1)/16, a.Semantics.LOWER)
-            assert lower.final().size() == 1
-            assert lower.final()[0].state_set().dimension() == 1
-            assert lower.reach().size() >= 2
-            held = evolver.orbit(lower.final()[0], a.Real(0), a.Semantics.LOWER)
-            assert held.final().size() == 1
+        lower = evolver.orbit(initial, a.Real(1)/16, a.Semantics.LOWER)
+        assert lower.final().size() == 1
+        assert lower.final()[0].state_set().dimension() == 1
+        assert lower.reach().size() >= 2
+        resumed = evolver.orbit(lower.final()[0], a.Real(1)/32, a.Semantics.LOWER)
+        assert resumed.final().size() == 1
+        held = evolver.orbit(lower.final()[0], a.Real(0), a.Semantics.LOWER)
+        assert held.final().size() == 1
 
 
 if __name__ == "__main__":

@@ -4219,3 +4219,14 @@ C++ tutorial build/run and the installed Python tutorial run also pass.
 apply-format/check-format are required immediately before publication, followed
 by exact-SHA Ubuntu, macOS, Windows, Coverage, Sanitizers and Format acceptance.
 The matrix remains 3 complete + 5 partial until that external gate succeeds.
+
+**Exact-SHA portability correction (28 November 2026).** Candidate
+`9ad15cb2aaf5eae0f39d080f6a74b6b17c65f94e` built successfully on every
+observed Debug and Release platform, and Format plus both sanitizer jobs passed.
+Debug test jobs consistently exposed one stale Python binding regression:
+`test_common_inclusion_consumers` still expected the first-order ordinary box
+LOWER call to raise `ValueError`. This contradicts the newly implemented public
+contract; it is not a numerical or platform-specific failure. Replace that
+negative branch with the same positive LOWER, positive-horizon resume and
+zero-horizon checks used for the structured method. Re-run local Python and the
+complete suite, then apply-format/check-format before publishing the correction.

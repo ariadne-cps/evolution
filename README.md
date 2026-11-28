@@ -8,16 +8,50 @@
 [![Coverage Status](https://github.com/ariadne-cps/evolution/actions/workflows/coverage.yml/badge.svg)](https://github.com/ariadne-cps/evolution/actions/workflows/coverage.yml)
 [![codecov](https://codecov.io/gh/ariadne-cps/evolution/branch/main/graph/badge.svg)](https://codecov.io/gh/ariadne-cps/evolution)
 
-Ariadne Evolution is the standalone C++20 numerical evolution layer for continuous, discrete, and hybrid dynamical systems: enclosures, orbits, simulators, evolvers, numerical propagation methods, and first-order PDE evolution.
+Ariadne Evolution is the standalone C++20 numerical evolution layer for continuous, discrete, and hybrid dynamical systems: enclosures, orbits, evolvers, evolvers, numerical propagation methods, and first-order PDE evolution.
 Although independently maintained and usable, this repository is also part of the [Ariadne repository structure](https://github.com/ariadne-cps/ariadne/blob/main/doc/structure.md).
 
 ## Layout
 
 Public headers: `include/evolution`; C++ implementations: `src`; C++ tests: `tests`; Python bindings and smoke tests: `python`; pinned dependencies: `ss`. The umbrella header is `include/ariadne-evolution.hpp`.
 
+The canonical `ContinuousTimeEvolver<P>` and `HybridContinuousTimeEvolver<P>`
+select approximate sampled trajectories with `ApproximateTag` or validated
+set evolution with `ValidatedTag`. `DiscreteTimeEvolver<ValidatedTag>` retains
+discrete map evolution; its approximate specialization is planned. There is no
+default paradigm. The former evolver names and headers are removed.
+See [paradigm contracts](doc/evolver_paradigms_design.md) for inputs, results,
+interfaces and Python template subscriptions. Numerical integration is shared
+by continuous validated evolution and hybrid modes where certificates agree.
+
+Ordinary and hybrid flows use `ValidatedIntegrationRequest` and consume
+`ValidatedIntegrationStep`. The continuous enclosure bridge applies
+the reach and endpoint certificates independently, preserving constraints,
+auxiliary outputs, existing parameter coordinates, absolute time and dwell time.
+The preconditioned solver retains its carried state and separately computed
+endpoint. The bridge returns one enclosure per reach patch, retaining each
+patch's local or absolute time interval, and a separate endpoint enclosure.
+A validated argument map binds the numerical state and fixed parameters to
+existing enclosure coordinates. Reach and endpoint can add different input
+coordinates with different domains.
+
+Structured certificates are required by default. Missing reach or endpoint
+maps can use the corresponding certified box only with the explicit
+`ALLOW_BOX_UPPER_ENCLOSURES` or `ALLOW_BOX_LOWER_ENCLOSURES` policy matching the
+requested semantics. These are outer Cartesian enclosures with independent
+uncertainty coordinates; the result records the loss of structure. LOWER box
+permission is issued only where the caller has proved that the box retains a
+nonempty actual continuation. Any available structured component is retained.
+Box application preserves the original feasible parameter coordinates and
+time maps, and never claims an inner reachability or correlated trajectory model.
+The ordinary equation paths continue to require structured certificates.
+Equations and inclusions now share `ContinuousTimeEvolver<ValidatedTag>`, `LabelledEnclosure`
+and the same workload, time, subdivision and reconditioning loop. The separate
+inclusion evolver and its competitive approximation scheduler have been removed.
+
 Hybrid evolution separates numerical step results from execution and Orbit
 accumulation. The default `FlatHybridEvolutionBackendFactory` retains the current
-workload scheduling; `HybridEvolverBase::set_evolution_backend_factory()` selects
+workload scheduling; `HybridContinuousTimeEvolverBase<ValidatedTag>::set_evolution_backend_factory()` selects
 another factory without changing the `orbit()` overloads or return type.
 `TreeHybridEvolutionBackendFactory` records trajectory histories and genealogy
 backed by `DerivationTree`. Its single checkpoint scheduler supports parent,
@@ -26,7 +60,146 @@ Both backends support sequential and concurrent execution through ThreadManager.
 Each call creates independent run state. See the [backend and trajectory-tree
 design](doc/evolution_tree_design.md) for the current API and deferred operations.
 
+Hybrid transitions use one event policy and separate geometric handlers for
+flow restrictions and jump construction. Jump candidates carry their own
+elapsed-time maps; blocking guards retain their explicit before/after-continuation
+order. Crossing analysis produces independent geometry and typed first-entry or
+guard-maximum certificates, so solver fallbacks retain only available evidence. See the [transition-handler design](doc/hybrid_transition_handlers_design.md)
+for the behavior matrix, numerical guarantees and remaining refactoring tasks.
+
+Hybrid numerical steps retain the common `ValidatedIntegrationStep` result.
+When an `UPPER` step uses its complete certified duration, reach and the
+independent endpoint are applied through the continuous enclosure bridge.
+Event-limited and parameter-dependent stopping times use the reach tube at
+their actual stopping time. The numerical domain covers the entire state map
+over the enclosure parameter domain, including points excluded by constraints,
+so composition stays within the certified patch domain.
+
+The autonomous equation crossing analyzer requires one structured local reach patch
+on `[state, local time]` and a structured endpoint. Multipatch results, extra
+input coordinates, explicit-time or fixed-parameter metadata and box-only
+certificates are rejected explicitly for that event analysis.
+
+`ContinuousTimeHybridAutomaton::new_mode(location, equation_or_inclusion)` retains an owned copy
+of the original ODAE or ODAI declaration. `HybridContinuousTimeEvolver<ValidatedTag>` supports
+autonomous and nonautonomous inclusion modes without fixed model parameters, under `UPPER`
+semantics. State invariants and PROGRESS/URGENT/IMPACT guards restrict outer
+reach and endpoint; URGENT/PERMISSIVE/IMPACT can produce conservative reset
+candidates. IMPACT retains the entire closed guard boundary, including
+zero-derivative contacts, without claiming direction or a first-entry time.
+Select their numerical capability explicitly:
+
+```cpp
+ContinuousTimeHybridAutomaton automaton;
+automaton.new_mode(mode, inclusion);
+HybridContinuousTimeEvolver<ValidatedTag> evolver(automaton);
+evolver.set_integrator(integrator, ZeroApproximation(), ConstantApproximation());
+// Alternatively: evolver.set_integrator(FirstOrderMultifunctionIntegrator());
+```
+
+Both structured and box paths also accept interval-Taylor inclusion modes.
+An equation mode can reset into an inclusion mode, including a change in state
+dimension and a parameter-dependent arrival time. The same hybrid workload,
+subdivision, reconditioning and flat/tree backends process these modes. The
+common continuous helper constructs each inclusion request, bound and result;
+no nested continuous Orbit or separate inclusion scheduler is created. At an
+uncertain arrival time, final sections retain the time equality as a constraint
+on state/dwell maps and expose the requested final time as the time map.
+
+Global time is separate from physical state: use `TimeVariable()` in dynamics,
+guards, invariants, resets or auxiliary outputs without declaring `dot(t)=1`.
+A field can remain autonomous while its events depend on time. Timed hybrid
+modes use validated UPPER outer-flow filtering and preserve uncertain arrival
+clocks through resets. See the [global-time design](doc/global_time_design.md)
+for numerical conditioning, argument layouts and capability boundaries.
+
+Fixed-parameter hybrid modes and composition of typed mode declarations still
+require further capabilities and fail explicitly. Inclusion guard intersections
+may retain spurious transitions and never imply full-source activation.
+Inclusions reject `LOWER`, including at zero horizon. Input axes accumulate
+between steps; numerical reconditioning protects all carried fixed-parameter
+axes and allows state/time error axes in its parameter-count limit. Switching
+back to the ordinary integrator overload clears the inclusion solver choice.
+
 ## Dependencies
+
+The `multifunction` branch uses the ordinary dynamics declarations
+`OrdinaryDifferentialAlgebraicEquation` (`system/odae.hpp`) and
+`OrdinaryDifferentialAlgebraicInclusion` (`system/odai.hpp`).
+`ContinuousTimeEvolver<ValidatedTag>` accepts autonomous and explicit-time equations and inclusions, including
+trajectory-constant parameters under `Semantics::UPPER`. Each parameter retains
+its physical values and correlations across integration steps, subdivision and
+reconditioning; parameters and time are not added to the physical state.
+Auxiliary outputs may depend on the separate enclosure clock and fixed model
+parameters. Explicit argument layouts retain their correlation with state,
+time and physical parameter intervals through subdivision and reconditioning.
+Named physical parameter maps also survive normalization and multi-source
+recombination. Continuation retains existing values for compatible declarations
+instead of adjoining fresh parameters. Unbound PARAMETER axes require explicit
+binding before multi-source recombination;
+see [constant-parameter auxiliary outputs](doc/constant_parameter_auxiliaries_design.md).
+Timed/parameterised preconditioning remains unsupported.
+`Semantics::LOWER` is rejected for parameterised equations and for all inclusions.
+`system()` returns an owning `ContinuousDynamics` metadata view of the original
+ODAE or ODAI declaration; numerical dispatch remains internal and introduces no
+additional physical state.
+
+For example, this computes two steps of `x'=p`, with one value of `p` retained
+throughout each trajectory:
+
+```cpp
+RealVariable x("x"), p("p");
+OrdinaryDifferentialAlgebraicEquation equation(
+    {dot(x) = p}, RealVariablesBox({-1 <= p <= 1}));
+TaylorPicardIntegrator integrator(step_maximum_error = 1e-6);
+ContinuousTimeEvolver<ValidatedTag> evolver(equation, integrator);
+evolver.configuration().set_maximum_step_size(0.0625);
+auto result = evolver.orbit(RealVariablesBox({x == 0}), Real(0.09375_x), Semantics::UPPER);
+```
+
+For a structured inclusion, select exactly one rigorous reach approximation
+and one endpoint approximation when constructing the same evolver:
+
+```cpp
+RealVariable u("u");
+OrdinaryDifferentialAlgebraicInclusion inclusion(
+    {dot(x) = u - x}, RealVariablesBox({-1 <= u <= 1}));
+ContinuousTimeEvolver<ValidatedTag> included(inclusion, integrator,
+                             ZeroApproximation(), ConstantApproximation());
+included.configuration().set_maximum_step_size(0.03125);
+auto tube = included.orbit(RealVariablesBox({x == 0}), Real(0.0625_x), Semantics::UPPER);
+```
+
+`ZeroApproximation` and `ConstantApproximation` certify the reach tube; all five
+supported approximations are available for the endpoint. No strategies compete
+by volume, retry or replace the selected methods. Inclusion reconditioning uses
+the common enclosure policy and parameter count, without winner statistics.
+The input-approximation remainder is separate from the underlying ODE solver's
+Taylor error: reduce the maximum step when tighter inclusion bounds are needed.
+
+Selecting `ContinuousTimeEvolver<ValidatedTag>(inclusion, FirstOrderMultifunctionIntegrator())`
+explicitly requests outer box certificates for either validated semantics.
+Under LOWER, the boxes remain outer numerical enclosures of a nonempty actual
+continuation; they are not INNER approximations or sampled-input trajectories.
+This path also supports structured ODAI declarations without free inputs.
+Interval-Taylor inclusions retain
+pointwise, time-varying coefficient semantics and remain inside the declared
+model domain. High-order integration requires a compatible numerical field
+provider with free input coordinates; interval coefficients can supply these
+as time-varying numerical inputs. Its bound covers the provider's possibly
+wider extension. Unsupported capabilities fail explicitly.
+
+`ContinuousTimeEvolver<ApproximateTag>` simulates autonomous and nonautonomous equations
+without fixed model parameters; `HybridContinuousTimeEvolver<ApproximateTag>` also evaluates
+timed equation modes, guards, invariants, resets and auxiliary outputs. These
+paradigms also select their configuration classes. Python selects specializations
+with `ContinuousTimeEvolver[ApproximateTag]` and `[ValidatedTag]`.
+Evolver input sampling for inclusions and constant model parameters remains
+planned. The [four-family design](doc/system_families_design.md) also plans native
+discrete and hybrid discrete-time simulation/evolution, shared infrastructure,
+and explicit continuous-to-discrete converters. Those new APIs and converters
+are not implemented yet. Full Python/C++ tutorial parity remains the final
+Evolution activity.
 
 Evolution uses the Git submodules [System](https://github.com/ariadne-cps/system), [Integration](https://github.com/ariadne-cps/integration), [Equation Solving](https://github.com/ariadne-cps/equation-solving), [Tree](https://github.com/ariadne-cps/tree), and [Build](https://github.com/ariadne-cps/build). The C++ test suites additionally use [Ariadne Testing](https://github.com/ariadne-cps/testing), pinned as the test-only submodule `ss/tst`. Each registered test runs with a fresh fixture, retaining the original mathematical checks and diagnostic variants.
 
@@ -505,10 +678,10 @@ still execute (including explicit high-verbosity fixture variants); only the
 terminal output is discarded, preserving logging-code coverage.
 
 ```bash
-cmake --build build-release --target test_hybrid_evolver
-ctest --test-dir build-release -R '^test_hybrid_evolver$' --output-on-failure
-./build-release/tests/test_hybrid_evolver --concise
-./build-release/tests/test_hybrid_evolver --full
+cmake --build build-release --target test_hybrid_continuous_time_evolver
+ctest --test-dir build-release -R '^test_hybrid_continuous_time_evolver$' --output-on-failure
+./build-release/tests/test_hybrid_continuous_time_evolver --concise
+./build-release/tests/test_hybrid_continuous_time_evolver --full
 ```
 
 The three header-only compilation tests do not use the testing framework and

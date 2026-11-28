@@ -208,8 +208,10 @@ UpperBoxType
 }
 
 UpperIntervalType
-    HybridEnclosure::range_of(const EffectiveScalarMultivariateFunction& g) const {
-    return apply(compose(g, this->state_function()), this->_set.reduced_domain());
+    HybridEnclosure::range_of(const EffectiveScalarMultivariateFunction& g, EnclosureFunctionArguments arguments) const {
+    return apply(compose(g, this->_set.argument_function(arguments,
+                                                         enclosure_has_parameter_arguments(arguments) ? this->_set.constant_parameter_count() : 0u)),
+                 this->_set.reduced_domain());
 }
 
 UpperIntervalType
@@ -248,26 +250,29 @@ HybridUpperBoxType
     return HybridUpperBoxType(this->location(), this->state_space(), cast_exact_box(this->state_bounding_box()));
 }
 
-Void HybridEnclosure::set_auxiliary(List<RealVariable> vars, EffectiveVectorMultivariateFunction aux) {
-    ARIADNE_PRECONDITION(this->state_space().size() == aux.argument_size());
+Void HybridEnclosure::set_auxiliary(List<RealVariable> vars, EffectiveVectorMultivariateFunction aux, EnclosureFunctionArguments arguments, SizeType parameter_count) {
     ARIADNE_PRECONDITION(vars.size() == aux.result_size());
-    this->_set.set_auxiliary(vars, aux);
+    this->_set.set_auxiliary(vars, aux, arguments, parameter_count);
 }
 
 Void HybridEnclosure::new_state_time_bound(DiscreteEvent, ValidatedScalarMultivariateFunction gamma) {
     this->_set.new_state_time_bound(gamma);
 }
 
-Void HybridEnclosure::new_invariant(DiscreteEvent, ValidatedScalarMultivariateFunction constraint_function) {
-    this->_set.new_negative_state_constraint(constraint_function);
+Void HybridEnclosure::new_invariant(DiscreteEvent, ValidatedScalarMultivariateFunction constraint_function, EnclosureFunctionArguments arguments) {
+    const auto map = this->_set.argument_function(arguments, enclosure_has_parameter_arguments(arguments) ? this->_set.constant_parameter_count() : 0u);
+    this->_set.new_negative_parameter_constraint(compose(constraint_function, map));
 }
 
-Void HybridEnclosure::new_activation(DiscreteEvent, ValidatedScalarMultivariateFunction constraint_function) {
-    this->_set.new_positive_state_constraint(constraint_function);
+Void HybridEnclosure::new_activation(DiscreteEvent, ValidatedScalarMultivariateFunction constraint_function, EnclosureFunctionArguments arguments) {
+    const auto map = this->_set.argument_function(arguments, enclosure_has_parameter_arguments(arguments) ? this->_set.constant_parameter_count() : 0u);
+    const ValidatedScalarMultivariateFunction predicate = compose(constraint_function, map);
+    this->_set.new_parameter_constraint(predicate >= ExactNumber(0));
 }
 
-Void HybridEnclosure::new_guard(DiscreteEvent, ValidatedScalarMultivariateFunction constraint_function) {
-    this->_set.new_zero_state_constraint(constraint_function);
+Void HybridEnclosure::new_guard(DiscreteEvent, ValidatedScalarMultivariateFunction constraint_function, EnclosureFunctionArguments arguments) {
+    const auto map = this->_set.argument_function(arguments, enclosure_has_parameter_arguments(arguments) ? this->_set.constant_parameter_count() : 0u);
+    this->_set.new_zero_parameter_constraint(compose(constraint_function, map));
 }
 
 Void HybridEnclosure::new_parameter_constraint(DiscreteEvent, ValidatedConstraint constraint) {
@@ -290,11 +295,14 @@ Void HybridEnclosure::clear_events() {
     this->_events.clear();
 }
 
-Void HybridEnclosure::apply_reset(DiscreteEvent event, DiscreteLocation target, RealSpace state_space, const ValidatedVectorMultivariateFunction& map, RealSpace auxiliary_space, const EffectiveVectorMultivariateFunction& auxiliary_mapping) {
-    ARIADNE_PRECONDITION_MSG(map.argument_size() == this->state_dimension(), "*this=" << *this << ", event=" << event << ", state_space=" << state_space << ", target=" << target << ", map=" << map);
+Void HybridEnclosure::apply_reset(DiscreteEvent event, DiscreteLocation target, RealSpace state_space, const ValidatedVectorMultivariateFunction& map, RealSpace auxiliary_space, const EffectiveVectorMultivariateFunction& auxiliary_mapping,
+                                  EnclosureFunctionArguments source_arguments, EnclosureFunctionArguments auxiliary_arguments) {
+    ARIADNE_PRECONDITION(map.argument_size() == this->_set.argument_function(source_arguments,
+                                                                             enclosure_has_parameter_arguments(source_arguments) ? this->_set.constant_parameter_count() : 0u)
+                                                    .result_size());
+    this->_set.apply_map(map, state_space, auxiliary_mapping, auxiliary_space, source_arguments, auxiliary_arguments);
     this->_events.append(event);
     this->_location = target;
-    this->_set.apply_map(map, state_space, auxiliary_mapping, auxiliary_space);
 }
 
 Void HybridEnclosure::apply_fixed_evolve_step(const ValidatedVectorMultivariateFunctionPatch& phi, const StepSizeType& elps) {

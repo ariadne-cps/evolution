@@ -30,6 +30,7 @@
 #define ARIADNE_ENCLOSURE_HPP
 
 #include <iosfwd>
+#include <optional>
 
 #include "algebra/vector.hpp"
 #include "drawing/drawer_interface.hpp"
@@ -94,6 +95,26 @@ class EnclosureConfiguration {
 };
 
 /** @brief EnclosureVariableKind: validated enclosures for continuous dynamics. */
+/** @brief Explicit argument layout; global time is never a physical state. */
+enum class EnclosureFunctionArguments : std::uint8_t { STATE,
+                                                       STATE_TIME,
+                                                       STATE_PARAMETERS,
+                                                       STATE_TIME_PARAMETERS,
+                                                       STATE_INPUTS,
+                                                       STATE_AUXILIARY };
+
+constexpr Bool enclosure_has_time_argument(EnclosureFunctionArguments arguments) {
+    return arguments == EnclosureFunctionArguments::STATE_TIME || arguments == EnclosureFunctionArguments::STATE_TIME_PARAMETERS;
+}
+constexpr Bool enclosure_has_parameter_arguments(EnclosureFunctionArguments arguments) {
+    return arguments == EnclosureFunctionArguments::STATE_PARAMETERS || arguments == EnclosureFunctionArguments::STATE_TIME_PARAMETERS;
+}
+// STATE_INPUTS binds the current input sample/set, not fixed parameters
+// or all historical INPUT coordinates carried by the enclosure.
+constexpr Bool enclosure_has_input_arguments(EnclosureFunctionArguments arguments) {
+    return arguments == EnclosureFunctionArguments::STATE_INPUTS;
+}
+
 enum class EnclosureVariableKind : std::uint8_t { INITIAL,
                                                   TEMPORAL,
                                                   PARAMETER,
@@ -116,15 +137,27 @@ class Enclosure
     // extension embeds every map and appends its variable kind together.
     ExactBoxType _domain;
     EffectiveVectorMultivariateFunction _auxiliary_mapping;
+    EnclosureFunctionArguments _auxiliary_arguments = EnclosureFunctionArguments::STATE;
+    SizeType _auxiliary_parameter_count = 0u;
     ValidatedVectorMultivariateFunctionPatch _state_function;
     ValidatedScalarMultivariateFunctionPatch _time_function;
     ValidatedScalarMultivariateFunctionPatch _dwell_time_function;
+    struct ConstantParameterBinding {
+        List<Identifier> names;
+        ExactBoxType domain;
+        ValidatedVectorMultivariateFunctionPatch function;
+    };
+    std::optional<ConstantParameterBinding> _constant_parameters;
     List<ValidatedConstraintModel> _constraints;
     mutable ExactBoxType _reduced_domain;
 
     List<EnclosureVariableKind> _variable_kinds;
 
     EnclosureConfiguration _configuration;
+
+    List<Bool> _protected_parameter_axes() const;
+    Bool _expose_constant_parameter_errors();
+    Void _constrain_constant_parameters();
 
   public:
     typedef EnclosureConfiguration ConfigurationType;
@@ -184,12 +217,38 @@ class Enclosure
     const ValidatedScalarMultivariateFunctionPatch get_function(SizeType i) const;
 
     //! \brief Set the auxiliary function.
-    Void set_auxiliary_mapping(const EffectiveVectorMultivariateFunction& aux);
+    Void set_auxiliary_mapping(const EffectiveVectorMultivariateFunction& aux,
+                               EnclosureFunctionArguments arguments = EnclosureFunctionArguments::STATE,
+                               SizeType parameter_count = 0u);
+    EnclosureFunctionArguments auxiliary_arguments() const;
+    //! \brief The declared number of fixed parameter arguments in the auxiliary mapping.
+    SizeType auxiliary_parameter_count() const;
+    ValidatedVectorMultivariateFunctionPatch argument_function(EnclosureFunctionArguments, SizeType parameter_count = 0u) const;
+    //! \brief Select the last count physical parameter values. Unbound generic
+    //! enclosures use their PARAMETER coordinates in declared order.
+    ValidatedVectorMultivariateFunctionPatch constant_parameter_function(SizeType count) const;
+    //! Select the most recent count INPUT coordinates, in their original order.
+    //! The earlier INPUT axes remain independent history, not current inputs.
+    ValidatedVectorMultivariateFunctionPatch input_parameter_function(SizeType count) const;
+    Bool has_constant_parameter_binding() const;
+    RealSpace constant_parameter_space() const;
+    const ExactBoxType& constant_parameter_domain() const;
+    SizeType constant_parameter_count() const;
+    SizeType number_of_protected_parameters() const;
+    //! \brief Bind a named physical parameter map, intersecting its values with
+    //! the declared domain. Uniform map errors become persistent coordinates.
+    Void bind_constant_parameters(const RealSpace&, const ExactBoxType&,
+                                  const ValidatedVectorMultivariateFunctionPatch&);
+    //! \brief Adjoin and bind a model declaration's physical coordinates once.
+    Void adjoin_constant_parameters(const RealSpace&, const ExactBoxType&);
     //! \brief Get the auxiliary function.
     const EffectiveVectorMultivariateFunction& auxiliary_mapping() const;
 
     //! \brief A list detailing the kind of variable each of the domain parameters represents.
     const List<EnclosureVariableKind>& variable_kinds() const;
+    //! \brief Append independent coordinates of the declared kind without adding state variables.
+    //! Existing maps, constraints and reduced domains retain their dependencies.
+    Void adjoin_parameters(const ExactBoxType& parameters, EnclosureVariableKind kind);
     //! \brief Substitutes the expression \f$x_j=v(x_1,\ldots,x_{j-1},x_{j+1}\ldots,x_n)\f$ into the function and constraints.
     //! Requires that \f$v(D_1,\ldots,D_{j-1},D_{j+1}\ldots,D_n) \subset D_j\f$ where \f$D\f$ is the domain.
     Void substitute(SizeType j, ValidatedScalarMultivariateFunctionPatch v);
@@ -205,7 +264,9 @@ class Enclosure
     //! \brief Apply the map \f$r\f$ to the enclosure, obtaining \f$\phi'(s)=r(\phi(s))(x,h)\f$ and \f$\tau'(s)=\tau(s)\f$. \f$f\f$. The state variables are unchanged.
     Void apply_map(ValidatedVectorMultivariateFunction r);
     //! \brief Apply the map \f$r\f$ to the enclosure, obtaining \f$\phi'(s)=r(\phi(s))(x,h)\f$ and \f$\tau'(s)=\tau(s)\f$. \f$f\f$. The auxiliary function is updated to \a aux.
-    Void apply_map(ValidatedVectorMultivariateFunction r, EffectiveVectorMultivariateFunction aux);
+    Void apply_map(ValidatedVectorMultivariateFunction r, EffectiveVectorMultivariateFunction aux,
+                   EnclosureFunctionArguments source_arguments = EnclosureFunctionArguments::STATE,
+                   EnclosureFunctionArguments auxiliary_arguments = EnclosureFunctionArguments::STATE);
     //! \brief Apply the map \f$r\f$ to the enclosure, obtaining \f$\phi'(s)=r(\phi(s))(x,h)\f$ and \f$\tau'(s)=\tau(s)\f$. \f$f\f$. The state variables are unchanged. Time is increased by one.
     Void apply_discrete_time_map_step(ValidatedVectorMultivariateFunction r);
     //! \brief Apply the flow \f$\xi'(s)=\phi(\xi(s),h)\f$ and \f$\tau'(s)=\tau(s)+h\f$.
@@ -467,7 +528,9 @@ class LabelledEnclosure
     /** @brief Perform the specified evolution operation. */
     Void apply_map(const ValidatedVectorMultivariateFunction& f, const RealSpace& new_state_space);
     Void apply_map(const ValidatedVectorMultivariateFunction& f, const RealSpace& new_state_space,
-                   const EffectiveVectorMultivariateFunction& a, const RealSpace& new_auxiliary_space);
+                   const EffectiveVectorMultivariateFunction& a, const RealSpace& new_auxiliary_space,
+                   EnclosureFunctionArguments source_arguments = EnclosureFunctionArguments::STATE,
+                   EnclosureFunctionArguments auxiliary_arguments = EnclosureFunctionArguments::STATE);
 
     /** @brief Perform the specified evolution operation. */
     Void set_state_space(const RealSpace&);
@@ -485,7 +548,9 @@ class LabelledEnclosure
     const ValidatedVectorMultivariateFunctionPatch state_time_auxiliary_function() const;
 
     /** @brief Perform the specified evolution operation. */
-    Void set_auxiliary(const RealSpace& spc, const EffectiveVectorMultivariateFunction& aux);
+    Void set_auxiliary(const RealSpace& spc, const EffectiveVectorMultivariateFunction& aux,
+                       EnclosureFunctionArguments arguments = EnclosureFunctionArguments::STATE,
+                       SizeType parameter_count = 0u);
 
     /** @brief Perform the specified evolution operation. */
     friend LabelledEnclosure product(const LabelledEnclosure&, const ExactIntervalType&);

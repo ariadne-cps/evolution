@@ -62,14 +62,14 @@ Void HybridEvolutionStepResult::continue_with(const HybridEnclosure& set, Hybrid
 }
 
 Void HybridEvolutionStepResult::transition_to(const HybridEnclosure& set, DiscreteEvent event, EventKind event_kind,
-                                              std::optional<CrossingKind> crossing_kind,
+                                              std::optional<CrossingSummary> crossing,
                                               HybridEvolutionTransitionResolution resolution) {
     successors.push_back({
         {set, HybridEvolutionPhase::PROCESS_STARTING_EVENTS},
         HybridEvolutionSuccessorKind::TRANSITION,
         event,
         event_kind,
-        crossing_kind,
+        crossing,
         resolution
     });
 }

@@ -22,7 +22,7 @@
  *  along with Ariadne Evolution. If not, see <https://www.gnu.org/licenses/>.
  */
 
-/** @file enclosure_recombiner.cpp
+/** @file src/enclosure_recombiner.cpp
  *  @brief Reference strategy and handle for continuous enclosure recombination.
  */
 
@@ -34,6 +34,7 @@
 #include <cmath>
 #include <memory>
 #include <optional>
+#include <stdexcept>
 #include <utility>
 #include <vector>
 
@@ -367,8 +368,19 @@ EnclosureRecombinationResult ReferenceEnclosureRecombiner::recombine(
         return finish(std::move(sources.front()));
 
     const auto& reference = sources.front();
+    const bool bound_parameters = reference.has_constant_parameter_binding();
+    ExactBoxType physical_parameter_domain = bound_parameters ? reference.constant_parameter_domain() : ExactBoxType{};
     const auto auxiliary_formula = make_formula(reference.auxiliary_mapping());
     for (const auto& source: sources) {
+        if (source.has_constant_parameter_binding() != bound_parameters ||
+            (bound_parameters && source.constant_parameter_space() != reference.constant_parameter_space()))
+            throw std::invalid_argument("Recombination requires matching physical parameter names and ordering");
+        if (!bound_parameters && std::find(source.variable_kinds().begin(), source.variable_kinds().end(), EnclosureVariableKind::PARAMETER) != source.variable_kinds().end())
+            throw std::invalid_argument("Bind physical parameter values explicitly before multi-source recombination");
+        if (bound_parameters)
+            physical_parameter_domain = hull(physical_parameter_domain, source.constant_parameter_domain());
+        ARIADNE_PRECONDITION(source.auxiliary_arguments() == reference.auxiliary_arguments());
+        ARIADNE_PRECONDITION(source.auxiliary_parameter_count() == reference.auxiliary_parameter_count());
         ARIADNE_PRECONDITION_MSG(identical(auxiliary_formula, make_formula(source.auxiliary_mapping())),
                                  "Recombination requires identical auxiliary mappings.");
     }
@@ -402,7 +414,13 @@ EnclosureRecombinationResult ReferenceEnclosureRecombiner::recombine(
         transformed._state_function = unchecked_compose(source.state_function(), parameters);
         transformed._time_function = unchecked_compose(source.time_function(), parameters);
         transformed._dwell_time_function = unchecked_compose(source.dwell_time_function(), parameters);
+        if (bound_parameters) {
+            transformed._constant_parameters = source._constant_parameters;
+            transformed._constant_parameters->function = unchecked_compose(source._constant_parameters->function, parameters);
+        }
         transformed._auxiliary_mapping = reference.auxiliary_mapping();
+        transformed._auxiliary_arguments = reference.auxiliary_arguments();
+        transformed._auxiliary_parameter_count = reference.auxiliary_parameter_count();
         transformed._variable_kinds = List<EnclosureVariableKind>(parameter_count, EnclosureVariableKind::UNKNOWN);
         for (SizeType k = 0; k != source.number_of_parameters(); ++k)
             transformed._variable_kinds[k] = source.variable_kinds()[k];
@@ -416,7 +434,9 @@ EnclosureRecombinationResult ReferenceEnclosureRecombiner::recombine(
     Enclosure result = normalise(sources.front(),
                                  source_profiles ? &(*source_profiles)[source_indices.front()] : nullptr,
                                  profile);
-    const auto reference_map = join(join(result.state_function(), result.time_function()), result.dwell_time_function());
+    auto reference_map = join(join(result.state_function(), result.time_function()), result.dwell_time_function());
+    if (bound_parameters)
+        reference_map = join(reference_map, result._constant_parameters->function);
     const auto component_count = reference_map.result_size();
     const auto constraint_count = result.number_of_constraints();
     // Every source has its own normalisation, graph and contractor. Shared
@@ -427,7 +447,9 @@ EnclosureRecombinationResult ReferenceEnclosureRecombiner::recombine(
         const auto image = [&] {
             ScopedRecombinationTimer timer(phase_profile ? &phase_profile->image_setup_ns : nullptr);
             ScopedRecombinationTimer source_timer(individual ? &individual->image_setup_ns : nullptr);
-            const auto source_map = join(join(source.state_function(), source.time_function()), source.dwell_time_function());
+            auto source_map = join(join(source.state_function(), source.time_function()), source.dwell_time_function());
+            if (bound_parameters)
+                source_map = join(source_map, source._constant_parameters->function);
             auto residual_image = factory.create_zeros(component_count + constraint_count, common_domain);
             for (SizeType k = 0; k != component_count; ++k)
                 residual_image.set(k, index == 0u ? factory.create_zero(common_domain) : source_map.get(k) - reference_map.get(k));
@@ -500,7 +522,7 @@ EnclosureRecombinationResult ReferenceEnclosureRecombiner::recombine(
     // let r = source_map(u) - reference_map(u). Every component of r lies
     // in combined[0:component_count], and each reference predicate at u
     // lies in the corresponding combined constraint interval. Therefore
-    // the result contains (state,time,dwell) = reference_map(u) + r.
+    // the result contains (state,time,dwell,physical parameters) = reference_map(u) + r.
     // Contractor reductions below must preserve this witness. Source-only
     // constraints restrict the bounds calculation, never the other alternatives.
     // See the constructive coverage proof in doc/evolution_tree_design.md.
@@ -526,6 +548,8 @@ EnclosureRecombinationResult ReferenceEnclosureRecombiner::recombine(
         result._state_function = embed(result._state_function, residual_domain);
         result._time_function = embed(result._time_function, residual_domain);
         result._dwell_time_function = embed(result._dwell_time_function, residual_domain);
+        if (bound_parameters)
+            result._constant_parameters->function = embed(result._constant_parameters->function, residual_domain);
         for (auto& constraint: result._constraints)
             constraint.function() = embed(constraint.function(), residual_domain);
         for (SizeType k = 0; k != residual_components.size(); ++k) {
@@ -535,10 +559,19 @@ EnclosureRecombinationResult ReferenceEnclosureRecombiner::recombine(
                 result._state_function[component] = result._state_function.get(component) + correction;
             else if (component == state_dimension)
                 result._time_function = result._time_function + correction;
-            else
+            else if (component == state_dimension + 1u)
                 result._dwell_time_function = result._dwell_time_function + correction;
+            else {
+                const SizeType physical_component = component - state_dimension - 2u;
+                result._constant_parameters->function[physical_component] = result._constant_parameters->function.get(physical_component) + correction;
+            }
         }
         result._variable_kinds.concatenate(List<EnclosureVariableKind>(residual_components.size(), EnclosureVariableKind::ERROR));
+        if (bound_parameters) {
+            result._constant_parameters->domain = physical_parameter_domain;
+            if (!result._expose_constant_parameter_errors())
+                result._constrain_constant_parameters();
+        }
     }
     {
         ScopedRecombinationTimer timer(profile ? &profile->output_reduce_ns : nullptr);

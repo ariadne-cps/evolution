@@ -29,6 +29,7 @@
 #include "evolution/enclosure.hpp"
 
 #include <iomanip>
+#include <stdexcept>
 
 #include "algebra/algebra.hpp"
 #include "algebra/differential.hpp"
@@ -36,6 +37,7 @@
 #include "algebra/matrix.hpp"
 #include "algebra/multi_index.hpp"
 #include "algebra/polynomial.hpp"
+#include "algebra/sweeper.hpp"
 #include "algebra/vector.hpp"
 #include "drawing/drawer.hpp"
 #include "drawing/drawer_manager.hpp"
@@ -345,9 +347,201 @@ const EffectiveVectorMultivariateFunction& Enclosure::auxiliary_mapping() const 
     return this->_auxiliary_mapping;
 }
 
-Void Enclosure::set_auxiliary_mapping(const EffectiveVectorMultivariateFunction& aux) {
-    ARIADNE_PRECONDITION(this->_state_function.result_size() == aux.argument_size());
+EnclosureFunctionArguments Enclosure::auxiliary_arguments() const { return _auxiliary_arguments; }
+SizeType Enclosure::auxiliary_parameter_count() const { return _auxiliary_parameter_count; }
+
+Bool Enclosure::has_constant_parameter_binding() const { return _constant_parameters.has_value(); }
+RealSpace Enclosure::constant_parameter_space() const {
+    return _constant_parameters ? RealSpace(_constant_parameters->names) : RealSpace{};
+}
+SizeType Enclosure::constant_parameter_count() const {
+    return _constant_parameters ? _constant_parameters->names.size() : 0u;
+}
+const ExactBoxType& Enclosure::constant_parameter_domain() const {
+    if (!_constant_parameters)
+        throw std::logic_error("Enclosure has no named physical parameter binding");
+    return _constant_parameters->domain;
+}
+
+Void Enclosure::_constrain_constant_parameters() {
+    for (SizeType i = 0u; i != constant_parameter_count(); ++i) {
+        const auto interval = _constant_parameters->domain[i];
+        _constraints.append(ValidatedConstraintModel(interval.lower_bound(),
+                                                     _constant_parameters->function.get(i), interval.upper_bound()));
+    }
+}
+
+Bool Enclosure::_expose_constant_parameter_errors() {
+    if (!_constant_parameters)
+        return false;
+    List<SizeType> indices;
+    for (SizeType i = 0u; i != constant_parameter_count(); ++i)
+        if (possibly(_constant_parameters->function.get(i).error() > 0))
+            indices.append(i);
+    if (indices.empty())
+        return false;
+    Enclosure extended = *this;
+    const SizeType offset = number_of_parameters();
+    const ValidatedFunctionPatchFactory persistent_factory{new TaylorFunctionFactory(TrivialSweeper<FloatDP>(dp))};
+    extended.adjoin_parameters(ExactBoxType(indices.size(), ExactIntervalType(-1, 1)), EnclosureVariableKind::PARAMETER);
+    for (SizeType j = 0u; j != indices.size(); ++j) {
+        auto component = extended._constant_parameters->function.get(indices[j]);
+        const FloatDP error = cast_exact(component.error().get(double_precision));
+        const auto* taylor = dynamic_cast<const ValidatedScalarMultivariateTaylorFunctionModelDP*>(&component.reference());
+        if (!taylor)
+            throw std::invalid_argument("Persistent physical parameter errors currently require Taylor models");
+        auto model = taylor->model();
+        model.set_sweeper(TrivialSweeper<FloatDP>(dp));
+        model.clobber();
+        component = ValidatedScalarMultivariateTaylorFunctionModelDP(extended.parameter_domain(), model);
+        component = component + persistent_factory.create_coordinate(extended.parameter_domain(), offset + j) * FloatDPBounds(error);
+        if (possibly(component.error() > 0))
+            throw std::runtime_error("Function factory cannot expose constant parameter error as an exact persistent coordinate");
+        extended._constant_parameters->function.set(indices[j], component);
+    }
+    extended._constrain_constant_parameters();
+    *this = std::move(extended);
+    return true;
+}
+
+Void Enclosure::bind_constant_parameters(const RealSpace& space, const ExactBoxType& domain,
+                                         const ValidatedVectorMultivariateFunctionPatch& function) {
+    if (_constant_parameters)
+        throw std::invalid_argument("Enclosure already has a physical parameter binding");
+    if (space.dimension() == 0u || space.dimension() != domain.dimension() ||
+        space.dimension() != function.result_size() ||
+        (enclosure_has_parameter_arguments(_auxiliary_arguments) &&
+         _auxiliary_parameter_count > space.dimension()))
+        throw std::invalid_argument("Physical parameter names, domain and map dimensions do not agree");
+    ARIADNE_PRECONDITION(Ariadne::subset(parameter_domain(), function.domain()));
+    Enclosure bound = *this;
+    bound._constant_parameters = ConstantParameterBinding{space.variable_names(), domain, restriction(function, parameter_domain())};
+    if (const auto* taylor = dynamic_cast<const ValidatedVectorMultivariateTaylorFunctionModelDP*>(&bound._constant_parameters->function.reference())) {
+        auto persistent = *taylor;
+        persistent.set_properties(TrivialSweeper<FloatDP>(dp));
+        bound._constant_parameters->function = persistent;
+    }
+    if (!bound._expose_constant_parameter_errors())
+        bound._constrain_constant_parameters();
+    *this = std::move(bound);
+}
+
+Void Enclosure::adjoin_constant_parameters(const RealSpace& space, const ExactBoxType& domain) {
+    if (_constant_parameters || space.dimension() != domain.dimension())
+        throw std::invalid_argument("Cannot adjoin incompatible or duplicate physical parameters");
+    if (space.dimension() == 0u)
+        return;
+    Enclosure extended = *this;
+    extended.adjoin_parameters(domain, EnclosureVariableKind::PARAMETER);
+    extended.bind_constant_parameters(space, domain, extended.constant_parameter_function(space.dimension()));
+    *this = std::move(extended);
+}
+
+List<Bool> Enclosure::_protected_parameter_axes() const {
+    List<Bool> result(number_of_parameters(), false);
+    for (SizeType i = 0u; i != number_of_parameters(); ++i)
+        result[i] = _variable_kinds[i] == EnclosureVariableKind::PARAMETER;
+    // An auxiliary a(x,u_current) must retain the exact current INPUT
+    // coordinates across Kuhn reconditioning. Historical INPUT axes may
+    // instead be summarized as validated state error.
+    if (enclosure_has_input_arguments(_auxiliary_arguments)) {
+        SizeType remaining = _auxiliary_parameter_count;
+        for (SizeType i = number_of_parameters(); i != 0u && remaining != 0u; --i) {
+            if (_variable_kinds[i - 1u] == EnclosureVariableKind::INPUT) {
+                result[i - 1u] = true;
+                --remaining;
+            }
+        }
+    }
+    if (_constant_parameters) {
+        const auto* models = dynamic_cast<const ValidatedVectorMultivariateTaylorFunctionModelDP*>(&_constant_parameters->function.reference());
+        if (!models)
+            return List<Bool>(number_of_parameters(), true);
+        for (SizeType k = 0u; k != models->result_size(); ++k)
+            for (auto term = models->models()[k].begin(); term != models->models()[k].end(); ++term)
+                for (SizeType i = 0u; i != number_of_parameters(); ++i)
+                    if (term->coefficient() != FloatDP(0, dp) && term->index()[i] != 0)
+                        result[i] = true;
+    }
+    return result;
+}
+
+SizeType Enclosure::number_of_protected_parameters() const {
+    const auto axes = _protected_parameter_axes();
+    return static_cast<SizeType>(std::count(axes.begin(), axes.end(), true));
+}
+
+ValidatedVectorMultivariateFunctionPatch Enclosure::constant_parameter_function(SizeType count) const {
+    if (_constant_parameters) {
+        const SizeType parameter_dimension = constant_parameter_count();
+        if (count > parameter_dimension)
+            throw std::logic_error("Physical parameter binding has insufficient components");
+        if (count == parameter_dimension)
+            return _constant_parameters->function;
+        auto selected = configuration().function_factory().create_zeros(count, parameter_domain());
+        for (SizeType i = 0u; i != count; ++i)
+            selected.set(i, _constant_parameters->function.get(parameter_dimension - count + i));
+        return selected;
+    }
+    Array<SizeType> indices(count);
+    SizeType remaining = count;
+    for (SizeType i = number_of_parameters(); i != 0u && remaining != 0u; --i) {
+        if (_variable_kinds[i - 1u] == EnclosureVariableKind::PARAMETER)
+            indices[--remaining] = i - 1u;
+    }
+    if (remaining != 0u)
+        throw std::logic_error("Enclosure has insufficient trajectory-constant parameter coordinates");
+    const auto& factory = configuration().function_factory();
+    auto result = factory.create_zeros(count, parameter_domain());
+    for (SizeType i = 0u; i != count; ++i)
+        result[i] = factory.create_coordinate(parameter_domain(), indices[i]);
+    return result;
+}
+
+ValidatedVectorMultivariateFunctionPatch Enclosure::input_parameter_function(SizeType count) const {
+    Array<SizeType> indices(count);
+    SizeType remaining = count;
+    for (SizeType i = number_of_parameters(); i != 0u && remaining != 0u; --i) {
+        if (_variable_kinds[i - 1u] == EnclosureVariableKind::INPUT)
+            indices[--remaining] = i - 1u;
+    }
+    if (remaining != 0u)
+        throw std::invalid_argument("Enclosure has insufficient current input coordinates");
+    const auto& factory = configuration().function_factory();
+    auto values = factory.create_zeros(count, parameter_domain());
+    for (SizeType j = 0u; j != count; ++j)
+        values[j] = factory.create_coordinate(parameter_domain(), indices[j]);
+    return values;
+}
+
+ValidatedVectorMultivariateFunctionPatch Enclosure::argument_function(EnclosureFunctionArguments arguments, SizeType parameter_count) const {
+    const bool selected_layout = enclosure_has_parameter_arguments(arguments) ||
+                                 enclosure_has_input_arguments(arguments);
+    if (selected_layout != (parameter_count != 0u))
+        throw std::invalid_argument("Enclosure function parameter count does not match its explicit argument layout");
+    switch (arguments) {
+        case EnclosureFunctionArguments::STATE:
+            return _state_function;
+        case EnclosureFunctionArguments::STATE_TIME:
+            return join(_state_function, _time_function);
+        case EnclosureFunctionArguments::STATE_PARAMETERS:
+            return join(_state_function, constant_parameter_function(parameter_count));
+        case EnclosureFunctionArguments::STATE_TIME_PARAMETERS:
+            return join(join(_state_function, _time_function), constant_parameter_function(parameter_count));
+        case EnclosureFunctionArguments::STATE_INPUTS:
+            return join(_state_function, input_parameter_function(parameter_count));
+        case EnclosureFunctionArguments::STATE_AUXILIARY:
+            return this->state_auxiliary_function();
+        default:
+            throw std::invalid_argument("Unknown enclosure function argument layout");
+    }
+}
+
+Void Enclosure::set_auxiliary_mapping(const EffectiveVectorMultivariateFunction& aux, EnclosureFunctionArguments arguments, SizeType parameter_count) {
+    ARIADNE_PRECONDITION(argument_function(arguments, parameter_count).result_size() == aux.argument_size());
     this->_auxiliary_mapping = aux;
+    this->_auxiliary_arguments = arguments;
+    this->_auxiliary_parameter_count = parameter_count;
 }
 
 Void Enclosure::_unchecked_new_variable(ExactIntervalType ivl, EnclosureVariableKind vk) {
@@ -357,6 +551,8 @@ Void Enclosure::_unchecked_new_variable(ExactIntervalType ivl, EnclosureVariable
     this->_state_function = combine(this->_state_function, variable_function);
     this->_time_function = embed(this->_time_function, ivl);
     this->_dwell_time_function = embed(this->_dwell_time_function, ivl);
+    if (_constant_parameters)
+        _constant_parameters->function = embed(_constant_parameters->function, ivl);
 
     for (SizeType i = 0; i != this->_constraints.size(); ++i) {
         ValidatedConstraintModel& constraint = this->_constraints[i];
@@ -371,6 +567,26 @@ Void Enclosure::set_time_function(const ValidatedScalarMultivariateFunctionPatch
     this->_time_function = restriction(time, this->parameter_domain());
 }
 
+Void Enclosure::adjoin_parameters(const ExactBoxType& parameters, EnclosureVariableKind kind) {
+    if (parameters.dimension() == 0u) {
+        return;
+    }
+    Enclosure extended = *this;
+    extended._domain = product(this->_domain, parameters);
+    extended._reduced_domain = product(this->_reduced_domain, parameters);
+    extended._state_function = embed(this->_state_function, parameters);
+    extended._time_function = embed(this->_time_function, parameters);
+    extended._dwell_time_function = embed(this->_dwell_time_function, parameters);
+    if (extended._constant_parameters)
+        extended._constant_parameters->function = embed(this->_constant_parameters->function, parameters);
+    for (auto& constraint: extended._constraints) {
+        constraint.set_function(embed(constraint.function(), parameters));
+    }
+    extended._variable_kinds.concatenate(
+        List<EnclosureVariableKind>(parameters.dimension(), kind));
+    *this = std::move(extended);
+}
+
 Void Enclosure::clear_time() {
     this->_time_function = 0;
     this->_dwell_time_function = 0;
@@ -378,17 +594,27 @@ Void Enclosure::clear_time() {
 
 Void Enclosure::apply_map(ValidatedVectorMultivariateFunction map) {
     ARIADNE_PRECONDITION_MSG(map.argument_size() == this->state_dimension(), "state_dimension=" << this->state_dimension() << ", map=" << map);
-    ARIADNE_PRECONDITION(map.result_size() == this->_auxiliary_mapping.argument_size());
+    const SizeType nt = enclosure_has_time_argument(_auxiliary_arguments) ? 1u : 0u;
+    ARIADNE_PRECONDITION(map.result_size() + nt + _auxiliary_parameter_count == this->_auxiliary_mapping.argument_size());
     this->_state_function = compose(map, this->_state_function);
     this->_dwell_time_function = this->configuration().function_factory().create_zero(this->domain());
 }
 
-Void Enclosure::apply_map(ValidatedVectorMultivariateFunction map, EffectiveVectorMultivariateFunction aux_map) {
-    ARIADNE_PRECONDITION_MSG(map.argument_size() == this->state_dimension(), "state_dimension=" << this->state_dimension() << ", map=" << map);
-    ARIADNE_PRECONDITION_MSG(aux_map.argument_size() == map.result_size(), "map=" << map << ", aux_map=" << aux_map);
-    this->_state_function = compose(map, this->_state_function);
+Void Enclosure::apply_map(ValidatedVectorMultivariateFunction map, EffectiveVectorMultivariateFunction aux_map,
+                          EnclosureFunctionArguments source_arguments, EnclosureFunctionArguments auxiliary_arguments) {
+    const auto arguments = argument_function(source_arguments, enclosure_has_parameter_arguments(source_arguments) ? constant_parameter_count() : 0u);
+    ARIADNE_PRECONDITION_MSG(map.argument_size() == arguments.result_size(), "arguments=" << arguments << ", map=" << map);
+    const SizeType nt = enclosure_has_time_argument(auxiliary_arguments) ? 1u : 0u;
+    const SizeType np = enclosure_has_parameter_arguments(auxiliary_arguments) ? constant_parameter_count() : 0u;
+    ARIADNE_PRECONDITION(auxiliary_arguments == EnclosureFunctionArguments::STATE || auxiliary_arguments == EnclosureFunctionArguments::STATE_TIME || enclosure_has_parameter_arguments(auxiliary_arguments));
+    if (enclosure_has_parameter_arguments(auxiliary_arguments) && np == 0u)
+        throw std::invalid_argument("Parameter-dependent reset outputs require an explicit physical binding");
+    ARIADNE_PRECONDITION_MSG(aux_map.argument_size() == map.result_size() + nt + np, "map=" << map << ", aux_map=" << aux_map);
+    this->_state_function = compose(map, arguments);
     this->_dwell_time_function = this->configuration().function_factory().create_zero(this->domain());
     this->_auxiliary_mapping = aux_map;
+    this->_auxiliary_arguments = auxiliary_arguments;
+    this->_auxiliary_parameter_count = np;
 }
 
 Void Enclosure::apply_discrete_time_map_step(ValidatedVectorMultivariateFunction map) {
@@ -621,7 +847,7 @@ const ValidatedVectorMultivariateFunctionPatch Enclosure::auxiliary_function() c
     static_assert(not Convertible<ValidatedVectorMultivariateFunction, EffectiveVectorMultivariateFunction>);
     static_assert(not Convertible<ValidatedVectorMultivariateFunctionPatch, EffectiveVectorMultivariateFunction>);
     static_assert(not Convertible<EffectiveVectorMultivariateFunction, ValidatedVectorMultivariateFunctionPatch>);
-    return compose(this->_auxiliary_mapping, this->_state_function);
+    return compose(this->_auxiliary_mapping, this->argument_function(this->_auxiliary_arguments, this->_auxiliary_parameter_count));
 }
 
 SizeType Enclosure::number_of_constraints() const {
@@ -924,7 +1150,21 @@ Pair<Enclosure, Enclosure>
     result2._dwell_time_function = dwell_time_function2;
 
     result1._auxiliary_mapping = this->_auxiliary_mapping;
+    result1._auxiliary_arguments = this->_auxiliary_arguments;
+    result1._auxiliary_parameter_count = this->_auxiliary_parameter_count;
     result2._auxiliary_mapping = this->_auxiliary_mapping;
+    result2._auxiliary_arguments = this->_auxiliary_arguments;
+    result2._auxiliary_parameter_count = this->_auxiliary_parameter_count;
+    result1._variable_kinds = this->_variable_kinds;
+    result2._variable_kinds = this->_variable_kinds;
+    if (_constant_parameters) {
+        result1._constant_parameters = _constant_parameters;
+        result2._constant_parameters = _constant_parameters;
+        result1._constant_parameters->function = restriction(_constant_parameters->function, result1.parameter_domain());
+        result2._constant_parameters->function = restriction(_constant_parameters->function, result2.parameter_domain());
+        result1._expose_constant_parameter_errors();
+        result2._expose_constant_parameter_errors();
+    }
 
     return result;
 }
@@ -953,6 +1193,7 @@ Void Enclosure::recondition() {
 
 Void Enclosure::
     uniform_error_recondition() {
+    this->_expose_constant_parameter_errors();
     const ExactDouble MAXIMUM_ERROR = cast_exact(std::numeric_limits<double>::epsilon() * 1024);
     const SizeType old_number_of_parameters = this->number_of_parameters();
     const SizeType state_dimension = this->state_dimension();
@@ -974,6 +1215,8 @@ Void Enclosure::
     this->_state_function = embed(this->_state_function, error_domains);
     this->_time_function = embed(this->_time_function, error_domains);
     this->_dwell_time_function = embed(this->_dwell_time_function, error_domains);
+    if (_constant_parameters)
+        _constant_parameters->function = embed(_constant_parameters->function, error_domains);
     for (auto& constraint: this->_constraints) {
         constraint.function() = embed(constraint.function(), error_domains);
     }
@@ -1053,6 +1296,7 @@ TaylorModel<ValidatedTag, FloatDP> recondition(const TaylorModel<ValidatedTag, F
 }
 
 Void Enclosure::kuhn_recondition() {
+    this->_expose_constant_parameter_errors();
     if (!dynamic_cast<const ValidatedVectorMultivariateTaylorFunctionModelDP*>(&this->state_function().reference())) {
         ARIADNE_WARN("Cannot Kuhn reduce an Enclosure which is not given by TaylorFunctions.");
         // Uniform error reconditioning also supports alternative function models.
@@ -1060,14 +1304,17 @@ Void Enclosure::kuhn_recondition() {
         return;
     }
 
-    const SizeType number_of_kept_parameters = (this->configuration().reconditioning_num_blocks() - 1) * this->state_dimension();
-    const SizeType number_of_discarded_parameters = this->number_of_parameters() - number_of_kept_parameters;
+    const auto protected_axes = _protected_parameter_axes();
+    const SizeType fixed_parameters = static_cast<SizeType>(std::count(protected_axes.begin(), protected_axes.end(), true));
+    const SizeType number_of_kept_parameters = std::max(
+        fixed_parameters, (this->configuration().reconditioning_num_blocks() - 1) * this->state_dimension());
     const SizeType number_of_error_parameters = this->state_dimension();
 
     if (this->number_of_parameters() <= number_of_kept_parameters) {
         this->uniform_error_recondition();
         return;
     }
+    const SizeType number_of_discarded_parameters = this->number_of_parameters() - number_of_kept_parameters;
 
     const ValidatedVectorMultivariateTaylorFunctionModelDP& function = dynamic_cast<const ValidatedVectorMultivariateTaylorFunctionModelDP&>(this->state_function().reference());
     const Vector<ValidatedTaylorModelDP>& models = function.models();
@@ -1088,7 +1335,12 @@ Void Enclosure::kuhn_recondition() {
             column_max_dependencies[j].first = max(column_max_dependencies[j].first, cast_exact(dependencies[i][j]));
         }
     }
-    std::sort(column_max_dependencies.begin(), column_max_dependencies.end(), std::greater<Pair<FloatDP, SizeType>>());
+    std::sort(column_max_dependencies.begin(), column_max_dependencies.end(),
+              [&](const auto& left, const auto& right) {
+                  const bool left_fixed = protected_axes[left.second];
+                  const bool right_fixed = protected_axes[right.second];
+                  return left_fixed != right_fixed ? left_fixed : left > right;
+              });
 
     Array<SizeType> kept_parameters(number_of_kept_parameters);
     Array<SizeType> discarded_parameters(number_of_discarded_parameters);
@@ -1129,6 +1381,17 @@ Void Enclosure::kuhn_recondition() {
     new_set._dwell_time_function = ValidatedScalarMultivariateTaylorFunctionModelDP(new_domain, Ariadne::recondition(dwell_time.model(), discarded_parameters, number_of_error_parameters));
 
     new_set._auxiliary_mapping = this->_auxiliary_mapping;
+    new_set._auxiliary_arguments = this->_auxiliary_arguments;
+    new_set._auxiliary_parameter_count = this->_auxiliary_parameter_count;
+    if (_constant_parameters) {
+        const auto& parameter_function = dynamic_cast<const ValidatedVectorMultivariateTaylorFunctionModelDP&>(_constant_parameters->function.reference());
+        Vector<ValidatedTaylorModelDP> new_parameters(constant_parameter_count(),
+                                                      ValidatedTaylorModelDP(new_domain.size(), parameter_function.properties()));
+        for (SizeType i = 0u; i != constant_parameter_count(); ++i)
+            new_parameters[i] = Ariadne::recondition(parameter_function.models()[i], discarded_parameters, number_of_error_parameters);
+        new_set._constant_parameters = _constant_parameters;
+        new_set._constant_parameters->function = ValidatedVectorMultivariateTaylorFunctionModelDP(new_domain, new_parameters);
+    }
     new_set._reduced_domain = new_reduced_domain;
     new_set._variable_kinds = List<EnclosureVariableKind>(new_domain.size(), EnclosureVariableKind::ERROR);
     for (SizeType j = 0; j < number_of_kept_parameters; ++j) {
@@ -1147,12 +1410,15 @@ Void Enclosure::restrict(const ExactBoxType& subdomain) {
     result._state_function = restriction(result._state_function, subdomain);
     result._time_function = restriction(result._time_function, subdomain);
     result._dwell_time_function = restriction(result._dwell_time_function, subdomain);
+    if (result._constant_parameters)
+        result._constant_parameters->function = restriction(result._constant_parameters->function, subdomain);
     ValidatedScalarMultivariateFunctionPatch new_constraint;
     for (List<ValidatedConstraintModel>::Iterator iter = result._constraints.begin();
          iter != result._constraints.end(); ++iter) {
         ValidatedScalarMultivariateFunctionPatch& constraint_function = iter->function();
         constraint_function = restriction(constraint_function, subdomain);
     }
+    this->_expose_constant_parameter_errors();
     this->reduce();
 }
 
@@ -1168,7 +1434,7 @@ const ValidatedScalarMultivariateFunctionPatch Enclosure::get_function(SizeType 
     } else if (i == this->state_dimension()) {
         return this->_time_function;
     } else {
-        return compose(this->_auxiliary_mapping[i - this->state_dimension() - 1u], this->_state_function);
+        return this->auxiliary_function()[i - this->state_dimension() - 1u];
     }
 }
 
@@ -1213,6 +1479,12 @@ Enclosure product(const Enclosure& set, const ExactIntervalType& ivl) {
     }
     result._time_function = embed(set._time_function, ivl);
     result._dwell_time_function = embed(set._dwell_time_function, ivl);
+    if (set._constant_parameters) {
+        result._constant_parameters = set._constant_parameters;
+        result._constant_parameters->function = embed(set._constant_parameters->function, ivl);
+        result._variable_kinds = set._variable_kinds;
+        result._variable_kinds.append(EnclosureVariableKind::INITIAL);
+    }
 
     return result;
 }
@@ -1228,11 +1500,19 @@ Enclosure product(const Enclosure& set, const ExactBoxType& bx) {
     }
     result._time_function = embed(set._time_function, bx);
     result._dwell_time_function = embed(set._dwell_time_function, bx);
+    if (set._constant_parameters) {
+        result._constant_parameters = set._constant_parameters;
+        result._constant_parameters->function = embed(set._constant_parameters->function, bx);
+        result._variable_kinds = set._variable_kinds;
+        result._variable_kinds.concatenate(List<EnclosureVariableKind>(bx.dimension(), EnclosureVariableKind::INITIAL));
+    }
 
     return result;
 }
 
 Enclosure product(const Enclosure& set1, const Enclosure& set2) {
+    if (set1.has_constant_parameter_binding() || set2.has_constant_parameter_binding())
+        throw std::invalid_argument("Products of enclosures with physical parameter bindings require an explicit reconciliation policy");
     ARIADNE_PRECONDITION(same(set1.time_function().range(), set2.time_function().range()));
     ARIADNE_PRECONDITION(same(set1.dwell_time_function().range(), set2.dwell_time_function().range()));
 
@@ -1335,10 +1615,9 @@ const RealSpace LabelledEnclosure::space() const {
     return this->state_time_auxiliary_space();
 }
 
-Void LabelledEnclosure::set_auxiliary(const RealSpace& spc, const EffectiveVectorMultivariateFunction& aux) {
-    ARIADNE_PRECONDITION(this->state_function().result_size() == aux.argument_size());
+Void LabelledEnclosure::set_auxiliary(const RealSpace& spc, const EffectiveVectorMultivariateFunction& aux, EnclosureFunctionArguments arguments, SizeType parameter_count) {
     ARIADNE_PRECONDITION(spc.size() == aux.result_size());
-    this->Enclosure::set_auxiliary_mapping(aux);
+    this->Enclosure::set_auxiliary_mapping(aux, arguments, parameter_count);
     this->_auxiliary_variables = spc.variable_names();
 }
 
@@ -1386,10 +1665,10 @@ Void LabelledEnclosure::apply_map(const ValidatedVectorMultivariateFunction& f, 
 }
 
 Void LabelledEnclosure::apply_map(const ValidatedVectorMultivariateFunction& f, const RealSpace& spc,
-                                  const EffectiveVectorMultivariateFunction& aux_f, const RealSpace& aux_spc) {
-    ARIADNE_PRECONDITION(spc.size() == aux_f.argument_size());
+                                  const EffectiveVectorMultivariateFunction& aux_f, const RealSpace& aux_spc,
+                                  EnclosureFunctionArguments source_arguments, EnclosureFunctionArguments auxiliary_arguments) {
     ARIADNE_PRECONDITION(aux_spc.size() == aux_f.result_size());
-    this->Enclosure::apply_map(f, aux_f);
+    this->Enclosure::apply_map(f, aux_f, source_arguments, auxiliary_arguments);
     this->_state_variables = spc.variable_names();
     this->_auxiliary_variables = aux_spc.variable_names();
 }

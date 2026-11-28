@@ -1,0 +1,232 @@
+/***************************************************************************
+ *            continuous_time_approximate_evolver.cpp
+ *
+ *  Copyright  2008-21  Luca Geretti, Mirko Albanese
+ *
+ ****************************************************************************/
+
+/*
+ *  This file is part of Ariadne Evolution.
+ *
+ *  Ariadne Evolution is free software: you can redistribute it and/or modify
+ *  it under the terms of the GNU General Public License as published by
+ *  the Free Software Foundation, either version 3 of the License, or
+ *  (at your option) any later version.
+ *
+ *  Ariadne Evolution is distributed in the hope that it will be useful,
+ *  but WITHOUT ANY WARRANTY; without even the implied warranty of
+ *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ *  GNU General Public License for more details.
+ *
+ *  You should have received a copy of the GNU General Public License
+ *  along with Ariadne Evolution. If not, see <https://www.gnu.org/licenses/>.
+ */
+
+/** @file src/continuous_time_approximate_evolver.cpp
+ *  @brief Implement approximate continuous equation and inclusion evolution.
+ */
+
+#include "evolution/continuous_time_approximate_evolver.hpp"
+
+#include <stdexcept>
+
+#include "algebra/algebra.hpp"
+#include "evolution/initial_point_sampling.hpp"
+#include "evolution/orbit.hpp"
+#include "function/formula.hpp"
+#include "function/function.hpp"
+#include "function/functional.hpp"
+#include "function/taylor_model.hpp"
+#include "integration/runge_kutta_integrator.hpp"
+#include "simulation_parameters.hpp"
+#include "simulation_time.hpp"
+#include "symbolic/assignment.hpp"
+#include "symbolic/space.hpp"
+#include "symbolic/valuation.hpp"
+#include "system/odae.hpp"
+#include "utility/array.hpp"
+#include "utility/container.hpp"
+#include "utility/stlio.hpp"
+#include "utility/tuple.hpp"
+
+#include "expression-set/expression_set.hpp"
+
+namespace Ariadne {
+
+template<class X>
+LabelledPoint<X> make_state_auxiliary_point(const Point<X>& spt,
+                                            const RealSpace& sspc, const RealSpace& aspc, const RealSpace& saspc, const EffectiveVectorMultivariateFunction& auxiliary_function, bool timed = false, X time = X(0, dp)) {
+    Point<X> sapt(saspc.dimension(), spt.zero_element());
+    Point<X> apt = evaluate(auxiliary_function, EvolutionDetail::simulation_arguments(Vector<X>(spt), timed, time));
+    for (SizeType i = 0; i != sapt.size(); ++i) {
+        RealVariable var = saspc.variable(i);
+        sapt[i] = sspc.contains(var) ? spt[sspc[var]] : apt[aspc[var]];
+    }
+    return LabelledPoint<X>(saspc, sapt);
+}
+
+template<class X>
+List<LabelledPoint<X>> make_state_auxiliary_point(const Vector<Point<X>>& spt,
+                                                  const RealSpace& sspc, const RealSpace& aspc, const RealSpace& saspc, const EffectiveVectorMultivariateFunction& auxiliary_function, bool timed = false, X time = X(0, dp)) {
+    List<LabelledPoint<X>> pointLst(spt.size(), LabelledPoint<X>(saspc, Point<X>()));
+    for (SizeType i = 0; i < spt.size(); i++) {
+        Point<X> sapt(saspc.dimension(), spt.at(i).zero_element());
+        Point<X> apt = evaluate(auxiliary_function, EvolutionDetail::simulation_arguments(Vector<X>(spt.at(i)), timed, time));
+        for (SizeType j = 0; j != sapt.size(); ++j) {
+            RealVariable var = saspc.variable(j);
+            sapt[j] = sspc.contains(var) ? spt.at(i)[sspc[var]] : apt[aspc[var]];
+        }
+        LabelledPoint<X> point(saspc, sapt);
+        pointLst.at(i) = point;
+    }
+
+    return pointLst;
+}
+
+template<class X>
+List<LabelledPoint<X>> make_state_auxiliary_point(const List<LabelledPoint<X>>& spt,
+                                                  const RealSpace& sspc, const RealSpace& aspc, const RealSpace& saspc, const EffectiveVectorMultivariateFunction& auxiliary_function, bool timed = false, X time = X(0, dp)) {
+    List<LabelledPoint<X>> pointLst(spt.size(), LabelledPoint<X>(saspc, Point<X>()));
+    for (SizeType i = 0; i < spt.size(); i++) {
+        Point<X> sapt(saspc.dimension(), spt.at(i).zero_element());
+        Point<X> apt = evaluate(auxiliary_function, EvolutionDetail::simulation_arguments(Vector<X>(spt.at(i)), timed, time));
+        for (SizeType j = 0; j != sapt.size(); ++j) {
+            RealVariable var = saspc.variable(j);
+            sapt[j] = sspc.contains(var) ? spt.at(i)[sspc[var]] : apt[aspc[var]];
+        }
+        LabelledPoint<X> point(saspc, sapt);
+        pointLst.at(i) = point;
+    }
+
+    return pointLst;
+}
+
+ContinuousTimeEvolver<ApproximateTag>::ContinuousTimeEvolver(const OrdinaryDifferentialAlgebraicEquation& system)
+    : ContinuousTimeEvolver(system, RealValuation{}) {}
+
+ContinuousTimeEvolver<ApproximateTag>::ContinuousTimeEvolver(const OrdinaryDifferentialAlgebraicEquation& system, const RealValuation& parameters)
+    : _system(new SystemType(system)), _configuration(new ConfigurationType()), _constant_parameters(parameters) {
+    EvolutionDetail::validate_simulation_parameters(system.parameter_space(), system.constant_parameter_domain(), parameters, true);
+    const SizeType retained_arguments = system.dimension() + (system.has_explicit_time() ? 1u : 0u);
+    _dynamic_function = EvolutionDetail::bind_simulation_parameters(system.function(), retained_arguments, system.parameter_space(), parameters);
+    _auxiliary_function = EvolutionDetail::bind_simulation_parameters(system.auxiliary_function(), retained_arguments, system.parameter_space(), parameters);
+}
+
+ContinuousTimeEvolver<ApproximateTag>::ContinuousTimeEvolver(const OrdinaryDifferentialAlgebraicInclusion& system,
+                                                             const InputSamplingPolicy& policy, const RealValuation& parameters)
+    : _system(new SystemType(system)), _configuration(new ConfigurationType()), _constant_parameters(parameters), _input_sampling(policy.clone()) {
+    EvolutionDetail::validate_simulation_inclusion(system, _input_sampling.get());
+    EvolutionDetail::validate_simulation_parameters(system.parameter_space(), system.constant_parameter_domain(), parameters, true);
+    _dynamic_function = EvolutionDetail::prepare_simulation_inclusion(system, parameters, system.has_explicit_time());
+    _auxiliary_function = EffectiveVectorMultivariateFunction::zeros(0u, system.dimension() + (system.has_explicit_time() ? 1u : 0u));
+}
+
+inline FloatDPApproximation evaluate(const EffectiveScalarMultivariateFunction& f, const Vector<FloatDPApproximation>& x) { return f(x); }
+inline Vector<FloatDPApproximation> evaluate(const EffectiveVectorMultivariateFunction& f, const Vector<FloatDPApproximation>& x) { return f(x); }
+
+auto ContinuousTimeEvolver<ApproximateTag>::orbit(const RealExpressionBoundedConstraintSet& init_set, const TerminationType& termination) const
+    -> OrbitType {
+    auto spc = _system->state_space();
+    UpperBoxType box = init_set.euclidean_set(spc).bounding_box();
+    return orbit(box, termination);
+}
+
+auto ContinuousTimeEvolver<ApproximateTag>::orbit(const RealBoxType& init_bx, const TerminationType& termination) const
+    -> OrbitType {
+    auto spc = _system->state_space();
+    auto box = init_bx.euclidean_set(spc);
+    UpperBoxType ubox(box);
+    return orbit(ubox, termination);
+}
+
+auto ContinuousTimeEvolver<ApproximateTag>::orbit(UpperBoxType& initial_box, const TerminationType& termination) const
+    -> OrbitType {
+    return orbit(EvolutionDetail::sample_vector_field_initial_points(
+                     initial_box, _system->state_space(), _configuration->sampling_counts()),
+                 termination);
+}
+
+auto ContinuousTimeEvolver<ApproximateTag>::orbit(const ApproximateListPointType& initial_points, const TerminationType& termination) const -> OrbitType {
+    LOGGING_SCOPE_CREATE;
+
+    LOGGING_PRINTLN("Simulating from " << initial_points.size() << " initial points")
+
+    const auto& auxiliary_function = _auxiliary_function;
+
+    auto state_space = _system->state_space();
+    auto auxiliary_space = _system->auxiliary_space();
+    auto state_auxiliary_space = _system->state_auxiliary_space();
+
+    // Labelled input points may list the state variables in a different order.
+    auto canonical_points = initial_points;
+    for (auto& point: canonical_points) {
+        Point<FloatDPApproximation> ordered(state_space.dimension(), point.zero_element());
+        for (SizeType i = 0; i < state_space.dimension(); ++i) {
+            ARIADNE_PRECONDITION(point.space().contains(state_space[i]));
+            ordered[i] = point[point.space()[state_space[i]]];
+        }
+        point = ApproximatePointType(state_space, ordered);
+    }
+    auto result = std::make_shared<SynchronisedOrbit>(make_state_auxiliary_point(canonical_points, state_space, auxiliary_space, state_auxiliary_space, auxiliary_function, _system->has_explicit_time()));
+
+    WorkloadType workload(std::bind_front(&ContinuousTimeEvolver<ApproximateTag>::_simulate_from_point, this), termination, result);
+    for (SizeType i = 0; i < canonical_points.size(); ++i) {
+        workload.append({i, canonical_points.at(i)});
+    }
+    workload.process();
+
+    return std::move(*result);
+}
+
+void ContinuousTimeEvolver<ApproximateTag>::_simulate_from_point(Pair<SizeType, ApproximatePointType> indexed_initial, const TerminationType& termination, SharedPointer<SynchronisedOrbit> orbit) const {
+    LOGGING_SCOPE_CREATE
+
+    const auto& curve_number = indexed_initial.first;
+    const auto& initial = indexed_initial.second;
+
+    ApproximateTimeType t(0, dp);
+    ApproximateTimeType h(_configuration->step_size(), dp);
+    ApproximateTimeType tmax(termination, dp);
+
+    const auto& dynamic_function = _dynamic_function;
+    const auto& auxiliary_function = _auxiliary_function;
+
+    const auto state_space = _system->state_space();
+    const auto auxiliary_space = _system->auxiliary_space();
+    const auto state_auxiliary_space = _system->state_auxiliary_space();
+
+    RungeKutta4Integrator integrator(_configuration->step_size().get_d());
+    Point<FloatDPApproximation> state_pt = initial;
+
+    std::streamsize old_precision = std::clog.precision();
+    LOGGING_PRINTLN("t=" << std::setw(4) << std::left << t << " p=" << state_pt << std::setprecision(old_precision));
+    SizeType continuous_step = 0u;
+    while (decide(t < tmax)) {
+        const auto duration = decide(t + h > tmax) ? tmax - t : h;
+        const auto step_field = EvolutionDetail::sample_simulation_field(dynamic_function, _system->inclusion(), _input_sampling.get(),
+                                                                         InputSamplingContext{curve_number, continuous_step, t, duration});
+        state_pt = _system->has_explicit_time()
+                     ? integrator.step(step_field, state_pt, t, duration)
+                     : integrator.step(step_field, state_pt, duration);
+        ++continuous_step;
+        t += duration;
+        orbit->insert(cast_exact(t), make_state_auxiliary_point(ApproximatePointType(state_space, state_pt), state_space, auxiliary_space, state_auxiliary_space, auxiliary_function, _system->has_explicit_time(), t), curve_number);
+        old_precision = std::clog.precision();
+        LOGGING_PRINTLN("t=" << std::setw(4) << std::left << t << " p=" << state_pt << std::setprecision(old_precision));
+    }
+}
+
+ContinuousTimeEvolverConfiguration<ApproximateTag>::ContinuousTimeEvolverConfiguration() : _step_size(0.125_x, dp), _sampling_counts() {
+}
+
+OutputStream&
+    ContinuousTimeEvolverConfiguration<ApproximateTag>::_write(OutputStream& os) const {
+    os << "ContinuousTimeEvolverConfiguration<ApproximateTag>("
+       << "\n  step_size=" << step_size()
+       << "\n  sampling_counts=" << sampling_counts()
+       << ")\n";
+    return os;
+}
+
+} // namespace Ariadne
+

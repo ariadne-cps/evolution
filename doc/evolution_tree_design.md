@@ -28,7 +28,7 @@ final contribution. The backend publishes a successful result before any of its
 successors executes. A failed callback leaves incomplete history and prohibits
 Orbit release; outstanding workers are joined before propagating failure.
 
-`HybridEvolverBase::set_evolution_backend_factory()` clones immutable factory
+`HybridContinuousTimeEvolverBase<ValidatedTag>::set_evolution_backend_factory()` clones immutable factory
 settings. Each orbit() call creates independent run state, supplies semantics,
 runs the same numerical callback and releases a conventional Orbit. Numerical
 propagation and termination rules are independent of the selected backend.
@@ -410,9 +410,10 @@ validated residual/image bounds or the inclusion witness.
 
 Map a common unit parameter box onto each source's reduced domain with explicit
 affine maps. Pad unused coordinates when parameter counts differ. This defines
-the parameter correspondence; no physical identity between unrelated source
-parameters is assumed. Compose state, absolute time, dwell time and every source
-predicate with that source's own affine map. Let the resulting joint state/clock
+the parameter correspondence; no identity between unrelated source coordinates
+is assumed. Named physical identities are checked separately before normalization.
+Compose state, absolute time, dwell time, any named
+physical parameter map and every source predicate with that source's own affine map. Let the resulting joint state/clock/physical-parameter
 maps be `F_i(u)` and take `P(u)=F_0(u)` as the nonlinear reference.
 
 Bound each residual `F_i(u)-P(u)` on that source's feasible parameter set. Use
@@ -422,14 +423,18 @@ its predicates both to bound expressions directly by
 cannot shrink. The reference residual is zero. Hull the validated residual bounds
 over the alternatives and append an independent parameter for each nonzero
 component. The result is `P(u)+r`, with `r` in the residual box. There are at most
-`state_dimension+2` new parameters, independent of the number of sources.
+`state_dimension+2` residual coordinates without physical bindings, plus at most
+one residual coordinate per bound physical parameter. Exposing parameter-map
+rounding errors may require additional persistent coordinates, independently
+of the number of sources; see [physical parameter maps](constant_parameter_maps_design.md).
 
 For each reference predicate, bound its values separately over every source's
 feasible normalised parameters and hull those bounds. Retain that predicate with
 the widened bounds, then contract the resulting enclosure. Source predicate
 lists need not have matching lengths or ordering. They are never concatenated
 as a conjunction across alternatives. Auxiliary variables are derived from the
-common auxiliary state mapping, rather than independently hulled.
+common declared auxiliary mapping of state, time and physical parameters,
+rather than independently hulled.
 
 For any feasible source parameter, its normalised parameter remains permitted by
 each widened reference predicate, and its state/clock difference from `P` lies
@@ -437,6 +442,9 @@ in the residual box. This establishes the upper inclusion. The construction
 relaxes the disjunction and may lose correlations between residual components;
 it does not claim an exact union or preservation of every state-space equality.
 Results can depend on reference order and cannot be used as lower enclosures.
+For named bindings, the hull of the declared physical domains contains every
+source's physical values. Constraining the output physical map to that hull
+therefore preserves the same constructive witness.
 An oriented residual representation or additional transported predicates may
 later improve tightness; they are not part of this implementation.
 
@@ -444,7 +452,7 @@ later improve tightness; they are not part of this implementation.
 
 The following is a **semantic inclusion argument**, not a statement about
 the inclusion of independently computed interval projections. It applies to
-the *joint* state/absolute-time/dwell-time set represented by each input
+the *joint* state/absolute-time/dwell-time/physical-parameter set represented by each input
 `Enclosure` under upper semantics. Write a source as
 
 \[

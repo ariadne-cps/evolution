@@ -42,10 +42,11 @@
 #include <vector>
 
 #include "evolution/enclosure_recombiner.hpp"
-#include "evolution/hybrid_evolver.hpp"
+#include "evolution/hybrid_continuous_time_evolver.hpp"
 #include "evolution/hybrid_orbit.hpp"
 #include "evolution/hybrid_time.hpp"
 #include "integration/integrator.hpp"
+#include "logging/logging.hpp"
 #include "system/hybrid_automata.hpp"
 #include "threading/thread_manager.hpp"
 #include "threading/threading_command_line_interface.hpp"
@@ -263,10 +264,10 @@ struct Scenario {
     double continuation_horizon;
 };
 
-HybridAutomaton make_system(const Scenario& scenario, DiscreteLocation source,
-                            DiscreteLocation target, DiscreteEvent jump,
-                            RealVariable x, RealVariable y) {
-    HybridAutomaton system(scenario.name);
+ContinuousTimeHybridAutomaton make_system(const Scenario& scenario, DiscreteLocation source,
+                                          DiscreteLocation target, DiscreteEvent jump,
+                                          RealVariable x, RealVariable y) {
+    ContinuousTimeHybridAutomaton system(scenario.name);
     system.new_mode(source, {dot(x) = 1, dot(y) = sqr(x)});
     system.new_mode(target, {dot(x) = 1 + sqr(y), dot(y) = 1});
     system.new_transition(source, jump, target, {next(x) = x, next(y) = y},
@@ -274,7 +275,7 @@ HybridAutomaton make_system(const Scenario& scenario, DiscreteLocation source,
     return system;
 }
 
-void configure(GeneralHybridEvolver& evolver, const Options& options) {
+void configure(HybridContinuousTimeEvolver<ValidatedTag>& evolver, const Options& options) {
     evolver.set_integrator(TaylorPicardIntegrator(StepMaximumError(options.accuracy)));
     evolver.configuration().set_maximum_step_size(ApproximateDouble(options.step));
     // Prevent radius-driven splitting from dominating the first baseline.
@@ -285,7 +286,7 @@ List<Enclosure> generate(const Scenario& scenario, const Options& options,
                          DiscreteLocation source, DiscreteLocation target,
                          DiscreteEvent jump, RealVariable x, RealVariable y,
                          bool verbose, SizeType& generated, SizeType& eligible) {
-    GeneralHybridEvolver evolver(make_system(scenario, source, target, jump, x, y));
+    HybridContinuousTimeEvolver<ValidatedTag> evolver(make_system(scenario, source, target, jump, x, y));
     configure(evolver, options);
     const HybridBoxSet initial = scenario.kind == EventKind::URGENT
                                    ? HybridBoxSet(source, {Real(-2) <= x <= Real(-1), Real(-1 / 2_q) <= y <= Real(1 / 2_q)})
@@ -527,7 +528,7 @@ struct Measurement {
 };
 
 Measurement measure(const List<Enclosure>& original,
-                    const GeneralHybridEvolver& continuation,
+                    const HybridContinuousTimeEvolver<ValidatedTag>& continuation,
                     const HybridTerminationCriterion& stop,
                     DiscreteLocation target, RealSpace space,
                     double final_time, bool urgent, bool profile_recombine) {
@@ -750,9 +751,9 @@ ScenarioSummary run_scenario(const Scenario& scenario, const Options& options,
                                    verbose, summary.generated, summary.eligible);
     summary.selected = original.size();
 
-    HybridAutomaton target_system("recombination-continuation");
+    ContinuousTimeHybridAutomaton target_system("recombination-continuation");
     target_system.new_mode(target, {dot(x) = 1 + sqr(y), dot(y) = 1});
-    GeneralHybridEvolver continuation(target_system);
+    HybridContinuousTimeEvolver<ValidatedTag> continuation(target_system);
     configure(continuation, options);
     const HybridTerminationCriterion stop(Real(ExactDouble(scenario.continuation_horizon)), Integer(8));
 
@@ -1289,8 +1290,8 @@ int run_sweep(const Scenario (&scenarios)[2], const Options& options,
                     } catch (const std::exception& error) {
                         failed = true;
                         csv_failure(csv, configuration, scenario, error.what());
-                        std::cerr << "  FAILED " << scenario.name << " step=" << step
-                                  << ": " << error.what() << '\n';
+                        LOGGING_PRINTLN("  FAILED " << scenario.name << " step=" << step
+                                                    << ": " << error.what());
                     }
                     csv.flush();
                     if (!csv)
@@ -1334,7 +1335,7 @@ int main(int argc, const char* argv[]) {
             run_scenario(scenario, options, cli, true);
         return 0;
     } catch (const std::exception& error) {
-        std::cerr << "benchmark_recombination: " << error.what() << "\n";
+        LOGGING_PRINTLN("benchmark_recombination: " << error.what());
         return 1;
     }
 }

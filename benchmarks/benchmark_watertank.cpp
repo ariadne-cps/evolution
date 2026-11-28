@@ -32,7 +32,7 @@
 #include <string>
 #include <vector>
 
-#include "evolution/hybrid_evolver.hpp"
+#include "evolution/hybrid_continuous_time_evolver.hpp"
 #include "evolution/hybrid_orbit.hpp"
 #include "evolution/hybrid_time.hpp"
 #include "integration/integrator.hpp"
@@ -79,11 +79,11 @@ List<ArgumentParser> argument_parsers(Options& options) {
     count("n", "samples", "Measured runs (default: 5)", options.samples, false);
     return parsers;
 }
-HybridAutomaton make_watertank() {
+ContinuousTimeHybridAutomaton make_watertank() {
     RealVariable height("height"), aperture("aperture");
     StringVariable valve("valve");
     DiscreteLocation open(valve | "open"), opening(valve | "opening"), closed(valve | "closed"), closing(valve | "closing");
-    HybridAutomaton tank("watertank");
+    ContinuousTimeHybridAutomaton tank("watertank");
     RealExpression flow = -Real(1 / 50_q) * height + Real(3 / 10_q) * aperture;
     tank.new_mode(open, {dot(height) = flow, dot(aperture) = 0});
     tank.new_mode(closed, {dot(height) = flow, dot(aperture) = 0});
@@ -103,7 +103,7 @@ struct Measurement {
     SizeType reach, intermediate, final;
 };
 
-Measurement measure(const GeneralHybridEvolver& evolver,
+Measurement measure(const HybridContinuousTimeEvolver<ValidatedTag>& evolver,
                     const HybridSet& initial, const HybridTime& horizon,
                     bool describe) {
     const auto start = Bench::Clock::now();
@@ -134,13 +134,13 @@ int main(int argc, const char* argv[]) {
                                         argument_parsers(options)));
         if (!cli.acquire(argc, argv))
             return 0;
-        const HybridAutomaton tank = make_watertank();
+        const ContinuousTimeHybridAutomaton tank = make_watertank();
         RealVariable height("height"), aperture("aperture");
         StringVariable valve("valve");
         HybridSet initial(DiscreteLocation(valve | "opening"),
                           {0 <= height <= Real(1 / 16_q), 0 <= aperture <= Real(1 / 64_q)});
         HybridTime horizon(ExactDouble(options.duration), options.events);
-        GeneralHybridEvolver evolver(tank);
+        HybridContinuousTimeEvolver<ValidatedTag> evolver(tank);
         evolver.set_integrator(
             TaylorPicardIntegrator(StepMaximumError(options.accuracy)));
         evolver.configuration().set_maximum_step_size(

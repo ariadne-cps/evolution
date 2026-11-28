@@ -177,6 +177,10 @@ bool compatible_checkpoints(const HybridEvolutionTree& tree,
            a.enclosure.state_space() == b.enclosure.state_space() &&
            a.enclosure.auxiliary_space() == b.enclosure.auxiliary_space() &&
            a.enclosure.previous_events() == b.enclosure.previous_events() &&
+           a.enclosure.continuous_set().has_constant_parameter_binding() == b.enclosure.continuous_set().has_constant_parameter_binding() &&
+           a.enclosure.continuous_set().constant_parameter_space() == b.enclosure.continuous_set().constant_parameter_space() &&
+           a.enclosure.continuous_set().auxiliary_arguments() == b.enclosure.continuous_set().auxiliary_arguments() &&
+           a.enclosure.continuous_set().auxiliary_parameter_count() == b.enclosure.continuous_set().auxiliary_parameter_count() &&
            identical(make_formula(a.enclosure.continuous_set().auxiliary_mapping()),
                      make_formula(b.enclosure.continuous_set().auxiliary_mapping()));
 }

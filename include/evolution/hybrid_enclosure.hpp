@@ -242,7 +242,9 @@ class HybridEnclosure
     //! Corresponds to replacing \f$\xi\f$ by \f$r\circ \xi\f$.
     Void apply_reset(DiscreteEvent e, DiscreteLocation q,
                      RealSpace s, const ValidatedVectorMultivariateFunction& r,
-                     RealSpace v, const EffectiveVectorMultivariateFunction& a);
+                     RealSpace v, const EffectiveVectorMultivariateFunction& a,
+                     EnclosureFunctionArguments source_arguments = EnclosureFunctionArguments::STATE,
+                     EnclosureFunctionArguments auxiliary_arguments = EnclosureFunctionArguments::STATE);
     //! \brief Apply the evolve step \f$\xi'(s) = \phi(\xi(s),\epsilon)\f$ and \f$\tau'(s)=\tau(s)+\epsilon\f$
     Void apply_fixed_evolve_step(const ValidatedVectorMultivariateFunctionPatch& phi, const StepSizeType& eps);
     //! \brief Apply the evolve step \f$\xi'(s) = \phi(\xi(s),\epsilon(\xi(s)))\f$ and \f$\tau'(s)=\tau(s)+\epsilon(\xi(s))\f$
@@ -272,7 +274,9 @@ class HybridEnclosure
     Void bound_time(Real tmax);
 
     //! \brief Sets the auxiliary variables and functions.
-    Void set_auxiliary(List<RealVariable> vars, EffectiveVectorMultivariateFunction aux);
+    Void set_auxiliary(List<RealVariable> vars, EffectiveVectorMultivariateFunction aux,
+                       EnclosureFunctionArguments arguments = EnclosureFunctionArguments::STATE,
+                       SizeType parameter_count = 0u);
 
     //! \brief Introduces a new state constraint \f$C\f$ on \f$x\f$.
     Void new_state_constraint(DiscreteEvent e, ValidatedConstraint c);
@@ -283,12 +287,12 @@ class HybridEnclosure
     //! \brief Introduces the new constraint \f$t\leq\gamma(x)\f$.
     Void new_state_time_bound(DiscreteEvent e, ValidatedScalarMultivariateFunction gamma);
     //! \brief Introduces the new invariant (progress predicate) \f$c(x)\leq0\f$.
-    Void new_invariant(DiscreteEvent e, ValidatedScalarMultivariateFunction c);
+    Void new_invariant(DiscreteEvent e, ValidatedScalarMultivariateFunction c, EnclosureFunctionArguments arguments = EnclosureFunctionArguments::STATE);
     //! \brief Introduces the new activation condition \f$g(x)\geq0\f$ for the event \a e.
-    Void new_activation(DiscreteEvent e, ValidatedScalarMultivariateFunction g);
+    Void new_activation(DiscreteEvent e, ValidatedScalarMultivariateFunction g, EnclosureFunctionArguments arguments = EnclosureFunctionArguments::STATE);
     //! \brief Introduces the new guard condition \f$g(x)=0\f$ for the event \a e.
     //! More precisely, the continuous dynamics is restricted to \f$c(x)\leq0\f$, and the event happens when \f$c(x)\geq0\f$.
-    Void new_guard(DiscreteEvent e, ValidatedScalarMultivariateFunction g);
+    Void new_guard(DiscreteEvent e, ValidatedScalarMultivariateFunction g, EnclosureFunctionArguments arguments = EnclosureFunctionArguments::STATE);
     //! \brief Introduces the new guard condition \f$g(x)=0\f$ for the event \a e, with computed crossing time \f$\tau(s)\f$.
     Void new_guard(DiscreteEvent e, ValidatedScalarMultivariateFunction g, ValidatedScalarMultivariateFunction ct);
 
@@ -306,7 +310,7 @@ class HybridEnclosure
     //! \brief Returns a bounding box for the set. Computed by a simple interval evaluation of \f$f(D)\f$.
     HybridUpperBoxType bounding_box() const;
     //! \brief Returns an over-approximation to the range of \a g over the set.
-    UpperIntervalType range_of(const EffectiveScalarMultivariateFunction& g) const;
+    UpperIntervalType range_of(const EffectiveScalarMultivariateFunction& g, EnclosureFunctionArguments arguments = EnclosureFunctionArguments::STATE) const;
     //! \brief Tests whether the set is disjoint from the box \a hbx.
     ValidatedLowerKleenean separated(const HybridExactBox& hbx) const;
     //! \brief Tests whether the set is a subset of the interior of the box \a hbx.

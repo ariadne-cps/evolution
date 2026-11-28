@@ -26,14 +26,6 @@
  *  @brief Demonstrate continuous, discrete and hybrid evolution of dynamical systems.
  */
 
-#include <iostream>
-#include <stdexcept>
-
-#include "function/function.hpp"
-#include "hybrid/hybrid_set.hpp"
-#include "integration/integrator.hpp"
-#include "numeric/float_bounds.hpp"
-
 #include "ariadne-evolution.hpp"
 
 using namespace Ariadne;
@@ -43,92 +35,190 @@ int main() {
     RealVariable x("x");
     List<DottedRealAssignment> dynamics;
     dynamics.append(dot(x) = -x);
-    VectorField decay(dynamics);
-    VectorFieldSimulator simulator(decay);
-    simulator.configuration().set_step_size(0.05);
-    simulator.configuration().set_num_subdivisions(0);
-    simulator.configuration().insert_subspace(x, 1);
+    OrdinaryDifferentialAlgebraicEquation decay(dynamics);
+    ContinuousTimeEvolver<ApproximateTag> approximate_continuous_evolver(decay);
+    approximate_continuous_evolver.configuration().set_step_size(0.05);
+    approximate_continuous_evolver.configuration().set_sampling_count(x, 1u);
 
     RealExpressionBoundedConstraintSet initial({0.9_dec <= x <= 1.1_dec});
-    auto simulated = simulator.orbit(initial, 0.1_dec);
-    const auto ncurves = simulated.curves().size();
-    if (ncurves != 1u) {
-        throw std::runtime_error("Expected one short continuous trajectory");
-    }
-    std::cout << "Continuous evolution: " << ncurves << " trajectory\n";
+    auto simulated = approximate_continuous_evolver.orbit(initial, 0.1_dec);
+    std::cout << "Approximate continuous equation: " << simulated.curves().size()
+              << " trajectory(s)\n";
+
+    // Nonautonomous equation: the global clock t is a genuine field argument.
+    const TimeVariable t;
+    const OrdinaryDifferentialAlgebraicEquation timed_flow({dot(x) = t - x});
+    ContinuousTimeEvolver<ApproximateTag> timed_approximate(timed_flow);
+    timed_approximate.configuration().set_step_size(0.03125);
+    auto timed_sample = timed_approximate.orbit(initial, Real(0.0625_x));
+    std::cout << "Approximate nonautonomous equation: "
+              << timed_sample.curves().size() << " trajectory(s)\n";
 
     // Validated continuous evolution: an enclosure, not a sampled trajectory.
     // The short time horizon keeps the demonstration inexpensive.
     TaylorPicardIntegrator integrator(StepMaximumError(1e-5));
-    VectorFieldEvolver validated(decay, integrator);
+    ContinuousTimeEvolver<ValidatedTag> validated(decay, integrator);
     validated.configuration().set_maximum_step_size(0.05);
     validated.configuration().set_maximum_enclosure_radius(1.0);
     auto validated_orbit = validated.orbit(initial, Real(0.05_dec), Semantics::UPPER);
-    if (validated_orbit.final().size() == 0u) {
-        throw std::runtime_error("Continuous evolver produced no final enclosure");
-    }
-    std::cout << "VectorFieldEvolver: " << validated_orbit.final().size()
+    std::cout << "Validated continuous equation UPPER: " << validated_orbit.final().size()
+              << " final enclosure(s)\n";
+    const auto validated_lower = validated.orbit(initial, Real(0.05_dec), Semantics::LOWER);
+    std::cout << "Validated continuous equation LOWER: " << validated_lower.final().size()
               << " final enclosure(s)\n";
 
-    // Discrete-time system: one step of a contracting iterated map.
+    // The same evolver and Orbit type handle measurable uncertain inputs.
+    // Exactly one tube-rigorous reach method and one endpoint method are chosen.
+    RealVariable u("u");
+    OrdinaryDifferentialAlgebraicInclusion disturbed(
+        {dot(x) = u - x}, RealVariablesBox({-1 <= u <= 1}));
+    ContinuousTimeEvolver<ValidatedTag> inclusion(disturbed, integrator, ZeroApproximation(), ConstantApproximation());
+    inclusion.configuration().set_maximum_step_size(0.03125);
+    const auto inclusion_orbit = inclusion.orbit(initial, Real(0.0625_x), Semantics::UPPER);
+    std::cout << "Validated continuous inclusion UPPER: "
+              << inclusion_orbit.final().size() << " final enclosure(s)\n";
+
+    ContinuousTimeEvolver<ApproximateTag> sampled_continuous_inclusion(
+        disturbed, MidpointInputSampling());
+    sampled_continuous_inclusion.configuration().set_step_size(0.03125);
+    auto sampled_inclusion_orbit = sampled_continuous_inclusion.orbit(initial, Real(0.0625_x));
+    std::cout << "Approximate continuous inclusion: "
+              << sampled_inclusion_orbit.curves().size() << " trajectory(s)\n";
+
+    // Discrete-time system: one step of a contracting difference equation.
     List<PrimedRealAssignment> updates;
     updates.append(next(x) = 0.5_dec * x);
-    IteratedMap contraction(updates);
-    IteratedMapEvolver evolver(contraction);
-    evolver.configuration().set_maximum_enclosure_radius(1.0);
-    auto discrete = evolver.orbit(initial, IteratedMap::TimeType(1), Semantics::UPPER);
-    if (discrete.final().size() == 0u) {
-        throw std::runtime_error("Discrete orbit has no final enclosure");
-    }
-    std::cout << "Discrete evolution: " << discrete.final().size()
+    DifferenceAlgebraicEquation contraction(updates);
+    DiscreteTimeEvolver<ValidatedTag> validated_discrete_evolver(contraction);
+    validated_discrete_evolver.configuration().set_maximum_enclosure_radius(1.0);
+    auto discrete = validated_discrete_evolver.orbit(initial, DifferenceAlgebraicEquation::TimeType(1), Semantics::UPPER);
+    std::cout << "Validated discrete equation UPPER: " << discrete.final().size()
               << " final enclosure(s)\n";
+    const auto discrete_lower = validated_discrete_evolver.orbit(
+        initial, Integer(1), Semantics::LOWER);
+    std::cout << "Validated discrete equation LOWER: " << discrete_lower.final().size()
+              << " final enclosure(s)\n";
+
+    // The same structured inclusion can be sampled or fully enclosed.
+    const DifferenceAlgebraicInclusion discrete_inclusion(
+        List<PrimedRealAssignment>{next(x) = x + u},
+        RealVariablesBox({-1 <= u <= 1}));
+    DiscreteTimeEvolver<ApproximateTag> sampled_discrete_inclusion(
+        discrete_inclusion, MidpointInputSampling());
+    const ExactBoxType discrete_initial({
+        {0.0_x, 0.0_x}
+    });
+    auto sampled_ticks = sampled_discrete_inclusion.orbit(discrete_initial, Integer(2));
+    std::cout << "Approximate discrete inclusion: " << sampled_ticks.curves().size()
+              << " trajectory(s)\n";
+
+    DiscreteTimeInclusionEvolver validated_discrete_inclusion(discrete_inclusion);
+    const auto discrete_included = validated_discrete_inclusion.orbit(
+        validated_discrete_inclusion.enclosure(discrete_initial), Integer(2), Semantics::UPPER);
+    std::cout << "Validated discrete inclusion UPPER: "
+              << discrete_included.final().size() << " final enclosure(s)\n";
 
     // Discrete-only hybrid system: the same two-mode automaton as the
     // Python tutorial. The simulation budget counts time and jumps.
     const DiscreteLocation idle(0), active(1);
     const DiscreteEvent activate("activate"), deactivate("deactivate");
-    HybridAutomaton automaton;
+    ContinuousTimeHybridAutomaton automaton;
     automaton.new_mode(idle);
     automaton.new_mode(active);
     automaton.new_transition(idle, activate, active);
     automaton.new_transition(active, deactivate, idle);
 
-    if (!automaton.has_transition(idle, activate) ||
-        automaton.target(active, deactivate) != idle) {
-        throw std::runtime_error("Hybrid transition relation is incorrect");
-    }
-    HybridSimulator hybrid_simulator(automaton);
+    HybridContinuousTimeEvolver<ApproximateTag> approximate_hybrid_continuous_evolver(automaton);
     HybridTime budget(1.0_x, 2);
-    if (budget.discrete_time() != Integer(2)) {
-        throw std::runtime_error("Incorrect hybrid jump budget");
-    }
-    std::cout << "Hybrid evolution: " << automaton.locations().size()
+    std::cout << "Hybrid transition model: " << automaton.locations().size()
               << " modes, budget " << budget << "\n";
-    (void)hybrid_simulator;
+    (void)approximate_hybrid_continuous_evolver;
+
+    // A permissive discrete hybrid tick has both a map and a reset successor.
+    DiscreteTimeHybridAutomaton tick_automaton;
+    tick_automaton.new_mode(idle, DifferenceAlgebraicEquation(
+                                      List<PrimedRealAssignment>{next(x) = x + 1}));
+    tick_automaton.new_mode(active, DifferenceAlgebraicEquation(
+                                        List<PrimedRealAssignment>{next(x) = x}));
+    tick_automaton.new_permissive_transition(idle, activate, active,
+                                             {next(x) = x + 2}, x >= 0, x <= 3);
+
+    HybridDiscreteTimeEvolver<ApproximateTag> approximate_tick_evolver(tick_automaton);
+    const HybridApproximatePoint tick_initial_point(
+        idle, RealSpace({x}), FloatDPApproximationPoint({1.0_x}, dp));
+    const auto sampled_branches = approximate_tick_evolver.orbit(tick_initial_point, Integer(1));
+    std::cout << "Approximate hybrid discrete branches: "
+              << sampled_branches.number_of_trajectories() << " trajectory(s)\n";
+
+    HybridDiscreteTimeEvolver<ValidatedTag> validated_tick_evolver(tick_automaton);
+    const HybridEnclosure tick_initial_set(
+        HybridExactBox(idle, RealSpace({
+                                 x
+    }),
+                       ExactBoxType({{0.875_x, 1.125_x}})),
+        EnclosureConfiguration(validated_discrete_evolver.function_factory()));
+    const auto validated_branches = validated_tick_evolver.orbit(
+        tick_initial_set, HybridDiscreteTimeTerminationCriterion(Integer(0), Integer(1)),
+        Semantics::UPPER);
+    std::cout << "Validated hybrid discrete UPPER branches: "
+              << validated_branches.final().size() << " final enclosure(s)\n";
+
+    // A single additional hybrid inclusion example shows why auxiliary
+    // variables are not independent inputs: a[0]=x[0]+u[0] determines
+    // both the permissive guard and the reset, with the full input box.
+    const RealVariable a("a");
+    DiscreteTimeHybridAutomaton auxiliary_tick_automaton;
+    auxiliary_tick_automaton.new_mode(idle, DifferenceAlgebraicInclusion(
+                                                List<PrimedRealAssignment>{next(x) = x + u},
+                                                List<RealAssignment>{let(a) = x + u},
+                                                RealVariablesBox({-1 <= u <= 1})));
+    auxiliary_tick_automaton.new_mode(active, DifferenceAlgebraicEquation(
+                                                  List<PrimedRealAssignment>{next(x) = x}));
+    auxiliary_tick_automaton.new_permissive_transition(
+        idle, activate, active, {next(x) = a + 3}, a >= 0, a <= 0);
+    HybridDiscreteTimeEvolver<ValidatedTag> auxiliary_tick_evolver(auxiliary_tick_automaton);
+    const HybridEnclosure auxiliary_tick_initial(
+        HybridExactBox(idle, RealSpace({
+                                 x
+    }),
+                       ExactBoxType({{0.0_x, 1.0_x}})),
+        EnclosureConfiguration(validated_discrete_evolver.function_factory()));
+    const auto auxiliary_tick_orbit = auxiliary_tick_evolver.orbit(
+        auxiliary_tick_initial,
+        HybridDiscreteTimeTerminationCriterion(Integer(0), Integer(1)), Semantics::UPPER);
+    std::cout << "Validated hybrid inclusion with auxiliary guard/reset: "
+              << auxiliary_tick_orbit.final().size() << " final enclosure(s)\n";
 
     // Hybrid validated evolution with continuous dynamics in a single mode.
     // No events are enabled: this isolates the continuous flow in a hybrid
     // enclosure, with a short maximum time and at most one discrete jump.
-    HybridAutomaton flow_automaton;
+    ContinuousTimeHybridAutomaton flow_automaton;
     List<DottedRealAssignment> hybrid_dynamics;
     hybrid_dynamics.append(dot(x) = -x);
     flow_automaton.new_mode(idle, hybrid_dynamics);
-    GeneralHybridEvolver hybrid_evolver(flow_automaton);
-    hybrid_evolver.set_integrator(TaylorPicardIntegrator(StepMaximumError(1e-5)));
-    hybrid_evolver.configuration().set_maximum_step_size(0.05);
-    hybrid_evolver.configuration().set_maximum_enclosure_radius(1.0);
+    HybridContinuousTimeEvolver<ValidatedTag> validated_hybrid_continuous_evolver(flow_automaton);
+    validated_hybrid_continuous_evolver.set_integrator(TaylorPicardIntegrator(StepMaximumError(1e-5)));
+    validated_hybrid_continuous_evolver.configuration().set_maximum_step_size(0.05);
+    validated_hybrid_continuous_evolver.configuration().set_maximum_enclosure_radius(1.0);
     // ExactBoxType uses double-exact bounds: use dyadic values 7/8 and 9/8,
     // not non-dyadic decimal fractions.
     HybridExactBox hybrid_initial(idle, flow_automaton.continuous_state_space(idle),
                                   ExactBoxType{
                                       {0.875_x, 1.125_x}
     });
-    auto hybrid_orbit = hybrid_evolver.orbit(hybrid_initial, HybridTime(Real(1 / 20_q), Integer(1)), Semantics::UPPER);
-    if (hybrid_orbit.final().size() == 0u) {
-        throw std::runtime_error("Hybrid evolver produced no final enclosure");
-    }
-    std::cout << "GeneralHybridEvolver: " << hybrid_orbit.final().size()
+    auto hybrid_orbit = validated_hybrid_continuous_evolver.orbit(hybrid_initial, HybridTime(Real(1 / 20_q), Integer(1)), Semantics::UPPER);
+    std::cout << "Validated hybrid continuous equation: " << hybrid_orbit.final().size()
               << " final enclosure(s)\n";
+
+    // Inclusion modes use the same hybrid evolver and explicit numerical choices.
+    // This mode has no outgoing events; its inputs may vary measurably in time.
+    ContinuousTimeHybridAutomaton inclusion_automaton;
+    inclusion_automaton.new_mode(idle, disturbed);
+    HybridContinuousTimeEvolver<ValidatedTag> hybrid_inclusion(inclusion_automaton);
+    hybrid_inclusion.set_integrator(integrator, ZeroApproximation(), ConstantApproximation());
+    hybrid_inclusion.configuration().set_maximum_step_size(0.03125);
+    auto hybrid_included = hybrid_inclusion.orbit(hybrid_initial, HybridTime(0.0625_x, 1), Semantics::UPPER);
+    std::cout << "Validated hybrid continuous inclusion: " << hybrid_included.final().size() << " final enclosure(s)\n";
 
     // First-order PDE: solve a small two-dimensional constant-coefficient
     // three-component hyperbolic system with smooth initial conditions.
@@ -172,13 +262,8 @@ int main() {
     EffectiveVectorMultivariateFunction profile = {sin(coords[0]), sin(coords[1]), zero};
     FirstOrderPDE pde(A, forcing);
     pde.add_direction(B0, Ds[0], T0).add_direction(B1, Ds[1], T1);
-    pde.validate();
     auto solution = first_order_pde(pde, profile, double_precision);
-    if (solution.uts.size(0) == 0u || solution.uts.size(1) == 0u ||
-        solution.uts.size(2) == 0u) {
-        throw std::runtime_error("PDE solver returned an empty solution history");
-    }
-    std::cout << "FirstOrderPDE: " << solution.uts.size(0) << " x "
+    std::cout << "First-order PDE: " << solution.uts.size(0) << " x "
               << solution.uts.size(1) << " x " << solution.uts.size(2)
               << " grid samples\n";
     return 0;

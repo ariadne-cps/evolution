@@ -1,31 +1,39 @@
 # Ariadne Evolution tutorial
 
-The tutorials are non-graphical. The C++ tutorial exercises **five**
-evolution capabilities with bounded scenarios:
+The C++ tutorial is an installed-library consumer: **its only header is
+`#include "ariadne-evolution.hpp"`**. All public system declarations,
+numerical backends and supporting types needed by its examples must be
+available through that umbrella header. The standalone CMake project links
+only the installed `AriadneEvolution::ariadne-evolution` target.
 
-1. **VectorFieldSimulator** — simulate a stable one-dimensional continuous
-   vector field for 0.1 time units.
-2. **VectorFieldEvolver** — compute a validated upper-semantics enclosure
-   for the same field over 0.05 time units.
-3. **IteratedMapEvolver** — take one validated step of a contracting map.
-4. **HybridSimulator and GeneralHybridEvolver** — specify a two-mode
-   discrete-only automaton, create a simulator, then compute a short
-   validated orbit for a separate continuous single-mode hybrid system.
-5. **FirstOrderPDE** — construct a validated, owning PDE model using
-   `add_direction()` and run the actual two-dimensional first-order PDE
-   solver and inspect its computed solution history. This is the most
-   expensive section; the initial profile uses unit-frequency sinusoids.
+## C++ worked examples
 
-The Python program builds a contracting `IteratedMap`, computes one validated
-upper-semantics iteration using `IteratedMapEvolver`, and constructs the same
-discrete-only `HybridAutomaton` used in C++. Both examples use the installed
-`pyariadne_evolution` extension. `IteratedMapEvolverConfiguration` is exposed so that
-its enclosure-radius and subdivision options can be configured.
+Examples are intentionally selected for distinct **implemented** C++
+contracts and syntax, not as a Cartesian product of system families,
+paradigms and set semantics.
 
-Python parity remains incomplete: the C++ tutorial also executes
-`VectorFieldSimulator`, `VectorFieldEvolver`, `GeneralHybridEvolver`, and
-the `FirstOrderPDE` solver. These workflows require further Python-side
-model, integrator, or solver bindings and matching executable examples.
+| Worked example | Syntax it illustrates |
+| --- | --- |
+| Autonomous ODAE, sampled and validated | `ContinuousTimeEvolver<ApproximateTag>` with two-argument `orbit`; `ContinuousTimeEvolver<ValidatedTag>` with `Semantics::UPPER` and `Semantics::LOWER` |
+| Nonautonomous ODAE, sampled | Explicit `TimeVariable` in a continuous field |
+| Ordinary structured ODAI, sampled and validated | Explicit `MidpointInputSampling` vs validated full-input `Semantics::UPPER` |
+| Ordinary difference equation, validated | `DiscreteTimeEvolver<ValidatedTag>` with both UPPER and LOWER |
+| Ordinary difference inclusion, sampled and validated | `DiscreteTimeEvolver<ApproximateTag>` with explicit input policy vs `DiscreteTimeInclusionEvolver` with UPPER |
+| Hybrid discrete map and reset alternatives | `HybridDiscreteTimeEvolver<ApproximateTag>` branch-complete sampled paths vs `HybridDiscreteTimeEvolver<ValidatedTag>` with an integer termination criterion and UPPER |
+| Hybrid discrete inclusion with auxiliary event | One `ValidatedTag` permissive transition where the same `a=x+u` determines guard, progression invariant and reset; whole-box input correlations are retained |
+| Continuous hybrid modes and flow | `ContinuousTimeHybridAutomaton`, approximate topology, validated short equation and inclusion evolutions |
+| First-order PDE | One bounded two-dimensional hyperbolic problem using `FirstOrderPDE` and `first_order_pde` |
+
+The same variables, initial sets and dynamics are reused where possible.
+The PDE appears once; the other combinations are represented by the minimal
+additional calls needed to show genuinely different signatures. Numerical
+samples are not set enclosures, and `Semantics::LOWER` is not an INNER
+approximation.
+
+The Python tutorial demonstrates the currently exposed installed
+`pyariadne_evolution` workflow: a validated difference equation and a
+continuous hybrid transition model. It is kept separate from the C++ header
+contract.
 
 ## Build and install
 
@@ -39,7 +47,7 @@ cmake --install build --prefix install
 
 ## C++ tutorial
 
-Build **separately** against the installed library:
+Build independently against the installed library:
 
 ```bash
 cmake -S tutorial -B tutorial/build -DCMAKE_PREFIX_PATH="$PWD/install"
@@ -62,6 +70,5 @@ then run:
 python tutorial/tutorial_evolution.py
 ```
 
-Neither script requires pytest or graphics. The Release CI builds and runs
-**both tutorials against the installed artifacts** on Ubuntu, macOS, and
-Windows, to catch packaging and binding regressions.
+Neither script requires pytest or graphics. Release CI builds and runs both
+tutorials against installed artifacts on Ubuntu, macOS and Windows.

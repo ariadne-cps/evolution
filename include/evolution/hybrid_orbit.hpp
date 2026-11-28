@@ -69,8 +69,8 @@ class HybridPaving;
 /** @brief HybridTime represents discrete and continuous orbit collections for hybrid systems. */
 class HybridTime;
 
-/** @brief HybridAutomatonInterface represents discrete and continuous orbit collections for hybrid systems. */
-class HybridAutomatonInterface;
+/** @brief ContinuousTimeHybridAutomatonInterface represents discrete and continuous orbit collections for hybrid systems. */
+class ContinuousTimeHybridAutomatonInterface;
 
 /** @brief DiscreteLocation represents discrete and continuous orbit collections for hybrid systems. */
 class DiscreteLocation;
@@ -128,7 +128,7 @@ class Orbit<Vector<HybridApproximatePoint>>
 };
 
 /** @brief Perform the specified evolution operation. */
-Orbit<HybridApproximatePoint> extend_auxiliary(const Orbit<HybridApproximatePoint>& horb, const HybridAutomatonInterface& ha);
+Orbit<HybridApproximatePoint> extend_auxiliary(const Orbit<HybridApproximatePoint>& horb, const ContinuousTimeHybridAutomatonInterface& ha);
 
 template<>
 OutputStream&

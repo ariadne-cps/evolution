@@ -31,56 +31,123 @@
 
 // Associations between systems and their evolution algorithms belong to evolution,
 // never to the system-description classes.
+#include "evolution/evolver.decl.hpp"
+
 namespace Ariadne {
 
-/** @brief IteratedMap: compile-time correspondence between systems, evolvers and enclosures. */
-class IteratedMap;
-/** @brief VectorField: compile-time correspondence between systems, evolvers and enclosures. */
-class VectorField;
-/** @brief DifferentialInclusion: compile-time correspondence between systems, evolvers and enclosures. */
-class DifferentialInclusion;
-/** @brief HybridAutomatonInterface: compile-time correspondence between systems, evolvers and enclosures. */
-class HybridAutomatonInterface;
+/** @brief DifferenceAlgebraicEquation: compile-time correspondence between systems, evolvers and enclosures. */
+class DifferenceAlgebraicEquation;
+class DifferenceAlgebraicInclusion;
+class DiscreteDynamics;
+class DiscreteTimeInclusionEvolver;
+/** @brief OrdinaryDifferentialAlgebraicEquation: compile-time correspondence between systems, evolvers and enclosures. */
+class OrdinaryDifferentialAlgebraicEquation;
+/** @brief OrdinaryDifferentialAlgebraicInclusion: compile-time correspondence between systems, evolvers and enclosures. */
+class OrdinaryDifferentialAlgebraicInclusion;
+/** @brief ContinuousTimeHybridAutomatonInterface: compile-time correspondence between systems, evolvers and enclosures. */
+class ContinuousTimeHybridAutomatonInterface;
+class DiscreteTimeHybridAutomatonInterface;
 
-/** @brief IteratedMapEvolver: compile-time correspondence between systems, evolvers and enclosures. */
-class IteratedMapEvolver;
-/** @brief VectorFieldEvolver: compile-time correspondence between systems, evolvers and enclosures. */
-class VectorFieldEvolver;
-/** @brief DifferentialInclusionEvolver: compile-time correspondence between systems, evolvers and enclosures. */
-class DifferentialInclusionEvolver;
-/** @brief HybridEvolverInterface: compile-time correspondence between systems, evolvers and enclosures. */
-class HybridEvolverInterface;
+/** @brief DiscreteTimeEvolver<ValidatedTag>: compile-time correspondence between systems, evolvers and enclosures. */
+template<>
+class DiscreteTimeEvolver<ValidatedTag>;
+/** @brief ContinuousTimeEvolver<ValidatedTag>: compile-time correspondence between systems, evolvers and enclosures. */
+template<>
+class ContinuousTimeEvolver<ValidatedTag>;
+class ContinuousDynamics;
+/** @brief HybridContinuousTimeEvolverInterface<ValidatedTag>: compile-time correspondence between systems, evolvers and enclosures. */
+template<>
+class HybridContinuousTimeEvolverInterface<ValidatedTag>;
+template<>
+class HybridDiscreteTimeEvolver<ValidatedTag>;
 
 /** @brief LabelledEnclosure: compile-time correspondence between systems, evolvers and enclosures. */
 class LabelledEnclosure;
 /** @brief HybridEnclosure: compile-time correspondence between systems, evolvers and enclosures. */
 class HybridEnclosure;
 
-template<class SYS>
+template<class P, class SYS>
 struct EvolutionTraits;
 
 template<>
-struct EvolutionTraits<IteratedMap> {
-    using EvolverType = IteratedMapEvolver;
+struct EvolutionTraits<ApproximateTag, DifferenceAlgebraicEquation> {
+    using EvolverType = DiscreteTimeEvolver<ApproximateTag>;
+};
+
+template<>
+struct EvolutionTraits<ApproximateTag, DifferenceAlgebraicInclusion> {
+    using EvolverType = DiscreteTimeEvolver<ApproximateTag>;
+};
+
+template<>
+struct EvolutionTraits<ApproximateTag, DiscreteDynamics> {
+    using EvolverType = DiscreteTimeEvolver<ApproximateTag>;
+};
+
+template<>
+struct EvolutionTraits<ValidatedTag, DifferenceAlgebraicEquation> {
+    using EvolverType = DiscreteTimeEvolver<ValidatedTag>;
     using EnclosureType = LabelledEnclosure;
 };
 
 template<>
-struct EvolutionTraits<VectorField> {
-    using EvolverType = VectorFieldEvolver;
+struct EvolutionTraits<ValidatedTag, DifferenceAlgebraicInclusion> {
+    using EvolverType = DiscreteTimeInclusionEvolver;
     using EnclosureType = LabelledEnclosure;
 };
 
 template<>
-struct EvolutionTraits<DifferentialInclusion> {
-    using EvolverType = DifferentialInclusionEvolver;
+struct EvolutionTraits<ValidatedTag, OrdinaryDifferentialAlgebraicEquation> {
+    using EvolverType = ContinuousTimeEvolver<ValidatedTag>;
     using EnclosureType = LabelledEnclosure;
 };
 
 template<>
-struct EvolutionTraits<HybridAutomatonInterface> {
-    using EvolverType = HybridEvolverInterface;
+struct EvolutionTraits<ValidatedTag, OrdinaryDifferentialAlgebraicInclusion> {
+    using EvolverType = ContinuousTimeEvolver<ValidatedTag>;
+    using EnclosureType = LabelledEnclosure;
+};
+
+template<>
+struct EvolutionTraits<ValidatedTag, ContinuousDynamics> {
+    using EvolverType = ContinuousTimeEvolver<ValidatedTag>;
+    using EnclosureType = LabelledEnclosure;
+};
+
+template<>
+struct EvolutionTraits<ApproximateTag, DiscreteTimeHybridAutomatonInterface> {
+    using EvolverType = HybridDiscreteTimeEvolver<ApproximateTag>;
+};
+
+template<>
+struct EvolutionTraits<ValidatedTag, DiscreteTimeHybridAutomatonInterface> {
+    using EvolverType = HybridDiscreteTimeEvolver<ValidatedTag>;
     using EnclosureType = HybridEnclosure;
+};
+
+template<>
+struct EvolutionTraits<ValidatedTag, ContinuousTimeHybridAutomatonInterface> {
+    using EvolverType = HybridContinuousTimeEvolverInterface<ValidatedTag>;
+    using EnclosureType = HybridEnclosure;
+};
+
+template<>
+struct EvolutionTraits<ApproximateTag, OrdinaryDifferentialAlgebraicEquation> {
+    using EvolverType = ContinuousTimeEvolver<ApproximateTag>;
+};
+
+template<>
+struct EvolutionTraits<ApproximateTag, OrdinaryDifferentialAlgebraicInclusion> {
+    using EvolverType = ContinuousTimeEvolver<ApproximateTag>;
+};
+template<>
+struct EvolutionTraits<ApproximateTag, ContinuousDynamics> {
+    using EvolverType = ContinuousTimeEvolver<ApproximateTag>;
+};
+
+template<>
+struct EvolutionTraits<ApproximateTag, ContinuousTimeHybridAutomatonInterface> {
+    using EvolverType = HybridContinuousTimeEvolverInterface<ApproximateTag>;
 };
 
 } // namespace Ariadne

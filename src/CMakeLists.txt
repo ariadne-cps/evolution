@@ -1,18 +1,41 @@
 add_library(EVOLUTION_SRC OBJECT
     enclosure.cpp
+    continuous_integration.cpp
+    continuous_dynamics.cpp
+    input_sampling.cpp
+    domain_bisection_sampling.cpp
+    initial_point_sampling.cpp
     enclosure_recombiner.cpp
     enclosure_augmented_paving.cpp
     orbit.cpp
-    differential_inclusion_evolver.cpp
-    iterated_map_evolver.cpp
-    vector_field_evolver.cpp
-    vector_field_simulator.cpp
+    discrete_time_evolver.cpp
+    discrete_time_inclusion_evolver.cpp
+    discrete_dynamics.cpp
+    discrete_time_approximate_evolver.cpp
+    continuous_time_validated_evolver.cpp
+    continuous_time_approximate_evolver.cpp
+    simulation_parameters.cpp
     first_order_pde.cpp
     hybrid_orbit.cpp
     hybrid_enclosure.cpp
-    hybrid_simulator.cpp
+    hybrid_continuous_time_approximate_evolver.cpp
     hybrid_evolution_backend.cpp
     hybrid_evolution_tree.cpp
-    hybrid_evolver.cpp
+    hybrid_crossing.cpp
+    hybrid_crossing_analysis.cpp
+    hybrid_transition_handlers.cpp
+    hybrid_guard_predicate.cpp
+    hybrid_step_results.cpp
+    hybrid_timing.cpp
+    hybrid_outer_flow.cpp
+    hybrid_parameters.cpp
+    hybrid_continuous_time_validated_evolver.cpp
+    hybrid_discrete_time_step_planner.cpp
+    hybrid_discrete_time_step_image.cpp
+    hybrid_discrete_time_step_executor.cpp
+    hybrid_discrete_time_predicate_evaluator.cpp
+    hybrid_discrete_time_upper_scheduler.cpp
+    hybrid_discrete_time_evolver.cpp
+    hybrid_discrete_time_approximate_evolver.cpp
 )
 target_include_directories(EVOLUTION_SRC PRIVATE "${PROJECT_SOURCE_DIR}/include/evolution")

@@ -153,8 +153,8 @@ Void export_simulator<VectorFieldSimulator>(pybind11::module& module, const char
     typedef typename VectorFieldSimulator::ConfigurationType ConfigurationType;
     pybind11::class_<ConfigurationType> simulator_configuration_class(module, "VectorFieldSimulatorConfiguration");
     simulator_configuration_class.def("set_step_size", &ConfigurationType::set_step_size);
-    simulator_configuration_class.def("set_discretisation_type", &ConfigurationType::set_discretisation_type);
-    simulator_configuration_class.def("set_num_subdivisions", &ConfigurationType::set_num_subdivisions);
+    simulator_configuration_class.def("set_sampling_count", &ConfigurationType::set_sampling_count);
+    simulator_configuration_class.def("clear_sampling_counts", &ConfigurationType::clear_sampling_counts);
     simulator_configuration_class.def("__repr__", &__cstr__<ConfigurationType>);
 }
 

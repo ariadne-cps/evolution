@@ -35,9 +35,11 @@
 #include "function/function.hpp"
 #include "function/functional.hpp"
 #include "function/taylor_model.hpp"
+#include "hybrid/hybrid_bounded_constraint_set.hpp"
 #include "hybrid/hybrid_set.hpp"
 #include "integration/runge_kutta_integrator.hpp"
 #include "logging/logging.hpp"
+#include "simulator_sampling.hpp"
 #include "symbolic/assignment.hpp"
 #include "symbolic/space.hpp"
 #include "symbolic/valuation.hpp"
@@ -102,43 +104,6 @@ Void make_point_list(const HybridPoint<X>& list, Vector<Point<X>>& return_point_
         Point<X> pt(sspc.dimension(), [&](SizeType j) { return values[sspc.variable(j)]; });
         return_point_list[index] = pt;
     }
-}
-
-Vector<HybridPoint<FloatDPApproximation>> create_hybrid_point_list(BinaryTreePaving& grid, DiscreteLocation loc, RealSpace spc, DiscretizationHybridType _dtype, Nat fineness, const UpperBoxType& sampling_box) {
-    if (_dtype == DiscretizationHybridType::HMince) {
-        grid.mince(fineness);
-    } else {
-        grid.recombine();
-    }
-
-    BinaryTreePaving::ConstIterator iter = grid.begin();
-    Vector<HybridPoint<FloatDPApproximation>> approxPointList(grid.size(), HybridPoint<FloatDPApproximation>());
-    SizeType k(0);
-    for (; iter != grid.end(); ++iter) {
-        // Outer approximation may include cells crossing the requested boundary.
-        // Sample their intersection so every initial point belongs to the box.
-        auto sampled = intersection(UpperBoxType(iter->box()), sampling_box);
-        auto midpoint = sampled.midpoint();
-        HybridPoint<FloatDPApproximation> pt(loc, spc, midpoint);
-        approxPointList.at(k) = pt;
-        k++;
-    }
-
-    return approxPointList;
-}
-
-BinaryTreePaving create_hybrid_grid(UpperBoxType box) {
-    Point<FloatDP> tmpPointCenter = Point(box.centre());
-    Vector<FloatDP> origin(tmpPointCenter.dimension(), FloatDP(0, dp));
-    Vector<FloatDP> lengths(box.widths().size(), FloatDP(0, dp));
-    for (SizeType i = 0; i < tmpPointCenter.dimension(); i++) {
-        origin[i] = tmpPointCenter[i];
-        lengths[i] = box.widths().at(i).raw();
-    }
-    Grid grid(origin, lengths);
-    BinaryTreePaving gridPaving(grid);
-
-    return gridPaving;
 }
 
 template<class X>
@@ -295,27 +260,12 @@ auto HybridSimulator::orbit(const Vector<HybridRealPoint>& initial_set, const Te
 
 auto HybridSimulator::orbit(const HybridUpperBox& initial_box, DiscreteLocation loc, HybridSpace space, const TerminationType& termination) const
     -> Orbit<HybridApproximateListPointType> {
-    auto box = initial_box.euclidean_set(space[loc]);
-    auto lengths = box.widths();
-    Nat box_width_null = 0;
-    for (SizeType i = 0; i < lengths.size(); ++i) {
-        if (lengths[i].get_d() > 0) {
-            continue;
-        }
-        ++box_width_null;
-    }
-    if (box_width_null == lengths.size()) {
-        auto midpoint = box.midpoint();
-        HybridApproximateListPointType pointList(1, HybridApproximatePointType(loc, space[loc], midpoint));
-        return orbit(pointList, termination);
-    }
-    if (box_width_null > 0) {
-        // A partially flat box needs positive grid lengths in every coordinate.
-        box = widen(box, FloatDPUpperBound(0.0001_q, dp));
-    }
-    BinaryTreePaving gridPaving = create_hybrid_grid(box);
-    gridPaving.adjoin_outer_approximation(box, _configuration->fineness());
-    HybridApproximateListPointType pointList = create_hybrid_point_list(gridPaving, loc, this->_sys_ptr->continuous_state_space(loc), _configuration->d_type(), _configuration->fineness(), initial_box.euclidean_set(space[loc]));
+    // Sample the original domain directly; partially flat boxes do not
+    // require artificial widening when no grid is constructed.
+    HybridApproximateListPointType pointList = EvolutionDetail::sample_hybrid_initial_points(
+        initial_box.euclidean_set(space[loc]), loc,
+        this->_sys_ptr->continuous_state_space(loc),
+        _configuration->sampling_counts());
     return orbit(pointList, termination);
 }
 
@@ -416,13 +366,12 @@ auto HybridSimulator::orbit(const HybridApproximateListPointType& init_list,
     return orbitList;
 }
 
-HybridSimulatorConfiguration::HybridSimulatorConfiguration() : _step_size(0.125, double_precision), _fineness(0), _discretization_type(DiscretizationHybridType::HMince) {}
+HybridSimulatorConfiguration::HybridSimulatorConfiguration() : _step_size(0.125, double_precision), _sampling_counts() {}
 
 OutputStream& HybridSimulatorConfiguration::_write(OutputStream& os) const {
     os << "HybridSimulatorConfiguration("
        << "\n  step_size=" << step_size()
-       << "\n  fineness=" << fineness()
-       << "\n  discretization type=" << d_type()
+       << "\n  sampling_counts=" << sampling_counts()
        << "\n)";
     return os;
 }

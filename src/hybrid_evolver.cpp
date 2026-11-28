@@ -39,9 +39,9 @@
 #include "function/function.hpp"
 #include "function/function_model.hpp"
 #include "function/function_patch.hpp"
+#include "hybrid/hybrid_expression_set.hpp"
 #include "integration/integrator.hpp"
 #include "numeric/numeric.hpp"
-#include "paving/binary_tree_paving.hpp"
 #include "system/hybrid_automaton_interface.hpp"
 
 #include "equation-solving/equation_solver.hpp"

@@ -117,6 +117,45 @@ class TestEvolutionDependencyBoundary : public Ariadne::Testing::ContextFixture 
         ARIADNE_TESTING_PROVE(violations.empty());
     }
 
+    void test_no_direct_paving_includes() {
+        // Sampling belongs to Evolution, but its implementation must not
+        // reintroduce the paving representation in any public or private
+        // production translation unit.
+        const auto root = project_root();
+        const std::regex forbidden(
+            R"(^[ \t]*#[ \t]*include[ \t]*["<](paving/|hybrid/hybrid_paving\.hpp))");
+        std::vector<std::string> violations;
+        std::size_t scanned = 0u;
+        for (const auto& relative: {"include/evolution", "src"}) {
+            const auto directory = root / relative;
+            for (const auto& entry: fs::directory_iterator(directory)) {
+                if (!entry.is_regular_file())
+                    continue;
+                const auto ext = entry.path().extension();
+                if (ext != ".hpp" && ext != ".cpp")
+                    continue;
+                ++scanned;
+                std::ifstream stream(entry.path());
+                if (!stream)
+                    throw std::runtime_error("Cannot open " + entry.path().string());
+                std::string line;
+                std::size_t line_number = 0u;
+                while (std::getline(stream, line)) {
+                    ++line_number;
+                    if (std::regex_search(line, forbidden))
+                        violations.push_back(entry.path().string() + ":" +
+                                             std::to_string(line_number) + ": " + line);
+                }
+                if (stream.bad())
+                    throw std::runtime_error("Error reading " + entry.path().string());
+            }
+        }
+        for (const auto& violation: violations)
+            ARIADNE_TESTING_NOTE(violation);
+        ARIADNE_TESTING_PROVE(scanned > 0u);
+        ARIADNE_TESTING_PROVE(violations.empty());
+    }
+
     void test_enclosure_api_does_not_expose_storage() {
         const auto source = read_file(project_root() / "include/evolution/enclosure.hpp");
         ARIADNE_TESTING_PROVE(source.find("Storage") == std::string::npos);
@@ -131,6 +170,7 @@ class TestEvolutionDependencyBoundary : public Ariadne::Testing::ContextFixture 
 int main(int argc, char** argv) {
     ARIADNE_TESTING_SUITE("test_evolution_dependency_boundary");
     ARIADNE_TESTING_ADD_TEST(TestEvolutionDependencyBoundary, test_no_upstream_reasoning_includes);
+    ARIADNE_TESTING_ADD_TEST(TestEvolutionDependencyBoundary, test_no_direct_paving_includes);
     ARIADNE_TESTING_ADD_TEST(TestEvolutionDependencyBoundary, test_enclosure_api_does_not_expose_storage);
     ARIADNE_TESTING_ADD_TEST(TestEvolutionDependencyBoundary, test_no_reasoning_target_dependency);
     return Ariadne::Testing::run_logging_suite(ariadne_test_suite, argc, argv);

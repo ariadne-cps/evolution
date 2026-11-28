@@ -3,12 +3,14 @@ set(UNIT_TESTS
     test_orbit_collections
     test_scalings
     test_hybrid_time
+    test_located_projection
     test_hybrid_enclosure
     test_enclosure_recorded_draw
     test_hybrid_evolver
     test_hybrid_evolution_backend
     test_hybrid_evolution_tree
     test_hybrid_step_contracts
+    test_hybrid_provider_integration
     test_hybrid_simulator
     test_first_order_pde
     test_first_order_pde_evolution_header
@@ -16,7 +18,6 @@ set(UNIT_TESTS
     test_orbit_evolution_header
     test_differential_inclusion_evolver
     test_enclosure
-    test_enclosure_augmented_paving
     test_enclosure_operations
     test_enclosure_recombination
     test_enclosure_precision
@@ -24,6 +25,8 @@ set(UNIT_TESTS
     test_vector_field_evolver
     test_vector_field_evolver_header
     test_vector_field_simulator
+    test_domain_bisection_sampling
+    test_simulator_sampling_contract
     test_evolution_dependency_boundary
 )
 foreach(TEST IN LISTS UNIT_TESTS)
@@ -43,3 +46,7 @@ endif()
 
 add_custom_target(tests)
 add_dependencies(tests ${UNIT_TESTS})
+
+# Sampling stays an Evolution-private implementation with no paving dependency.
+target_include_directories(test_domain_bisection_sampling PRIVATE "${PROJECT_SOURCE_DIR}/src")
+target_include_directories(test_simulator_sampling_contract PRIVATE "${PROJECT_SOURCE_DIR}/src")

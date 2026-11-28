@@ -55,12 +55,6 @@ class Vector;
 
 /** @brief Enclosure represents enclosures and representations for hybrid system states. */
 class Enclosure;
-/** @brief Grid represents enclosures and representations for hybrid system states. */
-class Grid;
-/** @brief BinaryTreePaving represents enclosures and representations for hybrid system states. */
-class BinaryTreePaving;
-/** @brief Paver selects the outer-approximation algorithm supplied by the caller. */
-class Paver;
 /** @brief AffineSet represents enclosures and representations for hybrid system states. */
 class AffineSet;
 /** @brief DiscreteEvent represents enclosures and representations for hybrid system states. */
@@ -86,8 +80,6 @@ class HybridBasicSet;
 
 /** @brief HybridEnclosure represents enclosures and representations for hybrid system states. */
 class HybridEnclosure;
-/** @brief HybridPaving represents enclosures and representations for hybrid system states. */
-class HybridPaving;
 template<>
 class ListSet<HybridEnclosure>;
 
@@ -313,10 +305,6 @@ class HybridEnclosure
     ValidatedLowerKleenean inside(const HybridExactBox& hbx) const;
     //! \brief Restricts to a subdomain of the \em parameter domain.
     Void restrict(const ExactBoxType& subdomain);
-    //! \brief Adjoins an outer approximation of the set to the grid-based set \a paving, with accuracy given by
-    //! \a fineness subdivisions in each component.
-    Void adjoin_outer_approximation_to(HybridPaving& paving, Nat fineness, const Paver& paver) const;
-
     //! \brief Splits into two smaller subsets along parameter direction \a dim.
     Pair<HybridEnclosure, HybridEnclosure> split(SizeType dim) const;
     //! \brief Splits into smaller subsets.
@@ -360,11 +348,6 @@ inline ValidatedLowerKleenean inside(const HybridEnclosure& he, const HybridExac
 inline ValidatedLowerKleenean separated(const HybridEnclosure& he, const HybridExactBox& hbx) { return he.separated(hbx); }
 
 inline OutputStream& operator<<(OutputStream& os, const HybridEnclosure& s) { return s._write(os); }
-
-/** @brief HybridGrid represents enclosures and representations for hybrid system states. */
-class HybridGrid;
-/** @brief HybridPaving represents enclosures and representations for hybrid system states. */
-class HybridPaving;
 
 template<>
 /** @brief ListSet represents enclosures and representations for hybrid system states. */
@@ -424,8 +407,6 @@ class ListSet<HybridEnclosure>
     friend OutputStream& operator<<(OutputStream& os, const ListSet<HybridEnclosure>& hls) {
         return os << hls._list;
     };
-    /** @brief Perform the specified evolution operation. */
-    friend HybridPaving outer_approximation(const ListSet<HybridEnclosure>& hls, const HybridGrid& g, Int dpth);
 
   private:
     List<HybridEnclosure> _list;

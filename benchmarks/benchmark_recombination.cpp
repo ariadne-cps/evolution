@@ -45,6 +45,7 @@
 #include "evolution/hybrid_evolver.hpp"
 #include "evolution/hybrid_orbit.hpp"
 #include "evolution/hybrid_time.hpp"
+#include "hybrid/hybrid_expression_set.hpp"
 #include "integration/integrator.hpp"
 #include "system/hybrid_automata.hpp"
 #include "threading/thread_manager.hpp"

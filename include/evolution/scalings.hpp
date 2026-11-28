@@ -33,7 +33,6 @@
 #include <map>
 
 #include "numeric/builtin.hpp"
-#include "paving/grid.hpp"
 #include "symbolic/space.hpp"
 #include "symbolic/variable.hpp"
 #include "utility/container.hpp"
@@ -45,7 +44,7 @@ typedef void Void;
 typedef std::ostream OutputStream;
 
 //! \ingroup DynamicsModule
-//! \brief A class which defines the state space grid to use given the continuous state variables \a spc.
+//! \brief Positive per-variable scale factors used to normalize continuous-state coordinates.
 class Scalings {
     ExactDouble _default_scaling;
     Map<Identifier, ExactDouble> _scalings;
@@ -65,8 +64,6 @@ class Scalings {
         return (this->_scalings.has_key(var.name())) ? this->_scalings[var.name()] : this->_default_scaling;
     }
     /** @brief Perform the specified evolution operation. */
-    Grid grid(const RealSpace& spc) const;
-    /** @brief Perform the specified evolution operation. */
     friend OutputStream& operator<<(OutputStream& os, const Scalings& s) {
         return os << "Scalings( " << s._scalings << " )";
     }
@@ -81,15 +78,6 @@ inline Scalings::Scalings(ExactDouble default_scaling, const Map<RealVariable, E
         ARIADNE_PRECONDITION(var_scal.second > 0);
         this->_scalings.insert(var_scal.first.name(), var_scal.second);
     }
-}
-
-inline Grid Scalings::grid(const RealSpace& spc) const {
-    /** @brief Perform the specified evolution operation. */
-    Vector<ExactDouble> lengths(spc.dimension(), 1.0_x);
-    for (SizeType i = 0; i < spc.dimension(); ++i) {
-        lengths[i] = this->scaling(spc[i]);
-    }
-    return Grid(lengths);
 }
 
 } // namespace Ariadne

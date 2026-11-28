@@ -54,18 +54,6 @@ class ListSet;
 template<class X>
 class Point;
 
-/** @brief Grid represents discrete and continuous orbit collections for hybrid systems. */
-class Grid;
-/** @brief GridCell represents discrete and continuous orbit collections for hybrid systems. */
-class GridCell;
-/** @brief BinaryTreePaving represents discrete and continuous orbit collections for hybrid systems. */
-class BinaryTreePaving;
-/** @brief HybridGrid represents discrete and continuous orbit collections for hybrid systems. */
-class HybridGrid;
-/** @brief HybridGridCell represents discrete and continuous orbit collections for hybrid systems. */
-class HybridGridCell;
-/** @brief HybridPaving represents discrete and continuous orbit collections for hybrid systems. */
-class HybridPaving;
 /** @brief HybridTime represents discrete and continuous orbit collections for hybrid systems. */
 class HybridTime;
 

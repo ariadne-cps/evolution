@@ -328,7 +328,6 @@ class TestEnclosure : public Ariadne::Testing::ContextFixture {
 
     Void test_labelled_drawers() {
         _draw(BoxDrawer(), "box");
-        _draw(GridDrawer(4), "grid");
         _draw(AffineDrawer(1), "affine");
     }
 

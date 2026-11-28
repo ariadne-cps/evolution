@@ -93,45 +93,39 @@ class TestVectorFieldSimulator : public Ariadne::Testing::ContextFixture {
         auto& config = simulator.configuration();
         ARIADNE_TESTING_EXPECT_EXCEPTION(config.set_step_size(0.0));
         ARIADNE_TESTING_EXPECT_EXCEPTION(config.set_step_size(-1.0));
-        ARIADNE_TESTING_EXPECT_EXCEPTION(config.insert_subspace(x, 0u));
-        config.insert_subspace(x, 2u);
-        ARIADNE_TESTING_EXPECT_EXCEPTION(config.insert_subspace(x, 3u));
-        ARIADNE_TESTING_EXPECT_EXCEPTION(config.set_subspace(subspace{
+        ARIADNE_TESTING_EXPECT_EXCEPTION(config.set_sampling_count(x, 0u));
+        config.set_sampling_count(x, 2u);
+        ARIADNE_TESTING_EXPECT_EXCEPTION(config.set_sampling_count(x, 3u));
+        ARIADNE_TESTING_EXPECT_EXCEPTION(config.set_sampling_counts(SamplingCounts{
             {x, 0u}
         }));
-        ARIADNE_TESTING_EXPECT_EQUAL(config.get_subspace().size(), 1u);
-        config.remove_keys();
-        ARIADNE_TESTING_PROVE(!config.is_using_subspace());
-        config.set_subspace(subspace{});
-        ARIADNE_TESTING_PROVE(!config.is_using_subspace());
-        config.set_subspace(subspace{
+        ARIADNE_TESTING_EXPECT_EQUAL(config.sampling_counts().size(), 1u);
+        config.clear_sampling_counts();
+        ARIADNE_TESTING_PROVE(config.sampling_counts().empty());
+        config.set_sampling_counts(SamplingCounts{});
+        ARIADNE_TESTING_PROVE(config.sampling_counts().empty());
+        config.set_sampling_counts(SamplingCounts{
             {x, 2u}
         });
-        config.set_num_subdivisions(3u);
         const auto& configured = simulator;
-        ARIADNE_TESTING_PROVE(configured.configuration().is_using_subspace());
+        ARIADNE_TESTING_EXPECT_EQUAL(configured.configuration().sampling_counts().size(), 1u);
         UpperBoxType box({
             {0, 1},
             {0, 1}
         });
         auto divided = simulator.orbit(box, Real(0));
-        ARIADNE_TESTING_EXPECT_EQUAL(config.num_subdivisions(), 3u);
-        ARIADNE_TESTING_PROVE(divided.curves().size() > 0u);
-        config.set_subspace(subspace{
+        ARIADNE_TESTING_EXPECT_EQUAL(divided.curves().size(), 2u);
+        config.set_sampling_counts(SamplingCounts{
             {unknown, 2u}
         });
         ARIADNE_TESTING_EXPECT_EXCEPTION(simulator.orbit(box, Real(0)));
-        config.remove_keys();
-        config.set_num_subdivisions(0u);
-        for (auto type: {DiscretisationType::None, DiscretisationType::Recombine}) {
-            config.set_discretisation_type(type);
-            auto sampled = simulator.orbit(box, Real(0));
-            ARIADNE_TESTING_PROVE(sampled.curves().size() > 0u);
-            std::ostringstream description;
-            const ConfigurationInterface& base = config;
-            description << base;
-            ARIADNE_TESTING_PROVE(description.str().find("VectorFieldSimulatorConfiguration") != std::string::npos);
-        }
+        config.clear_sampling_counts();
+        auto sampled = simulator.orbit(box, Real(0));
+        ARIADNE_TESTING_EXPECT_EQUAL(sampled.curves().size(), 1u);
+        std::ostringstream description;
+        const ConfigurationInterface& base = config;
+        description << base;
+        ARIADNE_TESTING_PROVE(description.str().find("sampling_counts") != std::string::npos);
     }
 
     Void test_multiple_trajectories_x() {
@@ -149,13 +143,11 @@ class TestVectorFieldSimulator : public Ariadne::Testing::ContextFixture {
 
         VectorFieldSimulator simulator(vanderpol);
         simulator.configuration().set_step_size(0.05);
-        simulator.configuration().set_num_subdivisions(0);
-        simulator.configuration().set_discretisation_type(DiscretisationType::Mince);
 
         Nat trajectory_number = 4;
 
         for (Nat t = 1; t <= trajectory_number; t++) {
-            simulator.configuration().insert_subspace(x, t);
+            simulator.configuration().set_sampling_count(x, t);
             ARIADNE_TESTING_NOTE(simulator.configuration());
 
             Orbit<ListPointType> orbit = simulator.orbit(initial_set, time);
@@ -164,7 +156,7 @@ class TestVectorFieldSimulator : public Ariadne::Testing::ContextFixture {
 
             ARIADNE_TESTING_EXPECT_EQUAL(curves.size(), t);
 
-            simulator.configuration().remove_keys();
+            simulator.configuration().clear_sampling_counts();
         }
     }
 
@@ -183,15 +175,13 @@ class TestVectorFieldSimulator : public Ariadne::Testing::ContextFixture {
 
         VectorFieldSimulator simulator(vanderpol);
         simulator.configuration().set_step_size(0.05);
-        simulator.configuration().set_num_subdivisions(0);
-        simulator.configuration().set_discretisation_type(DiscretisationType::Mince);
 
         Nat trajectory_number = 4;
 
         for (Nat first = 1; first <= trajectory_number; first++) {
             for (Nat second = 1; second <= trajectory_number; second++) {
-                simulator.configuration().insert_subspace(x, first);
-                simulator.configuration().insert_subspace(y, second);
+                simulator.configuration().set_sampling_count(x, first);
+                simulator.configuration().set_sampling_count(y, second);
                 ARIADNE_TESTING_NOTE(simulator.configuration());
 
                 Orbit<ListPointType> orbit = simulator.orbit(initial_set, time);
@@ -200,7 +190,7 @@ class TestVectorFieldSimulator : public Ariadne::Testing::ContextFixture {
 
                 ARIADNE_TESTING_EXPECT_EQUAL(curves.size(), first * second);
 
-                simulator.configuration().remove_keys();
+                simulator.configuration().clear_sampling_counts();
             }
         }
     }
@@ -220,10 +210,8 @@ class TestVectorFieldSimulator : public Ariadne::Testing::ContextFixture {
 
         VectorFieldSimulator simulator(vanderpol);
         simulator.configuration().set_step_size(0.05);
-        simulator.configuration().set_num_subdivisions(0);
-        simulator.configuration().set_discretisation_type(DiscretisationType::Mince);
-        simulator.configuration().insert_subspace(x, 1);
-        simulator.configuration().insert_subspace(y, 1);
+        simulator.configuration().set_sampling_count(x, 1);
+        simulator.configuration().set_sampling_count(y, 1);
 
         ARIADNE_TESTING_NOTE(simulator.configuration());
 
@@ -253,10 +241,8 @@ class TestVectorFieldSimulator : public Ariadne::Testing::ContextFixture {
 
         VectorFieldSimulator simulator(vanderpol);
         simulator.configuration().set_step_size(0.05);
-        simulator.configuration().set_num_subdivisions(0);
-        simulator.configuration().set_discretisation_type(DiscretisationType::Mince);
-        simulator.configuration().insert_subspace(x, 1);
-        simulator.configuration().insert_subspace(y, 1);
+        simulator.configuration().set_sampling_count(x, 1);
+        simulator.configuration().set_sampling_count(y, 1);
 
         ARIADNE_TESTING_NOTE(simulator.configuration());
 
